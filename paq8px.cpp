@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Release by Jan Ondrus, Apr. 26, 2010
+/* paq8px file compressor/archiver.  Release by Jan Ondrus, Mar. 8, 2016
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -109,26 +109,7 @@ on your C++ compiler.  In Linux, use "-f elf".
 Recommended compiler commands and optimizations:
 
   MINGW g++:
-    nasm paq7asm.asm -f win32 --prefix _
-    g++ paq8px.cpp -DWINDOWS -O2 -Os -s -march=pentiumpro -fomit-frame-pointer -o paq8px.exe paq7asm.obj
-
-  Borland:
-    nasm paq7asm.asm -f obj --prefix _
-    bcc32 -DWINDOWS -O -w-8027 paq8px.cpp paq7asm.obj
-
-  Mars:
-    nasm paq7asm.asm -f obj --prefix _
-    dmc -DWINDOWS -Ae -O paq8px.cpp paq7asm.obj
-
-  UNIX/Linux (PC):
-    nasm -f elf paq7asm.asm
-    g++ paq8px.cpp -DUNIX -O2 -Os -s -march=pentiumpro -fomit-frame-pointer -o paq8px paq7asm.o
-
-  Non PC (e.g. PowerPC under MacOS X)
-    g++ paq8px.cpp -O2 -DUNIX -DNOASM -s -o paq8px
-
-MinGW produces faster executables than Borland or Mars, but Intel 9
-is about 4% faster than MinGW).
+    g++ paq8px.cpp -DWINDOWS -lz -Wall -Wextra -O3 -s -fomit-frame-pointer -static-libgcc -o paq8px.exe
 
 
 ARCHIVE FILE FORMAT
@@ -607,6 +588,7 @@ Modified EXE transformation (e8/e9)
 Changed image and audio data handling (separated in blocks)
 Added compression of (8-bit, 24-bit) TGA image data
 Improved TIFF image detection
+Added zlib stream recompression
 */
 
 #define PROGNAME "paq8px"  // Please change this if you change the program.
@@ -617,6 +599,7 @@ Improved TIFF image detection
 #include <time.h>
 #include <math.h>
 #include <ctype.h>
+#include <zlib.h>
 #define NDEBUG  // remove for debugging (turns on Array bound checks)
 #include <assert.h>
 
@@ -627,9 +610,7 @@ Improved TIFF image detection
 #include <errno.h>
 #endif
 
-#ifdef WINDOWS
-#include <windows.h>
-#endif
+
 
 #ifndef DEFAULT_OPTION
 #define DEFAULT_OPTION 5
@@ -641,10 +622,8 @@ typedef unsigned short U16;
 typedef unsigned int   U32;
 
 // min, max functions
-#ifndef WINDOWS
 inline int min(int a, int b) {return a<b?a:b;}
 inline int max(int a, int b) {return a<b?b:a;}
-#endif
 
 // Error handler: print message if any, and exit
 void quit(const char* message=0) {
@@ -694,7 +673,7 @@ public:
 
 //////////////////////////// Array ////////////////////////////
 
-// Array<T, ALIGN> a(n); creates n elements of T initialized to 0 bits.
+// Array<T> a(n); creates n elements of T initialized to 0 bits.
 // Constructors for T are not called.
 // Indexing is bounds checked if assertions are on.
 // a.size() returns n.
@@ -702,9 +681,8 @@ public:
 // a.push_back(x) appends x and increases size by 1, reserving up to size*2.
 // a.pop_back() decreases size by 1, does not free memory.
 // Copy and assignment are not supported.
-// Memory is aligned on a ALIGN byte boundary (power of 2), default is none.
 
-template <class T, int ALIGN=0> class Array {
+template <class T> class Array {
 private:
   int n;     // user size
   int reserved;  // actual size
@@ -735,7 +713,7 @@ private:
   Array& operator=(const Array&);
 };
 
-template<class T, int ALIGN> void Array<T, ALIGN>::resize(int i) {
+template<class T> void Array<T>::resize(int i) {
   if (i<=reserved) {
     n=i;
     return;
@@ -747,33 +725,32 @@ template<class T, int ALIGN> void Array<T, ALIGN>::resize(int i) {
   if (saveptr) {
     if (savedata) {
       memcpy(data, savedata, sizeof(T)*min(i, saven));
-      programChecker.alloc(-ALIGN-n*sizeof(T));
+      programChecker.alloc(-n*sizeof(T));
     }
     free(saveptr);
   }
 }
 
-template<class T, int ALIGN> void Array<T, ALIGN>::create(int i) {
+template<class T> void Array<T>::create(int i) {
   n=reserved=i;
   if (i<=0) {
     data=0;
     ptr=0;
     return;
   }
-  const int sz=ALIGN+n*sizeof(T);
+  const int sz=n*sizeof(T);
   programChecker.alloc(sz);
   ptr = (char*)calloc(sz, 1);
   if (!ptr) quit("Out of memory");
-  data = (ALIGN ? (T*)(ptr+ALIGN-(((long)ptr)&(ALIGN-1))) : (T*)ptr);
-  assert((char*)data>=ptr && (char*)data<=ptr+ALIGN);
+  data = (T*)ptr;
 }
 
-template<class T, int ALIGN> Array<T, ALIGN>::~Array() {
-  programChecker.alloc(-ALIGN-n*sizeof(T));
+template<class T> Array<T>::~Array() {
+  programChecker.alloc(-n*sizeof(T));
   free(ptr);
 }
 
-template<class T, int ALIGN> void Array<T, ALIGN>::push_back(const T& x) {
+template<class T> void Array<T>::push_back(const T& x) {
   if (n==reserved) {
     int saven=n;
     resize(max(1, n*2));
@@ -1193,42 +1170,71 @@ Stretch::Stretch(): t(4096) {
 // m.p() returns the output prediction that the next bit is 1 as a
 //   12 bit number (0 to 4095).
 
-// dot_product returns dot product t*w of n elements.  n is rounded
-// up to a multiple of 8.  Result is scaled down by 8 bits.
-#ifdef NOASM  // no assembly language
-int dot_product(short *t, short *w, int n) {
-  int sum=0;
-  n=(n+7)&-8;
-  for (int i=0; i<n; i+=2)
-    sum+=(t[i]*w[i]+t[i+1]*w[i+1]) >> 8;
-  return sum;
-}
-#else  // The NASM version uses MMX and is about 8 times faster.
-extern "C" int dot_product(short *t, short *w, int n);  // in NASM
-#endif
 
-// Train neural network weights w[n] given inputs t[n] and err.
-// w[i] += t[i]*err, i=0..n-1.  t, w, err are signed 16 bits (+- 32K).
-// err is scaled 16 bits (representing +- 1/2).  w[i] is clamped to +- 32K
-// and rounded.  n is rounded up to a multiple of 8.
-#ifdef NOASM
-void train(short *t, short *w, int n, int err) {
-  n=(n+7)&-8;
-  for (int i=0; i<n; ++i) {
-    int wt=w[i]+(((t[i]*err*2>>16)+1)>>1);
-    if (wt<-32768) wt=-32768;
-    if (wt>32767) wt=32767;
-    w[i]=wt;
+#if !defined(__GNUC__)
+#if (2 == _M_IX86_FP)
+# define __SSE2__
+#endif
+#endif
+#if defined(__SSE2__)
+#include <emmintrin.h>
+
+static int dot_product (const short* const t, const short* const w, int n) {
+  __m128i sum = _mm_setzero_si128 ();
+  while ((n -= 8) >= 0) {
+    __m128i tmp = _mm_madd_epi16 (*(__m128i *) &t[n], *(__m128i *) &w[n]);
+    tmp = _mm_srai_epi32 (tmp, 8);
+    sum = _mm_add_epi32 (sum, tmp);
+  }
+  sum = _mm_add_epi32 (sum, _mm_srli_si128 (sum, 8));
+  sum = _mm_add_epi32 (sum, _mm_srli_si128 (sum, 4));
+  return _mm_cvtsi128_si32 (sum);
+}
+
+static void train (const short* const t, short* const w, int n, const int e) {
+  if (e) {
+    const __m128i one = _mm_set1_epi16 (1);
+    const __m128i err = _mm_set1_epi16 (short(e));
+    while ((n -= 8) >= 0) {
+      __m128i tmp = _mm_adds_epi16 (*(__m128i *) &t[n], *(__m128i *) &t[n]);
+      tmp = _mm_mulhi_epi16 (tmp, err);
+      tmp = _mm_adds_epi16 (tmp, one);
+      tmp = _mm_srai_epi16 (tmp, 1);
+      tmp = _mm_adds_epi16 (tmp, *(__m128i *) &w[n]);
+      *(__m128i *) &w[n] = tmp;
+    }
   }
 }
 #else
-extern "C" void train(short *t, short *w, int n, int err);  // in NASM
+
+static int dot_product (const short* const t, const short* const w, int n) {
+  int sum = 0;
+  while ((n -= 2) >= 0) {
+    sum += (t[n] * w[n] + t[n + 1] * w[n + 1]) >> 8;
+  }
+  return sum;
+}
+
+static void train (const short* const t, short* const w, int n, const int err) {
+  if (err) {
+    while ((n -= 1) >= 0) {
+      int wt = w[n] + ((((t[n] * err * 2) >> 16) + 1) >> 1);
+      if (wt < -32768) {
+        w[n] = -32768;
+      } else if (wt > 32767) {
+        w[n] = 32767;
+      } else {
+        w[n] = wt;
+      }
+    }
+  }
+}
 #endif
 
 class Mixer {
   const int N, M, S;   // max inputs, max contexts, max context sets
-  Array<short, 16> tx; // N inputs from add()
-  Array<short, 16> wx; // N*M weights
+  Array<short> tx; // N inputs from add()
+  Array<short> wx; // N*M weights
   Array<int> cxt;  // S contexts
   int ncxt;        // number of contexts (0 to S)
   int base;        // offset of next context
@@ -1299,6 +1305,9 @@ Mixer::Mixer(int n, int m, int s, int w):
     wx[i]=w;
   if (S>1) mp=new Mixer(S, 1, 1);
 }
+
+
+
 
 //////////////////////////// APM1 //////////////////////////////
 
@@ -1449,7 +1458,7 @@ inline U32 hash(U32 a, U32 b, U32 c=0xffffffff, U32 d=0xffffffff,
 // 2 byte checksum with LRU replacement (except last 2 by priority)
 template <int B> class BH {
   enum {M=8};  // search limit
-  Array<U8, 64> t; // elements
+  Array<U8> t; // elements
   U32 n; // size-1
 public:
   BH(int i): t(i*B), n(i-1) {
@@ -1630,7 +1639,7 @@ class ContextMap {
     U8* get(U16 chk);  // Find element (0-6) matching checksum.
       // If not found, insert or replace lowest priority (not last).
   };
-  Array<E, 64> t;  // bit histories for bits 0-1, 2-4, 5-7
+  Array<E> t;  // bit histories for bits 0-1, 2-4, 5-7
     // For 0-1, also contains a run count in bh[][4] and value in bh[][5]
     // and pending update count in bh[7]
   Array<U8*> cp;   // C pointers to current bit history
@@ -2311,8 +2320,7 @@ int jpegModel(Mixer& m) {
     //   xx is the first 2 extra bits, and the last 2 bits are 1 (since
     //   this never occurs in a valid RS code).
   static int cpos=0;  // position in cbuf
-  static U32 huff1=0, huff2=0, huff3=0, huff4=0;  // hashes of last codes
-  static int rs1, rs2, rs3, rs4;  // last 4 RS codes
+  static int rs1;  // last RS code
   static int ssum=0, ssum1=0, ssum2=0, ssum3=0;
     // sum of S in RS codes in block and sum of S in first component
 
@@ -2540,13 +2548,6 @@ int jpegModel(Mixer& m) {
       }
       if (rs>=0) {
         if (huffsize+(rs&15)==huffbits) { // done decoding
-          huff4=huff3;
-          huff3=huff2;
-          huff2=huff1;
-          huff1=hash(huffcode, huffbits);
-          rs4=rs3;
-          rs3=rs2;
-          rs2=rs1;
           rs1=rs;
           int x=0;  // decoded extra bits
           if (mcupos&63) {  // AC
@@ -3172,7 +3173,7 @@ void nestModel(Mixer& m)
 //////////////////////////// contextModel //////////////////////
 
 
-typedef enum {DEFAULT, JPEG, HDR, IMAGE1, IMAGE8, IMAGE24, AUDIO, EXE, CD} Filetype;
+typedef enum {DEFAULT, JPEG, HDR, IMAGE1, IMAGE8, IMAGE24, AUDIO, EXE, CD, ZLIB} Filetype;
 
 
 // This combines all the context models with a Mixer.
@@ -3577,6 +3578,21 @@ int expand_cd_sector(U8 *data, int a, int test) {
   return mode+form-1;
 }
 
+int parse_zlib_header(int header) {
+    switch (header) {
+        case 0x2815 : return 0;  case 0x2853 : return 1;  case 0x2891 : return 2;  case 0x28cf : return 3;
+        case 0x3811 : return 4;  case 0x384f : return 5;  case 0x388d : return 6;  case 0x38cb : return 7;
+        case 0x480d : return 8;  case 0x484b : return 9;  case 0x4889 : return 10; case 0x48c7 : return 11;
+        case 0x5809 : return 12; case 0x5847 : return 13; case 0x5885 : return 14; case 0x58c3 : return 15;
+        case 0x6805 : return 16; case 0x6843 : return 17; case 0x6881 : return 18; case 0x68de : return 19;
+        case 0x7801 : return 20; case 0x785e : return 21; case 0x789c : return 22; case 0x78da : return 23;
+    }
+    return -1;
+}
+int zlib_inflateInit(z_streamp strm, int zh) {
+    if (zh==-1) return inflateInit2(strm, -MAX_WBITS); else return inflateInit(strm);
+}
+
 // Detect EXE or JPEG data
 Filetype detect(FILE* in, int n, Filetype type, int &info) {
   U32 buf1=0, buf0=0;  // last 8 bytes
@@ -3600,6 +3616,8 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
   char pgm_buf[32];
   int cdi=0,cda=0,cdm=0;  // For CD sectors detection
   U32 cdf=0;
+  unsigned char zbuf[32], zin[1<<16], zout[1<<16]; // For ZLIB stream detection
+  int zbufpos=0,zzippos=-1;
 
   // For image detection
   static int deth=0,detd=0;  // detected header/data size in bytes
@@ -3612,6 +3630,57 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
     if (c==EOF) return (Filetype)(-1);
     buf1=buf1<<8|buf0>>24;
     buf0=buf0<<8|c;
+
+    // ZLIB stream detection
+    zbuf[zbufpos]=c;
+    zbufpos=(zbufpos+1)%32;
+    int zh=parse_zlib_header(((int)zbuf[zbufpos])*256+(int)zbuf[(zbufpos+1)%32]);
+    if ((i>=31 && zh!=-1) || zzippos==i) {
+        int streamLength=0, ret=0;
+
+        // Quick check possible stream by decompressing first 32 bytes
+        z_stream strm;
+        strm.zalloc=Z_NULL; strm.zfree=Z_NULL; strm.opaque=Z_NULL;
+        strm.next_in=Z_NULL; strm.avail_in=0;
+        if (zlib_inflateInit(&strm,zh)==Z_OK) {
+            unsigned char tmp[32];
+            for (int j=0; j<32; j++) tmp[j]=zbuf[(zbufpos+j)%32];
+            strm.next_in=tmp; strm.avail_in=32;
+            strm.next_out=zout; strm.avail_out=1<<16;
+            ret=inflate(&strm, Z_FINISH);
+            ret=(inflateEnd(&strm)==Z_OK && (ret==Z_STREAM_END || ret==Z_BUF_ERROR) && strm.total_in>=16);
+        }
+        if (ret) {
+            // Verify valid stream and determine stream length
+            long savedpos=ftell(in);
+            strm.zalloc=Z_NULL; strm.zfree=Z_NULL; strm.opaque=Z_NULL;
+            strm.next_in=Z_NULL; strm.avail_in=0;
+            if (zlib_inflateInit(&strm,zh)==Z_OK) {
+                for (int j=i-31; j<n; j+=1<<16) {
+                    unsigned int blsize=min(n-j,1<<16);
+                    fseek(in, start+j, SEEK_SET);
+                    if (fread(zin, 1, blsize, in)!=blsize) break;
+                    strm.next_in=zin; strm.avail_in=blsize;
+                    do {
+                        strm.next_out=zout; strm.avail_out=1<<16;
+                        ret=inflate(&strm, Z_FINISH);
+                    } while (strm.avail_out==0 && ret==Z_BUF_ERROR);
+                    if (ret==Z_STREAM_END) streamLength=strm.total_in;
+                    if (ret!=Z_BUF_ERROR) break;
+                }
+                if (inflateEnd(&strm)!=Z_OK) streamLength=0;
+            }
+            fseek(in, savedpos, SEEK_SET);
+        }
+        if (streamLength>0) return fseek(in, start+i-31, SEEK_SET),detd=streamLength,ZLIB;
+    }
+    if (zh==-1 && zbuf[zbufpos]=='P' && zbuf[(zbufpos+1)%32]=='K' && zbuf[(zbufpos+2)%32]=='\x3'
+      && zbuf[(zbufpos+3)%32]=='\x4' && zbuf[(zbufpos+8)%32]=='\x8' && zbuf[(zbufpos+9)%32]=='\0') {
+        int nlen=(int)zbuf[(zbufpos+26)%32]+((int)zbuf[(zbufpos+27)%32])*256
+                +(int)zbuf[(zbufpos+28)%32]+((int)zbuf[(zbufpos+29)%32])*256;
+        if (nlen<256 && i+30+nlen<n) zzippos=i+30+nlen;
+    }        
+    
 
     // CD sectors detection (mode 1 and mode 2 form 1+2 - 2352 bytes)
     if (buf1==0x00ffffff && buf0==0xffffffff && !cdi) cdi=i,cda=-1,cdm=0;
@@ -4065,6 +4134,202 @@ int decode_exe(Encoder& en, int size, FILE *out, FMode mode, int &diffFound, lon
   return size;
 }
 
+bool try_encode_zlib(FILE* in, FILE* out, int len) {
+  const int BLOCK=1<<16, LIMIT=128;
+  U8 zin[BLOCK*2],zout[BLOCK],zrec[BLOCK*2], diffByte[81*LIMIT];
+  int diffPos[81*LIMIT];
+  
+  // Step 1 - parse offset type form zlib stream header
+  long pos=ftell(in);
+  unsigned int h1=fgetc(in), h2=fgetc(in);
+  fseek(in, pos, SEEK_SET);
+  int zh=parse_zlib_header(h1*256+h2);
+  int memlevel,clevel,window=zh==-1?-MAX_WBITS:10+zh/4,ctype=zh%4;
+  int minclevel=window<0?1:ctype==3?7:ctype==2?6:ctype==1?2:1;
+  int maxclevel=window<0?9:ctype==3?9:ctype==2?6:ctype==1?5:1;
+
+  // Step 2 - check recompressiblitiy, determine parameters and save differences
+  z_stream main_strm, rec_strm[81];
+  int diffCount[81], recpos[81], main_ret;
+  main_strm.zalloc=Z_NULL; main_strm.zfree=Z_NULL; main_strm.opaque=Z_NULL;
+  main_strm.next_in=Z_NULL; main_strm.avail_in=0;
+  if (zlib_inflateInit(&main_strm,zh)!=Z_OK) return false;
+  for (int i=0; i<81; i++) {
+      memlevel=(i%9)+1;
+      clevel=(i/9)+1;
+      rec_strm[i].zalloc=Z_NULL; rec_strm[i].zfree=Z_NULL; rec_strm[i].opaque=Z_NULL;
+      rec_strm[i].next_in=Z_NULL; rec_strm[i].avail_in=0;
+      int ret=deflateInit2(&rec_strm[i], clevel, Z_DEFLATED, window, memlevel, Z_DEFAULT_STRATEGY);
+      diffCount[i]=(clevel>=minclevel && clevel<=maxclevel && ret==Z_OK)?0:LIMIT;
+      recpos[i]=BLOCK*2;
+      diffPos[i*LIMIT]=-1;
+      diffByte[i*LIMIT]=0;
+  }
+  for (int i=0; i<len; i+=BLOCK) {
+    unsigned int blsize=min(len-i,BLOCK);
+    for (int j=0; j<81; j++) {
+        if (diffCount[j]>=LIMIT) continue;
+        memmove(&zrec[0], &zrec[BLOCK], BLOCK);
+        recpos[j]-=BLOCK;
+    }
+    memmove(&zin[0], &zin[BLOCK], BLOCK);
+    fread(&zin[BLOCK], 1, blsize, in); // Read block from input file
+    
+    // Decompress/inflate block
+    main_strm.next_in=&zin[BLOCK]; main_strm.avail_in=blsize;
+    do {
+        main_strm.next_out=&zout[0]; main_strm.avail_out=BLOCK;
+        main_ret=inflate(&main_strm, Z_FINISH);
+
+        // Recompress/deflate block with all possible parameters
+        for (int j=0; j<81; j++) {
+            if (diffCount[j]>=LIMIT) continue;
+            rec_strm[j].next_in=&zout[0];  rec_strm[j].avail_in=BLOCK-main_strm.avail_out;
+            rec_strm[j].next_out=&zrec[recpos[j]]; rec_strm[j].avail_out=BLOCK*2-recpos[j];
+            int ret=deflate(&rec_strm[j], (int)main_strm.total_in == len ? Z_FINISH : Z_NO_FLUSH);
+            if (ret!=Z_BUF_ERROR && ret!=Z_STREAM_END && ret!=Z_OK) { diffCount[j]=LIMIT; continue; }
+
+            // Compare
+            int end=2*BLOCK-(int)rec_strm[j].avail_out;
+            int tail=max(main_ret==Z_STREAM_END ? len-(int)rec_strm[j].total_out : 0,0);
+            for (int k=recpos[j]; k<end+tail; k++) {
+              if ((k<end && i+k-BLOCK<len && zrec[k]!=zin[k]) || k>=end) {
+                if (++diffCount[j]<LIMIT) {
+                  const int p=j*LIMIT+diffCount[j];
+                  diffPos[p]=i+k-BLOCK;
+                  diffByte[p]=zin[k];
+                }
+              }
+            }
+            recpos[j]=2*BLOCK-rec_strm[j].avail_out;
+        }
+    } while (main_strm.avail_out==0 && main_ret==Z_BUF_ERROR);
+    if (main_ret!=Z_BUF_ERROR && main_ret!=Z_STREAM_END) break;
+  }
+  int minCount=LIMIT, index;
+  for (int i=80; i>=0; i--) {
+    deflateEnd(&rec_strm[i]);
+    if (diffCount[i]<minCount) {
+      minCount=diffCount[i];
+      memlevel=(i%9)+1;
+      clevel=(i/9)+1;
+      index=i;
+    }
+  }
+  inflateEnd(&main_strm);
+  if (minCount==LIMIT) return false;
+  
+  // Step 3 - write parameters, differences and precompressed (inflated) data
+  if (window<0) window=1;
+  fputc(window, out);
+  fputc(memlevel, out);
+  fputc(clevel, out);
+  fputc(len>>24, out);
+  fputc(len>>16, out);
+  fputc(len>>8, out);
+  fputc(len, out);
+  fputc(diffCount[index], out);
+  for (int i=0; i<diffCount[index]; i++) {
+    const int v=diffPos[index*LIMIT+i+1]-diffPos[index*LIMIT+i]-1;
+    fputc(v>>24, out);
+    fputc(v>>16, out);
+    fputc(v>>8, out);
+    fputc(v, out);
+  }
+  for (int i=0; i<diffCount[index]; i++) fputc(diffByte[index*LIMIT+i+1], out);
+  fseek(in, pos, SEEK_SET);
+  main_strm.zalloc=Z_NULL; main_strm.zfree=Z_NULL; main_strm.opaque=Z_NULL;
+  main_strm.next_in=Z_NULL; main_strm.avail_in=0;
+  if (zlib_inflateInit(&main_strm,zh)!=Z_OK) return false;
+  for (int i=0; i<len; i+=BLOCK) {
+    unsigned int blsize=min(len-i,BLOCK);
+    fread(&zin[0], 1, blsize, in);
+    main_strm.next_in=&zin[0]; main_strm.avail_in=blsize;
+    do {
+        main_strm.next_out=&zout[0]; main_strm.avail_out=BLOCK;
+        main_ret=inflate(&main_strm, Z_FINISH);
+        fwrite(&zout[0], 1, BLOCK-main_strm.avail_out, out);
+    } while (main_strm.avail_out==0 && main_ret==Z_BUF_ERROR);
+    if (main_ret!=Z_BUF_ERROR && main_ret!=Z_STREAM_END) break;
+  }
+  return main_ret==Z_STREAM_END;
+}
+
+void encode_zlib(FILE* in, FILE* out, int len) {
+  if (!try_encode_zlib(in, out, len)) {
+    int c=0;
+    fputc(c, out);
+    for (int i=0; i<len; i++) {
+      c=fgetc(in);
+      fputc(c, out);
+    }
+  }
+}
+
+
+int decode_zlib(FILE* in, int size, FILE *out, FMode mode, int &diffFound) {
+  const int BLOCK=1<<16, LIMIT=128;
+  U8 zin[BLOCK],zout[BLOCK];
+  int window=fgetc(in);
+  if (window==1) window=-MAX_WBITS;
+  int memlevel=fgetc(in);
+  int clevel=fgetc(in);
+  int len=fgetc(in)<<24;
+  len|=fgetc(in)<<16;
+  len|=fgetc(in)<<8;
+  len|=fgetc(in);
+  int diffCount=min(fgetc(in),LIMIT-1);
+  int diffPos[LIMIT];
+  diffPos[0]=-1;
+  for (int i=0; i<diffCount; i++) {
+    int v=fgetc(in)<<24;
+    v|=fgetc(in)<<16;
+    v|=fgetc(in)<<8;
+    v|=fgetc(in);
+    diffPos[i+1]=v+diffPos[i]+1;
+  }
+  U8 diffByte[LIMIT];
+  diffByte[0]=0;
+  for (int i=0; i<diffCount; i++) diffByte[i+1]=fgetc(in);
+  size-=8+5*diffCount;
+  
+  // Step 2 - check recompressiblitiy, determine parameters and save differences
+  z_stream rec_strm;
+  int diffIndex=1,recpos=0;
+  rec_strm.zalloc=Z_NULL; rec_strm.zfree=Z_NULL; rec_strm.opaque=Z_NULL;
+  rec_strm.next_in=Z_NULL; rec_strm.avail_in=0;
+  int ret=deflateInit2(&rec_strm, clevel, Z_DEFLATED, window, memlevel, Z_DEFAULT_STRATEGY);
+  if (ret!=Z_OK) return 0;
+  for (int i=0; i<size; i+=BLOCK) {
+    int blsize=min(size-i,BLOCK);
+    fread(&zin[0], 1, blsize, in);
+    rec_strm.next_in=&zin[0];  rec_strm.avail_in=blsize;
+    do {
+      rec_strm.next_out=&zout[0]; rec_strm.avail_out=BLOCK;
+      ret=deflate(&rec_strm, i+blsize==size ? Z_FINISH : Z_NO_FLUSH);
+      if (ret!=Z_BUF_ERROR && ret!=Z_STREAM_END && ret!=Z_OK) break;
+      const int have=min(BLOCK-rec_strm.avail_out,len-recpos);
+      while (diffIndex<=diffCount && diffPos[diffIndex]>=recpos && diffPos[diffIndex]<recpos+have) {
+        zout[diffPos[diffIndex]-recpos]=diffByte[diffIndex];
+        diffIndex++;
+      }
+      if (mode==FDECOMPRESS) fwrite(&zout[0], 1, have, out);
+      else if (mode==FCOMPARE) for (int j=0; j<have; j++) if (zout[j]!=getc(out) && !diffFound) diffFound=recpos+j+1;
+      recpos+=have;
+      
+    } while (rec_strm.avail_out==0);
+  }
+  while (diffIndex<=diffCount) {
+    if (mode==FDECOMPRESS) fputc(diffByte[diffIndex], out);
+    else if (mode==FCOMPARE) if (diffByte[diffIndex]!=getc(out) && !diffFound) diffFound=recpos+1;
+    diffIndex++;
+    recpos++;
+  }  
+  deflateEnd(&rec_strm);
+  return recpos==len ? len : 0;
+}
+
+
 //////////////////// Compress, Decompress ////////////////////////////
 
 void direct_encode_block(Filetype type, FILE *in, int len, Encoder &en, int s1, int s2, int info=-1) {
@@ -4089,8 +4354,8 @@ void direct_encode_block(Filetype type, FILE *in, int len, Encoder &en, int s1, 
 }
 
 void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it=0, int s1=0, int s2=0) {
-  static const char* typenames[9]={"default", "jpeg", "hdr",
-    "1b-image", "8b-image", "24b-image", "audio", "exe", "cd"};
+  static const char* typenames[10]={"default", "jpeg", "hdr",
+    "1b-image", "8b-image", "24b-image", "audio", "exe", "cd", "zlib"};
   static const char* audiotypes[4]={"8b mono", "8b stereo", "16b mono",
     "16b stereo"};
   Filetype type=DEFAULT;
@@ -4124,12 +4389,13 @@ void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it=0, int
       else if (type==IMAGE1 || type==IMAGE8 || type==IMAGE24) printf(" (width: %d)", info);
       else if (type==CD) printf(" (m%d/f%d)", info==1?1:2, info!=3?1:2);
       printf("\n");
-      if (type==EXE || type==CD || type==IMAGE24) {
+      if (type==EXE || type==CD || type==IMAGE24 || type==ZLIB) {
         tmp=tmpfile();  // temporary encoded file
         if (!tmp) perror("tmpfile"), quit();
         if (type==IMAGE24) encode_bmp(in, tmp, len, info);
         else if (type==EXE) encode_exe(in, tmp, len, begin);
         else if (type==CD) encode_cd(in, tmp, len, info);
+        else if (type==ZLIB) encode_zlib(in, tmp, len);
         const long tmpsize=ftell(tmp);
 
         rewind(tmp);
@@ -4139,6 +4405,7 @@ void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it=0, int
         if (type==IMAGE24) decode_bmp(en, tmpsize, info, in, FCOMPARE, diffFound);
         else if (type==EXE) decode_exe(en, tmpsize, in, FCOMPARE, diffFound);
         else if (type==CD) decode_cd(tmp, tmpsize, in, FCOMPARE, diffFound);
+        else if (type==ZLIB) decode_zlib(tmp, tmpsize, in, FCOMPARE, diffFound);
 
         // Test fails, compress without transform
         if (diffFound || fgetc(tmp)!=EOF) {
@@ -4147,7 +4414,7 @@ void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it=0, int
           direct_encode_block(DEFAULT, in, len, en, s1, s2);
         } else {
           rewind(tmp);
-          if (type==CD) {
+          if (type==CD || type==ZLIB) {
             en.compress(type), en.compress(tmpsize>>24), en.compress(tmpsize>>16);
             en.compress(tmpsize>>8), en.compress(tmpsize);
             compressRecursive(tmp, tmpsize, en, blstr, it+1, s1, s2);
@@ -4187,6 +4454,10 @@ void compress(const char* filename, long filesize, Encoder& en) {
   printf("Compressed from %ld to %ld bytes.\n",filesize,en.size()-start);
 }
 
+#ifdef WINDOWS
+#include <windows.h>
+#endif
+
 // Try to make a directory, return true if successful
 bool makedir(const char* dir) {
 #ifdef WINDOWS
@@ -4219,12 +4490,14 @@ int decompressRecursive(FILE *out, long size, Encoder& en, FMode mode, int it=0,
     }
     if (type==IMAGE24) len=decode_bmp(en, len, info, out, mode, diffFound);
     else if (type==EXE) len=decode_exe(en, len, out, mode, diffFound, s1, s2);
-    else if (type==CD) {
+    else if (type==CD || type==ZLIB) {
       tmp=tmpfile();
+      if (!tmp) perror("tmpfile"), quit();
       decompressRecursive(tmp, len, en, FDECOMPRESS, it+1, s1+i, s2-len);
       if (mode!=FDISCARD) {
         rewind(tmp);
-        len=decode_cd(tmp, len, out, mode, diffFound);
+        if (type==CD) len=decode_cd(tmp, len, out, mode, diffFound);
+        if (type==ZLIB) len=decode_zlib(tmp, len, out, mode, diffFound);
       }
       fclose(tmp);
     } else {
@@ -4414,7 +4687,7 @@ int main(int argc, char** argv) {
 
     // Print help message
     if (argc<2) {
-      printf(PROGNAME " archiver (C) 2008, Matt Mahoney et al.\n"
+      printf(PROGNAME " archiver (C) 2016, Matt Mahoney et al.\n"
         "Free under GPL, http://www.gnu.org/licenses/gpl.txt\n\n"
 #ifdef WINDOWS
         "To compress or extract, drop a file or folder on the "
@@ -4530,13 +4803,13 @@ int main(int argc, char** argv) {
     // Compress header
     if (mode==COMPRESS) {
       int len=header_string.size();
-      printf("\nFile list (%ld bytes)\n", len);
+      printf("\nFile list (%d bytes)\n", len);
       assert(en.getMode()==COMPRESS);
       long start=en.size();
       en.compress(0); // block type 0
       en.compress(len>>24); en.compress(len>>16); en.compress(len>>8); en.compress(len); // block length
       for (int i=0; i<len; i++) en.compress(header_string[i]);
-      printf("Compressed from %ld to %ld bytes.\n",len,en.size()-start);
+      printf("Compressed from %d to %ld bytes.\n",len,en.size()-start);
     }
 
     // Deompress header
