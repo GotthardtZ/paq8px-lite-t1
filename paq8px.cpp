@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Release by Jan Ondrus, Mar. 8, 2016
+/* paq8px file compressor/archiver.  Release by Jan Ondrus, Mar. 11, 2016
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -3194,7 +3194,7 @@ int contextModel2() {
     if (size==-1) ft2=(Filetype)buf(1);
     if (size==-5 && ft2!=IMAGE1 && ft2!=IMAGE8 && ft2!=IMAGE24 && ft2!=AUDIO) {
       size=buf(4)<<24|buf(3)<<16|buf(2)<<8|buf(1);
-      if (ft2==CD) size=0;
+      if (ft2==CD || ft2==ZLIB) size=0;
       blpos=0;
     }
     if (size==-9) {
@@ -3348,6 +3348,7 @@ private:
   U32 x1, x2;            // Range, initially [0, 1), scaled by 2^32
   U32 x;                 // Decompress mode: last 4 input bytes of archive
   FILE *alt;             // decompress() source in COMPRESS mode
+  float p1, p2;
 
   // Compress bit y or return decompressed bit
   int code(int i=0) {
@@ -3400,10 +3401,24 @@ public:
       return c;
     }
   }
+  
+  void set_status_range(float perc1, float perc2) { p1=perc1; p2=perc2; }
+  void print_status(int n, int size) {
+    printf("%6.2f%%\b\b\b\b\b\b\b", (p1+(p2-p1)*n/(size+1))*100), fflush(stdout);
+  }
+  void print_status() {
+    printf("%6.2f%%\b\b\b\b\b\b\b", float(size())/(p2+1)*100), fflush(stdout);
+  }
 };
 
 Encoder::Encoder(Mode m, FILE* f):
     mode(m), archive(f), x1(0), x2(0xffffffff), x(0), alt(0) {
+  if (mode==DECOMPRESS) {
+    long start=size();
+    fseek(f, 0, SEEK_END);
+    set_status_range(0, size());
+    fseek(archive, start, SEEK_SET);
+  } 
   if (level>0 && mode==DECOMPRESS) {  // x = first 4 bytes of archive
     for (int i=0; i<4; ++i)
       x=(x<<8)+(getc(archive)&255);
@@ -3595,7 +3610,7 @@ int zlib_inflateInit(z_streamp strm, int zh) {
 
 // Detect EXE or JPEG data
 Filetype detect(FILE* in, int n, Filetype type, int &info) {
-  U32 buf1=0, buf0=0;  // last 8 bytes
+  U32 buf3=0, buf2=0, buf1=0, buf0=0;  // last 16 bytes
   long start=ftell(in);
 
   // For EXE detection
@@ -3618,6 +3633,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
   U32 cdf=0;
   unsigned char zbuf[32], zin[1<<16], zout[1<<16]; // For ZLIB stream detection
   int zbufpos=0,zzippos=-1;
+  int pdfim=0,pdfimw=0,pdfimh=0,pdfimb=0,pdfimp=0;
 
   // For image detection
   static int deth=0,detd=0;  // detected header/data size in bytes
@@ -3628,6 +3644,8 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
   for (int i=0; i<n; ++i) {
     int c=getc(in);
     if (c==EOF) return (Filetype)(-1);
+    buf3=buf3<<8|buf2>>24;
+    buf2=buf2<<8|buf1>>24;
     buf1=buf1<<8|buf0>>24;
     buf0=buf0<<8|c;
 
@@ -3636,51 +3654,68 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
     zbufpos=(zbufpos+1)%32;
     int zh=parse_zlib_header(((int)zbuf[zbufpos])*256+(int)zbuf[(zbufpos+1)%32]);
     if ((i>=31 && zh!=-1) || zzippos==i) {
-        int streamLength=0, ret=0;
+      int streamLength=0, ret=0;
 
-        // Quick check possible stream by decompressing first 32 bytes
-        z_stream strm;
+      // Quick check possible stream by decompressing first 32 bytes
+      z_stream strm;
+      strm.zalloc=Z_NULL; strm.zfree=Z_NULL; strm.opaque=Z_NULL;
+      strm.next_in=Z_NULL; strm.avail_in=0;
+      if (zlib_inflateInit(&strm,zh)==Z_OK) {
+        unsigned char tmp[32];
+        for (int j=0; j<32; j++) tmp[j]=zbuf[(zbufpos+j)%32];
+        strm.next_in=tmp; strm.avail_in=32;
+        strm.next_out=zout; strm.avail_out=1<<16;
+        ret=inflate(&strm, Z_FINISH);
+        ret=(inflateEnd(&strm)==Z_OK && (ret==Z_STREAM_END || ret==Z_BUF_ERROR) && strm.total_in>=16);
+      }
+      if (ret) {
+        // Verify valid stream and determine stream length
+        long savedpos=ftell(in);
         strm.zalloc=Z_NULL; strm.zfree=Z_NULL; strm.opaque=Z_NULL;
-        strm.next_in=Z_NULL; strm.avail_in=0;
+        strm.next_in=Z_NULL; strm.avail_in=0; strm.total_in=strm.total_out=0;
         if (zlib_inflateInit(&strm,zh)==Z_OK) {
-            unsigned char tmp[32];
-            for (int j=0; j<32; j++) tmp[j]=zbuf[(zbufpos+j)%32];
-            strm.next_in=tmp; strm.avail_in=32;
-            strm.next_out=zout; strm.avail_out=1<<16;
-            ret=inflate(&strm, Z_FINISH);
-            ret=(inflateEnd(&strm)==Z_OK && (ret==Z_STREAM_END || ret==Z_BUF_ERROR) && strm.total_in>=16);
+          for (int j=i-31; j<n; j+=1<<16) {
+            unsigned int blsize=min(n-j,1<<16);
+            fseek(in, start+j, SEEK_SET);
+            if (fread(zin, 1, blsize, in)!=blsize) break;
+            strm.next_in=zin; strm.avail_in=blsize;
+            do {
+              strm.next_out=zout; strm.avail_out=1<<16;
+              ret=inflate(&strm, Z_FINISH);
+            } while (strm.avail_out==0 && ret==Z_BUF_ERROR);
+            if (ret==Z_STREAM_END) streamLength=strm.total_in;
+            if (ret!=Z_BUF_ERROR) break;
+          }
+          if (inflateEnd(&strm)!=Z_OK) streamLength=0;
         }
-        if (ret) {
-            // Verify valid stream and determine stream length
-            long savedpos=ftell(in);
-            strm.zalloc=Z_NULL; strm.zfree=Z_NULL; strm.opaque=Z_NULL;
-            strm.next_in=Z_NULL; strm.avail_in=0;
-            if (zlib_inflateInit(&strm,zh)==Z_OK) {
-                for (int j=i-31; j<n; j+=1<<16) {
-                    unsigned int blsize=min(n-j,1<<16);
-                    fseek(in, start+j, SEEK_SET);
-                    if (fread(zin, 1, blsize, in)!=blsize) break;
-                    strm.next_in=zin; strm.avail_in=blsize;
-                    do {
-                        strm.next_out=zout; strm.avail_out=1<<16;
-                        ret=inflate(&strm, Z_FINISH);
-                    } while (strm.avail_out==0 && ret==Z_BUF_ERROR);
-                    if (ret==Z_STREAM_END) streamLength=strm.total_in;
-                    if (ret!=Z_BUF_ERROR) break;
-                }
-                if (inflateEnd(&strm)!=Z_OK) streamLength=0;
-            }
-            fseek(in, savedpos, SEEK_SET);
+        fseek(in, savedpos, SEEK_SET);
+      }
+      if (streamLength>0) {
+        info=0;
+        if (pdfimw>0 && pdfimh>0) {
+          if (pdfimb==8 && (int)strm.total_out==pdfimw*pdfimh) info=(8<<24)+pdfimw;
+          if (pdfimb==8 && (int)strm.total_out==pdfimw*pdfimh*3) info=(24<<24)+pdfimw*3;
+          if (pdfimb==4 && (int)strm.total_out==((pdfimw+1)/2)*pdfimh) info=(8<<24)+((pdfimw+1)/2);
         }
-        if (streamLength>0) return fseek(in, start+i-31, SEEK_SET),detd=streamLength,ZLIB;
+        return fseek(in, start+i-31, SEEK_SET),detd=streamLength,ZLIB;
+      }
     }
     if (zh==-1 && zbuf[zbufpos]=='P' && zbuf[(zbufpos+1)%32]=='K' && zbuf[(zbufpos+2)%32]=='\x3'
       && zbuf[(zbufpos+3)%32]=='\x4' && zbuf[(zbufpos+8)%32]=='\x8' && zbuf[(zbufpos+9)%32]=='\0') {
         int nlen=(int)zbuf[(zbufpos+26)%32]+((int)zbuf[(zbufpos+27)%32])*256
                 +(int)zbuf[(zbufpos+28)%32]+((int)zbuf[(zbufpos+29)%32])*256;
         if (nlen<256 && i+30+nlen<n) zzippos=i+30+nlen;
-    }        
-    
+    }
+    if (i-pdfimp>1024) pdfim=pdfimw=pdfimh=pdfimb=0;
+    if (pdfim>1 && !(isspace(c) || isdigit(c))) pdfim=1;
+    if (pdfim==2 && isdigit(c)) pdfimw=pdfimw*10+(c-'0');
+    if (pdfim==3 && isdigit(c)) pdfimh=pdfimh*10+(c-'0');
+    if (pdfim==4 && isdigit(c)) pdfimb=pdfimb*10+(c-'0');
+    if ((buf0&0xffff)==0x3c3c) pdfimp=i,pdfim=1; // <<
+    if (pdfim && (buf1&0xffff)==0x2f57 && buf0==0x69647468) pdfim=2,pdfimw=0; // /Width
+    if (pdfim && (buf1&0xffffff)==0x2f4865 && buf0==0x69676874) pdfim=3,pdfimh=0; // /Height
+    if (pdfim && buf3==0x42697473 && buf2==0x50657243 && buf1==0x6f6d706f
+       && buf0==0x6e656e74 && zbuf[(zbufpos+15)%32]=='/') pdfim=4,pdfimb=0; // /BitsPerComponent
 
     // CD sectors detection (mode 1 and mode 2 form 1+2 - 2352 bytes)
     if (buf1==0x00ffffff && buf0==0xffffffff && !cdi) cdi=i,cda=-1,cdm=0;
@@ -3958,11 +3993,6 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
 
 typedef enum {FDECOMPRESS, FCOMPARE, FDISCARD} FMode;
 
-// Print progress: n is the number of bytes compressed or decompressed
-void printStatus(int n, int size) {
-  printf("%6.2f%%\b\b\b\b\b\b\b", float(100)*n/(size+1)), fflush(stdout);
-}
-
 void encode_cd(FILE* in, FILE* out, int len, int info) {
   const int BLOCK=2352;
   U8 blk[BLOCK];
@@ -4045,6 +4075,7 @@ int decode_bmp(Encoder& en, int size, int width, FILE *out, FMode mode, int &dif
         fputc(b-r, out);
         fputc(b, out);
         fputc(b-g, out);
+        if (!j && !(i&0xf)) en.print_status();
       }
       else if (mode==FCOMPARE) {
         if (((b-r)&255)!=getc(out) && !diffFound) diffFound=p+1;
@@ -4101,9 +4132,9 @@ void encode_exe(FILE* in, FILE* out, int len, int begin) {
   }
 }
 
-int decode_exe(Encoder& en, int size, FILE *out, FMode mode, int &diffFound, long s1=0, long s2=0) {
+int decode_exe(Encoder& en, int size, FILE *out, FMode mode, int &diffFound) {
   const int BLOCK=0x10000;  // block size
-  int begin, offset=6, a, showstatus=(s2!=0);
+  int begin, offset=6, a;
   U8 c[6];
   begin=en.decompress()<<24;
   begin|=en.decompress()<<16;
@@ -4128,13 +4159,13 @@ int decode_exe(Encoder& en, int size, FILE *out, FMode mode, int &diffFound, lon
     }
     if (mode==FDECOMPRESS) putc(c[5], out);
     else if (mode==FCOMPARE && c[5]!=getc(out) && !diffFound) diffFound=offset-6+1;
-    if (showstatus && !(offset&0xfff)) printStatus(s1+offset-6, s2);
+    if (mode==FDECOMPRESS && !(offset&0xfff)) en.print_status();
     offset++;
   }
   return size;
 }
 
-bool try_encode_zlib(FILE* in, FILE* out, int len) {
+int encode_zlib(FILE* in, FILE* out, int len) {
   const int BLOCK=1<<16, LIMIT=128;
   U8 zin[BLOCK*2],zout[BLOCK],zrec[BLOCK*2], diffByte[81*LIMIT];
   int diffPos[81*LIMIT];
@@ -4144,33 +4175,33 @@ bool try_encode_zlib(FILE* in, FILE* out, int len) {
   unsigned int h1=fgetc(in), h2=fgetc(in);
   fseek(in, pos, SEEK_SET);
   int zh=parse_zlib_header(h1*256+h2);
-  int memlevel,clevel,window=zh==-1?-MAX_WBITS:10+zh/4,ctype=zh%4;
-  int minclevel=window<0?1:ctype==3?7:ctype==2?6:ctype==1?2:1;
-  int maxclevel=window<0?9:ctype==3?9:ctype==2?6:ctype==1?5:1;
+  int memlevel,clevel,window=zh==-1?0:MAX_WBITS+10+zh/4,ctype=zh%4;
+  int minclevel=window==0?1:ctype==3?7:ctype==2?6:ctype==1?2:1;
+  int maxclevel=window==0?9:ctype==3?9:ctype==2?6:ctype==1?5:1;
 
   // Step 2 - check recompressiblitiy, determine parameters and save differences
   z_stream main_strm, rec_strm[81];
-  int diffCount[81], recpos[81], main_ret;
+  int diffCount[81], recpos[81], main_ret=Z_STREAM_END;
   main_strm.zalloc=Z_NULL; main_strm.zfree=Z_NULL; main_strm.opaque=Z_NULL;
   main_strm.next_in=Z_NULL; main_strm.avail_in=0;
   if (zlib_inflateInit(&main_strm,zh)!=Z_OK) return false;
   for (int i=0; i<81; i++) {
-      memlevel=(i%9)+1;
-      clevel=(i/9)+1;
-      rec_strm[i].zalloc=Z_NULL; rec_strm[i].zfree=Z_NULL; rec_strm[i].opaque=Z_NULL;
-      rec_strm[i].next_in=Z_NULL; rec_strm[i].avail_in=0;
-      int ret=deflateInit2(&rec_strm[i], clevel, Z_DEFLATED, window, memlevel, Z_DEFAULT_STRATEGY);
-      diffCount[i]=(clevel>=minclevel && clevel<=maxclevel && ret==Z_OK)?0:LIMIT;
-      recpos[i]=BLOCK*2;
-      diffPos[i*LIMIT]=-1;
-      diffByte[i*LIMIT]=0;
+    memlevel=(i%9)+1;
+    clevel=(i/9)+1;
+    rec_strm[i].zalloc=Z_NULL; rec_strm[i].zfree=Z_NULL; rec_strm[i].opaque=Z_NULL;
+    rec_strm[i].next_in=Z_NULL; rec_strm[i].avail_in=0;
+    int ret=deflateInit2(&rec_strm[i], clevel, Z_DEFLATED, window-MAX_WBITS, memlevel, Z_DEFAULT_STRATEGY);
+    diffCount[i]=(clevel>=minclevel && clevel<=maxclevel && ret==Z_OK)?0:LIMIT;
+    recpos[i]=BLOCK*2;
+    diffPos[i*LIMIT]=-1;
+    diffByte[i*LIMIT]=0;
   }
   for (int i=0; i<len; i+=BLOCK) {
     unsigned int blsize=min(len-i,BLOCK);
     for (int j=0; j<81; j++) {
-        if (diffCount[j]>=LIMIT) continue;
-        memmove(&zrec[0], &zrec[BLOCK], BLOCK);
-        recpos[j]-=BLOCK;
+      if (diffCount[j]>=LIMIT) continue;
+      memmove(&zrec[0], &zrec[BLOCK], BLOCK);
+      recpos[j]-=BLOCK;
     }
     memmove(&zin[0], &zin[BLOCK], BLOCK);
     fread(&zin[BLOCK], 1, blsize, in); // Read block from input file
@@ -4178,31 +4209,31 @@ bool try_encode_zlib(FILE* in, FILE* out, int len) {
     // Decompress/inflate block
     main_strm.next_in=&zin[BLOCK]; main_strm.avail_in=blsize;
     do {
-        main_strm.next_out=&zout[0]; main_strm.avail_out=BLOCK;
-        main_ret=inflate(&main_strm, Z_FINISH);
+      main_strm.next_out=&zout[0]; main_strm.avail_out=BLOCK;
+      main_ret=inflate(&main_strm, Z_FINISH);
 
-        // Recompress/deflate block with all possible parameters
-        for (int j=0; j<81; j++) {
-            if (diffCount[j]>=LIMIT) continue;
-            rec_strm[j].next_in=&zout[0];  rec_strm[j].avail_in=BLOCK-main_strm.avail_out;
-            rec_strm[j].next_out=&zrec[recpos[j]]; rec_strm[j].avail_out=BLOCK*2-recpos[j];
-            int ret=deflate(&rec_strm[j], (int)main_strm.total_in == len ? Z_FINISH : Z_NO_FLUSH);
-            if (ret!=Z_BUF_ERROR && ret!=Z_STREAM_END && ret!=Z_OK) { diffCount[j]=LIMIT; continue; }
+      // Recompress/deflate block with all possible parameters
+      for (int j=0; j<81; j++) {
+        if (diffCount[j]>=LIMIT) continue;
+        rec_strm[j].next_in=&zout[0];  rec_strm[j].avail_in=BLOCK-main_strm.avail_out;
+        rec_strm[j].next_out=&zrec[recpos[j]]; rec_strm[j].avail_out=BLOCK*2-recpos[j];
+        int ret=deflate(&rec_strm[j], (int)main_strm.total_in == len ? Z_FINISH : Z_NO_FLUSH);
+        if (ret!=Z_BUF_ERROR && ret!=Z_STREAM_END && ret!=Z_OK) { diffCount[j]=LIMIT; continue; }
 
-            // Compare
-            int end=2*BLOCK-(int)rec_strm[j].avail_out;
-            int tail=max(main_ret==Z_STREAM_END ? len-(int)rec_strm[j].total_out : 0,0);
-            for (int k=recpos[j]; k<end+tail; k++) {
-              if ((k<end && i+k-BLOCK<len && zrec[k]!=zin[k]) || k>=end) {
-                if (++diffCount[j]<LIMIT) {
-                  const int p=j*LIMIT+diffCount[j];
-                  diffPos[p]=i+k-BLOCK;
-                  diffByte[p]=zin[k];
-                }
-              }
+        // Compare
+        int end=2*BLOCK-(int)rec_strm[j].avail_out;
+        int tail=max(main_ret==Z_STREAM_END ? len-(int)rec_strm[j].total_out : 0,0);
+        for (int k=recpos[j]; k<end+tail; k++) {
+          if ((k<end && i+k-BLOCK<len && zrec[k]!=zin[k]) || k>=end) {
+            if (++diffCount[j]<LIMIT) {
+              const int p=j*LIMIT+diffCount[j];
+              diffPos[p]=i+k-BLOCK;
+              diffByte[p]=zin[k];
             }
-            recpos[j]=2*BLOCK-rec_strm[j].avail_out;
+          }
         }
+        recpos[j]=2*BLOCK-rec_strm[j].avail_out;
+      }
     } while (main_strm.avail_out==0 && main_ret==Z_BUF_ERROR);
     if (main_ret!=Z_BUF_ERROR && main_ret!=Z_STREAM_END) break;
   }
@@ -4220,23 +4251,16 @@ bool try_encode_zlib(FILE* in, FILE* out, int len) {
   if (minCount==LIMIT) return false;
   
   // Step 3 - write parameters, differences and precompressed (inflated) data
-  if (window<0) window=1;
-  fputc(window, out);
-  fputc(memlevel, out);
-  fputc(clevel, out);
-  fputc(len>>24, out);
-  fputc(len>>16, out);
-  fputc(len>>8, out);
-  fputc(len, out);
   fputc(diffCount[index], out);
-  for (int i=0; i<diffCount[index]; i++) {
-    const int v=diffPos[index*LIMIT+i+1]-diffPos[index*LIMIT+i]-1;
-    fputc(v>>24, out);
-    fputc(v>>16, out);
-    fputc(v>>8, out);
-    fputc(v, out);
+  fputc(window, out);
+  fputc(index, out);
+  for (int i=0; i<=diffCount[index]; i++) {
+    const int v=i==diffCount[index] ? len-diffPos[index*LIMIT+i]
+                                    : diffPos[index*LIMIT+i+1]-diffPos[index*LIMIT+i]-1;
+    fputc(v>>24, out); fputc(v>>16, out); fputc(v>>8, out); fputc(v, out);
   }
   for (int i=0; i<diffCount[index]; i++) fputc(diffByte[index*LIMIT+i+1], out);
+  
   fseek(in, pos, SEEK_SET);
   main_strm.zalloc=Z_NULL; main_strm.zfree=Z_NULL; main_strm.opaque=Z_NULL;
   main_strm.next_in=Z_NULL; main_strm.avail_in=0;
@@ -4246,54 +4270,35 @@ bool try_encode_zlib(FILE* in, FILE* out, int len) {
     fread(&zin[0], 1, blsize, in);
     main_strm.next_in=&zin[0]; main_strm.avail_in=blsize;
     do {
-        main_strm.next_out=&zout[0]; main_strm.avail_out=BLOCK;
-        main_ret=inflate(&main_strm, Z_FINISH);
-        fwrite(&zout[0], 1, BLOCK-main_strm.avail_out, out);
+      main_strm.next_out=&zout[0]; main_strm.avail_out=BLOCK;
+      main_ret=inflate(&main_strm, Z_FINISH);
+      fwrite(&zout[0], 1, BLOCK-main_strm.avail_out, out);
     } while (main_strm.avail_out==0 && main_ret==Z_BUF_ERROR);
     if (main_ret!=Z_BUF_ERROR && main_ret!=Z_STREAM_END) break;
   }
   return main_ret==Z_STREAM_END;
 }
 
-void encode_zlib(FILE* in, FILE* out, int len) {
-  if (!try_encode_zlib(in, out, len)) {
-    int c=0;
-    fputc(c, out);
-    for (int i=0; i<len; i++) {
-      c=fgetc(in);
-      fputc(c, out);
-    }
-  }
-}
-
-
 int decode_zlib(FILE* in, int size, FILE *out, FMode mode, int &diffFound) {
   const int BLOCK=1<<16, LIMIT=128;
   U8 zin[BLOCK],zout[BLOCK];
-  int window=fgetc(in);
-  if (window==1) window=-MAX_WBITS;
-  int memlevel=fgetc(in);
-  int clevel=fgetc(in);
-  int len=fgetc(in)<<24;
-  len|=fgetc(in)<<16;
-  len|=fgetc(in)<<8;
-  len|=fgetc(in);
   int diffCount=min(fgetc(in),LIMIT-1);
+  int window=fgetc(in)-MAX_WBITS;
+  int index=fgetc(in);
+  int memlevel=(index%9)+1;
+  int clevel=(index/9)+1;  
+  int len=0;
   int diffPos[LIMIT];
   diffPos[0]=-1;
-  for (int i=0; i<diffCount; i++) {
-    int v=fgetc(in)<<24;
-    v|=fgetc(in)<<16;
-    v|=fgetc(in)<<8;
-    v|=fgetc(in);
-    diffPos[i+1]=v+diffPos[i]+1;
+  for (int i=0; i<=diffCount; i++) {
+    int v=fgetc(in)<<24; v|=fgetc(in)<<16; v|=fgetc(in)<<8; v|=fgetc(in);
+    if (i==diffCount) len=v+diffPos[i]; else diffPos[i+1]=v+diffPos[i]+1;
   }
   U8 diffByte[LIMIT];
   diffByte[0]=0;
   for (int i=0; i<diffCount; i++) diffByte[i+1]=fgetc(in);
-  size-=8+5*diffCount;
+  size-=7+5*diffCount;
   
-  // Step 2 - check recompressiblitiy, determine parameters and save differences
   z_stream rec_strm;
   int diffIndex=1,recpos=0;
   rec_strm.zalloc=Z_NULL; rec_strm.zfree=Z_NULL; rec_strm.opaque=Z_NULL;
@@ -4332,7 +4337,7 @@ int decode_zlib(FILE* in, int size, FILE *out, FMode mode, int &diffFound) {
 
 //////////////////// Compress, Decompress ////////////////////////////
 
-void direct_encode_block(Filetype type, FILE *in, int len, Encoder &en, int s1, int s2, int info=-1) {
+void direct_encode_block(Filetype type, FILE *in, int len, Encoder &en, int info=-1) {
   en.compress(type);
   en.compress(len>>24);
   en.compress(len>>16);
@@ -4345,15 +4350,68 @@ void direct_encode_block(Filetype type, FILE *in, int len, Encoder &en, int s1, 
     en.compress(info);
   }
   printf("Compressing... ");
-  const int total=s1+len+s2;
-  for (int j=s1; j<s1+len; ++j) {
-    if (!(j&0xfff)) printStatus(j, total);
+  for (int j=0; j<len; ++j) {
+    if (!(j&0xfff)) en.print_status(j, len);
     en.compress(getc(in));
   }
   printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
 }
 
-void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it=0, int s1=0, int s2=0) {
+void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it=0, float p1=0.0, float p2=1.0);
+
+void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int info, char *blstr, int it, float p1, float p2, long begin) {
+  if (type==EXE || type==CD || type==IMAGE24 || type==ZLIB) {
+    FILE* tmp=tmpfile();  // temporary encoded file
+    if (!tmp) perror("tmpfile"), quit();
+    int diffFound=0;
+    if (type==IMAGE24) encode_bmp(in, tmp, len, info);
+    else if (type==EXE) encode_exe(in, tmp, len, begin);
+    else if (type==CD) encode_cd(in, tmp, len, info);
+    else if (type==ZLIB) diffFound=encode_zlib(in, tmp, len)?0:1;
+    const long tmpsize=ftell(tmp);
+    if (!diffFound) {
+      rewind(tmp);
+      en.setFile(tmp);
+      fseek(in, begin, SEEK_SET);
+      if (type==IMAGE24) decode_bmp(en, tmpsize, info, in, FCOMPARE, diffFound);
+      else if (type==EXE) decode_exe(en, tmpsize, in, FCOMPARE, diffFound);
+      else if (type==CD) decode_cd(tmp, tmpsize, in, FCOMPARE, diffFound);
+      else if (type==ZLIB) decode_zlib(tmp, tmpsize, in, FCOMPARE, diffFound);
+    }
+
+    // Test fails, compress without transform
+    if (diffFound || fgetc(tmp)!=EOF) {
+      printf("Transform fails at %d, skipping...\n", diffFound-1);
+      fseek(in, begin, SEEK_SET);
+      direct_encode_block(DEFAULT, in, len, en);
+    } else {
+      rewind(tmp);
+      if (type==CD || type==ZLIB) {
+        en.compress(type), en.compress(tmpsize>>24), en.compress(tmpsize>>16);
+        en.compress(tmpsize>>8), en.compress(tmpsize);
+        if (type==ZLIB && info>0) {// PDF image
+          Filetype type2=(info>>24)==24?IMAGE24:IMAGE8;
+          int hdrsize=7+5*fgetc(tmp);
+          rewind(tmp);
+          direct_encode_block(HDR, tmp, hdrsize, en);
+          transform_encode_block(type2, tmp, tmpsize-hdrsize, en, info&0xffffff, blstr, it, p1, p2, hdrsize);
+        } else {
+          compressRecursive(tmp, tmpsize, en, blstr, it+1, p1, p2);
+        }
+      } else if (type==EXE) {
+        direct_encode_block(type, tmp, tmpsize, en);
+      } else if (type==IMAGE24) {
+        direct_encode_block(type, tmp, tmpsize, en, info);
+      }
+    }
+    fclose(tmp);  // deletes
+  } else {
+    const int i1=(type==IMAGE1 || type==IMAGE8 || type==AUDIO)?info:-1;
+    direct_encode_block(type, in, len, en, i1);
+  }
+}
+
+void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it, float p1, float p2) {
   static const char* typenames[10]={"default", "jpeg", "hdr",
     "1b-image", "8b-image", "24b-image", "audio", "exe", "cd", "zlib"};
   static const char* audiotypes[4]={"8b mono", "8b stereo", "16b mono",
@@ -4361,15 +4419,14 @@ void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it=0, int
   Filetype type=DEFAULT;
   int blnum=0, info;  // image width or audio type
   long begin=ftell(in), end0=begin+n;
-  FILE* tmp;
   char b2[32];
   strcpy(b2, blstr);
   if (b2[0]) strcat(b2, "-");
   if (it==5) {
-    direct_encode_block(DEFAULT, in, n, en, s1, s2);
+    direct_encode_block(DEFAULT, in, n, en);
     return;
   }
-  s2+=n;
+  float pscale=n>0?(p2-p1)/n:0;
 
   // Transform and test in blocks
   while (n>0) {
@@ -4382,56 +4439,18 @@ void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it=0, int
     }
     int len=int(end-begin);
     if (len>0) {
-      s2-=len;
+      en.set_status_range(p1,p2=p1+pscale*len);
       sprintf(blstr,"%s%d",b2,blnum++);
       printf(" %-11s | %-9s |%10d bytes [%ld - %ld]",blstr,typenames[type],len,begin,end-1);
       if (type==AUDIO) printf(" (%s)", audiotypes[info%4]);
       else if (type==IMAGE1 || type==IMAGE8 || type==IMAGE24) printf(" (width: %d)", info);
       else if (type==CD) printf(" (m%d/f%d)", info==1?1:2, info!=3?1:2);
+      else if (type==ZLIB && info>0) printf(" (%db-image)",info>>24);
       printf("\n");
-      if (type==EXE || type==CD || type==IMAGE24 || type==ZLIB) {
-        tmp=tmpfile();  // temporary encoded file
-        if (!tmp) perror("tmpfile"), quit();
-        if (type==IMAGE24) encode_bmp(in, tmp, len, info);
-        else if (type==EXE) encode_exe(in, tmp, len, begin);
-        else if (type==CD) encode_cd(in, tmp, len, info);
-        else if (type==ZLIB) encode_zlib(in, tmp, len);
-        const long tmpsize=ftell(tmp);
-
-        rewind(tmp);
-        en.setFile(tmp);
-        fseek(in, begin, SEEK_SET);
-        int diffFound=0;
-        if (type==IMAGE24) decode_bmp(en, tmpsize, info, in, FCOMPARE, diffFound);
-        else if (type==EXE) decode_exe(en, tmpsize, in, FCOMPARE, diffFound);
-        else if (type==CD) decode_cd(tmp, tmpsize, in, FCOMPARE, diffFound);
-        else if (type==ZLIB) decode_zlib(tmp, tmpsize, in, FCOMPARE, diffFound);
-
-        // Test fails, compress without transform
-        if (diffFound || fgetc(tmp)!=EOF) {
-          printf("Transform fails at %d, skipping...\n", diffFound-1);
-          fseek(in, begin, SEEK_SET);
-          direct_encode_block(DEFAULT, in, len, en, s1, s2);
-        } else {
-          rewind(tmp);
-          if (type==CD || type==ZLIB) {
-            en.compress(type), en.compress(tmpsize>>24), en.compress(tmpsize>>16);
-            en.compress(tmpsize>>8), en.compress(tmpsize);
-            compressRecursive(tmp, tmpsize, en, blstr, it+1, s1, s2);
-          } else if (type==EXE) {
-            direct_encode_block(type, tmp, tmpsize, en, s1, s2);
-          } else if (type==IMAGE24) {
-            direct_encode_block(type, tmp, tmpsize, en, s1, s2, info);
-          }
-        }
-        fclose(tmp);  // deletes
-      } else {
-        const int i1=(type==IMAGE1 || type==IMAGE8 || type==AUDIO)?info:-1;
-        direct_encode_block(type, in, len, en, s1, s2, i1);
-      }
-      s1+=len;
+      transform_encode_block(type, in, len, en, info, blstr, it, p1, p2, begin);
+      p1=p2;
+      n-=len;
     }
-    n-=len;
     type=nextType;
     begin=end;
   }
@@ -4471,29 +4490,27 @@ bool makedir(const char* dir) {
 #endif
 }
 
-
-int decompressRecursive(FILE *out, long size, Encoder& en, FMode mode, int it=0, int s1=0, int s2=0) {
+int decompressRecursive(FILE *out, long n, Encoder& en, FMode mode, int it=0) {
   Filetype type;
   long len, i=0;
   int diffFound=0, info;
   FILE *tmp;
-  s2+=size;
-  while (i<size) {
+  while (i<n) {
     type=(Filetype)en.decompress();
     len=en.decompress()<<24;
     len|=en.decompress()<<16;
     len|=en.decompress()<<8;
     len|=en.decompress();
-
+    
     if (type==IMAGE1 || type==IMAGE8 || type==IMAGE24 || type==AUDIO) {
       info=0; for (int i=0; i<4; ++i) { info<<=8; info+=en.decompress(); }
     }
     if (type==IMAGE24) len=decode_bmp(en, len, info, out, mode, diffFound);
-    else if (type==EXE) len=decode_exe(en, len, out, mode, diffFound, s1, s2);
+    else if (type==EXE) len=decode_exe(en, len, out, mode, diffFound);
     else if (type==CD || type==ZLIB) {
       tmp=tmpfile();
       if (!tmp) perror("tmpfile"), quit();
-      decompressRecursive(tmp, len, en, FDECOMPRESS, it+1, s1+i, s2-len);
+      decompressRecursive(tmp, len, en, FDECOMPRESS, it+1);
       if (mode!=FDISCARD) {
         rewind(tmp);
         if (type==CD) len=decode_cd(tmp, len, out, mode, diffFound);
@@ -4501,18 +4518,17 @@ int decompressRecursive(FILE *out, long size, Encoder& en, FMode mode, int it=0,
       }
       fclose(tmp);
     } else {
-      for (int j=i+s1; j<i+s1+len; ++j) {
-        if (!(j&0xfff)) printStatus(j, s2);
+      for (int j=0; j<len; ++j) {
+        if (!(j&0xfff)) en.print_status();
         if (mode==FDECOMPRESS) putc(en.decompress(), out);
         else if (mode==FCOMPARE) {
           if (en.decompress()!=fgetc(out) && !diffFound) {
             mode=FDISCARD;
-            diffFound=j+1;
+            diffFound=i+j+1;
           }
         } else en.decompress();
       }
     }
-
     i+=len;
   }
   return diffFound;
