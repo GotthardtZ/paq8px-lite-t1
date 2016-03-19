@@ -1,8 +1,8 @@
-/* paq8px file compressor/archiver.  Release by Jan Ondrus, Mar. 11, 2016
+/* paq8px file compressor/archiver.  Release by Jan Ondrus, Mar. 13, 2016
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
-    Jan Ondrus, Andreas Morphis, Pavel L. Holoborodko, KZ., Simon Berger,
+    Jan Ondrus, Andreas Morphis, Pavel L. Holoborodko, Kaido Orav, Simon Berger,
     Neill Corlett
 
     LICENSE
@@ -109,7 +109,7 @@ on your C++ compiler.  In Linux, use "-f elf".
 Recommended compiler commands and optimizations:
 
   MINGW g++:
-    g++ paq8px.cpp -DWINDOWS -lz -Wall -Wextra -O3 -s -fomit-frame-pointer -static-libgcc -o paq8px.exe
+    g++ paq8px.cpp -DWINDOWS -lz -Wall -Wextra -O3 -static -static-libgcc -opaq8px.exe 
 
 
 ARCHIVE FILE FORMAT
@@ -589,6 +589,9 @@ Changed image and audio data handling (separated in blocks)
 Added compression of (8-bit, 24-bit) TGA image data
 Improved TIFF image detection
 Added zlib stream recompression
+Added base64 transform (from paq8pxd)
+Modified im8bitModel (8-bit) (from paq8pxd)
+Added gif recompression
 */
 
 #define PROGNAME "paq8px"  // Please change this if you change the program.
@@ -2136,12 +2139,12 @@ void im24bitModel(Mixer& m, int w) {
 //////////////////////////// im8bitModel /////////////////////////////////
 
 // Model for 8-bit image data
-
 void im8bitModel(Mixer& m, int w) {
   const int SC=0x20000;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC*2),scm7(SC);
-  static ContextMap cm(MEM*4, 32);
+  static ContextMap cm(MEM*4, 45+12);
+  static int itype=0, id8=1, id9=1;
 
   // Select nearby pixels as context
   if (!bpos) {
@@ -2151,41 +2154,118 @@ void im8bitModel(Mixer& m, int w) {
     mean>>=2;
     const int logvar=ilog(var);
     int i=0;
-    // 2 x
-    cm.set(hash(++i, buf(1)>>2, buf(w)>>2));
-    cm.set(hash(++i, buf(1)>>2, buf(2)>>2));
-    cm.set(hash(++i, buf(w)>>2, buf(w*2)>>2));
-    cm.set(hash(++i, buf(1)>>2, buf(w-1)>>2));
-    cm.set(hash(++i, buf(w)>>2, buf(w+1)>>2));
-    cm.set(hash(++i, buf(w+1)>>2, buf(w+2)>>2));
-    cm.set(hash(++i, buf(w+1)>>2, buf(w*2+2)>>2));
-    cm.set(hash(++i, buf(w-1)>>2, buf(w*2-2)>>2));
-    cm.set(hash(++i, (buf(1)+buf(w))>>1));
-    cm.set(hash(++i, (buf(1)+buf(2))>>1));
-    cm.set(hash(++i, (buf(w)+buf(w*2))>>1));
-    cm.set(hash(++i, (buf(1)+buf(w-1))>>1));
-    cm.set(hash(++i, (buf(w)+buf(w+1))>>1));
-    cm.set(hash(++i, (buf(w+1)+buf(w+2))>>1));
-    cm.set(hash(++i, (buf(w+1)+buf(w*2+2))>>1));
-    cm.set(hash(++i, (buf(w-1)+buf(w*2-2))>>1));
-    // 3 x
-    cm.set(hash(++i, buf(w)>>2, buf(1)>>2, buf(w-1)>>2));
-    cm.set(hash(++i, buf(w-1)>>2, buf(w)>>2, buf(w+1)>>2));
-    cm.set(hash(++i, buf(1)>>2, buf(w-1)>>2, buf(w*2-1)>>2));
-    // mixed
-    cm.set(hash(++i, (buf(3)+buf(w))>>1, buf(1)>>2, buf(2)>>2));
-    cm.set(hash(++i, (buf(2)+buf(1))>>1,(buf(w)+buf(w*2))>>1,buf(w-1)>>2));
-    cm.set(hash(++i, (buf(2)+buf(1))>>2,(buf(w-1)+buf(w))>>2));
-    cm.set(hash(++i, (buf(2)+buf(1))>>1,(buf(w)+buf(w*2))>>1));
-    cm.set(hash(++i, (buf(2)+buf(1))>>1,(buf(w-1)+buf(w*2-2))>>1));
-    cm.set(hash(++i, (buf(2)+buf(1))>>1,(buf(w+1)+buf(w*2+2))>>1));
-    cm.set(hash(++i, (buf(w)+buf(w*2))>>1,(buf(w-1)+buf(w*2+2))>>1));
-    cm.set(hash(++i, (buf(w-1)+buf(w))>>1,(buf(w)+buf(w+1))>>1));
-    cm.set(hash(++i, (buf(1)+buf(w-1))>>1,(buf(w)+buf(w*2))>>1));
-    cm.set(hash(++i, (buf(1)+buf(w-1))>>2,(buf(w)+buf(w+1))>>2));
-    cm.set(hash(++i, (((buf(1)-buf(w-1))>>1)+buf(w))>>2));
-    cm.set(hash(++i, (((buf(w-1)-buf(w))>>1)+buf(1))>>2));
-    cm.set(hash(++i, (-buf(1)+buf(w-1)+buf(w))>>2));
+
+    const int errr=(buf(2)+buf(w+1)-buf(w));
+    if(abs(errr-buf(w-1)+buf(1)-buf(w))>255) id8++; else id9++;
+    if (blpos==0) id8=id9=1,itype=0;    // reset on new block
+    if(blpos%w==0 && blpos>w) itype=(id9/id8)<4; // select model
+
+    if (itype==0) { //faster, for smooth images
+      cm.set(hash(++i,buf(1),0));
+      cm.set(hash(++i,buf(w-1),0));
+      cm.set(hash(++i,buf(w-2),0));
+      cm.set(hash(++i,buf(2),0));
+      cm.set(hash(++i,buf(w*2-1),0));
+      cm.set(hash(++i,buf(w-1)+buf(1)-buf(w),buf(1)));
+      cm.set(hash(++i,buf(w+1),0));
+      cm.set(hash(++i,buf(w*2-2),0));
+      cm.set(hash(++i,2*buf(w-1)-buf(w*2-1),buf(1)));
+      cm.set(hash(++i,2*buf(1)-buf(2),buf(1)));
+      cm.set(hash(++i,(abs(buf(1)-buf(2))+abs(buf(w-1)-buf(w))+abs(buf(w-1)-buf(w-2))),buf(1)));
+      cm.set(hash(++i,(abs(buf(1)-buf(w))+abs(buf(w-1)-buf(w*2-1))+abs(buf(w-2)-buf(w*2-2))),buf(1)));
+      cm.set(hash(++i,abs(errr-buf(w-1)+buf(1)-buf(w)),buf(1)));
+      cm.set(hash(++i,mean,logvar));
+      cm.set(hash(++i,2*buf(1)-buf(2),2*buf(w-1)-buf(w*2-1)));
+      cm.set(hash(++i,(abs(buf(1)-buf(2))+abs(buf(w-1)-buf(w))+abs(buf(w-1)-buf(w-2))), (abs(buf(1)-buf(w))+abs(buf(w-1)-buf(w*2-1))+abs(buf(w-2)-buf(w*2-2)))));
+      cm.set(hash(++i,buf(1)>>2, buf(w)>>2));
+      cm.set(hash(++i,buf(1)>>2, buf(2)>>2));
+      cm.set(hash(++i,buf(w)>>2, buf(w*2)>>2));
+      cm.set(hash(++i,buf(1)>>2, buf(w-1)>>2));
+      cm.set(hash(++i,buf(w)>>2, buf(w+1)>>2));
+      cm.set(hash(++i,buf(w+1)>>2, buf(w+2)>>2));
+      cm.set(hash(++i,(buf(w+1)+buf(w*2+2))>>1));
+      cm.set(hash(++i,(buf(w-1)+buf(w*2-2))>>1));
+      cm.set(hash(++i,2*buf(w-1)-buf(w*2-1),buf(w-1)));
+      cm.set(hash(++i,2*buf(1)-buf(2),buf(w-1)));
+      cm.set(hash(++i,buf(w*2-1),buf(w-2),buf(1)));
+      cm.set(hash(++i,(buf(1)+buf(w))>>1));
+      cm.set(hash(++i,(buf(1)+buf(2))>>1));
+      cm.set(hash(++i,(buf(w)+buf(w*2))>>1));
+      cm.set(hash(++i,(buf(1)+buf(w-1))>>1));
+      cm.set(hash(++i,(buf(w)+buf(w+1))>>1));
+      cm.set(hash(++i,(buf(w+1)+buf(w+2))>>1));
+      cm.set(hash(++i,(buf(w+1)+buf(w*2+2))>>1));
+      cm.set(hash(++i,(buf(w-1)+buf(w*2-2))>>1));
+      cm.set(hash(++i,buf(w*2-2),buf(w-1),buf(1)));
+      cm.set(hash(++i,buf(w+1),buf(w-1),buf(w-2),buf(1)));
+      cm.set(hash(++i,2*buf(1)-buf(2),buf(w-2),buf(w*2-2)));
+      cm.set(hash(++i,buf(2),buf(w+1),buf(w),buf(w-1)));
+      cm.set(hash(++i,buf(w*3), buf(w),buf(1)));
+      cm.set(hash(++i,buf(w)>>2, buf(3)>>2, buf(w-1)>>2));
+      cm.set(hash(++i,buf(3)>>2, buf(w-2)>>2, buf(w*2-2)>>2));
+      cm.set(hash(++i,buf(w)>>2, buf(1)>>2, buf(w-1)>>2));
+      cm.set(hash(++i,buf(w-1)>>2, buf(w)>>2, buf(w+1)>>2));
+      cm.set(hash(++i,buf(1)>>2, buf(w-1)>>2, buf(w*2-1)>>2));
+    } else {
+      i=512;
+      cm.set(hash(++i,buf(1),0));
+      cm.set(hash(++i,buf(2), 0));
+      cm.set(hash(++i,buf(w), 0));
+      cm.set(hash(++i,buf(w+1), 0));
+      cm.set(hash(++i,buf(w-1), 0));
+      cm.set(hash(++i,(buf(2)+buf(w)-buf(w+1)), 0));
+      cm.set(hash(++i,(buf(w)+buf(2)-buf(w+1))>>1, 0));
+      cm.set(hash(++i,(buf(2)+buf(w+1))>>1, 0));
+      cm.set(hash(++i,(buf(w-1)-buf(w)), buf(1)>>1));
+      cm.set(hash(++i,(buf(w)-buf(w+1)), buf(1)>>1));
+      cm.set(hash(++i,(buf(w+1)+buf(2)), buf(1)>>1));
+      cm.set(hash(++i,buf(1)>>2, buf(w)>>2));
+      cm.set(hash(++i,buf(1)>>2, buf(2)>>2));
+      cm.set(hash(++i,buf(w)>>2, buf(w*2)>>2));
+      cm.set(hash(++i,buf(1)>>2, buf(w-1)>>2));
+      cm.set(hash(++i,buf(w)>>2, buf(w+1)>>2));
+      cm.set(hash(++i,buf(w+1)>>2, buf(w+2)>>2));
+      cm.set(hash(++i,buf(w+1)>>2, buf(w*2+2)>>2));
+      cm.set(hash(++i,buf(w-1)>>2, buf(w*2-2)>>2));
+      cm.set(hash(++i,(buf(1)+buf(w))>>1));
+      cm.set(hash(++i,(buf(1)+buf(2))>>1));
+      cm.set(hash(++i,(buf(w)+buf(w*2))>>1));
+      cm.set(hash(++i,(buf(1)+buf(w-1))>>1));
+      cm.set(hash(++i,(buf(w)+buf(w+1))>>1));
+      cm.set(hash(++i,(buf(w+1)+buf(w+2))>>1));
+      cm.set(hash(++i,(buf(w+1)+buf(w*2+2))>>1));
+      cm.set(hash(++i,(buf(w-1)+buf(w*2-2))>>1));
+      cm.set(hash(++i,buf(w)>>2, buf(1)>>2, buf(w-1)>>2));
+      cm.set(hash(++i,buf(w-1)>>2, buf(w)>>2, buf(w+1)>>2));
+      cm.set(hash(++i,buf(1)>>2, buf(w-1)>>2, buf(w*2-1)>>2));
+      cm.set(hash(++i,(buf(3)+buf(w))>>1, buf(1)>>2, buf(2)>>2));
+      cm.set(hash(++i,(buf(2)+buf(1))>>1,(buf(w)+buf(w*2))>>1,buf(w-1)>>2));
+      cm.set(hash(++i,(buf(2)+buf(1))>>2,(buf(w-1)+buf(w))>>2));
+      cm.set(hash(++i,(buf(2)+buf(1))>>1,(buf(w)+buf(w*2))>>1));
+      cm.set(hash(++i,(buf(2)+buf(1))>>1,(buf(w-1)+buf(w*2-2))>>1));
+      cm.set(hash(++i,(buf(2)+buf(1))>>1,(buf(w+1)+buf(w*2+2))>>1));
+      cm.set(hash(++i,(buf(w)+buf(w*2))>>1,(buf(w-1)+buf(w*2+2))>>1));
+      cm.set(hash(++i,(buf(w-1)+buf(w))>>1,(buf(w)+buf(w+1))>>1));
+      cm.set(hash(++i,(buf(1)+buf(w-1))>>1,(buf(w)+buf(w*2))>>1));
+      cm.set(hash(++i,(buf(1)+buf(w-1))>>2,(buf(w)+buf(w+1))>>2));
+      cm.set(hash(++i,(((buf(1)-buf(w-1))>>1)+buf(w))>>2));
+      cm.set(hash(++i,(((buf(w-1)-buf(w))>>1)+buf(1))>>2));
+      cm.set(hash(++i,(-buf(1)+buf(w-1)+buf(w))>>2));
+      cm.set(hash(++i,(buf(1)*2-buf(2))>>1));
+      cm.set(hash(++i,mean,logvar));
+      cm.set(hash(++i,(buf(w)*2-buf(w*2))>>1));
+      cm.set(hash(++i,(buf(1)+buf(w)-buf(w+1))>>1));
+      cm.set(hash(++i,(buf(4)+buf(3))>>2,(buf(w-1)+buf(w))>>2));
+      cm.set(hash(++i,(buf(4)+buf(3))>>1,(buf(w)+buf(w*2))>>1));
+      cm.set(hash(++i,(buf(4)+buf(3))>>1,(buf(w-1)+buf(w*2-2))>>1));
+      cm.set(hash(++i,(buf(4)+buf(3))>>1,(buf(w+1)+buf(w*2+2))>>1));
+      cm.set(hash(++i,(buf(4)+buf(1))>>2,(buf(w-3)+buf(w))>>2));
+      cm.set(hash(++i,(buf(4)+buf(1))>>1,(buf(w)+buf(w*2))>>1));
+      cm.set(hash(++i,(buf(4)+buf(1))>>1,(buf(w-3)+buf(w*2-3))>>1));
+      cm.set(hash(++i,(buf(4)+buf(1))>>1,(buf(w+3)+buf(w*2+3))>>1));
+      cm.set(hash(++i,buf(w)>>2, buf(3)>>2, buf(w-1)>>2));
+      cm.set(hash(++i,buf(3)>>2, buf(w-2)>>2, buf(w*2-2)>>2));
+    }
     scm1.set((buf(1)+buf(w))>>1);
     scm2.set((buf(1)+buf(w)-buf(w+1))>>1);
     scm3.set((buf(1)*2-buf(2))>>1);
@@ -3173,7 +3253,7 @@ void nestModel(Mixer& m)
 //////////////////////////// contextModel //////////////////////
 
 
-typedef enum {DEFAULT, JPEG, HDR, IMAGE1, IMAGE8, IMAGE24, AUDIO, EXE, CD, ZLIB} Filetype;
+typedef enum {DEFAULT, JPEG, HDR, IMAGE1, IMAGE8, IMAGE24, AUDIO, EXE, CD, ZLIB, BASE64, GIF} Filetype;
 
 
 // This combines all the context models with a Mixer.
@@ -3194,7 +3274,7 @@ int contextModel2() {
     if (size==-1) ft2=(Filetype)buf(1);
     if (size==-5 && ft2!=IMAGE1 && ft2!=IMAGE8 && ft2!=IMAGE24 && ft2!=AUDIO) {
       size=buf(4)<<24|buf(3)<<16|buf(2)<<8|buf(1);
-      if (ft2==CD || ft2==ZLIB) size=0;
+      if (ft2==CD || ft2==ZLIB || ft2==BASE64 || ft2==GIF) size=0;
       blpos=0;
     }
     if (size==-9) {
@@ -3401,7 +3481,7 @@ public:
       return c;
     }
   }
-  
+
   void set_status_range(float perc1, float perc2) { p1=perc1; p2=perc2; }
   void print_status(int n, int size) {
     printf("%6.2f%%\b\b\b\b\b\b\b", (p1+(p2-p1)*n/(size+1))*100), fflush(stdout);
@@ -3418,7 +3498,7 @@ Encoder::Encoder(Mode m, FILE* f):
     fseek(f, 0, SEEK_END);
     set_status_range(0, size());
     fseek(archive, start, SEEK_SET);
-  } 
+  }
   if (level>0 && mode==DECOMPRESS) {  // x = first 4 bytes of archive
     for (int i=0; i<4; ++i)
       x=(x<<8)+(getc(archive)&255);
@@ -3492,7 +3572,7 @@ deth=(header_len),detd=(data_len),info=(wmode),\
 fseek(in, start+(start_pos), SEEK_SET),HDR
 
 
-// Function ecc_compute(), edc_compute() and eccedc_init() taken from 
+// Function ecc_compute(), edc_compute() and eccedc_init() taken from
 // ** UNECM - Decoder for ECM (Error Code Modeler) format.
 // ** Version 1.0
 // ** Copyright (C) 2002 Neill Corlett
@@ -3608,7 +3688,7 @@ int zlib_inflateInit(z_streamp strm, int zh) {
     if (zh==-1) return inflateInit2(strm, -MAX_WBITS); else return inflateInit(strm);
 }
 
-// Detect EXE or JPEG data
+// Detect blocks
 Filetype detect(FILE* in, int n, Filetype type, int &info) {
   U32 buf3=0, buf2=0, buf1=0, buf0=0;  // last 16 bytes
   long start=ftell(in);
@@ -3634,6 +3714,8 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
   unsigned char zbuf[32], zin[1<<16], zout[1<<16]; // For ZLIB stream detection
   int zbufpos=0,zzippos=-1;
   int pdfim=0,pdfimw=0,pdfimh=0,pdfimb=0,pdfimp=0;
+  int b64s=0,b64i=0,b64line=0,b64nl=0; // For base64 detection
+  int gif=0,gifa=0,gifi=0,gifw=0,gifc=0; // For GIF detection
 
   // For image detection
   static int deth=0,detd=0;  // detected header/data size in bytes
@@ -3790,7 +3872,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
       else if (p==42+aiffs) AUD_DET(AUDIO,aiff-3,54+aiffs,buf0-8,aiffm);
     }
 
-    // Detect .mod file header 
+    // Detect .mod file header
     if ((buf0==0x4d2e4b2e || buf0==0x3643484e || buf0==0x3843484e  // M.K. 6CHN 8CHN
        || buf0==0x464c5434 || buf0==0x464c5438) && (buf1&0xc0c0c0c0)==0 && i>=1083) {
       long savedpos=ftell(in);
@@ -3812,7 +3894,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
       fseek(in, savedpos, SEEK_SET);
     }
 
-    // Detect .s3m file header 
+    // Detect .s3m file header
     if (buf0==0x1a100000) s3mi=i,s3mno=s3mni=0;
     if (s3mi) {
       const int p=i-s3mi;
@@ -3864,7 +3946,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
     // Detect .pbm .pgm .ppm image
     if ((buf0&0xfff0ff)==0x50300a) {
       pgmn=(buf0&0xf00)>>8;
-      if (pgmn>=4 && pgmn <=6) pgm=i,pgm_ptr=pgmw=pgmh=pgmc=pgmcomment=0;
+      if (pgmn>=4 && pgmn<=6) pgm=i,pgm_ptr=pgmw=pgmh=pgmc=pgmcomment=0;
     }
     if (pgm) {
       if (i-pgm==1 && c==0x23) pgmcomment=1; //pgm comment
@@ -3961,6 +4043,32 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
       }
     }
 
+    // Detect .gif
+    if (type==DEFAULT && dett==GIF && i==0) {
+      dett=DEFAULT;
+      if (c==0x2c || c==0x21) gif=2,gifi=2;
+    }
+    if (!gif && (buf1&0xffff)==0x4749 && buf0==0x46383961) gif=1,gifi=i+5;
+    if (gif) {
+      if (gif==1 && i==gifi) gif=2,gifi=i+5+((c&128)?(3*(2<<(c&7))):0);
+      if (gif==2 && i==gifi) {
+        if ((buf0&0xff0000)==0x210000) gif=5,gifi=i;
+        else if ((buf0&0xff0000)==0x2c0000) gif=3,gifi=i;
+        else gif=0;
+      }
+      if (gif==3 && i==gifi+6) gifw=(bswap(buf0)&0xffff);
+      if (gif==3 && i==gifi+7) gif=4,gifc=255,gifa=gifi=i+2+((c&128)?(3*(2<<(c&7))):0);
+      if (gif==4 && i==gifi) {
+        if (c>0 && gifc!=255) gifw=0;
+        if (c>0) gifc=c,gifi+=c+1;
+        else if (!gifw) gif=2,gifi=i+3;
+        else return fseek(in, start+gifa-1, SEEK_SET),detd=i-gifa+2,info=gifw,dett=GIF;
+      }
+      if (gif==5 && i==gifi) {
+        if (c>0) gifi+=c+1; else gif=2,gifi=i+3;
+      }
+    }
+
     // Detect EXE if the low order byte (little-endian) XX is more
     // recently seen (and within 4K) if a relative to absolute address
     // conversion is done in the context CALL/JMP (E8/E9) XX xx xx 00/FF
@@ -3986,6 +4094,26 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
     if (i-e8e9last>0x4000) {
       if (type==EXE) return fseek(in, start+e8e9last, SEEK_SET), DEFAULT;
       e8e9count=e8e9pos=0;
+    }
+
+    // Detect base64 encoded data
+    if (b64s==0 && buf0==0x73653634 && ((buf1&0xffffff)==0x206261 || (buf1&0xffffff)==0x204261)) b64s=1,b64i=i-6; //' base64' ' Base64'
+    if (b64s==0 && ((buf1==0x3b626173 && buf0==0x6536342c) || (buf1==0x215b4344 && buf0==0x4154415b))) b64s=3,b64i=i+1; // ';base64,' '![CDATA['
+    if (b64s>0) {
+      if (b64s==1 && buf0==0x0d0a0d0a) b64s=((i-b64i>=128)?0:2),b64i=i+1,b64line=0;
+      else if (b64s==2 && (buf0&0xffff)==0x0d0a && b64line==0) b64line=i+1-b64i,b64nl=i;
+      else if (b64s==2 && (buf0&0xffff)==0x0d0a && b64line>0 && (buf0&0xffffff)!=0x3d0d0a) {
+         if (i-b64nl<b64line && buf0!=0x0d0a0d0a) i-=1,b64s=5;
+         else if (buf0==0x0d0a0d0a) i-=3,b64s=5;
+         else if (i-b64nl==b64line) b64nl=i;
+         else b64s=0;
+      }
+      else if (b64s==2 && (buf0&0xffffff)==0x3d0d0a) i-=1,b64s=5; // '=' or '=='
+      else if (b64s==2 && !(isalnum(c) || c=='+' || c=='/' || c==10 || c==13 || c=='=')) b64s=0;
+      if (b64line>0 && (b64line<=4 || b64line>255)) b64s=0;
+      if (b64s==3 && !(isalnum(c) || c=='+' || c=='/' || c=='=')) b64s=4;
+      if ((b64s==4 && i-b64i>128) || (b64s==5 && i-b64i>512 && i-b64i<(1<<27))) return fseek(in, start+b64i, SEEK_SET),detd=i-b64i,BASE64;
+      if (b64s>3) b64s=0;
     }
   }
   return type;
@@ -4169,7 +4297,7 @@ int encode_zlib(FILE* in, FILE* out, int len) {
   const int BLOCK=1<<16, LIMIT=128;
   U8 zin[BLOCK*2],zout[BLOCK],zrec[BLOCK*2], diffByte[81*LIMIT];
   int diffPos[81*LIMIT];
-  
+
   // Step 1 - parse offset type form zlib stream header
   long pos=ftell(in);
   unsigned int h1=fgetc(in), h2=fgetc(in);
@@ -4205,7 +4333,7 @@ int encode_zlib(FILE* in, FILE* out, int len) {
     }
     memmove(&zin[0], &zin[BLOCK], BLOCK);
     fread(&zin[BLOCK], 1, blsize, in); // Read block from input file
-    
+
     // Decompress/inflate block
     main_strm.next_in=&zin[BLOCK]; main_strm.avail_in=blsize;
     do {
@@ -4249,7 +4377,7 @@ int encode_zlib(FILE* in, FILE* out, int len) {
   }
   inflateEnd(&main_strm);
   if (minCount==LIMIT) return false;
-  
+
   // Step 3 - write parameters, differences and precompressed (inflated) data
   fputc(diffCount[index], out);
   fputc(window, out);
@@ -4260,7 +4388,7 @@ int encode_zlib(FILE* in, FILE* out, int len) {
     fputc(v>>24, out); fputc(v>>16, out); fputc(v>>8, out); fputc(v, out);
   }
   for (int i=0; i<diffCount[index]; i++) fputc(diffByte[index*LIMIT+i+1], out);
-  
+
   fseek(in, pos, SEEK_SET);
   main_strm.zalloc=Z_NULL; main_strm.zfree=Z_NULL; main_strm.opaque=Z_NULL;
   main_strm.next_in=Z_NULL; main_strm.avail_in=0;
@@ -4286,7 +4414,7 @@ int decode_zlib(FILE* in, int size, FILE *out, FMode mode, int &diffFound) {
   int window=fgetc(in)-MAX_WBITS;
   int index=fgetc(in);
   int memlevel=(index%9)+1;
-  int clevel=(index/9)+1;  
+  int clevel=(index/9)+1;
   int len=0;
   int diffPos[LIMIT];
   diffPos[0]=-1;
@@ -4298,7 +4426,7 @@ int decode_zlib(FILE* in, int size, FILE *out, FMode mode, int &diffFound) {
   diffByte[0]=0;
   for (int i=0; i<diffCount; i++) diffByte[i+1]=fgetc(in);
   size-=7+5*diffCount;
-  
+
   z_stream rec_strm;
   int diffIndex=1,recpos=0;
   rec_strm.zalloc=Z_NULL; rec_strm.zfree=Z_NULL; rec_strm.opaque=Z_NULL;
@@ -4321,7 +4449,7 @@ int decode_zlib(FILE* in, int size, FILE *out, FMode mode, int &diffFound) {
       if (mode==FDECOMPRESS) fwrite(&zout[0], 1, have, out);
       else if (mode==FCOMPARE) for (int j=0; j<have; j++) if (zout[j]!=getc(out) && !diffFound) diffFound=recpos+j+1;
       recpos+=have;
-      
+
     } while (rec_strm.avail_out==0);
   }
   while (diffIndex<=diffCount) {
@@ -4329,9 +4457,287 @@ int decode_zlib(FILE* in, int size, FILE *out, FMode mode, int &diffFound) {
     else if (mode==FCOMPARE) if (diffByte[diffIndex]!=getc(out) && !diffFound) diffFound=recpos+1;
     diffIndex++;
     recpos++;
-  }  
+  }
   deflateEnd(&rec_strm);
   return recpos==len ? len : 0;
+}
+
+//
+// decode/encode base64
+//
+static const char  table1[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+bool isbase64(unsigned char c) {
+    return (isalnum(c) || (c == '+') || (c == '/')|| (c == 10) || (c == 13));
+}
+
+int decode_base64(FILE *in, FILE *out, FMode mode, int &diffFound){
+    U8 inn[3];
+    int i,len1=0, len=0, blocksout = 0;
+    int fle=0;
+    int linesize=0;
+    int outlen=0;
+    int tlf=0;
+    linesize=getc(in);
+    outlen=getc(in);
+    outlen+=(getc(in)<<8);
+    outlen+=(getc(in)<<16);
+    tlf=(getc(in));
+    outlen+=((tlf&63)<<24);
+    U8 *ptr,*fptr;
+    ptr = (U8*)calloc((outlen>>2)*4+10, 1);
+    if (!ptr) quit("Out of memory (d_B64)");
+    fptr=&ptr[0];
+    tlf=(tlf&192);
+    if (tlf==128)
+       tlf=10;        // LF: 10
+    else if (tlf==64)
+         tlf=13;        // LF: 13
+    else
+         tlf=0;
+
+    while(fle<outlen){
+        len=0;
+        for(i=0;i<3;i++){
+            inn[i] = getc( in );
+            if(!feof(in)){
+                len++;
+                len1++;
+            }
+            else {
+                inn[i] = 0;
+            }
+        }
+        if(len){
+            U8 in0,in1,in2;
+            in0=inn[0],in1=inn[1],in2=inn[2];
+            fptr[fle++]=(table1[in0>>2]);
+            fptr[fle++]=(table1[((in0&0x03)<<4)|((in1&0xf0)>>4)]);
+            fptr[fle++]=((len>1?table1[((in1&0x0f)<<2)|((in2&0xc0)>>6)]:'='));
+            fptr[fle++]=((len>2?table1[in2&0x3f]:'='));
+            blocksout++;
+        }
+        if(blocksout>=(linesize/4) && linesize!=0){ //no lf if linesize==0
+            if( blocksout &&  !feof(in) && fle<=outlen) { //no lf if eof
+                if (tlf) fptr[fle++]=(tlf);
+                else fptr[fle++]=13,fptr[fle++]=10;
+            }
+            blocksout = 0;
+        }
+    }
+    //Write out or compare
+    if (mode==FDECOMPRESS){
+            fwrite(&ptr[0], 1, outlen, out);
+
+        }
+    else if (mode==FCOMPARE){
+    for(i=0;i<outlen;i++){
+        U8 b=fptr[i];
+
+
+            if (b!=fgetc(out) && !diffFound) diffFound=ftell(out);
+        }
+    }
+    free(ptr);
+    return outlen;
+}
+
+inline char valueb(char c){
+       const char *p = strchr(table1, c);
+       if(p) {
+          return p-table1;
+       } else {
+          return 0;
+       }
+}
+
+void encode_base64(FILE* in, FILE* out, int len) {
+  int in_len = 0;
+  int i = 0;
+  int j = 0;
+  int b=0;
+  int lfp=0;
+  int tlf=0;
+  char src[4];
+  U8 *ptr,*fptr;
+  int b64mem=(len>>2)*3+10;
+    ptr = (U8*)calloc(b64mem, 1);
+    if (!ptr) quit("Out of memory (e_B64)");
+    fptr=&ptr[0];
+    int olen=5;
+
+  while (b=fgetc(in),in_len++ , ( b != '=') && isbase64(b) && in_len<=len) {
+    if (b==13 || b==10) {
+       if (lfp==0) lfp=in_len ,tlf=b;
+       if (tlf!=b) tlf=0;
+       continue;
+    }
+    src[i++] = b;
+    if (i ==4){
+          for (j = 0; j <4; j++) src[j] = valueb(src[j]);
+          src[0] = (src[0] << 2) + ((src[1] & 0x30) >> 4);
+          src[1] = ((src[1] & 0xf) << 4) + ((src[2] & 0x3c) >> 2);
+          src[2] = ((src[2] & 0x3) << 6) + src[3];
+
+          fptr[olen++]=src[0];
+          fptr[olen++]=src[1];
+          fptr[olen++]=src[2];
+      i = 0;
+    }
+  }
+
+  if (i){
+    for (j=i;j<4;j++)
+      src[j] = 0;
+
+    for (j=0;j<4;j++)
+      src[j] = valueb(src[j]);
+
+    src[0] = (src[0] << 2) + ((src[1] & 0x30) >> 4);
+    src[1] = ((src[1] & 0xf) << 4) + ((src[2] & 0x3c) >> 2);
+    src[2] = ((src[2] & 0x3) << 6) + src[3];
+
+    for (j=0;(j<i-1);j++) {
+        fptr[olen++]=src[j];
+    }
+  }
+  fptr[0]=lfp&255; //nl lenght
+  fptr[1]=len&255;
+  fptr[2]=len>>8&255;
+  fptr[3]=len>>16&255;
+  if (tlf!=0) {
+    if (tlf==10) fptr[4]=128;
+    else fptr[4]=64;
+  }
+  else
+      fptr[4]=len>>24&63; //1100 0000
+  fwrite(&ptr[0], 1, olen, out);
+  free(ptr);
+}
+
+int encode_gif(FILE* in, FILE* out, int len) {
+  int codesize=fgetc(in),diffpos=0,hdrsize=5,clearpos=0;
+  int beginin=ftell(in),beginout=ftell(out);
+  U8 output[4096];
+  fputc(hdrsize>>8, out);
+  fputc(hdrsize&255, out);
+  fputc(clearpos>>8, out);
+  fputc(clearpos&255, out);
+  fputc(codesize, out);
+  for (int phase=0; phase<2; phase++) {
+    fseek(in, beginin, SEEK_SET);
+    int bits=codesize+1,shift=0,buf=0;
+    int blocksize=0,maxcode=(1<<codesize)+1,last=-1,dict[4096];
+    while ((blocksize=fgetc(in))>0 && ftell(in)-beginin<len) {
+      for (int i=0; i<blocksize; i++) {
+        buf|=fgetc(in)<<shift;
+        shift+=8;
+        while (shift>=bits) {
+          int code=buf&((1<<bits)-1);
+          buf>>=bits;
+          shift-=bits;
+          if (code==(1<<codesize)) {
+            if (maxcode>(1<<codesize)+1) {
+              if (clearpos && clearpos!=4095-maxcode) return 0;
+              clearpos=4095-maxcode;
+            }
+            bits=codesize+1, maxcode=(1<<codesize)+1, last=-1;
+          }
+          else if (code==(1<<codesize)+1) { }
+          else if (code>maxcode+1) return 0;
+          else {
+            int j=(code<=maxcode?code:last),size=1;
+            while (j>=(1<<codesize)) {
+              output[4096-(size++)]=dict[j]&255;
+              j=dict[j]>>8;
+            }
+            output[4096-size]=j;
+            if (phase==1) fwrite(&output[4096-size], 1, size, out); else diffpos+=size;
+            if (code==maxcode+1) { if (phase==1) fputc(j, out); else diffpos++; }
+            if (last!=-1) {
+              dict[++maxcode]=(last<<8)+j;
+              if (phase==0 && last>(1<<codesize)) {
+                bool diff=false;
+                for (int m=(1<<codesize)+2;m<maxcode;m++) if (dict[maxcode]==dict[m]) { diff=true; break; }
+                if (diff) {
+                  hdrsize+=4;
+                  j=diffpos-size-(code==maxcode);
+                  fputc((j>>24)&255, out); fputc((j>>16)&255, out); fputc((j>>8)&255, out); fputc(j&255, out);
+                  diffpos=size+(code==maxcode);
+                }
+              }
+              if (maxcode>=((1<<bits)-1) && bits<12) bits++;
+            }
+            last=code;
+          }
+        }
+      }
+    }
+  }
+  diffpos=ftell(out);
+  fseek(out, beginout, SEEK_SET);
+  fputc(hdrsize>>8, out);
+  fputc(hdrsize&255, out);
+  fputc(clearpos>>8, out);
+  fputc(clearpos&255, out);
+  fseek(out, diffpos, SEEK_SET);
+  return ftell(in)-beginin==len-1;
+}
+
+#define gif_write_block(count) { output[0]=(count);\
+if (mode==FDECOMPRESS) fwrite(&output[0], 1, (count)+1, out);\
+else if (mode==FCOMPARE) for (int j=0; j<(count)+1; j++) if (output[j]!=getc(out) && !diffFound) diffFound=outsize+j+1;\
+outsize+=(count)+1; blocksize=0; }
+
+#define gif_write_code(c) { buf+=(c)<<shift; shift+=bits;\
+while (shift>=8) { output[++blocksize]=buf&255; buf>>=8;shift-=8;\
+if (blocksize==255) gif_write_block(255); }}
+
+int decode_gif(FILE* in, int size, FILE *out, FMode mode, int &diffFound) {
+  int diffcount=fgetc(in), curdiff=0, diffpos[4096];
+  diffcount=((diffcount<<8)+fgetc(in)-5)/4;
+  int clearpos=fgetc(in); clearpos=(clearpos<<8)+fgetc(in);
+  if (diffcount>4096 || clearpos>256) return 1;
+  int codesize=fgetc(in),bits=codesize+1,shift=0,buf=0,blocksize=0;
+  int maxcode=(1<<codesize)+1,dict[4096],input;
+  for (int i=0; i<diffcount; i++) {
+    diffpos[i]=fgetc(in);
+    diffpos[i]=(diffpos[i]<<8)+fgetc(in);
+    diffpos[i]=(diffpos[i]<<8)+fgetc(in);
+    diffpos[i]=(diffpos[i]<<8)+fgetc(in);
+    if (i>0) diffpos[i]+=diffpos[i-1];
+  }
+  U8 output[256];
+  size-=6+diffcount*4;
+  int last=fgetc(in),total=size+1,outsize=1;
+  if (mode==FDECOMPRESS) fputc(codesize, out);
+  else if (mode==FCOMPARE) if (codesize!=getc(out) && !diffFound) diffFound=1;
+  gif_write_code(1<<codesize);
+  while (size-->=0 && (input=fgetc(in))>=0) {
+    int code=-1, key=(last<<8)+input;
+    for (int i=(1<<codesize)+2; i<=maxcode; i++) if (dict[i]==key) code=i;
+    if (curdiff<diffcount && total-size>diffpos[curdiff]) curdiff++,code=-1;
+    if (code==-1) {
+      gif_write_code(last);
+      if (maxcode==4095-clearpos) { gif_write_code(1<<codesize); bits=codesize+1, maxcode=(1<<codesize)+1; }
+      else
+      {
+        dict[++maxcode]=key;
+        if (maxcode>=(1<<bits) && bits<12) bits++;
+      }
+      code=input;
+    }
+    last=code;
+  }
+  gif_write_code(last);
+  gif_write_code((1<<codesize)+1);
+  if (shift>0) {
+    output[++blocksize]=buf&255;
+    if (blocksize==255) gif_write_block(255);
+  }
+  if (blocksize>0) gif_write_block(blocksize);
+  if (mode==FDECOMPRESS) fputc(0, out);
+  else if (mode==FCOMPARE) if (0!=getc(out) && !diffFound) diffFound=outsize+1;
+  return outsize+1;
 }
 
 
@@ -4360,7 +4766,7 @@ void direct_encode_block(Filetype type, FILE *in, int len, Encoder &en, int info
 void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it=0, float p1=0.0, float p2=1.0);
 
 void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int info, char *blstr, int it, float p1, float p2, long begin) {
-  if (type==EXE || type==CD || type==IMAGE24 || type==ZLIB) {
+  if (type==EXE || type==CD || type==IMAGE24 || type==ZLIB || type==BASE64 || type==GIF) {
     FILE* tmp=tmpfile();  // temporary encoded file
     if (!tmp) perror("tmpfile"), quit();
     int diffFound=0;
@@ -4368,7 +4774,10 @@ void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int i
     else if (type==EXE) encode_exe(in, tmp, len, begin);
     else if (type==CD) encode_cd(in, tmp, len, info);
     else if (type==ZLIB) diffFound=encode_zlib(in, tmp, len)?0:1;
+    else if (type==BASE64) encode_base64(in, tmp, len);
+    else if (type==GIF) diffFound=encode_gif(in, tmp, len)?0:1;
     const long tmpsize=ftell(tmp);
+    fseek(tmp, tmpsize, SEEK_SET);
     if (!diffFound) {
       rewind(tmp);
       en.setFile(tmp);
@@ -4377,8 +4786,9 @@ void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int i
       else if (type==EXE) decode_exe(en, tmpsize, in, FCOMPARE, diffFound);
       else if (type==CD) decode_cd(tmp, tmpsize, in, FCOMPARE, diffFound);
       else if (type==ZLIB) decode_zlib(tmp, tmpsize, in, FCOMPARE, diffFound);
+      else if (type==BASE64) decode_base64(tmp, in, FCOMPARE, diffFound);
+      else if (type==GIF) decode_gif(tmp, tmpsize, in, FCOMPARE, diffFound);
     }
-
     // Test fails, compress without transform
     if (diffFound || fgetc(tmp)!=EOF) {
       printf("Transform fails at %d, skipping...\n", diffFound-1);
@@ -4386,7 +4796,7 @@ void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int i
       direct_encode_block(DEFAULT, in, len, en);
     } else {
       rewind(tmp);
-      if (type==CD || type==ZLIB) {
+      if (type==CD || type==ZLIB || type==BASE64 || type==GIF) {
         en.compress(type), en.compress(tmpsize>>24), en.compress(tmpsize>>16);
         en.compress(tmpsize>>8), en.compress(tmpsize);
         if (type==ZLIB && info>0) {// PDF image
@@ -4395,6 +4805,12 @@ void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int i
           rewind(tmp);
           direct_encode_block(HDR, tmp, hdrsize, en);
           transform_encode_block(type2, tmp, tmpsize-hdrsize, en, info&0xffffff, blstr, it, p1, p2, hdrsize);
+        } else if (type==GIF) {
+          int hdrsize=fgetc(tmp);
+          hdrsize=(hdrsize<<8)+fgetc(tmp);
+          rewind(tmp);
+          direct_encode_block(HDR, tmp, hdrsize, en);
+          direct_encode_block(IMAGE8, tmp, tmpsize-hdrsize, en, info);
         } else {
           compressRecursive(tmp, tmpsize, en, blstr, it+1, p1, p2);
         }
@@ -4412,8 +4828,8 @@ void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int i
 }
 
 void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it, float p1, float p2) {
-  static const char* typenames[10]={"default", "jpeg", "hdr",
-    "1b-image", "8b-image", "24b-image", "audio", "exe", "cd", "zlib"};
+  static const char* typenames[12]={"default", "jpeg", "hdr",
+    "1b-image", "8b-image", "24b-image", "audio", "exe", "cd", "zlib", "base64", "gif"};
   static const char* audiotypes[4]={"8b mono", "8b stereo", "16b mono",
     "16b stereo"};
   Filetype type=DEFAULT;
@@ -4445,7 +4861,7 @@ void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it, float
       if (type==AUDIO) printf(" (%s)", audiotypes[info%4]);
       else if (type==IMAGE1 || type==IMAGE8 || type==IMAGE24) printf(" (width: %d)", info);
       else if (type==CD) printf(" (m%d/f%d)", info==1?1:2, info!=3?1:2);
-      else if (type==ZLIB && info>0) printf(" (%db-image)",info>>24);
+      else if (type==ZLIB && info>0) printf(" (image)");
       printf("\n");
       transform_encode_block(type, in, len, en, info, blstr, it, p1, p2, begin);
       p1=p2;
@@ -4501,13 +4917,13 @@ int decompressRecursive(FILE *out, long n, Encoder& en, FMode mode, int it=0) {
     len|=en.decompress()<<16;
     len|=en.decompress()<<8;
     len|=en.decompress();
-    
+
     if (type==IMAGE1 || type==IMAGE8 || type==IMAGE24 || type==AUDIO) {
       info=0; for (int i=0; i<4; ++i) { info<<=8; info+=en.decompress(); }
     }
     if (type==IMAGE24) len=decode_bmp(en, len, info, out, mode, diffFound);
     else if (type==EXE) len=decode_exe(en, len, out, mode, diffFound);
-    else if (type==CD || type==ZLIB) {
+    else if (type==CD || type==ZLIB || type==GIF || type==BASE64) {
       tmp=tmpfile();
       if (!tmp) perror("tmpfile"), quit();
       decompressRecursive(tmp, len, en, FDECOMPRESS, it+1);
@@ -4515,6 +4931,8 @@ int decompressRecursive(FILE *out, long n, Encoder& en, FMode mode, int it=0) {
         rewind(tmp);
         if (type==CD) len=decode_cd(tmp, len, out, mode, diffFound);
         if (type==ZLIB) len=decode_zlib(tmp, len, out, mode, diffFound);
+        if (type==BASE64) len=decode_base64(tmp, out, mode, diffFound);
+        if (type==GIF) len=decode_gif(tmp, len, out, mode, diffFound);
       }
       fclose(tmp);
     } else {
