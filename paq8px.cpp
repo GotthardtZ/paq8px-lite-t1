@@ -4111,7 +4111,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
       else if (b64s==2 && (buf0&0xffffff)==0x3d0d0a) i-=1,b64s=5; // '=' or '=='
       else if (b64s==2 && !(isalnum(c) || c=='+' || c=='/' || c==10 || c==13 || c=='=')) b64s=0;
       if (b64line>0 && (b64line<=4 || b64line>255)) b64s=0;
-      if (b64s==3 && !(isalnum(c) || c=='+' || c=='/' || c=='=')) b64s=4;
+      if (b64s==3 && i>=b64i && !(isalnum(c) || c=='+' || c=='/' || c=='=')) b64s=4;
       if ((b64s==4 && i-b64i>128) || (b64s==5 && i-b64i>512 && i-b64i<(1<<27))) return fseek(in, start+b64i, SEEK_SET),detd=i-b64i,BASE64;
       if (b64s>3) b64s=0;
     }
