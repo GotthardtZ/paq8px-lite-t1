@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Release by Jan Ondrus, Mar. 13, 2016
+/* paq8px file compressor/archiver.  Release by Jan Ondrus, Mar. 20, 2016
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -848,13 +848,15 @@ public:
 
 /////////////////////// Global context /////////////////////////
 
+typedef enum {DEFAULT, JPEG, HDR, IMAGE1, IMAGE8, IMAGE24, AUDIO, EXE, CD, ZLIB, BASE64, GIF} Filetype;
 int level=DEFAULT_OPTION;  // Compression level 0 to 8
 #define MEM (0x10000<<level)
 int y=0;  // Last bit, 0 or 1, set by encoder
 
 // Global context set by Predictor and available to all models.
+
 int c0=1; // Last 0-7 bits of the partial byte with a leading 1 bit (1-255)
-U32 c4=0; // Last 4 whole bytes, packed.  Last byte is bits 0-7.
+U32 c4=0, f4=0, b2=0; // Last 4 whole bytes, packed.  Last byte is bits 0-7.
 int bpos=0; // bits in c0 (0 to 7)
 Buf buf;  // Rotating input queue set by Predictor
 int blpos=0; // Relative position in block
@@ -1252,7 +1254,7 @@ public:
     for (int i=0; i<ncxt; ++i) {
       int err=((y<<12)-pr[i])*7;
       assert(err>=-32768 && err<32768);
-      if (err) train(&tx[0], &wx[cxt[i]*N], nx, err);
+      train(&tx[0], &wx[cxt[i]*N], nx, err);
     }
     nx=base=ncxt=0;
   }
@@ -1768,15 +1770,11 @@ int ContextMap::mix1(Mixer& m, int cc, int bp, int c1, int y1) {
       m.add(0);
 
     // predict from bit context
-   if (cp[i])
-   {
-    result+=mix2(m, *cp[i], sm[i]);
-   }
-   else
-   {
-    mix2(m, 0, sm[i]);
-   }
-
+    if (cp[i]) {
+      result+=mix2(m, *cp[i], sm[i]);
+    } else {
+      mix2(m, 0, sm[i]);
+    }
 
   }
   if (bp==7) cn=0;
@@ -1854,97 +1852,134 @@ int matchModel(Mixer& m) {
 
 // Model English text (words and columns/end of line)
 static U32 frstchar=0, spafdo=0, spaces=0, spacecount=0, words=0, wordcount=0,wordlen=0,wordlen1=0;
-void wordModel(Mixer& m) {
+void wordModel(Mixer& m, Filetype filetype) {
   static U32 word0=0, word1=0, word2=0, word3=0, word4=0, word5=0;  // hashes
+  static U32 xword0=0,xword1=0,xword2=0,cword0=0,ccword=0;
   static U32 number0=0, number1=0;  // hashes
   static U32 text0=0;  // hash stream of letters
-  static ContextMap cm(MEM*16, 20+3+3+6+1+1+1+1+1+1+2+1+1+1+1);
-  static int nl1=-3, nl=-2;  // previous, current newline position
+  static ContextMap cm(MEM*16, 44);
+  static int nl1=-3, nl=-2, w=0;  // previous, current newline position
+  static U32 mask = 0;
+  static Array<int> wpos(0x10000);  // last position of word
+  
   // Update word hashes
   if (bpos==0) {
-    int c=c4&255;
+    int c=c4&255,f=0;
     if (spaces&0x80000000) --spacecount;
     if (words&0x80000000) --wordcount;
     spaces=spaces*2;
     words=words*2;
-
     if (c>='A' && c<='Z') c+='a'-'A';
-    if ((c>='a' && c<='z') || c>=128) {
+    if ((c>='a' && c<='z') || c==1 || c==2 ||(c>=128 &&(b2!=3))) {
       ++words, ++wordcount;
-      word0=word0*263*32+c;
+      word0^=hash(word0, c,0);
       text0=text0*997*16+c;
       wordlen++;
       wordlen=min(wordlen,45);
+      f=0;
+      w=word0&(wpos.size()-1);
     }
-    else if (word0) {
-      word5=word4*23;
-      word4=word3*19;
-      word3=word2*17;
-      word2=word1*13;
-      word1=word0*11;
-      wordlen1=wordlen;
-      word0=wordlen=0;
+    else {
+      if (word0) {
+        word5=word4;
+        word4=word3;
+        word3=word2;
+        word2=word1;
+        word1=word0;
+        wordlen1=wordlen;
+         wpos[w]=blpos;
+        if (c==':'|| c=='=') cword0=word0;
+        if (c==']'&& (frstchar!=':' || frstchar!='*')) xword0=word0;
+        ccword=0;
+        word0=wordlen=0;
+        if((c=='.'||c=='!'||c=='?' ||c=='}' ||c==')') && buf(2)!=10 && filetype!=EXE) f=1;
+      }
+      if ((c4&0xFFFF)==0x3D3D) xword1=word1,xword2=word2; // ==
+      if ((c4&0xFFFF)==0x2727) xword1=word1,xword2=word2; // ''
+      if (c==32 || c==10) { ++spaces, ++spacecount; if (c==10 ) nl1=nl, nl=pos-1;}
+      else if (c=='.' || c=='!' || c=='?' || c==',' || c==';' || c==':') spafdo=0,ccword=c;
+      else { ++spafdo; spafdo=min(63,spafdo); }
     }
     if (c>='0' && c<='9') {
-      number0=number0*263*32+c;
+        number0^=hash(number0, c,1);
     }
     else if (number0) {
-      number1=number0*11;
-      number0=0;
+      number1=number0;
+      number0=0,ccword=0;
     }
-    if (c=='.' || c=='!' || c=='?' || c==',' || c==';' || c==':') spafdo=0; else { ++spafdo; spafdo=min(63,spafdo); }
-    if (c==32 || c==10) { ++spaces, ++spacecount; if (c==10) nl1=nl, nl=pos-1;}
-    int col=min(255, pos-nl), above=buf[nl1+col]; // text column context
+
+    int col=min(255, pos-nl);
+    int above=buf[nl1+col];
     if (col<=2) frstchar=(col==2?min(c,96):0);
-    cm.set(spafdo|col<<8);
-    cm.set(spafdo|spaces<<8);
-    cm.set(frstchar<<11|c);
-    cm.set(col<<8|frstchar);
-    cm.set(spaces<<8|(words&255));
-
-    cm.set(number0+word2*31);
-    cm.set(number0+word1*31);
-    cm.set(number0*31+c);
-    cm.set(number0+number1*31);
-    cm.set(word0+number1*31);
-
-    cm.set(frstchar<<7);
-    cm.set(wordlen<<16|c);
-    cm.set(wordlen1<<8|col);
-    cm.set(c*64+spacecount/2);
+    if (frstchar=='[' && c==32)    {if(buf(3)==']' || buf(4)==']' ) frstchar=96,xword0=0;}
+    cm.set(hash(513,spafdo, spaces,ccword));
+    cm.set(hash(514,frstchar, c));
+    cm.set(hash(515,col, frstchar));
+    cm.set(hash(516,spaces, (words&255)));
+    cm.set(hash(256,number0, word2));
+    cm.set(hash(257,number0, word1));
+    cm.set(hash(258,number1, c,ccword));
+    cm.set(hash(259,number0, number1));
+    cm.set(hash(260,word0, number1));
+    cm.set(hash(518,wordlen1,col));
+    cm.set(hash(519,c,spacecount/2));
     U32 h=wordcount*64+spacecount;
-    cm.set((c<<13)+h);
-    cm.set(h);
-    cm.set(h+spafdo*8);
+    cm.set(hash(520,c,h,ccword));
+    cm.set(hash(517,frstchar,h));
+    cm.set(hash(521,h,spafdo));
 
-    U32 d=c4&0xffff;
-    cm.set(d<<9|frstchar);
-
-    h=word0*271+buf(1);
-    cm.set(h);
-    cm.set(word0);
-    cm.set(h+word1);
-    cm.set(word0+word1*31);
-    cm.set(h+word1+word2*29);
-    cm.set(text0&0xffffff);
-    cm.set(text0&0xfffff);
-
-    cm.set(h+word2);
-    cm.set(h+word3);
-    cm.set(h+word4);
-    cm.set(h+word5);
-    cm.set(buf(1)|buf(3)<<8|buf(5)<<16);
-    cm.set(buf(2)|buf(4)<<8|buf(6)<<16);
-
-    cm.set(h+word1+word3);
-    cm.set(h+word2+word3);
-
-    // Text column models
-    cm.set(col<<16|buf(1)<<8|above);
-    cm.set(buf(1)<<8|above);
-    cm.set(col<<8|buf(1));
-    cm.set(col*(c==32));
-    cm.set(col);
+    U32 d=c4&0xf0ff;
+    cm.set(hash(522,d,frstchar,ccword));
+    h=word0*271;
+    h=h+buf(1);
+    cm.set(hash(262,h, 0));
+    cm.set(hash(263,word0, 0));
+    cm.set(hash(264,h, word1));
+    cm.set(hash(265,word0, word1));
+    cm.set(hash(266,h, word1,word2));
+    cm.set(hash(268,text0&0xfffff, 0));
+    cm.set(hash(269,word0, xword0));
+    cm.set(hash(270,word0, xword1));
+    cm.set(hash(271,word0, xword2));
+    cm.set(hash(272,frstchar, xword2));
+    cm.set(hash(273,word0, cword0));
+    cm.set(hash(274,number0, cword0));
+    cm.set(hash(275,h, word2));
+    cm.set(hash(276,h, word3));
+    cm.set(hash(277,h, word4));
+    cm.set(hash(278,h, word5));
+    cm.set(hash(279,h, word1,word3));
+    cm.set(hash(280,h, word2,word3));
+    if (f) {
+      word5=word4;
+      word4=word3;
+      word3=word2;
+      word2=word1;
+      word1='.';
+    }
+    cm.set(hash(523,col,buf(1),above));
+    cm.set(hash(524,buf(1),above));
+    cm.set(hash(525,col,buf(1)));
+    cm.set(hash(526,col,c==32));
+    cm.set(hash(281, w, llog(blpos-wpos[w])>>4));
+    cm.set(hash(282,buf(1),llog(blpos-wpos[w])>>2));
+    
+    int fl = 0;
+    if ((c4&0xff) != 0) {
+      if (isalpha(c4&0xff)) fl = 1;
+      else if (ispunct(c4&0xff)) fl = 2;
+      else if (isspace(c4&0xff)) fl = 3;
+      else if ((c4&0xff) == 0xff) fl = 4;
+      else if ((c4&0xff) < 16) fl = 5;
+      else if ((c4&0xff) < 64) fl = 6;
+      else fl = 7;
+    }
+    mask = (mask<<3)|fl;
+    cm.set(hash(528,mask,0));
+    cm.set(hash(529,mask,buf(1)));
+    cm.set(hash(530,mask&0xff,col));
+    cm.set(hash(531,mask,buf(2),buf(3)));
+    cm.set(hash(532,mask&0x1ff,f4&0x00fff0));       
   }
   cm.mix(m);
 }
@@ -1957,8 +1992,8 @@ void wordModel(Mixer& m) {
 void recordModel(Mixer& m) {
   static int cpos1[256] , cpos2[256], cpos3[256], cpos4[256];
   static int wpos1[0x10000]; // buf(1..2) -> last position
-  static int rlen=2, rlen1=3, rlen2=4;  // run length and 2 candidates
-  static int rcount1=0, rcount2=0;  // candidate counts
+  static int rlen=2, rlen1=3, rlen2=4, rlen3=5;  // run length and 2 candidates
+  static int rcount1=0, rcount2=0, rcount3=0;  // candidate counts
   static ContextMap cm(32768, 3), cn(32768/2, 3), co(32768*2, 3), cp(MEM, 3);
 
   // Find record length
@@ -1967,14 +2002,15 @@ void recordModel(Mixer& m) {
     int r=pos-cpos1[c];
     if (r>1 && r==cpos1[c]-cpos2[c]
         && r==cpos2[c]-cpos3[c] && r==cpos3[c]-cpos4[c]
-        && (r>15 || ((c==buf(r*5+1)) && c==buf(r*6+1)))) {
+        && (r>10 || ((c==buf(r*5+1)) && c==buf(r*6+1)))) {
       if (r==rlen1) ++rcount1;
       else if (r==rlen2) ++rcount2;
       else if (rcount1>rcount2) rlen2=r, rcount2=1;
       else rlen1=r, rcount1=1;
     }
-    if (rcount1>15 && rlen!=rlen1) rlen=rlen1, rcount1=rcount2=0;
-    if (rcount2>15 && rlen!=rlen2) rlen=rlen2, rcount1=rcount2=0;
+    if (rcount1>12 && rlen!=rlen1 && rlen1*2!=rlen1) rlen1=rlen=rlen1, rcount1=rcount2=rcount3=0;
+    if (rcount2>18 && rlen!=rlen2 && rlen1*2!=rlen2) rlen1=rlen,rlen=rlen2, rcount1=rcount2=rcount3=0;
+    if (rcount3>24 && rlen!=rlen3 && rlen1*2!=rlen3) rlen1=rlen,rlen=rlen1, rcount1=rcount2=rcount3=0;
 
     // Set 2 dimensional contexts
     assert(rlen>0);
@@ -1991,9 +2027,6 @@ void recordModel(Mixer& m) {
     int col=pos%rlen;
     co.set(buf(1)<<8|buf(rlen));
 
-    //cp.set(w*16);
-    //cp.set(d*32);
-    //cp.set(c*64);
     cp.set(rlen|buf(rlen)<<10|col<<18);
     cp.set(rlen|buf(1)<<10|col<<18);
     cp.set(col|rlen<<12);
@@ -2017,7 +2050,7 @@ void recordModel(Mixer& m) {
 // Model order 1-2 contexts with gaps.
 
 void sparseModel(Mixer& m, int seenbefore, int howmany) {
-  static ContextMap cm(MEM*2, 40);
+  static ContextMap cm(MEM*2, 42);
   if (bpos==0) {
     cm.set(seenbefore);
     cm.set(howmany);
@@ -2025,13 +2058,15 @@ void sparseModel(Mixer& m, int seenbefore, int howmany) {
     cm.set(buf(1)|buf(6)<<8);
     cm.set(buf(3)|buf(6)<<8);
     cm.set(buf(4)|buf(8)<<8);
+    cm.set(buf(1)|buf(3)<<8|buf(5)<<16);
+    cm.set(buf(2)|buf(4)<<8|buf(6)<<16);
     cm.set(c4&0x00f0f0ff);
     cm.set(c4&0x00ff00ff);
     cm.set(c4&0xff0000ff);
     cm.set(c4&0x00f8f8f8);
     cm.set(c4&0xf8f8f8f8);
-    cm.set(c4&0x00f0f0f0);
-    cm.set(c4&0xf0f0f0f0);
+    cm.set(f4&0x00000fff);
+    cm.set(f4);
     cm.set(c4&0x00e0e0e0);
     cm.set(c4&0xe0e0e0e0);
     cm.set(c4&0x810000c1);
@@ -3048,31 +3083,39 @@ void exeModel(Mixer& m) {
 // 1 or 2 byte context.
 
 void indirectModel(Mixer& m) {
-  static ContextMap cm(MEM, 9);
+  static ContextMap cm(MEM, 12);
   static U32 t1[256];
   static U16 t2[0x10000];
   static U16 t3[0x8000];
+  static U16 t4[0x8000];
 
   if (!bpos) {
     U32 d=c4&0xffff, c=d&255, d2=(buf(1)&31)+32*(buf(2)&31)+1024*(buf(3)&31);
+    U32 d3=(buf(1)>>3&31)+32*(buf(3)>>3&31)+1024*(buf(4)>>3&31);
     U32& r1=t1[d>>8];
     r1=r1<<8|c;
     U16& r2=t2[c4>>8&0xffff];
     r2=r2<<8|c;
     U16& r3=t3[(buf(2)&31)+32*(buf(3)&31)+1024*(buf(4)&31)];
     r3=r3<<8|c;
+    U16& r4=t4[(buf(2)>>3&31)+32*(buf(4)>>3&31)+1024*(buf(5)>>3&31)];
+    r4=r4<<8|c;    
     const U32 t=c|t1[c]<<8;
     const U32 t0=d|t2[d]<<16;
     const U32 ta=d2|t3[d2]<<16;
+    const U32 tc=d3|t4[d3]<<16;
     cm.set(t);
     cm.set(t0);
     cm.set(ta);
+    cm.set(tc);
     cm.set(t&0xff00);
     cm.set(t0&0xff0000);
     cm.set(ta&0xff0000);
+    cm.set(tc&0xff0000);
     cm.set(t&0xffff);
     cm.set(t0&0xffffff);
     cm.set(ta&0xffffff);
+    cm.set(tc&0xffffff);
   }
   cm.mix(m);
 }
@@ -3150,9 +3193,9 @@ void dmcModel(Mixer& m) {
 
   // update count, state
   if (y) {
-    if (t[curr].c1<3800) t[curr].c1+=256;
+    if (t[curr].c1<3840) t[curr].c1+=256;
   }
-  else if (t[curr].c0<3800) t[curr].c0+=256;
+  else if (t[curr].c0<3840) t[curr].c0+=256;
   t[curr].state=nex(t[curr].state, y);
   curr=t[curr].nx[y];
 
@@ -3168,8 +3211,7 @@ void dmcModel(Mixer& m) {
 void nestModel(Mixer& m)
 {
   static int ic=0, bc=0, pc=0,vc=0, qc=0, lvc=0, wc=0;
-  static ContextMap cm(MEM, 14);
-  static U32 mask = 0;
+  static ContextMap cm(MEM, 10);
   if (bpos==0) {
     int c=c4&255, matched=1, vv;
     const int lc = (c >= 'A' && c <= 'Z'?c+'a'-'A':c);
@@ -3220,17 +3262,7 @@ void nestModel(Mixer& m)
     if (matched) bc = 0; else bc += 1;
     if (bc > 300) bc = ic = pc = qc = 0;
 
-    int fl = 0;
-    if ((c4&0xff) != 0) {
-      if (isalpha(c4&0xff)) fl = 1;
-      else if (ispunct(c4&0xff)) fl = 2;
-      else if (isspace(c4&0xff)) fl = 3;
-      else if ((c4&0xff) == 0xff) fl = 4;
-      else if ((c4&0xff) < 16) fl = 5;
-      else if ((c4&0xff) < 64) fl = 6;
-      else fl = 7;
-    }
-    mask = (mask<<3)|fl;
+ 
 
     cm.set((3*vc+77*pc+373*ic+qc)&0xffff);
     cm.set((31*vc+27*pc+281*qc)&0xffff);
@@ -3242,26 +3274,19 @@ void nestModel(Mixer& m)
     cm.set((vc&0xffff)|((c4&0xff)<<16));
     cm.set(((3*pc)&0xffff)|((c4&0xff)<<16));
     cm.set((ic&0xffff)|((c4&0xff)<<16));
-    cm.set(mask);
-    cm.set((mask<<8)|buf(1));
-    cm.set((mask<<17)|(buf(2)<<8)|buf(3));
-    cm.set((mask&0x1ff)|((c4&0xf0f0f0f0)<<9));
+
   }
   cm.mix(m);
 }
 
 //////////////////////////// contextModel //////////////////////
 
-
-typedef enum {DEFAULT, JPEG, HDR, IMAGE1, IMAGE8, IMAGE24, AUDIO, EXE, CD, ZLIB, BASE64, GIF} Filetype;
-
-
 // This combines all the context models with a Mixer.
 
 int contextModel2() {
   static ContextMap cm(MEM*32, 9);
   static RunContextMap rcm7(MEM), rcm9(MEM), rcm10(MEM);
-  static Mixer m(845, 3095, 7);
+  static Mixer m(881, 3095, 7);
   static U32 cxt[16];  // order 0-11 contexts
   static Filetype ft2,filetype=DEFAULT;
   static int size=0;  // bytes remaining in block
@@ -3320,7 +3345,7 @@ int contextModel2() {
     sparseModel(m,ismatch,order);
     distanceModel(m);
     recordModel(m);
-    wordModel(m);
+    wordModel(m, filetype);
     indirectModel(m);
     dmcModel(m);
     nestModel(m);
@@ -3373,12 +3398,19 @@ void Predictor::update() {
   static APM1 a(256), a1(0x10000), a2(0x10000), a3(0x10000),
                       a4(0x10000), a5(0x10000), a6(0x10000);
 
-  // Update global context: pos, bpos, c0, c4, buf
+  // Update global context: pos, bpos, c0, c4, buf, f4
   c0+=c0+y;
   if (c0>=256) {
     buf[pos++]=c0;
     c4=(c4<<8)+c0-256;
     c0=1;
+    
+    int b1=buf(1);
+    b2=b1;
+    if(b1=='.' || b1=='!' || b1=='?' || b1=='/'|| b1==')'|| b1=='}') f4=(f4&0xfffffff0)+2;
+    if (b1==32) --b1;
+    f4=f4*16+(b1>>4);    
+    
   }
   bpos=(bpos+1)&7;
 
@@ -4048,7 +4080,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
       dett=DEFAULT;
       if (c==0x2c || c==0x21) gif=2,gifi=2;
     }
-    if (!gif && (buf1&0xffff)==0x4749 && buf0==0x46383961) gif=1,gifi=i+5;
+    if (!gif && (buf1&0xffff)==0x4749 && (buf0==0x46383961 || buf0==0x46383761)) gif=1,gifi=i+5;
     if (gif) {
       if (gif==1 && i==gifi) gif=2,gifi=i+5+((c&128)?(3*(2<<(c&7))):0);
       if (gif==2 && i==gifi) {
@@ -4654,6 +4686,7 @@ int encode_gif(FILE* in, FILE* out, int len) {
             if (phase==1) fwrite(&output[4096-size], 1, size, out); else diffpos+=size;
             if (code==maxcode+1) { if (phase==1) fputc(j, out); else diffpos++; }
             if (last!=-1) {
+              if (maxcode>=4095) return 0;
               dict[++maxcode]=(last<<8)+j;
               if (phase==0 && last>(1<<codesize)) {
                 bool diff=false;
