@@ -109,7 +109,7 @@ on your C++ compiler.  In Linux, use "-f elf".
 Recommended compiler commands and optimizations:
 
   MINGW g++:
-    g++ paq8px.cpp -DWINDOWS -lz -Wall -Wextra -O3 -static -static-libgcc -opaq8px.exe 
+    g++ paq8px.cpp -DWINDOWS -lz -Wall -Wextra -O3 -static -static-libgcc -opaq8px.exe
 
 
 ARCHIVE FILE FORMAT
@@ -1861,7 +1861,7 @@ void wordModel(Mixer& m, Filetype filetype) {
   static int nl1=-3, nl=-2, w=0;  // previous, current newline position
   static U32 mask = 0;
   static Array<int> wpos(0x10000);  // last position of word
-  
+
   // Update word hashes
   if (bpos==0) {
     int c=c4&255,f=0;
@@ -1963,7 +1963,7 @@ void wordModel(Mixer& m, Filetype filetype) {
     cm.set(hash(526,col,c==32));
     cm.set(hash(281, w, llog(blpos-wpos[w])>>4));
     cm.set(hash(282,buf(1),llog(blpos-wpos[w])>>2));
-    
+
     int fl = 0;
     if ((c4&0xff) != 0) {
       if (isalpha(c4&0xff)) fl = 1;
@@ -1979,7 +1979,7 @@ void wordModel(Mixer& m, Filetype filetype) {
     cm.set(hash(529,mask,buf(1)));
     cm.set(hash(530,mask&0xff,col));
     cm.set(hash(531,mask,buf(2),buf(3)));
-    cm.set(hash(532,mask&0x1ff,f4&0x00fff0));       
+    cm.set(hash(532,mask&0x1ff,f4&0x00fff0));
   }
   cm.mix(m);
 }
@@ -3099,7 +3099,7 @@ void indirectModel(Mixer& m) {
     U16& r3=t3[(buf(2)&31)+32*(buf(3)&31)+1024*(buf(4)&31)];
     r3=r3<<8|c;
     U16& r4=t4[(buf(2)>>3&31)+32*(buf(4)>>3&31)+1024*(buf(5)>>3&31)];
-    r4=r4<<8|c;    
+    r4=r4<<8|c;
     const U32 t=c|t1[c]<<8;
     const U32 t0=d|t2[d]<<16;
     const U32 ta=d2|t3[d2]<<16;
@@ -3262,7 +3262,7 @@ void nestModel(Mixer& m)
     if (matched) bc = 0; else bc += 1;
     if (bc > 300) bc = ic = pc = qc = 0;
 
- 
+
 
     cm.set((3*vc+77*pc+373*ic+qc)&0xffff);
     cm.set((31*vc+27*pc+281*qc)&0xffff);
@@ -3404,13 +3404,13 @@ void Predictor::update() {
     buf[pos++]=c0;
     c4=(c4<<8)+c0-256;
     c0=1;
-    
+
     int b1=buf(1);
     b2=b1;
     if(b1=='.' || b1=='!' || b1=='?' || b1=='/'|| b1==')'|| b1=='}') f4=(f4&0xfffffff0)+2;
     if (b1==32) --b1;
-    f4=f4*16+(b1>>4);    
-    
+    f4=f4*16+(b1>>4);
+
   }
   bpos=(bpos+1)&7;
 
@@ -3747,7 +3747,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
   int zbufpos=0,zzippos=-1;
   int pdfim=0,pdfimw=0,pdfimh=0,pdfimb=0,pdfimp=0;
   int b64s=0,b64i=0,b64line=0,b64nl=0; // For base64 detection
-  int gif=0,gifa=0,gifi=0,gifw=0,gifc=0; // For GIF detection
+  int gif=0,gifa=0,gifi=0,gifw=0,gifc=0,gifb=0; // For GIF detection
 
   // For image detection
   static int deth=0,detd=0;  // detected header/data size in bytes
@@ -4089,10 +4089,10 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
         else gif=0;
       }
       if (gif==3 && i==gifi+6) gifw=(bswap(buf0)&0xffff);
-      if (gif==3 && i==gifi+7) gif=4,gifc=255,gifa=gifi=i+2+((c&128)?(3*(2<<(c&7))):0);
+      if (gif==3 && i==gifi+7) gif=4,gifc=gifb=0,gifa=gifi=i+2+((c&128)?(3*(2<<(c&7))):0);
       if (gif==4 && i==gifi) {
-        if (c>0 && gifc!=255) gifw=0;
-        if (c>0) gifc=c,gifi+=c+1;
+        if (c>0 && gifb && gifc!=gifb) gifw=0;
+        if (c>0) gifb=gifc,gifc=c,gifi+=c+1;
         else if (!gifw) gif=2,gifi=i+3;
         else return fseek(in, start+gifa-1, SEEK_SET),detd=i-gifa+2,info=gifw,dett=GIF;
       }
@@ -4647,11 +4647,12 @@ void encode_base64(FILE* in, FILE* out, int len) {
 }
 
 int encode_gif(FILE* in, FILE* out, int len) {
-  int codesize=fgetc(in),diffpos=0,hdrsize=5,clearpos=0;
+  int codesize=fgetc(in),diffpos=0,hdrsize=6,clearpos=0,bsize=0;
   int beginin=ftell(in),beginout=ftell(out);
   U8 output[4096];
   fputc(hdrsize>>8, out);
   fputc(hdrsize&255, out);
+  fputc(bsize, out);
   fputc(clearpos>>8, out);
   fputc(clearpos&255, out);
   fputc(codesize, out);
@@ -4659,22 +4660,27 @@ int encode_gif(FILE* in, FILE* out, int len) {
     fseek(in, beginin, SEEK_SET);
     int bits=codesize+1,shift=0,buf=0;
     int blocksize=0,maxcode=(1<<codesize)+1,last=-1,dict[4096];
-    while ((blocksize=fgetc(in))>0 && ftell(in)-beginin<len) {
+    bool end=false;
+    while ((blocksize=fgetc(in))>0 && ftell(in)-beginin<len && !end) {
       for (int i=0; i<blocksize; i++) {
         buf|=fgetc(in)<<shift;
         shift+=8;
-        while (shift>=bits) {
+        while (shift>=bits && !end) {
           int code=buf&((1<<bits)-1);
           buf>>=bits;
           shift-=bits;
+          if (!bsize && code!=(1<<codesize)) {
+            hdrsize+=4; fputc(0, out); fputc(0, out); fputc(0, out); fputc(0, out);
+          }
+          if (!bsize) bsize=blocksize;
           if (code==(1<<codesize)) {
             if (maxcode>(1<<codesize)+1) {
-              if (clearpos && clearpos!=4095-maxcode) return 0;
-              clearpos=4095-maxcode;
+              if (clearpos && clearpos!=69631-maxcode) return 0;
+              clearpos=69631-maxcode;
             }
             bits=codesize+1, maxcode=(1<<codesize)+1, last=-1;
           }
-          else if (code==(1<<codesize)+1) { }
+          else if (code==(1<<codesize)+1) end=true;
           else if (code>maxcode+1) return 0;
           else {
             int j=(code<=maxcode?code:last),size=1;
@@ -4686,16 +4692,19 @@ int encode_gif(FILE* in, FILE* out, int len) {
             if (phase==1) fwrite(&output[4096-size], 1, size, out); else diffpos+=size;
             if (code==maxcode+1) { if (phase==1) fputc(j, out); else diffpos++; }
             if (last!=-1) {
-              if (maxcode>=4095) return 0;
-              dict[++maxcode]=(last<<8)+j;
-              if (phase==0 && last>(1<<codesize)) {
-                bool diff=false;
-                for (int m=(1<<codesize)+2;m<maxcode;m++) if (dict[maxcode]==dict[m]) { diff=true; break; }
-                if (diff) {
-                  hdrsize+=4;
-                  j=diffpos-size-(code==maxcode);
-                  fputc((j>>24)&255, out); fputc((j>>16)&255, out); fputc((j>>8)&255, out); fputc(j&255, out);
-                  diffpos=size+(code==maxcode);
+              if (++maxcode>=8191) return 0;
+              if (maxcode<=4095)
+              {
+                dict[maxcode]=(last<<8)+j;
+                if (phase==0) {
+                  bool diff=false;
+                  for (int m=(1<<codesize)+2;m<min(maxcode,4095);m++) if (dict[maxcode]==dict[m]) { diff=true; break; }
+                  if (diff) {
+                    hdrsize+=4;
+                    j=diffpos-size-(code==maxcode);
+                    fputc((j>>24)&255, out); fputc((j>>16)&255, out); fputc((j>>8)&255, out); fputc(j&255, out);
+                    diffpos=size+(code==maxcode);
+                  }
                 }
               }
               if (maxcode>=((1<<bits)-1) && bits<12) bits++;
@@ -4710,7 +4719,8 @@ int encode_gif(FILE* in, FILE* out, int len) {
   fseek(out, beginout, SEEK_SET);
   fputc(hdrsize>>8, out);
   fputc(hdrsize&255, out);
-  fputc(clearpos>>8, out);
+  fputc(255-bsize, out);
+  fputc((clearpos>>8)&255, out);
   fputc(clearpos&255, out);
   fseek(out, diffpos, SEEK_SET);
   return ftell(in)-beginin==len-1;
@@ -4723,14 +4733,16 @@ outsize+=(count)+1; blocksize=0; }
 
 #define gif_write_code(c) { buf+=(c)<<shift; shift+=bits;\
 while (shift>=8) { output[++blocksize]=buf&255; buf>>=8;shift-=8;\
-if (blocksize==255) gif_write_block(255); }}
+if (blocksize==bsize) gif_write_block(bsize); }}
 
 int decode_gif(FILE* in, int size, FILE *out, FMode mode, int &diffFound) {
   int diffcount=fgetc(in), curdiff=0, diffpos[4096];
-  diffcount=((diffcount<<8)+fgetc(in)-5)/4;
+  diffcount=((diffcount<<8)+fgetc(in)-6)/4;
+  int bsize=255-fgetc(in);
   int clearpos=fgetc(in); clearpos=(clearpos<<8)+fgetc(in);
-  if (diffcount>4096 || clearpos>256) return 1;
+  clearpos=(69631-clearpos)&0xffff;
   int codesize=fgetc(in),bits=codesize+1,shift=0,buf=0,blocksize=0;
+  if (diffcount>4096 || clearpos<=(1<<codesize)+2) return 1;
   int maxcode=(1<<codesize)+1,dict[4096],input;
   for (int i=0; i<diffcount; i++) {
     diffpos[i]=fgetc(in);
@@ -4744,17 +4756,18 @@ int decode_gif(FILE* in, int size, FILE *out, FMode mode, int &diffFound) {
   int last=fgetc(in),total=size+1,outsize=1;
   if (mode==FDECOMPRESS) fputc(codesize, out);
   else if (mode==FCOMPARE) if (codesize!=getc(out) && !diffFound) diffFound=1;
-  gif_write_code(1<<codesize);
+  if (diffcount==0 || diffpos[0]!=0) gif_write_code(1<<codesize) else curdiff++;
   while (size-->=0 && (input=fgetc(in))>=0) {
     int code=-1, key=(last<<8)+input;
-    for (int i=(1<<codesize)+2; i<=maxcode; i++) if (dict[i]==key) code=i;
+    for (int i=(1<<codesize)+2; i<=min(maxcode,4095); i++) if (dict[i]==key) code=i;
     if (curdiff<diffcount && total-size>diffpos[curdiff]) curdiff++,code=-1;
     if (code==-1) {
       gif_write_code(last);
-      if (maxcode==4095-clearpos) { gif_write_code(1<<codesize); bits=codesize+1, maxcode=(1<<codesize)+1; }
+      if (maxcode==clearpos) { gif_write_code(1<<codesize); bits=codesize+1, maxcode=(1<<codesize)+1; }
       else
       {
-        dict[++maxcode]=key;
+        ++maxcode;
+        if (maxcode<=4095) dict[maxcode]=key;
         if (maxcode>=(1<<bits) && bits<12) bits++;
       }
       code=input;
@@ -4765,7 +4778,7 @@ int decode_gif(FILE* in, int size, FILE *out, FMode mode, int &diffFound) {
   gif_write_code((1<<codesize)+1);
   if (shift>0) {
     output[++blocksize]=buf&255;
-    if (blocksize==255) gif_write_block(255);
+    if (blocksize==bsize) gif_write_block(bsize);
   }
   if (blocksize>0) gif_write_block(blocksize);
   if (mode==FDECOMPRESS) fputc(0, out);
