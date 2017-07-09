@@ -2442,6 +2442,7 @@ int jpegModel(Mixer& m) {
   static IntBuf cbuf2(0x20000);
   static Array<int> adv_pred(7), sumu(8), sumv(8);
   static Array<int> ls(10);  // block -> distance to previous block
+  static Array<int> blockW(10), blockN(10), nBlocks(4), SamplingFactors(4);
   static Array<int> lcp(4), zpos(64);
 
     //for parsing Quantization tables
@@ -2601,8 +2602,10 @@ int jpegModel(Mixer& m) {
         for (int j=0; j<nf; ++j) {
           if (buf[sos+2*i+5]==buf[sof+3*j+10]) { // Cs == C ?
             int hv=buf[sof+3*j+11];  // packed dimensions H x V
+            SamplingFactors[j] = hv;
             if (hv>>4>hmax) hmax=hv>>4;
             hv=(hv&15)*(hv>>4);  // number of blocks in component C
+            nBlocks[j] = hv;
             jassert(hv>=1 && hv+mcusize<=10);
             while (hv) {
               jassert(mcusize<10);
@@ -2625,6 +2628,7 @@ int jpegModel(Mixer& m) {
         ls[j]=0;
         for (int i=1; i<mcusize; ++i) if (color[(j+i)%mcusize]==color[j]) ls[j]=i;
         ls[j]=(mcusize-ls[j])<<6;
+        blockW[j] = ls[j];
       }
       for (j=0; j<64; ++j) zpos[zzu[j]+8*zzv[j]]=j;
       width=buf[sof+7]*256+buf[sof+8];  // in pixels
@@ -2632,6 +2636,38 @@ int jpegModel(Mixer& m) {
       jassert(width>0);
       mcusize*=64;  // coefficients per MCU
       row=column=0;
+	  
+      for (i = 0; i < 10; i++)
+        blockN[i] = mcusize * width;
+
+      // more blocks than components, we have subsampling
+      if (nf < mcusize>>6) {
+        int x = 0;
+        int s = 0;
+        for (i = 0; i < nf; i++) {
+          // nBlocks tells us the number of blocks of each component
+          if (nBlocks[i]!=1) {
+            int h = SamplingFactors[i]>>4;
+            int v = SamplingFactors[i]&0xf;
+
+            if (h) {
+              blockW[x] += h*(v-1)*64;
+              s = h;
+              while (s < nBlocks[i]){
+                blockW[x+s] = blockW[x];
+                s+=h;
+              }
+            }
+
+            for (s = 0; s < h; s++)
+              blockN[x+s] -= h*(v-1)*64;
+            for (s = h; s < nBlocks[i]; s++)
+              blockN[x+s] = h*64;
+          }
+
+          x+=nBlocks[i];
+        }
+      }	
     }
   }
 
@@ -2726,11 +2762,17 @@ int jpegModel(Mixer& m) {
             const int zz=mcupos&63, cpos_dc=cpos-zz;
             if (zz==0) {
               for (int i=0; i<8; ++i) sumu[i]=sumv[i]=0;
-              int cpos_dc_ls_acomp = cpos_dc-ls[acomp];
-              int cpos_dc_mcusize_width = cpos_dc-mcusize*width;
+              // position in the buffer of first (DC) coefficient of the block
+              // of this same component that is to the west of this one, not
+              // necessarily in this MCU
+              int offset_DC_W = cpos_dc - blockW[acomp];
+              // position in the buffer of first (DC) coefficient of the block
+              // of this same component that is to the north of this one, not
+              // necessarily in this MCU
+              int offset_DC_N = cpos_dc - blockN[acomp];
               for (int i=0; i<64; ++i) {
-                sumu[zzu[i]]+=(zzv[i]&1?-1:1)*(zzv[i]?16*(16+zzv[i]):181)*(qtab[q+i]+1)*cbuf2[cpos_dc_mcusize_width+i];
-                sumv[zzv[i]]+=(zzu[i]&1?-1:1)*(zzu[i]?16*(16+zzu[i]):181)*(qtab[q+i]+1)*cbuf2[cpos_dc_ls_acomp+i];
+                sumu[zzu[i]]+=(zzv[i]&1?-1:1)*(zzv[i]?16*(16+zzv[i]):181)*(qtab[q+i]+1)*cbuf2[offset_DC_N+i];
+                sumv[zzv[i]]+=(zzu[i]&1?-1:1)*(zzu[i]?16*(16+zzu[i]):181)*(qtab[q+i]+1)*cbuf2[offset_DC_W+i];
               }
             }
             else {
