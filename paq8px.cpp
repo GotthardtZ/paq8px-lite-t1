@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Release by Jan Ondrus, Mar. 20, 2016
+/* paq8px file compressor/archiver.  Release by Márcio Pais, July 15, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -2007,7 +2007,7 @@ void recordModel(Mixer& m) {
   static int rcount[2] = {0,0}; // candidate counts
   static U8 padding = 0; // detected padding byte
   static int prevTransition = 0; // position of the last padding transition
-  static ContextMap cm(32768, 3), cn(32768/2, 3), co(32768*2, 3), cp(MEM, 4);
+  static ContextMap cm(32768, 3), cn(32768/2, 3), co(32768*2, 3), cp(MEM, 6);
 
   // Find record length
   if (!bpos) {
@@ -2051,7 +2051,7 @@ void recordModel(Mixer& m) {
         // this length is not a multiple of the other, than it might
         // really be worthwhile to investigate it, so we won't set its
         // counter to 0
-        if (rlen[i+1]<<4 > rlen[1+i^1])
+        if (rlen[i+1]<<4 > rlen[1+(i^1)])
           rcount[i^1] = 0;
       }
     }
@@ -2094,11 +2094,15 @@ void recordModel(Mixer& m) {
     anyway
     */
 
-    if ((((U16)(c4>>8) == ((SPACE<<8)+SPACE)) && (c0 != SPACE)) || (!(c4>>8) && c0 && ((padding != SPACE) || (pos-prevTransition > rlen[0])))){
+    if ((((U16)(c4>>8) == ((SPACE<<8)+SPACE)) && (c != SPACE)) || (!(c4>>8) && c && ((padding != SPACE) || (pos-prevTransition > rlen[0])))){
       prevTransition = pos;
       padding = (U8)d;
     }
-    cp.set( (rlen[0]>8)*hash( min(min(0xFF,rlen[0]),pos-prevTransition), min(0x3FF,col), w&0xF0F0 + (w==((padding<<8)+padding)) ) );
+    cp.set( (rlen[0]>8)*hash( min(min(0xFF,rlen[0]),pos-prevTransition), min(0x3FF,col), (w&0xF0F0)|(w==((padding<<8)|padding)) ) );
+
+    int last4 = (buf(rlen[0]*4)<<24)|(buf(rlen[0]*3)<<16)|(buf(rlen[0]*2)<<8)|buf(rlen[0]);
+    cp.set( (last4&0xFF)|((last4&0xF000)>>4)|((last4&0xE00000)>>9)|((last4&0xE0000000)>>14)|((col/max(1,rlen[0]/16))<<18) );
+    cp.set( (last4&0xF8F8)|(col<<16) );
 
     // update last context positions
     cpos4[c]=cpos3[c];
@@ -2173,6 +2177,17 @@ void distanceModel(Mixer& m) {
 
 //////////////////////////// im24bitModel /////////////////////////////////
 
+U8 Clip(int Px){
+  return min(0xFF,max(0,Px));
+}
+U8 Clamp4( int Px, U8 n1, U8 n2, U8 n3, U8 n4){
+  return min( max(n1,max(n2,max(n3,n4))), max( min(n1,min(n2,min(n3,n4))), Px ));
+}
+
+U8 LogMeanDiffQt(U8 a, U8 b){
+  return (a!=b)?((a>b)<<3)|ilog2((a+b)/max(2,abs(a-b)*2)+1):0;
+}
+
 // Model for 24-bit image data
 
 // Square buf(i)
@@ -2185,7 +2200,7 @@ void im24bitModel(Mixer& m, int w) {
   const int SC=0x20000;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm10(512);
-  static ContextMap cm(MEM*4, 13);
+  static ContextMap cm(MEM*4, 13+5);
 
   // Select nearby pixels as context
   if (!bpos) {
@@ -2196,6 +2211,14 @@ void im24bitModel(Mixer& m, int w) {
     mean>>=2;
     const int logvar=ilog(var);
     int i=color<<4;
+
+    int WWW=buf(9), WW=buf(6), W=buf(3), NW=buf(w+3), N=buf(w), NE=buf(w-3), NNW=buf(w*2+3), NN=buf(w*2), NNE=buf(w*2-3), NNN=buf(w*3);
+    cm.set(hash( ++i, (N+1)>>1, LogMeanDiffQt(N,Clip(NN*2-NNN)) ));
+    cm.set(hash( ++i, (W+1)>>1, LogMeanDiffQt(W,Clip(WW*2-WWW)) ));
+    cm.set(hash( ++i, Clamp4(W+N-NW,W,NW,N,NE), LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
+    cm.set(hash( ++i, (NNN+N+4)/8, Clip(N*3-NN*3+NNN)>>1 ));
+    cm.set(hash( ++i, (WWW+W+4)/8, Clip(W*3-WW*3+WWW)>>1 ));
+
     cm.set(hash(++i, buf(3)));
     cm.set(hash(++i, buf(3), buf(1)));
     cm.set(hash(++i, buf(3), buf(1), buf(2)));
@@ -2247,7 +2270,7 @@ void im8bitModel(Mixer& m, int w) {
   const int SC=0x20000;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC*2),scm7(SC);
-  static ContextMap cm(MEM*4, 45+12);
+  static ContextMap cm(MEM*4, 45+12 +5);
   static int itype=0, id8=1, id9=1;
 
   // Select nearby pixels as context
@@ -2370,6 +2393,14 @@ void im8bitModel(Mixer& m, int w) {
       cm.set(hash(++i,buf(w)>>2, buf(3)>>2, buf(w-1)>>2));
       cm.set(hash(++i,buf(3)>>2, buf(w-2)>>2, buf(w*2-2)>>2));
     }
+
+    int WWW=buf(3), WW=buf(2), W=buf(1), NW=buf(w+1), N=buf(w), NE=buf(w-1), NNW=buf(w*2+1), NN=buf(w*2), NNE=buf(w*2-1), NNN=buf(w*3);
+    cm.set(hash( ++i, (N+1)>>1, LogMeanDiffQt(N,Clip(NN*2-NNN)) ));
+    cm.set(hash( ++i, (W+1)>>1, LogMeanDiffQt(W,Clip(WW*2-WWW)) ));
+    cm.set(hash( ++i, Clamp4(W+N-NW,W,NW,N,NE), LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
+    cm.set(hash( ++i, (NNN+N+4)/8, Clip(N*3-NN*3+NNN)>>1 ));
+    cm.set(hash( ++i, (WWW+W+4)/8, Clip(W*3-WW*3+WWW)>>1 ));
+
     scm1.set((buf(1)+buf(w))>>1);
     scm2.set((buf(1)+buf(w)-buf(w+1))>>1);
     scm3.set((buf(1)*2-buf(2))>>1);
@@ -2451,24 +2482,39 @@ void dump(const char* msg, int p) {
 // fall back to a non-JPEG model.
 #define jassert(x) if (!(x)) { \
 /*  printf("JPEG error at %d, line %d: %s\n", pos, __LINE__, #x); */ \
-  jpeg=0; \
-  return next_jpeg;}
+  images[idx].jpeg=0; \
+  return images[idx].next_jpeg;}
 
 struct HUF {U32 min, max; int val;}; // Huffman decode tables
   // huf[Tc][Th][m] is the minimum, maximum+1, and pointer to codes for
   // coefficient type Tc (0=DC, 1=AC), table Th (0-3), length m+1 (m=0-15)
+
+struct JPEGImage{
+  int offset, // offset of SOI marker
+  jpeg, // 1 if JPEG is header detected, 2 if image data
+  next_jpeg, // updated with jpeg on next byte boundary
+  app, // Bytes remaining to skip in this marker
+  sof, sos, data, // pointers to buf
+  htsize, // number of pointers in ht
+  mcusize, // number of coefficients in an MCU
+  linesize; // width of image in MCU
+  int hufsel[2][10];  // DC/AC, mcupos/64 -> huf decode table
+  int ht[8]; // pointers to Huffman table headers
+  HUF huf[128]; // Tc*64+Th*16+m -> min, max, val
+  U8 hbuf[2048]; // Tc*1024+Th*256+hufcode -> RS
+  U8 qtab[256]; // table
+  int qmap[10]; // block -> table number
+};
 
 int jpegModel(Mixer& m) {
 
   // State of parser
   enum {SOF0=0xc0, SOF1, SOF2, SOF3, DHT, RST0=0xd0, SOI=0xd8, EOI, SOS, DQT,
     DNL, DRI, APP0=0xe0, COM=0xfe, FF};  // Second byte of 2 byte codes
-  static int jpeg=0;  // 1 if JPEG is header detected, 2 if image data
-  static int next_jpeg=0;  // updated with jpeg on next byte boundary
-  static int app;  // Bytes remaining to skip in APPx or COM field
-  static int sof=0, sos=0, data=0;  // pointers to buf
-  static Array<int> ht(8);  // pointers to Huffman table headers
-  static int htsize=0;  // number of pointers in ht
+  const static int MaxEmbeddedLevel = 3;
+  static JPEGImage images[MaxEmbeddedLevel];
+  static int idx=-1;
+  static int lastPos=0;
 
   // Huffman decode state
   static U32 huffcode=0;  // Current Huffman code including extra bits
@@ -2481,13 +2527,6 @@ int jpegModel(Mixer& m) {
   static int mcupos=0;  // position in MCU (0-639).  The low 6 bits mark
     // the coefficient in zigzag scan order (0=DC, 1-63=AC).  The high
     // bits mark the block within the MCU, used to select Huffman tables.
-
-  // Decoding tables
-  static Array<HUF> huf(128);  // Tc*64+Th*16+m -> min, max, val
-  static int mcusize=0;  // number of coefficients in an MCU
-  static int linesize=0; // width of image in MCU
-  static int hufsel[2][10];  // DC/AC, mcupos/64 -> huf decode table
-  static Array<U8> hbuf(2048);  // Tc*1024+Th*256+hufcode -> RS
 
   // Image state
   static Array<int> color(10);  // block -> component (0-3)
@@ -2516,8 +2555,6 @@ int jpegModel(Mixer& m) {
 
     //for parsing Quantization tables
   static int dqt_state = -1, dqt_end = 0, qnum = 0;
-  static Array<U8> qtab(256); // table
-  static Array<int> qmap(10); // block -> table number
 
   const static U8 zzu[64]={  // zigzag coef -> u,v
     0,1,0,0,1,2,3,2,1,0,0,1,2,3,4,5,4,3,2,1,0,0,1,2,3,4,5,6,7,6,5,4,
@@ -2526,11 +2563,91 @@ int jpegModel(Mixer& m) {
     0,0,1,2,1,0,0,1,2,3,4,3,2,1,0,0,1,2,3,4,5,6,5,4,3,2,1,0,0,1,2,3,
     4,5,6,7,7,6,5,4,3,2,1,2,3,4,5,6,7,7,6,5,4,3,4,5,6,7,7,6,5,6,7,7};
 
+  // Standard Huffman tables (cf. JPEG standard section K.3)
+  // IMPORTANT: these are only valid for 8-bit data precision
+  const static U8 bits_dc_luminance[16] = {
+    0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0
+  };
+  const static U8 values_dc_luminance[12] = {
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+  };
+
+  const static U8 bits_dc_chrominance[16] = {
+    0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0
+  };
+  const static U8 values_dc_chrominance[12] = {
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+  };
+
+  const static U8 bits_ac_luminance[16] = {
+    0, 2, 1, 3, 3, 2, 4, 3, 5, 5, 4, 4, 0, 0, 1, 0x7d
+  };
+  const static U8 values_ac_luminance[162] = {
+    0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12,
+    0x21, 0x31, 0x41, 0x06, 0x13, 0x51, 0x61, 0x07,
+    0x22, 0x71, 0x14, 0x32, 0x81, 0x91, 0xa1, 0x08,
+    0x23, 0x42, 0xb1, 0xc1, 0x15, 0x52, 0xd1, 0xf0,
+    0x24, 0x33, 0x62, 0x72, 0x82, 0x09, 0x0a, 0x16,
+    0x17, 0x18, 0x19, 0x1a, 0x25, 0x26, 0x27, 0x28,
+    0x29, 0x2a, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39,
+    0x3a, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49,
+    0x4a, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59,
+    0x5a, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69,
+    0x6a, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79,
+    0x7a, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89,
+    0x8a, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98,
+    0x99, 0x9a, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7,
+    0xa8, 0xa9, 0xaa, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6,
+    0xb7, 0xb8, 0xb9, 0xba, 0xc2, 0xc3, 0xc4, 0xc5,
+    0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xd2, 0xd3, 0xd4,
+    0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda, 0xe1, 0xe2,
+    0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea,
+    0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8,
+    0xf9, 0xfa
+  };
+
+  const static U8 bits_ac_chrominance[16] = {
+    0, 2, 1, 2, 4, 4, 3, 4, 7, 5, 4, 4, 0, 1, 2, 0x77
+  };
+  const static U8 values_ac_chrominance[162] = {
+    0x00, 0x01, 0x02, 0x03, 0x11, 0x04, 0x05, 0x21,
+    0x31, 0x06, 0x12, 0x41, 0x51, 0x07, 0x61, 0x71,
+    0x13, 0x22, 0x32, 0x81, 0x08, 0x14, 0x42, 0x91,
+    0xa1, 0xb1, 0xc1, 0x09, 0x23, 0x33, 0x52, 0xf0,
+    0x15, 0x62, 0x72, 0xd1, 0x0a, 0x16, 0x24, 0x34,
+    0xe1, 0x25, 0xf1, 0x17, 0x18, 0x19, 0x1a, 0x26,
+    0x27, 0x28, 0x29, 0x2a, 0x35, 0x36, 0x37, 0x38,
+    0x39, 0x3a, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48,
+    0x49, 0x4a, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58,
+    0x59, 0x5a, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68,
+    0x69, 0x6a, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78,
+    0x79, 0x7a, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87,
+    0x88, 0x89, 0x8a, 0x92, 0x93, 0x94, 0x95, 0x96,
+    0x97, 0x98, 0x99, 0x9a, 0xa2, 0xa3, 0xa4, 0xa5,
+    0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xb2, 0xb3, 0xb4,
+    0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xc2, 0xc3,
+    0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xd2,
+    0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda,
+    0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9,
+    0xea, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8,
+    0xf9, 0xfa
+  };
+
+  if (idx < 0){
+    memset(&images[0], 0, sizeof(images));
+    idx = 0;
+    lastPos = pos;
+  }
+
   // Be sure to quit on a byte boundary
-  if (!bpos) next_jpeg=jpeg>1;
-  if (bpos && !jpeg) return next_jpeg;
-  if (!bpos && app>=0) --app;
-  if (app>0) return next_jpeg;
+  if (!bpos) images[idx].next_jpeg=images[idx].jpeg>1;
+  if (bpos && !images[idx].jpeg) return images[idx].next_jpeg;
+  if (!bpos && images[idx].app>=0){
+    --images[idx].app;
+    if (idx<MaxEmbeddedLevel && buf(4)==FF && buf(3)==SOI && buf(2)==FF && (buf(1)==0xC0 || buf(1)==0xC4 || (buf(1)>=0xDB && buf(1)<=0xFE)) )
+      memset(&images[++idx], 0, sizeof(JPEGImage));
+  }
+  if (images[idx].app>0) return images[idx].next_jpeg;
   if (!bpos) {
 
     // Parse.  Baseline DCT-Huffman JPEG syntax is:
@@ -2568,35 +2685,45 @@ int jpegModel(Mixer& m) {
     //   might appear at the end of the scan (ignored).
     // FF 00 is interpreted as FF (to distinguish from RSTx, DNL, EOI).
 
-    // Detect JPEG (SOI, APPx)
-    if (!jpeg && buf(4)==FF && buf(3)==SOI && buf(2)==FF && (buf(1)==0xC0 || buf(1)==0xC4 || (buf(1)>=0xDB && buf(1)<=0xFE)) ){
-      jpeg=1;
-      sos=sof=htsize=data=mcusize=linesize=0, app=(buf(1)>>4==0xE)*2;
+    // Detect JPEG (SOI followed by a valid marker)
+    if (!images[idx].jpeg && buf(4)==FF && buf(3)==SOI && buf(2)==FF && (buf(1)==0xC0 || buf(1)==0xC4 || (buf(1)>=0xDB && buf(1)<=0xFE)) ){
+      images[idx].jpeg=1;
+      images[idx].offset = pos-4;
+      images[idx].sos=images[idx].sof=images[idx].htsize=images[idx].data=images[idx].mcusize=images[idx].linesize=0, images[idx].app=(buf(1)>>4==0xE)*2;
       huffcode=huffbits=huffsize=mcupos=cpos=0, rs=-1;
-      memset(&huf[0], 0, huf.size()*sizeof(HUF));
+      memset(&images[idx].huf[0], 0, sizeof(images[idx].huf));
       memset(&pred[0], 0, pred.size()*sizeof(int));
     }
 
     // Detect end of JPEG when data contains a marker other than RSTx
-    // or byte stuff (00).
-    if (jpeg && data && buf(2)==FF && buf(1) && (buf(1)&0xf8)!=RST0) {
-      jassert(buf(1)==EOI);
-      jpeg=0;
-    }
-    if (!jpeg) return next_jpeg;
+    // or byte stuff (00), or if we jumped in position since the last byte seen
+    if (images[idx].jpeg && images[idx].data && ((buf(2)==FF && buf(1) && (buf(1)&0xf8)!=RST0) || (pos-lastPos>1)) ) {
+      jassert((buf(1)==EOI) || (pos-lastPos>1));
+      int length = pos - images[idx].offset;
+      if (idx && pos-lastPos==1)
+        printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bEmbedded JPEG at offset %d, size: %d bytes, level %d\nCompressing... ", images[idx].offset, length, idx), fflush(stdout);
 
-    // Detect APPx or COM field
-    if (!data && !app && buf(4)==FF && (buf(3)>>4==0xe || buf(3)==COM))
-      app=buf(2)*256+buf(1)+2;
+      memset(&images[idx], 0, sizeof(JPEGImage));
+      idx-=(idx>0);
+      images[idx].app-=length;
+      if (images[idx].app < 0)
+        images[idx].app = 0;
+    }
+    lastPos = pos;
+    if (!images[idx].jpeg) return images[idx].next_jpeg;
+
+    // Detect APPx, COM or other markers, so we can skip them
+    if (!images[idx].data && !images[idx].app && buf(4)==FF && (((buf(3)>=0xC1) && (buf(3)<=0xCF) && (buf(3)!=DHT)) || ((buf(3)>=0xDC) && (buf(3)<=0xFE))))
+      images[idx].app=buf(2)*256+buf(1)+2;
 
     // Save pointers to sof, ht, sos, data,
     if (buf(5)==FF && buf(4)==SOS) {
       int len=buf(3)*256+buf(2);
       if (len==6+2*buf(1) && buf(1) && buf(1)<=4)  // buf(1) is Ns
-        sos=pos-5, data=sos+len+2, jpeg=2;
+        images[idx].sos=pos-5, images[idx].data=images[idx].sos+len+2, images[idx].jpeg=2;
     }
-    if (buf(4)==FF && buf(3)==DHT && htsize<8) ht[htsize++]=pos-4;
-    if (buf(4)==FF && buf(3)==SOF0) sof=pos-4;
+    if (buf(4)==FF && buf(3)==DHT && images[idx].htsize<8) images[idx].ht[images[idx].htsize++]=pos-4;
+    if (buf(4)==FF && buf(3)==SOF0) images[idx].sof=pos-4;
 
     // Parse Quantizazion tables
     if (buf(4)==FF && buf(3)==DQT)
@@ -2610,7 +2737,7 @@ int jpegModel(Mixer& m) {
         else {
           jassert(buf(1)>0);
           jassert(qnum>=0 && qnum<4);
-          qtab[qnum*64+((dqt_state%65)-1)]=buf(1)-1;
+          images[idx].qtab[qnum*64+((dqt_state%65)-1)]=buf(1)-1;
         }
         dqt_state++;
       }
@@ -2626,23 +2753,22 @@ int jpegModel(Mixer& m) {
   {
     // Build Huffman tables
     // huf[Tc][Th][m] = min, max+1 codes of length m, pointer to byte values
-    if (pos==data && bpos==1) {
-      jassert(htsize>0);
+    if (pos==images[idx].data && bpos==1) {
       int i;
-      for (i=0; i<htsize; ++i) {
-        int p=ht[i]+4;  // pointer to current table after length field
+      for (i=0; i<images[idx].htsize; ++i) {
+        int p=images[idx].ht[i]+4;  // pointer to current table after length field
         int end=p+buf[p-2]*256+buf[p-1]-2;  // end of Huffman table
         int count=0;  // sanity check
         while (p<end && end<pos && end<p+2100 && ++count<10) {
           int tc=buf[p]>>4, th=buf[p]&15;
           if (tc>=2 || th>=4) break;
           jassert(tc>=0 && tc<2 && th>=0 && th<4);
-          HUF* h=&huf[tc*64+th*16]; // [tc][th][0];
+          HUF* h=&images[idx].huf[tc*64+th*16]; // [tc][th][0];
           int val=p+17;  // pointer to values
           int hval=tc*1024+th*256;  // pointer to RS values in hbuf
           int j;
           for (j=0; j<256; ++j) // copy RS codes
-            hbuf[hval+j]=buf[val+j];
+            images[idx].hbuf[hval+j]=buf[val+j];
           int code=0;
           for (j=0; j<16; ++j) {
             h[j].min=code;
@@ -2659,58 +2785,101 @@ int jpegModel(Mixer& m) {
       }
       huffcode=huffbits=huffsize=0, rs=-1;
 
+      // load default tables
+      if (!images[idx].htsize){
+        for (int tc = 0; tc < 2; tc++) {
+          for (int th = 0; th < 2; th++) {
+            HUF* h = &images[idx].huf[tc*64+th*16];
+            int hval = tc*1024 + th*256;
+            int code = 0, c = 0, x = 0;
+
+            for (int i = 0; i < 16; i++) {
+              switch (tc*2+th) {
+                case 0: x = bits_dc_luminance[i]; break;
+                case 1: x = bits_dc_chrominance[i]; break;
+                case 2: x = bits_ac_luminance[i]; break;
+                case 3: x = bits_ac_chrominance[i];
+              }
+
+              h[i].min = code;
+              h[i].max = (code+=x);
+              h[i].val = hval;
+              hval+=x;
+              code+=code;
+              c+=x;
+            }
+
+            hval = tc*1024 + th*256;
+            c--;
+
+            while (c >= 0){
+              switch (tc*2+th) {
+                case 0: x = values_dc_luminance[c]; break;
+                case 1: x = values_dc_chrominance[c]; break;
+                case 2: x = values_ac_luminance[c]; break;
+                case 3: x = values_ac_chrominance[c];
+              }
+
+              images[idx].hbuf[hval+c] = x;
+              c--;
+            }
+          }
+        }
+        images[idx].htsize = 4;
+      }
+
       // Build Huffman table selection table (indexed by mcupos).
       // Get image width.
-      if (!sof && sos) return next_jpeg;
-      int ns=buf[sos+4];
-      int nf=buf[sof+9];
+      if (!images[idx].sof && images[idx].sos) return images[idx].next_jpeg;
+      int ns=buf[images[idx].sos+4];
+      int nf=buf[images[idx].sof+9];
       jassert(ns<=4 && nf<=4);
-      mcusize=0;  // blocks per MCU
+      images[idx].mcusize=0;  // blocks per MCU
       int hmax=0;  // MCU horizontal dimension
       for (i=0; i<ns; ++i) {
         for (int j=0; j<nf; ++j) {
-          if (buf[sos+2*i+5]==buf[sof+3*j+10]) { // Cs == C ?
-            int hv=buf[sof+3*j+11];  // packed dimensions H x V
+          if (buf[images[idx].sos+2*i+5]==buf[images[idx].sof+3*j+10]) { // Cs == C ?
+            int hv=buf[images[idx].sof+3*j+11];  // packed dimensions H x V
             SamplingFactors[j] = hv;
             if (hv>>4>hmax) hmax=hv>>4;
             hv=(hv&15)*(hv>>4);  // number of blocks in component C
             nBlocks[j] = hv;
-            jassert(hv>=1 && hv+mcusize<=10);
+            jassert(hv>=1 && hv+images[idx].mcusize<=10);
             while (hv) {
-              jassert(mcusize<10);
-              hufsel[0][mcusize]=buf[sos+2*i+6]>>4&15;
-              hufsel[1][mcusize]=buf[sos+2*i+6]&15;
-              jassert (hufsel[0][mcusize]<4 && hufsel[1][mcusize]<4);
-              color[mcusize]=i;
-              int tq=buf[sof+3*j+12];  // quantization table index (0..3)
+              jassert(images[idx].mcusize<10);
+              images[idx].hufsel[0][images[idx].mcusize]=buf[images[idx].sos+2*i+6]>>4&15;
+              images[idx].hufsel[1][images[idx].mcusize]=buf[images[idx].sos+2*i+6]&15;
+              jassert (images[idx].hufsel[0][images[idx].mcusize]<4 && images[idx].hufsel[1][images[idx].mcusize]<4);
+              color[images[idx].mcusize]=i;
+              int tq=buf[images[idx].sof+3*j+12];  // quantization table index (0..3)
               jassert(tq>=0 && tq<4);
-              qmap[mcusize]=tq; // quantizazion table mapping
+              images[idx].qmap[images[idx].mcusize]=tq; // quantizazion table mapping
               --hv;
-              ++mcusize;
+              ++images[idx].mcusize;
             }
           }
         }
       }
       jassert(hmax>=1 && hmax<=10);
       int j;
-      for (j=0; j<mcusize; ++j) {
+      for (j=0; j<images[idx].mcusize; ++j) {
         ls[j]=0;
-        for (int i=1; i<mcusize; ++i) if (color[(j+i)%mcusize]==color[j]) ls[j]=i;
-        ls[j]=(mcusize-ls[j])<<6;
+        for (int i=1; i<images[idx].mcusize; ++i) if (color[(j+i)%images[idx].mcusize]==color[j]) ls[j]=i;
+        ls[j]=(images[idx].mcusize-ls[j])<<6;
         blockW[j] = ls[j];
       }
       for (j=0; j<64; ++j) zpos[zzu[j]+8*zzv[j]]=j;
-      width=buf[sof+7]*256+buf[sof+8];  // in pixels
+      width=buf[images[idx].sof+7]*256+buf[images[idx].sof+8];  // in pixels
       width=(width-1)/(hmax*8)+1;  // in MCU
       jassert(width>0);
-      mcusize*=64;  // coefficients per MCU
+      images[idx].mcusize*=64;  // coefficients per MCU
       row=column=0;
 	  
       for (i = 0; i < 10; i++)
-        blockN[i] = mcusize * width;
+        blockN[i] = images[idx].mcusize * width;
 
       // more blocks than components, we have subsampling
-      if (nf < mcusize>>6) {
+      if (nf < images[idx].mcusize>>6) {
         int x = 0;
         int s = 0;
         for (i = 0; i < nf; i++) {
@@ -2743,7 +2912,7 @@ int jpegModel(Mixer& m) {
 
   // Decode Huffman
   {
-    if (mcusize && buf(1+(!bpos))!=FF) {  // skip stuffed byte
+    if (images[idx].mcusize && buf(1+(!bpos))!=FF) {  // skip stuffed byte
       jassert(huffbits<=32);
       huffcode+=huffcode+y;
       ++huffbits;
@@ -2752,17 +2921,17 @@ int jpegModel(Mixer& m) {
         const int ac=(mcupos&63)>0;
         jassert(mcupos>=0 && (mcupos>>6)<10);
         jassert(ac==0 || ac==1);
-        const int sel=hufsel[ac][mcupos>>6];
+        const int sel=images[idx].hufsel[ac][mcupos>>6];
         jassert(sel>=0 && sel<4);
         const int i=huffbits-1;
         jassert(i>=0 && i<16);
-        const HUF *h=&huf[ac*64+sel*16]; // [ac][sel];
+        const HUF *h=&images[idx].huf[ac*64+sel*16]; // [ac][sel];
         jassert(h[i].min<=h[i].max && h[i].val<2048 && huffbits>0);
         if (huffcode<h[i].max) {
           jassert(huffcode>=h[i].min);
           int k=h[i].val+huffcode-h[i].min;
           jassert(k>=0 && k<2048);
-          rs=hbuf[k];
+          rs=images[idx].hbuf[k];
           huffsize=huffbits;
         }
       }
@@ -2773,7 +2942,7 @@ int jpegModel(Mixer& m) {
           if (mcupos&63) {  // AC
             if (rs==0) { // EOB
               mcupos=(mcupos+63)&-64;
-              jassert(mcupos>=0 && mcupos<=mcusize && mcupos<=640);
+              jassert(mcupos>=0 && mcupos<=images[idx].mcusize && mcupos<=640);
               while (cpos&63) {
                 cbuf2[cpos]=0;
                 cbuf[cpos++]=0;
@@ -2818,8 +2987,8 @@ int jpegModel(Mixer& m) {
             }
             ssum=rs;
           }
-          jassert(mcupos>=0 && mcupos<=mcusize);
-          if (mcupos>=mcusize) {
+          jassert(mcupos>=0 && mcupos<=images[idx].mcusize);
+          if (mcupos>=images[idx].mcusize) {
             mcupos=0;
             if (++column==width) column=0, ++row;
           }
@@ -2827,7 +2996,7 @@ int jpegModel(Mixer& m) {
 
           // UPDATE_ADV_PRED !!!!
           {
-            const int acomp=mcupos>>6, q=64*qmap[acomp];
+            const int acomp=mcupos>>6, q=64*images[idx].qmap[acomp];
             const int zz=mcupos&63, cpos_dc=cpos-zz;
             if (zz==0) {
               for (int i=0; i<8; ++i) sumu[i]=sumv[i]=0;
@@ -2840,20 +3009,20 @@ int jpegModel(Mixer& m) {
               // necessarily in this MCU
               int offset_DC_N = cpos_dc - blockN[acomp];
               for (int i=0; i<64; ++i) {
-                sumu[zzu[i]]+=(zzv[i]&1?-1:1)*(zzv[i]?16*(16+zzv[i]):181)*(qtab[q+i]+1)*cbuf2[offset_DC_N+i];
-                sumv[zzv[i]]+=(zzu[i]&1?-1:1)*(zzu[i]?16*(16+zzu[i]):181)*(qtab[q+i]+1)*cbuf2[offset_DC_W+i];
+                sumu[zzu[i]]+=(zzv[i]&1?-1:1)*(zzv[i]?16*(16+zzv[i]):181)*(images[idx].qtab[q+i]+1)*cbuf2[offset_DC_N+i];
+                sumv[zzv[i]]+=(zzu[i]&1?-1:1)*(zzu[i]?16*(16+zzu[i]):181)*(images[idx].qtab[q+i]+1)*cbuf2[offset_DC_W+i];
               }
             }
             else {
-              sumu[zzu[zz-1]]-=(zzv[zz-1]?16*(16+zzv[zz-1]):181)*(qtab[q+zz-1]+1)*cbuf2[cpos-1];
-              sumv[zzv[zz-1]]-=(zzu[zz-1]?16*(16+zzu[zz-1]):181)*(qtab[q+zz-1]+1)*cbuf2[cpos-1];
+              sumu[zzu[zz-1]]-=(zzv[zz-1]?16*(16+zzv[zz-1]):181)*(images[idx].qtab[q+zz-1]+1)*cbuf2[cpos-1];
+              sumv[zzv[zz-1]]-=(zzu[zz-1]?16*(16+zzu[zz-1]):181)*(images[idx].qtab[q+zz-1]+1)*cbuf2[cpos-1];
             }
 
             for (int i=0; i<3; ++i)
               for (int st=0; st<8; ++st) {
                 const int zz2=min(zz+st, 63);
                 int p=(sumu[zzu[zz2]]*i+sumv[zzv[zz2]]*(2-i))/2;
-                p/=(qtab[q+zz2]+1)*181*(16+zzv[zz2])*(16+zzu[zz2])/256;
+                p/=(images[idx].qtab[q+zz2]+1)*181*(16+zzv[zz2])*(16+zzu[zz2])/256;
                 if (zz2==0) p-=cbuf2[cpos_dc-ls[acomp]];
                 p=(p<0?-1:+1)*ilog(10*abs(p)+1)/10;
                 if (st==0) {
@@ -2868,7 +3037,7 @@ int jpegModel(Mixer& m) {
               }
             x=2*sumu[zzu[zz]]+2*sumv[zzv[zz]];
             for (int i=0; i<8; ++i) x-=(zzu[zz]<i)*sumu[i]+(zzv[zz]<i)*sumv[i];
-            x/=(qtab[q+zz]+1)*181;
+            x/=(images[idx].qtab[q+zz]+1)*181;
             if (zz==0) x-=cbuf2[cpos_dc-ls[acomp]];
             adv_pred[3]=(x<0?-1:+1)*ilog(10*abs(x)+1)/10;
 
@@ -2877,7 +3046,7 @@ int jpegModel(Mixer& m) {
               if (a<b) x=255;
               else {
                 const int zz2=zpos[zzu[zz]+8*zzv[zz]-(i&1?8:1)*b];
-                x=(qtab[q+zz2]+1)*cbuf2[cpos_dc+zz2]/(qtab[q+zz]+1);
+                x=(images[idx].qtab[q+zz2]+1)*cbuf2[cpos_dc+zz2]/(images[idx].qtab[q+zz]+1);
                 x=(x<0?-1:+1)*ilog(10*abs(x)+1)/10;
               }
               lcp[i]=x;
@@ -2892,7 +3061,7 @@ int jpegModel(Mixer& m) {
   }
 
   // Estimate next bit probability
-  if (!jpeg || !data) return next_jpeg;
+  if (!images[idx].jpeg || !images[idx].data) return images[idx].next_jpeg;
   if (buf(1+(!bpos))==FF) {
     m.add(128);
     m.set(1, 8);
@@ -2938,7 +3107,7 @@ int jpegModel(Mixer& m) {
     cxt[4]=hash(++n, hc, rs1, adv_pred[0]);
     cxt[5]=hash(++n, hc, rs1, adv_pred[1]);
     cxt[6]=hash(++n, hc, adv_pred[2], adv_pred[0]);
-    cxt[7]=hash(++n, hc, cbuf[cpos-width*mcusize], adv_pred[3]);
+    cxt[7]=hash(++n, hc, cbuf[cpos-width*images[idx].mcusize], adv_pred[3]);
     cxt[8]=hash(++n, hc, cbuf[cpos-ls[mcupos>>6]], adv_pred[3]);
     cxt[9]=hash(++n, hc, lcp[0], lcp[1], adv_pred[1]);
     cxt[10]=hash(++n, hc, lcp[0], lcp[1], mcupos&63);
@@ -2951,7 +3120,7 @@ int jpegModel(Mixer& m) {
     cxt[17]=hash(++n, hc, rs1, mcupos&63);
     cxt[18]=hash(++n, hc, mcupos>>3, ssum2>>5, adv_pred[3]);
     cxt[19]=hash(++n, hc, lcp[0]/4, lcp[1]/4, adv_pred[5]);
-    cxt[20]=hash(++n, hc, cbuf[cpos-width*mcusize], adv_pred[6]);
+    cxt[20]=hash(++n, hc, cbuf[cpos-width*images[idx].mcusize], adv_pred[6]);
     cxt[21]=hash(++n, hc, cbuf[cpos-ls[mcupos>>6]], adv_pred[4]);
     cxt[22]=hash(++n, hc, adv_pred[2]);
     cxt[23]=hash(n, hc, adv_pred[0]);
@@ -3397,7 +3566,7 @@ void nestModel(Mixer& m)
 int contextModel2() {
   static ContextMap cm(MEM*32, 9);
   static RunContextMap rcm7(MEM), rcm9(MEM), rcm10(MEM);
-  static Mixer m(881+8, 3095, 7);
+  static Mixer m(881+8*3, 3095, 7);
   static U32 cxt[16];  // order 0-11 contexts
   static Filetype ft2,filetype=DEFAULT;
   static int size=0;  // bytes remaining in block
