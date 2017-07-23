@@ -848,7 +848,7 @@ public:
 
 /////////////////////// Global context /////////////////////////
 
-typedef enum {DEFAULT, JPEG, HDR, IMAGE1, IMAGE8, IMAGE24, AUDIO, EXE, CD, ZLIB, BASE64, GIF} Filetype;
+typedef enum {DEFAULT, JPEG, HDR, IMAGE1, IMAGE8, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF} Filetype;
 int level=DEFAULT_OPTION;  // Compression level 0 to 8
 #define MEM (0x10000<<level)
 int y=0;  // Last bit, 0 or 1, set by encoder
@@ -1989,7 +1989,7 @@ void wordModel(Mixer& m, Filetype filetype) {
 // Model 2-D data with fixed record length.  Also order 1-2 models
 // that include the distance to the last match.
 
-unsigned ilog2(unsigned x) {
+inline unsigned ilog2(unsigned x) {
   x = x | (x >> 1);
   x = x | (x >> 2);
   x = x | (x >> 4);
@@ -2177,18 +2177,18 @@ void distanceModel(Mixer& m) {
 
 //////////////////////////// im24bitModel /////////////////////////////////
 
-U8 Clip(int Px){
+inline U8 Clip(int Px){
   return min(0xFF,max(0,Px));
 }
-U8 Clamp4( int Px, U8 n1, U8 n2, U8 n3, U8 n4){
+inline U8 Clamp4( int Px, U8 n1, U8 n2, U8 n3, U8 n4){
   return min( max(n1,max(n2,max(n3,n4))), max( min(n1,min(n2,min(n3,n4))), Px ));
 }
 
-U8 LogMeanDiffQt(U8 a, U8 b){
+inline U8 LogMeanDiffQt(U8 a, U8 b){
   return (a!=b)?((a>b)<<3)|ilog2((a+b)/max(2,abs(a-b)*2)+1):0;
 }
 
-// Model for 24-bit image data
+// Model for 24/32-bit image data
 
 // Square buf(i)
 inline int sqrbuf(int i) {
@@ -2196,50 +2196,65 @@ inline int sqrbuf(int i) {
   return buf(i)*buf(i);
 }
 
-void im24bitModel(Mixer& m, int w) {
+void im24bitModel(Mixer& m, int w, int alpha=0) {
   const int SC=0x20000;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm10(512);
   static ContextMap cm(MEM*4, 13+5);
+  static int color = -1;
+  static int stride  = 3;
+  static int ctx, padding, lastPos, x = 0;
 
   // Select nearby pixels as context
   if (!bpos) {
-    assert(w>3);
-    int color=pos%3;
-    int mean=buf(3)+buf(w-3)+buf(w)+buf(w+3);
-    const int var=(sqrbuf(3)+sqrbuf(w-3)+sqrbuf(w)+sqrbuf(w+3)-mean*mean/4)>>2;
+    assert(w>3+alpha);
+    if ((color < 0) || (pos-lastPos != 1)){
+      stride = 3+alpha;
+      padding = w%stride;
+      x = 0;
+    }
+    lastPos = pos;
+    ++x*=x<w;
+    if (x+padding<w)
+      ++color*=color<stride;
+    else
+      color=(padding)*(stride+1);
+
+    int mean=buf(stride)+buf(w-stride)+buf(w)+buf(w+stride);
+    const int var=(sqrbuf(stride)+sqrbuf(w-stride)+sqrbuf(w)+sqrbuf(w+stride)-mean*mean/4)>>2;
     mean>>=2;
     const int logvar=ilog(var);
-    int i=color<<4;
+    int i=color<<5;
 
-    int WWW=buf(9), WW=buf(6), W=buf(3), NW=buf(w+3), N=buf(w), NE=buf(w-3), NNW=buf(w*2+3), NN=buf(w*2), NNE=buf(w*2-3), NNN=buf(w*3);
-    cm.set(hash( ++i, (N+1)>>1, LogMeanDiffQt(N,Clip(NN*2-NNN)) ));
-    cm.set(hash( ++i, (W+1)>>1, LogMeanDiffQt(W,Clip(WW*2-WWW)) ));
-    cm.set(hash( ++i, Clamp4(W+N-NW,W,NW,N,NE), LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
-    cm.set(hash( ++i, (NNN+N+4)/8, Clip(N*3-NN*3+NNN)>>1 ));
-    cm.set(hash( ++i, (WWW+W+4)/8, Clip(W*3-WW*3+WWW)>>1 ));
+    int WWW=buf(3*stride), WW=buf(2*stride), W=buf(stride), NW=buf(w+stride), N=buf(w), NE=buf(w-stride), NNW=buf(w*2+stride), NN=buf(w*2), NNE=buf(w*2-stride), NNN=buf(w*3);
+    ctx = (min(color,stride)<<9)|((abs(W-N)>8)<<8)|((W>N)<<7)|((W>NW)<<6)|((abs(N-NW)>8)<<5)|((N>NW)<<4)|((abs(N-NE)>8)<<3)|((N>NE)<<2)|((W>WW)<<1)|(N>NN);
+    cm.set(hash( (N+1)>>1, LogMeanDiffQt(N,Clip(NN*2-NNN)) ));
+    cm.set(hash( (W+1)>>1, LogMeanDiffQt(W,Clip(WW*2-WWW)) ));
+    cm.set(hash( Clamp4(W+N-NW,W,NW,N,NE), LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
+    cm.set(hash( (NNN+N+4)/8, Clip(N*3-NN*3+NNN)>>1 ));
+    cm.set(hash( (WWW+W+4)/8, Clip(W*3-WW*3+WWW)>>1 ));
 
-    cm.set(hash(++i, buf(3)));
-    cm.set(hash(++i, buf(3), buf(1)));
-    cm.set(hash(++i, buf(3), buf(1), buf(2)));
+    cm.set(hash(++i, buf(stride)));
+    cm.set(hash(++i, buf(stride), buf(1)));
+    cm.set(hash(++i, buf(stride), buf(1), buf(2)));
     cm.set(hash(++i, buf(w)));
     cm.set(hash(++i, buf(w), buf(1)));
     cm.set(hash(++i, buf(w), buf(1), buf(2)));
-    cm.set(hash(++i, (buf(3)+buf(w))>>3, buf(1)>>4, buf(2)>>4));
+    cm.set(hash(++i, (buf(stride)+buf(w))>>3, buf(1)>>4, buf(2)>>4));
     cm.set(hash(++i, buf(1), buf(2)));
-    cm.set(hash(++i, buf(3), buf(1)-buf(4)));
-    cm.set(hash(++i, buf(3)+buf(1)-buf(4)));
+    cm.set(hash(++i, buf(stride), buf(1)-buf(4)));
+    cm.set(hash(++i, buf(stride)+buf(1)-buf(4)));
     cm.set(hash(++i, buf(w), buf(1)-buf(w+1)));
     cm.set(hash(++i, buf(w)+buf(1)-buf(w+1)));
     cm.set(hash(++i, mean, logvar>>4));
-    scm1.set(buf(3)+buf(w)-buf(w+3));
-    scm2.set(buf(3)+buf(w-3)-buf(w));
-    scm3.set(buf(3)*2-buf(6));
+    scm1.set(buf(stride)+buf(w)-buf(w+stride));
+    scm2.set(buf(stride)+buf(w-stride)-buf(w));
+    scm3.set(buf(stride)*2-buf(stride*2));
     scm4.set(buf(w)*2-buf(w*2));
-    scm5.set(buf(w+3)*2-buf(w*2+6));
-    scm6.set(buf(w-3)*2-buf(w*2-6));
-    scm7.set(buf(w-3)+buf(1)-buf(w-2));
-    scm8.set(buf(w)+buf(w-3)-buf(w*2-3));
+    scm5.set(buf(w+stride)*2-buf(w*2+stride*2));
+    scm6.set(buf(w-stride)*2-buf(w*2-stride*2));
+    scm7.set(buf(w-stride)+buf(1)-buf(w-2));
+    scm8.set(buf(w)+buf(w-stride)-buf(w*2-stride));
     scm9.set(mean>>1|(logvar<<1&0x180));
   }
 
@@ -2256,10 +2271,10 @@ void im24bitModel(Mixer& m, int w) {
   scm10.mix(m);
   cm.mix(m);
   static int col=0;
-  if (++col>=24) col=0;
-  m.set(2, 8);
-  m.set(col, 24);
-  m.set((buf(1)>>4)*3+(pos%3), 48);
+  if (++col>=stride*8) col=0;
+  m.set( ctx, 2048 );
+  m.set(col, stride*8);
+  m.set((buf(1+(alpha && !color))>>4)*stride+(x%stride), stride*16);
   m.set(c0, 256);
 }
 
@@ -2272,7 +2287,7 @@ void im8bitModel(Mixer& m, int w) {
     scm3(SC), scm4(SC), scm5(SC), scm6(SC*2),scm7(SC);
   static ContextMap cm(MEM*4, 45+12 +5);
   static int itype=0, id8=1, id9=1;
-
+  static int ctx, col=0;
   // Select nearby pixels as context
   if (!bpos) {
     assert(w>3);
@@ -2395,6 +2410,8 @@ void im8bitModel(Mixer& m, int w) {
     }
 
     int WWW=buf(3), WW=buf(2), W=buf(1), NW=buf(w+1), N=buf(w), NE=buf(w-1), NNW=buf(w*2+1), NN=buf(w*2), NNE=buf(w*2-1), NNN=buf(w*3);
+    ctx = min(0x1F,(blpos%w)/max(1,w/32))|( ( ((abs(W-N)*16>W+N)<<1)|(abs(N-NW)>8) )<<5 )|((W+N)&0x180);
+
     cm.set(hash( ++i, (N+1)>>1, LogMeanDiffQt(N,Clip(NN*2-NNN)) ));
     cm.set(hash( ++i, (W+1)>>1, LogMeanDiffQt(W,Clip(WW*2-WWW)) ));
     cm.set(hash( ++i, Clamp4(W+N-NW,W,NW,N,NE), LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
@@ -2418,9 +2435,8 @@ void im8bitModel(Mixer& m, int w) {
   scm6.mix(m);
   scm7.mix(m); // Amazingly but improves compression!
   cm.mix(m);
-  static int col=0;
   if (++col>=8) col=0; // reset after every 24 columns?
-  m.set(2, 8);
+  m.set( ctx, 512 );
   m.set(col, 8);
   m.set((buf(w)+buf(1))>>4, 32);
   m.set(c0, 256);
@@ -3577,7 +3593,7 @@ int contextModel2() {
     --size;
     ++blpos;
     if (size==-1) ft2=(Filetype)buf(1);
-    if (size==-5 && ft2!=IMAGE1 && ft2!=IMAGE8 && ft2!=IMAGE24 && ft2!=AUDIO) {
+    if (size==-5 && ft2!=IMAGE1 && ft2!=IMAGE8 && ft2!=IMAGE24 && ft2!=IMAGE32 && ft2!=AUDIO) {
       size=buf(4)<<24|buf(3)<<16|buf(2)<<8|buf(1);
       if (ft2==CD || ft2==ZLIB || ft2==BASE64 || ft2==GIF) size=0;
       blpos=0;
@@ -3599,6 +3615,7 @@ int contextModel2() {
   if (filetype==IMAGE1) im1bitModel(m, info);
   if (filetype==IMAGE8) return im8bitModel(m, info), m.p();
   if (filetype==IMAGE24) return im24bitModel(m, info), m.p();
+  if (filetype==IMAGE32) return im24bitModel(m, info, 1), m.p();
   if (filetype==AUDIO) return wavModel(m, info), m.p();
   if (filetype==JPEG) if (jpegModel(m)) return m.p();
 
@@ -4245,7 +4262,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
       else if (p==16 && buf0!=0x28000000) bmp=0; //BITMAPINFOHEADER (0x28)
       else if (p==20) bmpx=bswap(buf0),bmp=((bmpx==0||bmpx>0x30000)?0:bmp); //width
       else if (p==24) bmpy=abs((int)bswap(buf0)),bmp=((bmpy==0||bmpy>0x10000)?0:bmp); //height
-      else if (p==27) imgbpp=c,bmp=((imgbpp!=1 && imgbpp!=8 && imgbpp!=24)?0:bmp);
+      else if (p==27) imgbpp=c,bmp=((imgbpp!=1 && imgbpp!=8 && imgbpp!=24 && imgbpp!=32)?0:bmp);
       else if ((p==31) && buf0) bmp=0;
       // check number of colors in palette (4 bytes), must be 0 (default) or <= 1<<bpp.
       // also check if image is too small, since it might not be worth it to use the image models
@@ -4261,12 +4278,13 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
             bmpy=bmpx;
 
           // if DIB and not 24bpp, we must calculate the data offset based on BPP or num. of entries in color palette
-          if (hdrless && (imgbpp!=24))
+          if (hdrless && (imgbpp<=24))
             bmpof+=(buf0)?bswap(buf0)*4:4<<imgbpp;
 
           if (imgbpp==1) IMG_DET(IMAGE1,bmp-1,bmpof,(((bmpx-1)>>5)+1)*4,bmpy);
           else if (imgbpp==8) IMG_DET(IMAGE8,bmp-1,bmpof,(bmpx+3)&-4,bmpy);
           else if (imgbpp==24) IMG_DET(IMAGE24,bmp-1,bmpof,((bmpx*3)+3)&-4,bmpy);
+          else if (imgbpp==32) IMG_DET(IMAGE32,bmp-1,bmpof,bmpx*4,bmpy);
         }
         bmp=0;
       }
@@ -5165,14 +5183,14 @@ void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int i
     }
     fclose(tmp);  // deletes
   } else {
-    const int i1=(type==IMAGE1 || type==IMAGE8 || type==AUDIO)?info:-1;
+    const int i1=(type==IMAGE1 || type==IMAGE8 || type==IMAGE32 || type==AUDIO)?info:-1;
     direct_encode_block(type, in, len, en, i1);
   }
 }
 
 void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it, float p1, float p2) {
-  static const char* typenames[12]={"default", "jpeg", "hdr",
-    "1b-image", "8b-image", "24b-image", "audio", "exe", "cd", "zlib", "base64", "gif"};
+  static const char* typenames[13]={"default", "jpeg", "hdr",
+    "1b-image", "8b-image", "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif"};
   static const char* audiotypes[4]={"8b mono", "8b stereo", "16b mono",
     "16b stereo"};
   Filetype type=DEFAULT;
@@ -5202,7 +5220,7 @@ void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it, float
       sprintf(blstr,"%s%d",b2,blnum++);
       printf(" %-11s | %-9s |%10d bytes [%ld - %ld]",blstr,typenames[type],len,begin,end-1);
       if (type==AUDIO) printf(" (%s)", audiotypes[info%4]);
-      else if (type==IMAGE1 || type==IMAGE8 || type==IMAGE24) printf(" (width: %d)", info);
+      else if (type==IMAGE1 || type==IMAGE8 || type==IMAGE24 || type==IMAGE32) printf(" (width: %d)", info);
       else if (type==CD) printf(" (m%d/f%d)", info==1?1:2, info!=3?1:2);
       else if (type==ZLIB && info>0) printf(" (image)");
       printf("\n");
@@ -5261,7 +5279,7 @@ int decompressRecursive(FILE *out, long n, Encoder& en, FMode mode, int it=0) {
     len|=en.decompress()<<8;
     len|=en.decompress();
 
-    if (type==IMAGE1 || type==IMAGE8 || type==IMAGE24 || type==AUDIO) {
+    if (type==IMAGE1 || type==IMAGE8 || type==IMAGE24 || type==IMAGE32 || type==AUDIO) {
       info=0; for (int i=0; i<4; ++i) { info<<=8; info+=en.decompress(); }
     }
     if (type==IMAGE24) len=decode_bmp(en, len, info, out, mode, diffFound);
