@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Release by Márcio Pais, July 23, 2017
+/* paq8px file compressor/archiver.  Release by Márcio Pais, July 24, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -848,7 +848,7 @@ public:
 
 /////////////////////// Global context /////////////////////////
 
-typedef enum {DEFAULT, JPEG, HDR, IMAGE1, IMAGE8, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF} Filetype;
+typedef enum {DEFAULT, JPEG, HDR, IMAGE1, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF} Filetype;
 int level=DEFAULT_OPTION;  // Compression level 0 to 8
 #define MEM (0x10000<<level)
 int y=0;  // Last bit, 0 or 1, set by encoder
@@ -1801,7 +1801,7 @@ int matchModel(Mixer& m) {
   static SmallStationaryContextMap scm1(0x20000);
 
   if (!bpos) {
-    h=(h*997*8+buf(1)+1)&(t.size()-1);  // update context hash
+    h=(h*997*8+buf(1)+1)&(t.size()-1);  // update context hash    
     if (len) ++len, ++ptr;
     else {  // find match
       ptr=t[h];
@@ -1990,11 +1990,11 @@ void wordModel(Mixer& m, Filetype filetype) {
 // that include the distance to the last match.
 
 inline unsigned BitCount(unsigned v){
-	v -= ((v>>1)&0x55555555);
-	v = ((v>>2)&0x33333333) + (v&0x33333333);
-	v = ((v>>4)+v)&0x0f0f0f0f;
-	v = ((v>>8)+v)&0x00ff00ff;
-	v = ((v>>16)+v)&0x0000ffff;
+  v -= ((v>>1)&0x55555555);
+  v = ((v>>2)&0x33333333) + (v&0x33333333);
+  v = ((v>>4)+v)&0x0f0f0f0f;
+  v = ((v>>8)+v)&0x00ff00ff;
+  v = ((v>>16)+v)&0x0000ffff;
   return v;
 }
 
@@ -2228,9 +2228,9 @@ void im24bitModel(Mixer& m, int w, int alpha=0) {
       x = 0;
     }
     lastPos = pos;
-    ++x*=x<w;
+    x*=(++x)<w;
     if (x+padding<w)
-      ++color*=color<stride;
+      color*=(++color)<stride;
     else
       color=(padding)*(stride+1);
 
@@ -2295,7 +2295,7 @@ void im24bitModel(Mixer& m, int w, int alpha=0) {
 //////////////////////////// im8bitModel /////////////////////////////////
 
 // Model for 8-bit image data
-void im8bitModel(Mixer& m, int w) {
+void im8bitModel(Mixer& m, int w, int gray = 0) {
   const int SC=0x20000;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC*2),scm7(SC);
@@ -2423,14 +2423,26 @@ void im8bitModel(Mixer& m, int w) {
       cm.set(hash(++i,buf(3)>>2, buf(w-2)>>2, buf(w*2-2)>>2));
     }
 
-    int WWW=buf(3), WW=buf(2), W=buf(1), NW=buf(w+1), N=buf(w), NE=buf(w-1), NNW=buf(w*2+1), NN=buf(w*2), NNE=buf(w*2-1), NNN=buf(w*3);
-    ctx = min(0x1F,(blpos%w)/max(1,w/32))|( ( ((abs(W-N)*16>W+N)<<1)|(abs(N-NW)>8) )<<5 )|((W+N)&0x180);
+    int WWW=buf(3), WW=buf(2), W=buf(1), NW=buf(w+1), N=buf(w), NE=buf(w-1), NEE=buf(w-2), NNW=buf(w*2+1), NN=buf(w*2), NNE=buf(w*2-1), NNN=buf(w*3);
 
-    cm.set(hash( ++i, (N+1)>>1, LogMeanDiffQt(N,Clip(NN*2-NNN)) ));
-    cm.set(hash( ++i, (W+1)>>1, LogMeanDiffQt(W,Clip(WW*2-WWW)) ));
-    cm.set(hash( ++i, Clamp4(W+N-NW,W,NW,N,NE), LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
-    cm.set(hash( ++i, (NNN+N+4)/8, Clip(N*3-NN*3+NNN)>>1 ));
-    cm.set(hash( ++i, (WWW+W+4)/8, Clip(W*3-WW*3+WWW)>>1 ));
+    if (gray){
+      ctx = min(0x1F,(blpos%w)/max(1,w/32))|( ( ((abs(W-N)*16>W+N)<<1)|(abs(N-NW)>8) )<<5 )|((W+N)&0x180);
+
+      cm.set(hash( ++i, (N+1)>>1, LogMeanDiffQt(N,Clip(NN*2-NNN)) ));
+      cm.set(hash( ++i, (W+1)>>1, LogMeanDiffQt(W,Clip(WW*2-WWW)) ));
+      cm.set(hash( ++i, Clamp4(W+N-NW,W,NW,N,NE), LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
+      cm.set(hash( ++i, (NNN+N+4)/8, Clip(N*3-NN*3+NNN)>>1 ));
+      cm.set(hash( ++i, (WWW+W+4)/8, Clip(W*3-WW*3+WWW)>>1 ));
+    }
+    else{
+      ctx = min(0x1F,(blpos%w)/max(1,w/32));
+
+      cm.set(hash( ++i, W, NEE ));
+      cm.set(hash( ++i, WW, NN ));
+      cm.set(hash( ++i, W, WWW ));
+      cm.set(hash( ++i, N, NNN ));
+      cm.set(hash( ++i, NNW, NN ));
+    }
 
     scm1.set((buf(1)+buf(w))>>1);
     scm2.set((buf(1)+buf(w)-buf(w+1))>>1);
@@ -2450,7 +2462,7 @@ void im8bitModel(Mixer& m, int w) {
   scm7.mix(m); // Amazingly but improves compression!
   cm.mix(m);
   if (++col>=8) col=0; // reset after every 24 columns?
-  m.set( ctx, 512 );
+  m.set( (gray)?ctx:ctx|((bpos>4)<<8), 512 );
   m.set(col, 8);
   m.set((buf(w)+buf(1))>>4, 32);
   m.set(c0, 256);
@@ -2513,6 +2525,7 @@ void dump(const char* msg, int p) {
   if (success && idx && pos-lastPos==1) \
     printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bEmbedded JPEG at offset %d, size: %d bytes, level %d\nCompressing... ", images[idx].offset, length, idx), fflush(stdout); \
   memset(&images[idx], 0, sizeof(JPEGImage)); \
+  dqt_state=-1; \
   idx-=(idx>0); \
   images[idx].app-=length; \
   if (images[idx].app < 0) \
@@ -2913,7 +2926,7 @@ int jpegModel(Mixer& m) {
       jassert(width>0);
       images[idx].mcusize*=64;  // coefficients per MCU
       row=column=0;
-	  
+    
       for (i = 0; i < 10; i++)
         blockN[i] = images[idx].mcusize * width;
 
@@ -2944,7 +2957,7 @@ int jpegModel(Mixer& m) {
 
           x+=nBlocks[i];
         }
-      }	
+      } 
     }
   }
 
@@ -3605,7 +3618,7 @@ void nestModel(Mixer& m)
 int contextModel2() {
   static ContextMap cm(MEM*32, 9);
   static RunContextMap rcm7(MEM), rcm9(MEM), rcm10(MEM);
-  static Mixer m(881+8*3, 3095+1024*(level>7), 7+(level>7));
+  static Mixer m(881+8*3, 3095+768+1024*(level>7), 7+(level>7));
   static U32 cxt[16];  // order 0-11 contexts
   static Filetype ft2,filetype=DEFAULT;
   static int size=0;  // bytes remaining in block
@@ -3616,7 +3629,7 @@ int contextModel2() {
     --size;
     ++blpos;
     if (size==-1) ft2=(Filetype)buf(1);
-    if (size==-5 && ft2!=IMAGE1 && ft2!=IMAGE8 && ft2!=IMAGE24 && ft2!=IMAGE32 && ft2!=AUDIO) {
+    if (size==-5 && ft2!=IMAGE1 && ft2!=IMAGE8 && ft2!=IMAGE8GRAY && ft2!=IMAGE24 && ft2!=IMAGE32 && ft2!=AUDIO) {
       size=buf(4)<<24|buf(3)<<16|buf(2)<<8|buf(1);
       if (ft2==CD || ft2==ZLIB || ft2==BASE64 || ft2==GIF) size=0;
       blpos=0;
@@ -3637,6 +3650,7 @@ int contextModel2() {
   int ismatch=ilog(matchModel(m));  // Length of longest matching context
   if (filetype==IMAGE1) im1bitModel(m, info);
   if (filetype==IMAGE8) return im8bitModel(m, info), m.p();
+  if (filetype==IMAGE8GRAY) return im8bitModel(m, info, 1), m.p();
   if (filetype==IMAGE24) return im24bitModel(m, info), m.p();
   if (filetype==IMAGE32) return im24bitModel(m, info, 1), m.p();
   if (filetype==AUDIO) return wavModel(m, info), m.p();
@@ -3678,9 +3692,9 @@ int contextModel2() {
 
   U32 c1=buf(1), c2=buf(2), c3=buf(3), c;
 
-  m.set(c1+8, 264);
+  m.set(8+ c1 + (bpos>5)*256 + ( ((c0&((1<<bpos)-1))==0) || (c0==((2<<bpos)-1)) )*512, 8+1024);
   m.set(c0, 256);
-  m.set(order+8*(c4>>6&3)+32*(bpos==0)+64*(c1==c2)+128*(filetype==EXE), 256);
+  m.set(order+8*(c4>>6&3)+32*(bpos==0)+64*(c1==c2)+128*(filetype==EXE), 256);  
   m.set(c2, 256);
   m.set(c3, 256);
   m.set(ismatch, 256);
@@ -4040,6 +4054,34 @@ int zlib_inflateInit(z_streamp strm, int zh) {
     if (zh==-1) return inflateInit2(strm, -MAX_WBITS); else return inflateInit(strm);
 }
 
+bool IsGrayscalePalette(FILE* in, int n = 256, int isRGBA = 0){
+  long offset = ftell(in);
+  int stride = 3+isRGBA, res = (n>0)<<8, order=1;
+  for (int i = 0; (i < n*stride) && (res>>8); i++) {
+    int b = getc(in);
+    if (b==EOF){
+      res = 0;
+      break;
+    }
+    if (!i) {
+      res = 0x100|b;
+      order = 1-2*(b>0);
+      continue;
+    }
+
+    //"j" is the index of the current byte in this color entry
+    int j = i%stride;
+    if (!j)
+      res = (res&((b-(res&0xFF)==order)<<8))|b; // load first component of this entry
+    else if (j==3)
+      res&=((!b || (b==0xFF))<<9)-1; // alpha/attribute component must be zero or 0xFF
+    else
+      res&=((b==res&0xFF)<<9)-1;
+  }
+  fseek(in, offset, SEEK_SET);
+  return res>>8;
+}
+
 // Detect blocks
 Filetype detect(FILE* in, int n, Filetype type, int &info) {
   U32 buf3=0, buf2=0, buf1=0, buf0=0;  // last 16 bytes
@@ -4290,7 +4332,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
       // check number of colors in palette (4 bytes), must be 0 (default) or <= 1<<bpp.
       // also check if image is too small, since it might not be worth it to use the image models
       else if (p==48){
-        if ( (!buf0 || ((bswap(buf0)<=(U32)(1<<imgbpp)) && (imgbpp<=8))) && (((bmpx*bmpy*imgbpp)>>3)>256) ) {
+        if ( (!buf0 || ((bswap(buf0)<=(U32)(1<<imgbpp)) && (imgbpp<=8))) && (((bmpx*bmpy*imgbpp)>>3)>512) ) {
           // possible icon/cursor?
           if (hdrless && (bmpx*2==bmpy) && (
             (bmpx==8)   || (bmpx==10) || (bmpx==14) || (bmpx==16) || (bmpx==20) ||
@@ -4305,7 +4347,10 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
             bmpof+=(buf0)?bswap(buf0)*4:4<<imgbpp;
 
           if (imgbpp==1) IMG_DET(IMAGE1,bmp-1,bmpof,(((bmpx-1)>>5)+1)*4,bmpy);
-          else if (imgbpp==8) IMG_DET(IMAGE8,bmp-1,bmpof,(bmpx+3)&-4,bmpy);
+          else if (imgbpp==8){
+            fseek(in, start+bmp+53, SEEK_SET);
+            IMG_DET( (IsGrayscalePalette(in, bswap(buf0), 1))?IMAGE8GRAY:IMAGE8,bmp-1,bmpof,(bmpx+3)&-4,bmpy);
+          }
           else if (imgbpp==24) IMG_DET(IMAGE24,bmp-1,bmpof,((bmpx*3)+3)&-4,bmpy);
           else if (imgbpp==32) IMG_DET(IMAGE32,bmp-1,bmpof,bmpx*4,bmpy);
         }
@@ -4336,7 +4381,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
       if (pgm_ptr>=32) pgm=0;
       if (pgmcomment && c==0x0a) pgmcomment=0;
       if (pgmw && pgmh && !pgmc && pgmn==4) IMG_DET(IMAGE1,pgm-2,i-pgm+3,(pgmw+7)/8,pgmh);
-      if (pgmw && pgmh && pgmc && pgmn==5) IMG_DET(IMAGE8,pgm-2,i-pgm+3,pgmw,pgmh);
+      if (pgmw && pgmh && pgmc && pgmn==5) IMG_DET(IMAGE8GRAY,pgm-2,i-pgm+3,pgmw,pgmh);
       if (pgmw && pgmh && pgmc && pgmn==6) IMG_DET(IMAGE24,pgm-2,i-pgm+3,pgmw*3,pgmh);
     }
 
@@ -4405,7 +4450,10 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
       if (i-tga==8) tga=(buf1==0?tga:0),tgax=(bswap(buf0)&0xffff),tgay=(bswap(buf0)>>16);
       else if (i-tga==10) {
         if (tgaz==(int)((buf0&0xffff)>>8) && tgax && tgay) {
-          if (tgat==1) IMG_DET(IMAGE8,tga-7,18+256*3,tgax,tgay);
+          if (tgat==1){
+            fseek(in, start+tga+11, SEEK_SET);
+            IMG_DET( (IsGrayscalePalette(in))?IMAGE8GRAY:IMAGE8,tga-7,18+256*3,tgax,tgay);
+          }
           else if (tgat==2) IMG_DET(IMAGE24,tga-7,18,tgax*3,tgay);
           else if (tgat==3) IMG_DET(IMAGE8,tga-7,18,tgax,tgay);
         }
@@ -5206,14 +5254,14 @@ void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int i
     }
     fclose(tmp);  // deletes
   } else {
-    const int i1=(type==IMAGE1 || type==IMAGE8 || type==IMAGE32 || type==AUDIO)?info:-1;
+    const int i1=(type==IMAGE1 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE32 || type==AUDIO)?info:-1;
     direct_encode_block(type, in, len, en, i1);
   }
 }
 
 void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it, float p1, float p2) {
-  static const char* typenames[13]={"default", "jpeg", "hdr",
-    "1b-image", "8b-image", "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif"};
+  static const char* typenames[14]={"default", "jpeg", "hdr",
+    "1b-image", "8b-image", "8b-img-grayscale", "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif"};
   static const char* audiotypes[4]={"8b mono", "8b stereo", "16b mono",
     "16b stereo"};
   Filetype type=DEFAULT;
@@ -5241,9 +5289,9 @@ void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it, float
     if (len>0) {
       en.set_status_range(p1,p2=p1+pscale*len);
       sprintf(blstr,"%s%d",b2,blnum++);
-      printf(" %-11s | %-9s |%10d bytes [%ld - %ld]",blstr,typenames[type],len,begin,end-1);
+      printf(" %-11s | %-16s |%10d bytes [%ld - %ld]",blstr,typenames[type],len,begin,end-1);
       if (type==AUDIO) printf(" (%s)", audiotypes[info%4]);
-      else if (type==IMAGE1 || type==IMAGE8 || type==IMAGE24 || type==IMAGE32) printf(" (width: %d)", info);
+      else if (type==IMAGE1 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32) printf(" (width: %d)", info);
       else if (type==CD) printf(" (m%d/f%d)", info==1?1:2, info!=3?1:2);
       else if (type==ZLIB && info>0) printf(" (image)");
       printf("\n");
@@ -5302,7 +5350,7 @@ int decompressRecursive(FILE *out, long n, Encoder& en, FMode mode, int it=0) {
     len|=en.decompress()<<8;
     len|=en.decompress();
 
-    if (type==IMAGE1 || type==IMAGE8 || type==IMAGE24 || type==IMAGE32 || type==AUDIO) {
+    if (type==IMAGE1 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32 || type==AUDIO) {
       info=0; for (int i=0; i<4; ++i) { info<<=8; info+=en.decompress(); }
     }
     if (type==IMAGE24) len=decode_bmp(en, len, info, out, mode, diffFound);
