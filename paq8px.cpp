@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Release by Márcio Pais, July 24, 2017
+/* paq8px file compressor/archiver.  Release by Márcio Pais, July 25, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -3116,9 +3116,9 @@ int jpegModel(Mixer& m) {
   if (!images[idx].jpeg || !images[idx].data) return images[idx].next_jpeg;
   if (buf(1+(!bpos))==FF) {
     m.add(128);
-    m.set(1, 8);
-    m.set(0, 257);
-    m.set(buf(1), 256);
+    m.set(0, 9);
+    m.set(0, 1025); 
+    m.set(buf(1), 1024);
     return 1;
   }
 
@@ -3131,7 +3131,7 @@ int jpegModel(Mixer& m) {
   static Array<U32> cxt(N);  // context hashes
   static Array<U8*> cp(N);  // context pointers
   static StateMap sm[N];
-  static Mixer m1(32, 770, 3);
+  static Mixer m1(32, 2050, 3);
   static APM a1(0x8000), a2(0x10000);
 
 
@@ -3145,7 +3145,7 @@ int jpegModel(Mixer& m) {
   // Update context
   const int comp=color[mcupos>>6];
   const int coef=(mcupos&63)|comp<<6;
-  const int hc=(huffcode*4+((mcupos&63)==0)*2+(comp==0))|1<<(huffbits+2);
+  const int hc=(huffcode*4+((mcupos&63)==0)*2+(comp==0))|1<<(huffbits+2);  
   static int hbcount=2;
   if (++hbcount>2 || huffbits==0) hbcount=0;
   jassert(coef>=0 && coef<256);
@@ -3179,30 +3179,32 @@ int jpegModel(Mixer& m) {
     cxt[24]=hash(n, hc, adv_pred[1]);
     cxt[25]=hash(++n, hc, zv, lcp[1], adv_pred[6]);
     cxt[26]=hash(++n, hc, zu, lcp[0], adv_pred[4]);
-    cxt[27]=hash(++n, hc, lcp[0], lcp[1], adv_pred[3]);
+    cxt[27]=hash(++n, hc, lcp[0], lcp[1], adv_pred[3]);  
   }
 
   // Predict next bit
   m1.add(128);
-  assert(hbcount<=2);
+  assert(hbcount<=2);  
+  int p;
  switch(hbcount)
   {
-   case 0: for (int i=0; i<N; ++i) cp[i]=t[cxt[i]]+1, m1.add(stretch(sm[i].p(*cp[i]))); break;
-   case 1: { int hc=1+(huffcode&1)*3; for (int i=0; i<N; ++i) cp[i]+=hc, m1.add(stretch(sm[i].p(*cp[i]))); } break;
-   default: { int hc=1+(huffcode&1); for (int i=0; i<N; ++i) cp[i]+=hc, m1.add(stretch(sm[i].p(*cp[i]))); } break;
+   case 0: for (int i=0; i<N; ++i){ cp[i]=t[cxt[i]]+1, m1.add(p=stretch(sm[i].p(*cp[i]))); if (level>7) m.add(p>>2);} break;
+   case 1: { int hc=1+(huffcode&1)*3; for (int i=0; i<N; ++i){ cp[i]+=hc, m1.add(p=stretch(sm[i].p(*cp[i]))); if (level>7) m.add(p>>2); }} break;
+   default: { int hc=1+(huffcode&1); for (int i=0; i<N; ++i){ cp[i]+=hc, m1.add(p=stretch(sm[i].p(*cp[i]))); if (level>7) m.add(p>>2); }} break;
   }
 
-  m1.set(column==0, 2);
-  m1.set(coef, 256);
-  m1.set(hc&511, 512);
+  m1.set(column==0, 2);  
+  m1.set( coef+256*min(3,huffbits), 1024 );
+  m1.set( (hc&0x1FE)*2+min(3,ilog2(zu+zv+1)), 1024 );
   int pr=m1.p();
-  m.add(stretch(pr));
+  m.add(stretch(pr)>>2);
   pr=a1.p(pr, (hc&511)|((adv_pred[1]==0?0:(abs(adv_pred[1])-4)&63)<<9), 1023);
+  m.add(stretch(pr)>>2);
   pr=a2.p(pr, (hc&255)|(coef<<8), 255);
-  m.add(stretch(pr));
-  m.set(1, 8);
-  m.set(1+(hc&255), 257);
-  m.set(buf(1), 256);
+  m.add(stretch(pr)>>2);
+  m.set( 1 + (zu+zv<4)+(huffbits>6)*2+(column==0)*4, 9 );
+  m.set( 1 + (hc&0xFF) + 256*min(3,ilog2(zu+zv+1)), 1025 );
+  m.set( coef+256*min(3,huffbits), 1024 );
   return 1;
 }
 
