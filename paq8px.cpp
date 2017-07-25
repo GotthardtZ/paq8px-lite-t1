@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Release by Márcio Pais, July 15, 2017
+/* paq8px file compressor/archiver.  Release by Márcio Pais, July 23, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -1989,13 +1989,22 @@ void wordModel(Mixer& m, Filetype filetype) {
 // Model 2-D data with fixed record length.  Also order 1-2 models
 // that include the distance to the last match.
 
+inline unsigned BitCount(unsigned v){
+	v -= ((v>>1)&0x55555555);
+	v = ((v>>2)&0x33333333) + (v&0x33333333);
+	v = ((v>>4)+v)&0x0f0f0f0f;
+	v = ((v>>8)+v)&0x00ff00ff;
+	v = ((v>>16)+v)&0x0000ffff;
+  return v;
+}
+
 inline unsigned ilog2(unsigned x) {
   x = x | (x >> 1);
   x = x | (x >> 2);
   x = x | (x >> 4);
   x = x | (x >> 8);
   x = x | (x >>16);
-  return x - (x >> 1);
+  return BitCount(x >> 1);
 }
 
 #define SPACE 0x20
@@ -2006,7 +2015,7 @@ void recordModel(Mixer& m) {
   static int rlen[3] = {2,3,4}; // run length and 2 candidates
   static int rcount[2] = {0,0}; // candidate counts
   static U8 padding = 0; // detected padding byte
-  static int prevTransition = 0; // position of the last padding transition
+  static int prevTransition = 0, col = 0, mxCtx = 0; // position of the last padding transition
   static ContextMap cm(32768, 3), cn(32768/2, 3), co(32768*2, 3), cp(MEM, 6);
 
   // Find record length
@@ -2014,7 +2023,7 @@ void recordModel(Mixer& m) {
     int w=c4&0xffff, c=w&255, d=w>>8;
     int r=pos-cpos1[c];
     if (r>1 && r==cpos1[c]-cpos2[c]
-        && r==cpos2[c]-cpos3[c] && r==cpos3[c]-cpos4[c]
+        && r==cpos2[c]-cpos3[c] && (r>32 || r==cpos3[c]-cpos4[c])
         && (r>10 || ((c==buf(r*5+1)) && c==buf(r*6+1)))) {
       if (r==rlen[1]) ++rcount[0];
       else if (r==rlen[2]) ++rcount[1];
@@ -2024,7 +2033,7 @@ void recordModel(Mixer& m) {
 
     // check candidate lengths
     for (int i=0; i < 2; i++) {
-      if (rcount[i] > max(0,15-(int)ilog2(rlen[i+1]))){
+      if (rcount[i] > max(0,12-(int)ilog2(rlen[i+1]))){
         if (rlen[0] != rlen[i+1]){
           if ( (rlen[i+1] > rlen[0]) && (rlen[i+1] % rlen[0] == 0) ){
             // maybe we found a multiple of the real record size..?
@@ -2070,7 +2079,7 @@ void recordModel(Mixer& m) {
     co.set(buf(1)<<17|buf(2)<<9|llog(pos-wpos1[w])>>2);
     co.set(buf(1)<<8|buf(rlen[0]));
 
-    int col=pos%rlen[0];
+    col=pos%rlen[0];
     cp.set(rlen[0]|buf(rlen[0])<<10|col<<18);
     cp.set(rlen[0]|buf(1)<<10|col<<18);
     cp.set(col|rlen[0]<<12);
@@ -2110,11 +2119,16 @@ void recordModel(Mixer& m) {
     cpos2[c]=cpos1[c];
     cpos1[c]=pos;
     wpos1[w]=pos;
+
+    mxCtx = (rlen[0]>128)?(min(0x7F,col/max(1,rlen[0]/128))):col;
   }
   cm.mix(m);
   cn.mix(m);
   co.mix(m);
   cp.mix(m);
+
+  if (level>7)
+    m.set( (rlen[0]>2)*( (bpos<<7)|mxCtx ), 1024 );
 }
 
 
@@ -2494,11 +2508,25 @@ void dump(const char* msg, int p) {
 }
 */
 
+#define finish(success){ \
+  int length = pos - images[idx].offset; \
+  if (success && idx && pos-lastPos==1) \
+    printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bEmbedded JPEG at offset %d, size: %d bytes, level %d\nCompressing... ", images[idx].offset, length, idx), fflush(stdout); \
+  memset(&images[idx], 0, sizeof(JPEGImage)); \
+  idx-=(idx>0); \
+  images[idx].app-=length; \
+  if (images[idx].app < 0) \
+    images[idx].app = 0; \
+}
+
 // Detect invalid JPEG data.  The proper response is to silently
 // fall back to a non-JPEG model.
 #define jassert(x) if (!(x)) { \
 /*  printf("JPEG error at %d, line %d: %s\n", pos, __LINE__, #x); */ \
-  images[idx].jpeg=0; \
+  if (idx>0) \
+    finish(false) \
+  else \
+    images[idx].jpeg=0; \
   return images[idx].next_jpeg;}
 
 struct HUF {U32 min, max; int val;}; // Huffman decode tables
@@ -2715,22 +2743,17 @@ int jpegModel(Mixer& m) {
     // or byte stuff (00), or if we jumped in position since the last byte seen
     if (images[idx].jpeg && images[idx].data && ((buf(2)==FF && buf(1) && (buf(1)&0xf8)!=RST0) || (pos-lastPos>1)) ) {
       jassert((buf(1)==EOI) || (pos-lastPos>1));
-      int length = pos - images[idx].offset;
-      if (idx && pos-lastPos==1)
-        printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bEmbedded JPEG at offset %d, size: %d bytes, level %d\nCompressing... ", images[idx].offset, length, idx), fflush(stdout);
-
-      memset(&images[idx], 0, sizeof(JPEGImage));
-      idx-=(idx>0);
-      images[idx].app-=length;
-      if (images[idx].app < 0)
-        images[idx].app = 0;
+      finish(true);
     }
     lastPos = pos;
     if (!images[idx].jpeg) return images[idx].next_jpeg;
 
     // Detect APPx, COM or other markers, so we can skip them
-    if (!images[idx].data && !images[idx].app && buf(4)==FF && (((buf(3)>=0xC1) && (buf(3)<=0xCF) && (buf(3)!=DHT)) || ((buf(3)>=0xDC) && (buf(3)<=0xFE))))
+    if (!images[idx].data && !images[idx].app && buf(4)==FF && (((buf(3)>=0xC1) && (buf(3)<=0xCF) && (buf(3)!=DHT)) || ((buf(3)>=0xDC) && (buf(3)<=0xFE)))){
       images[idx].app=buf(2)*256+buf(1)+2;
+      if (idx)
+        jassert( pos + images[idx].app < images[idx].offset + images[idx-1].app );
+    }
 
     // Save pointers to sof, ht, sos, data,
     if (buf(5)==FF && buf(4)==SOS) {
@@ -3582,7 +3605,7 @@ void nestModel(Mixer& m)
 int contextModel2() {
   static ContextMap cm(MEM*32, 9);
   static RunContextMap rcm7(MEM), rcm9(MEM), rcm10(MEM);
-  static Mixer m(881+8*3, 3095, 7);
+  static Mixer m(881+8*3, 3095+1024*(level>7), 7+(level>7));
   static U32 cxt[16];  // order 0-11 contexts
   static Filetype ft2,filetype=DEFAULT;
   static int size=0;  // bytes remaining in block
