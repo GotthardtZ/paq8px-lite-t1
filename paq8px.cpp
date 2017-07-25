@@ -2525,7 +2525,7 @@ void dump(const char* msg, int p) {
   if (success && idx && pos-lastPos==1) \
     printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bEmbedded JPEG at offset %d, size: %d bytes, level %d\nCompressing... ", images[idx].offset, length, idx), fflush(stdout); \
   memset(&images[idx], 0, sizeof(JPEGImage)); \
-  dqt_state=-1; \
+  mcusize=0,dqt_state=-1; \
   idx-=(idx>0); \
   images[idx].app-=length; \
   if (images[idx].app < 0) \
@@ -2552,13 +2552,8 @@ struct JPEGImage{
   next_jpeg, // updated with jpeg on next byte boundary
   app, // Bytes remaining to skip in this marker
   sof, sos, data, // pointers to buf
-  htsize, // number of pointers in ht
-  mcusize, // number of coefficients in an MCU
-  linesize; // width of image in MCU
-  int hufsel[2][10];  // DC/AC, mcupos/64 -> huf decode table
+  htsize; // number of pointers in ht
   int ht[8]; // pointers to Huffman table headers
-  HUF huf[128]; // Tc*64+Th*16+m -> min, max, val
-  U8 hbuf[2048]; // Tc*1024+Th*256+hufcode -> RS
   U8 qtab[256]; // table
   int qmap[10]; // block -> table number
 };
@@ -2581,9 +2576,16 @@ int jpegModel(Mixer& m) {
     // 2 packed 4-bit numbers, r=run of zeros, s=number of extra bits for
     // first nonzero code.  huffcode is complete when rs >= 0.
     // rs is -1 prior to decoding incomplete huffcode.
+
   static int mcupos=0;  // position in MCU (0-639).  The low 6 bits mark
     // the coefficient in zigzag scan order (0=DC, 1-63=AC).  The high
     // bits mark the block within the MCU, used to select Huffman tables.
+
+  // Decoding tables
+  static Array<HUF> huf(128);  // Tc*64+Th*16+m -> min, max, val
+  static int mcusize=0;  // number of coefficients in an MCU
+  static int hufsel[2][10];  // DC/AC, mcupos/64 -> huf decode table
+  static Array<U8> hbuf(2048);  // Tc*1024+Th*256+hufcode -> RS
 
   // Image state
   static Array<int> color(10);  // block -> component (0-3)
@@ -2746,9 +2748,9 @@ int jpegModel(Mixer& m) {
     if (!images[idx].jpeg && buf(4)==FF && buf(3)==SOI && buf(2)==FF && (buf(1)==0xC0 || buf(1)==0xC4 || (buf(1)>=0xDB && buf(1)<=0xFE)) ){
       images[idx].jpeg=1;
       images[idx].offset = pos-4;
-      images[idx].sos=images[idx].sof=images[idx].htsize=images[idx].data=images[idx].mcusize=images[idx].linesize=0, images[idx].app=(buf(1)>>4==0xE)*2;
-      huffcode=huffbits=huffsize=mcupos=cpos=0, rs=-1;
-      memset(&images[idx].huf[0], 0, sizeof(images[idx].huf));
+      images[idx].sos=images[idx].sof=images[idx].htsize=images[idx].data=0, images[idx].app=(buf(1)>>4==0xE)*2;
+      mcusize=huffcode=huffbits=huffsize=mcupos=cpos=0, rs=-1;
+      memset(&huf[0], 0, sizeof(huf));
       memset(&pred[0], 0, pred.size()*sizeof(int));
     }
 
@@ -2815,12 +2817,12 @@ int jpegModel(Mixer& m) {
           int tc=buf[p]>>4, th=buf[p]&15;
           if (tc>=2 || th>=4) break;
           jassert(tc>=0 && tc<2 && th>=0 && th<4);
-          HUF* h=&images[idx].huf[tc*64+th*16]; // [tc][th][0];
+          HUF* h=&huf[tc*64+th*16]; // [tc][th][0];
           int val=p+17;  // pointer to values
           int hval=tc*1024+th*256;  // pointer to RS values in hbuf
           int j;
           for (j=0; j<256; ++j) // copy RS codes
-            images[idx].hbuf[hval+j]=buf[val+j];
+            hbuf[hval+j]=buf[val+j];
           int code=0;
           for (j=0; j<16; ++j) {
             h[j].min=code;
@@ -2841,7 +2843,7 @@ int jpegModel(Mixer& m) {
       if (!images[idx].htsize){
         for (int tc = 0; tc < 2; tc++) {
           for (int th = 0; th < 2; th++) {
-            HUF* h = &images[idx].huf[tc*64+th*16];
+            HUF* h = &huf[tc*64+th*16];
             int hval = tc*1024 + th*256;
             int code = 0, c = 0, x = 0;
 
@@ -2872,7 +2874,7 @@ int jpegModel(Mixer& m) {
                 case 3: x = values_ac_chrominance[c];
               }
 
-              images[idx].hbuf[hval+c] = x;
+              hbuf[hval+c] = x;
               c--;
             }
           }
@@ -2886,7 +2888,7 @@ int jpegModel(Mixer& m) {
       int ns=buf[images[idx].sos+4];
       int nf=buf[images[idx].sof+9];
       jassert(ns<=4 && nf<=4);
-      images[idx].mcusize=0;  // blocks per MCU
+      mcusize=0;  // blocks per MCU
       int hmax=0;  // MCU horizontal dimension
       for (i=0; i<ns; ++i) {
         for (int j=0; j<nf; ++j) {
@@ -2896,42 +2898,42 @@ int jpegModel(Mixer& m) {
             if (hv>>4>hmax) hmax=hv>>4;
             hv=(hv&15)*(hv>>4);  // number of blocks in component C
             nBlocks[j] = hv;
-            jassert(hv>=1 && hv+images[idx].mcusize<=10);
+            jassert(hv>=1 && hv+mcusize<=10);
             while (hv) {
-              jassert(images[idx].mcusize<10);
-              images[idx].hufsel[0][images[idx].mcusize]=buf[images[idx].sos+2*i+6]>>4&15;
-              images[idx].hufsel[1][images[idx].mcusize]=buf[images[idx].sos+2*i+6]&15;
-              jassert (images[idx].hufsel[0][images[idx].mcusize]<4 && images[idx].hufsel[1][images[idx].mcusize]<4);
-              color[images[idx].mcusize]=i;
+              jassert(mcusize<10);
+              hufsel[0][mcusize]=buf[images[idx].sos+2*i+6]>>4&15;
+              hufsel[1][mcusize]=buf[images[idx].sos+2*i+6]&15;
+              jassert (hufsel[0][mcusize]<4 && hufsel[1][mcusize]<4);
+              color[mcusize]=i;
               int tq=buf[images[idx].sof+3*j+12];  // quantization table index (0..3)
               jassert(tq>=0 && tq<4);
-              images[idx].qmap[images[idx].mcusize]=tq; // quantizazion table mapping
+              images[idx].qmap[mcusize]=tq; // quantizazion table mapping
               --hv;
-              ++images[idx].mcusize;
+              ++mcusize;
             }
           }
         }
       }
       jassert(hmax>=1 && hmax<=10);
       int j;
-      for (j=0; j<images[idx].mcusize; ++j) {
+      for (j=0; j<mcusize; ++j) {
         ls[j]=0;
-        for (int i=1; i<images[idx].mcusize; ++i) if (color[(j+i)%images[idx].mcusize]==color[j]) ls[j]=i;
-        ls[j]=(images[idx].mcusize-ls[j])<<6;
+        for (int i=1; i<mcusize; ++i) if (color[(j+i)%mcusize]==color[j]) ls[j]=i;
+        ls[j]=(mcusize-ls[j])<<6;
         blockW[j] = ls[j];
       }
       for (j=0; j<64; ++j) zpos[zzu[j]+8*zzv[j]]=j;
       width=buf[images[idx].sof+7]*256+buf[images[idx].sof+8];  // in pixels
       width=(width-1)/(hmax*8)+1;  // in MCU
       jassert(width>0);
-      images[idx].mcusize*=64;  // coefficients per MCU
+      mcusize*=64;  // coefficients per MCU
       row=column=0;
     
       for (i = 0; i < 10; i++)
-        blockN[i] = images[idx].mcusize * width;
+        blockN[i] = mcusize * width;
 
       // more blocks than components, we have subsampling
-      if (nf < images[idx].mcusize>>6) {
+      if (nf < mcusize>>6) {
         int x = 0;
         int s = 0;
         for (i = 0; i < nf; i++) {
@@ -2964,7 +2966,7 @@ int jpegModel(Mixer& m) {
 
   // Decode Huffman
   {
-    if (images[idx].mcusize && buf(1+(!bpos))!=FF) {  // skip stuffed byte
+    if (mcusize && buf(1+(!bpos))!=FF) {  // skip stuffed byte
       jassert(huffbits<=32);
       huffcode+=huffcode+y;
       ++huffbits;
@@ -2973,17 +2975,17 @@ int jpegModel(Mixer& m) {
         const int ac=(mcupos&63)>0;
         jassert(mcupos>=0 && (mcupos>>6)<10);
         jassert(ac==0 || ac==1);
-        const int sel=images[idx].hufsel[ac][mcupos>>6];
+        const int sel=hufsel[ac][mcupos>>6];
         jassert(sel>=0 && sel<4);
         const int i=huffbits-1;
         jassert(i>=0 && i<16);
-        const HUF *h=&images[idx].huf[ac*64+sel*16]; // [ac][sel];
+        const HUF *h=&huf[ac*64+sel*16]; // [ac][sel];
         jassert(h[i].min<=h[i].max && h[i].val<2048 && huffbits>0);
         if (huffcode<h[i].max) {
           jassert(huffcode>=h[i].min);
           int k=h[i].val+huffcode-h[i].min;
           jassert(k>=0 && k<2048);
-          rs=images[idx].hbuf[k];
+          rs=hbuf[k];
           huffsize=huffbits;
         }
       }
@@ -2994,7 +2996,7 @@ int jpegModel(Mixer& m) {
           if (mcupos&63) {  // AC
             if (rs==0) { // EOB
               mcupos=(mcupos+63)&-64;
-              jassert(mcupos>=0 && mcupos<=images[idx].mcusize && mcupos<=640);
+              jassert(mcupos>=0 && mcupos<=mcusize && mcupos<=640);
               while (cpos&63) {
                 cbuf2[cpos]=0;
                 cbuf[cpos++]=0;
@@ -3039,8 +3041,8 @@ int jpegModel(Mixer& m) {
             }
             ssum=rs;
           }
-          jassert(mcupos>=0 && mcupos<=images[idx].mcusize);
-          if (mcupos>=images[idx].mcusize) {
+          jassert(mcupos>=0 && mcupos<=mcusize);
+          if (mcupos>=mcusize) {
             mcupos=0;
             if (++column==width) column=0, ++row;
           }
@@ -3071,22 +3073,25 @@ int jpegModel(Mixer& m) {
             }
 
             for (int i=0; i<3; ++i)
+            {
               for (int st=0; st<8; ++st) {
                 const int zz2=min(zz+st, 63);
                 int p=(sumu[zzu[zz2]]*i+sumv[zzv[zz2]]*(2-i))/2;
                 p/=(images[idx].qtab[q+zz2]+1)*181*(16+zzv[zz2])*(16+zzu[zz2])/256;
                 if (zz2==0) p-=cbuf2[cpos_dc-ls[acomp]];
-                p=(p<0?-1:+1)*ilog(10*abs(p)+1)/10;
+                p=(p<0?-1:+1)*ilog(10*abs(p)+1);
                 if (st==0) {
                   adv_pred[i]=p;
-                  adv_pred[i+4]=p/4;
+                  adv_pred[i+4]=p/40;
                 }
-                else if (abs(p)>abs(adv_pred[i])+1) {
-                  adv_pred[i]+=(st*2+(p>0))<<6;
-                  if (abs(p/4)>abs(adv_pred[i+4])+1) adv_pred[i+4]+=(st*2+(p>0))<<6;
+                else if (abs(p)>abs(adv_pred[i])+5) {
+                  adv_pred[i]+=10*((st*2+(p>0))<<6);
+                  if (abs(p/40)>abs(adv_pred[i+4])+1) adv_pred[i+4]+=(st*2+(p>0))<<6;
                   break;
                 }
               }
+              adv_pred[i]/=10;
+            }
             x=2*sumu[zzu[zz]]+2*sumv[zzv[zz]];
             for (int i=0; i<8; ++i) x-=(zzu[zz]<i)*sumu[i]+(zzv[zz]<i)*sumv[i];
             x/=(images[idx].qtab[q+zz]+1)*181;
@@ -3159,7 +3164,7 @@ int jpegModel(Mixer& m) {
     cxt[4]=hash(++n, hc, rs1, adv_pred[0]);
     cxt[5]=hash(++n, hc, rs1, adv_pred[1]);
     cxt[6]=hash(++n, hc, adv_pred[2], adv_pred[0]);
-    cxt[7]=hash(++n, hc, cbuf[cpos-width*images[idx].mcusize], adv_pred[3]);
+    cxt[7]=hash(++n, hc, cbuf[cpos-width*mcusize], adv_pred[3]);
     cxt[8]=hash(++n, hc, cbuf[cpos-ls[mcupos>>6]], adv_pred[3]);
     cxt[9]=hash(++n, hc, lcp[0], lcp[1], adv_pred[1]);
     cxt[10]=hash(++n, hc, lcp[0], lcp[1], mcupos&63);
@@ -3172,7 +3177,7 @@ int jpegModel(Mixer& m) {
     cxt[17]=hash(++n, hc, rs1, mcupos&63);
     cxt[18]=hash(++n, hc, mcupos>>3, ssum2>>5, adv_pred[3]);
     cxt[19]=hash(++n, hc, lcp[0]/4, lcp[1]/4, adv_pred[5]);
-    cxt[20]=hash(++n, hc, cbuf[cpos-width*images[idx].mcusize], adv_pred[6]);
+    cxt[20]=hash(++n, hc, cbuf[cpos-width*mcusize], adv_pred[6]);
     cxt[21]=hash(++n, hc, cbuf[cpos-ls[mcupos>>6]], adv_pred[4]);
     cxt[22]=hash(++n, hc, adv_pred[2]);
     cxt[23]=hash(n, hc, adv_pred[0]);
