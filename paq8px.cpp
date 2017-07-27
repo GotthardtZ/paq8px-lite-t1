@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Release by Márcio Pais, July 25, 2017
+/* paq8px file compressor/archiver.  Release by Márcio Pais, July 26, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -2214,7 +2214,7 @@ void im24bitModel(Mixer& m, int w, int alpha=0) {
   const int SC=0x20000;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm10(512);
-  static ContextMap cm(MEM*4, 13+5);
+  static ContextMap cm(MEM*4, 13+6);
   static int color = -1;
   static int stride  = 3;
   static int ctx, padding, lastPos, x = 0;
@@ -2247,6 +2247,7 @@ void im24bitModel(Mixer& m, int w, int alpha=0) {
     cm.set(hash( Clamp4(W+N-NW,W,NW,N,NE), LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
     cm.set(hash( (NNN+N+4)/8, Clip(N*3-NN*3+NNN)>>1 ));
     cm.set(hash( (WWW+W+4)/8, Clip(W*3-WW*3+WWW)>>1 ));
+    cm.set( (W+Clip(NE*3-NNE*3+buf(w*3-stride)))/4 );
 
     cm.set(hash(++i, buf(stride)));
     cm.set(hash(++i, buf(stride), buf(1)));
@@ -2523,7 +2524,7 @@ void dump(const char* msg, int p) {
 #define finish(success){ \
   int length = pos - images[idx].offset; \
   if (success && idx && pos-lastPos==1) \
-    printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bEmbedded JPEG at offset %d, size: %d bytes, level %d\nCompressing... ", images[idx].offset, length, idx), fflush(stdout); \
+    printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bEmbedded JPEG at offset %d, size: %d bytes, level %d\nCompressing... ", images[idx].offset-pos+blpos, length, idx), fflush(stdout); \
   memset(&images[idx], 0, sizeof(JPEGImage)); \
   mcusize=0,dqt_state=-1; \
   idx-=(idx>0); \
@@ -2701,7 +2702,7 @@ int jpegModel(Mixer& m) {
   // Be sure to quit on a byte boundary
   if (!bpos) images[idx].next_jpeg=images[idx].jpeg>1;
   if (bpos && !images[idx].jpeg) return images[idx].next_jpeg;
-  if (!bpos && images[idx].app>=0){
+  if (!bpos && images[idx].app>0){
     --images[idx].app;
     if (idx<MaxEmbeddedLevel && buf(4)==FF && buf(3)==SOI && buf(2)==FF && (buf(1)==0xC0 || buf(1)==0xC4 || (buf(1)>=0xDB && buf(1)<=0xFE)) )
       memset(&images[++idx], 0, sizeof(JPEGImage));
@@ -3261,8 +3262,8 @@ void wavModel(Mixer& m, int info) {
   const double a=0.996,a2=1/a;
   const int SC=0x20000;
   static SmallStationaryContextMap scm1(SC), scm2(SC), scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC);
-  static ContextMap cm(MEM*4, 10);
-  static int bits, channels, w;
+  static ContextMap cm(MEM*4, 10+1);
+  static int bits, channels, w, ch;
   static int z1, z2, z3, z4, z5, z6, z7;
 
   if (!bpos && !blpos) {
@@ -3280,7 +3281,7 @@ void wavModel(Mixer& m, int info) {
   }
   // Select previous samples and predicted sample as context
   if (!bpos && blpos>=w) {
-    const int ch=blpos%w;
+    /*const int*/ ch=blpos%w;
     const int msb=ch%(bits>>3);
     const int chn=ch/(bits>>3);
     if (!msb) {
@@ -3343,12 +3344,16 @@ void wavModel(Mixer& m, int info) {
       cm.set(hash(++i, y1&0xff, ((z1-y2+z2-y3)>>1)&0xff));
       cm.set(hash(++i, x1, y1&0xff));
       cm.set(hash(++i, x1, x2>>3, x3));
-      cm.set(hash(++i, (y1+z1-y2)&0xff));
+      if (bits==8)        
+        cm.set(hash(++i, y1&0xFE, ilog2(abs((int)(z1-y2)))*2+(z1>y2) ));
+      else  
+        cm.set(hash(++i, (y1+z1-y2)&0xff));
       cm.set(hash(++i, x1));
       cm.set(hash(++i, x1, x2));
       cm.set(hash(++i, z1&0xff));
       cm.set(hash(++i, (z1*2-z2)&0xff));
       cm.set(hash(++i, z6&0xff));
+      cm.set(hash( ++i, y1&0xFF, ((z1-y2+z2-y3)/(bits>>3))&0xFF ));
     } else {
       cm.set(hash(++i, (y1-x1+z1-y2)>>8));
       cm.set(hash(++i, (y1-x1)>>8));
@@ -3360,6 +3365,7 @@ void wavModel(Mixer& m, int info) {
       cm.set(hash(++i, z1>>8));
       cm.set(hash(++i, (z1*2-z2)>>8));
       cm.set(hash(++i, y1>>8));
+      cm.set(hash( ++i, (y1-x1)>>6 ));
     }
     scm1.set(t*ch);
     scm2.set(t*((z1-x1+y1)>>9)&0xff);
@@ -3382,7 +3388,8 @@ void wavModel(Mixer& m, int info) {
   if (level>=4) recordModel(m);
   static int col=0;
   if (++col>=w*8) col=0;
-  m.set(3, 8);
+  //m.set(3, 8);
+  m.set( ch+4*ilog2(col&(bits-1)), 4*8 );
   m.set(col%bits<8, 2);
   m.set(col%bits, bits);
   m.set(col, w*8);
@@ -4356,7 +4363,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
           if (imgbpp==1) IMG_DET(IMAGE1,bmp-1,bmpof,(((bmpx-1)>>5)+1)*4,bmpy);
           else if (imgbpp==8){
             fseek(in, start+bmp+53, SEEK_SET);
-            IMG_DET( (IsGrayscalePalette(in, bswap(buf0), 1))?IMAGE8GRAY:IMAGE8,bmp-1,bmpof,(bmpx+3)&-4,bmpy);
+            IMG_DET( (IsGrayscalePalette(in, (buf0)?bswap(buf0):1<<imgbpp, 1))?IMAGE8GRAY:IMAGE8,bmp-1,bmpof,(bmpx+3)&-4,bmpy);
           }
           else if (imgbpp==24) IMG_DET(IMAGE24,bmp-1,bmpof,((bmpx*3)+3)&-4,bmpy);
           else if (imgbpp==32) IMG_DET(IMAGE32,bmp-1,bmpof,bmpx*4,bmpy);
