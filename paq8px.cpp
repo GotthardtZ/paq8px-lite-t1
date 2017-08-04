@@ -2659,14 +2659,15 @@ int jpegModel(Mixer& m) {
     //   this never occurs in a valid RS code).
   static int cpos=0;  // position in cbuf
   static int rs1;  // last RS code
+  static int rstpos=0,rstlen=0; // reset position
   static int ssum=0, ssum1=0, ssum2=0, ssum3=0;
     // sum of S in RS codes in block and sum of S in first component
 
   static IntBuf cbuf2(0x20000);
   static Array<int> adv_pred(4), sumu(8), sumv(8), run_pred(6);
-  static int prev_coef=0;
+  static int prev_coef=0, prev_coef2=0;
   static Array<int> ls(10);  // block -> distance to previous block
-  static Array<int> blockW(10), blockN(10), nBlocks(4), SamplingFactors(4);
+  static Array<int> blockW(10), blockN(10), SamplingFactors(4);
   static Array<int> lcp(4), zpos(64);
 
     //for parsing Quantization tables
@@ -2809,6 +2810,7 @@ int jpegModel(Mixer& m) {
       mcusize=huffcode=huffbits=huffsize=mcupos=cpos=0, rs=-1;
       memset(&huf[0], 0, sizeof(huf));
       memset(&pred[0], 0, pred.size()*sizeof(int));
+      rstpos=rstlen=0;
     }
 
     // Detect end of JPEG when data contains a marker other than RSTx
@@ -2858,6 +2860,8 @@ int jpegModel(Mixer& m) {
     if (buf(2)==FF && (buf(1)&0xf8)==RST0) {
       huffcode=huffbits=huffsize=mcupos=0, rs=-1;
       memset(&pred[0], 0, pred.size()*sizeof(int));
+      rstlen=column+row*width-rstpos;
+      rstpos=column+row*width;
     }
   }
 
@@ -2954,7 +2958,6 @@ int jpegModel(Mixer& m) {
             SamplingFactors[j] = hv;
             if (hv>>4>hmax) hmax=hv>>4;
             hv=(hv&15)*(hv>>4);  // number of blocks in component C
-            nBlocks[j] = hv;
             jassert(hv>=1 && hv+mcusize<=10);
             while (hv) {
               jassert(mcusize<10);
@@ -2977,7 +2980,7 @@ int jpegModel(Mixer& m) {
         ls[j]=0;
         for (int i=1; i<mcusize; ++i) if (color[(j+i)%mcusize]==color[j]) ls[j]=i;
         ls[j]=(mcusize-ls[j])<<6;
-        blockW[j] = ls[j];
+        blockW[j] = ls[j];        
       }
       for (j=0; j<64; ++j) zpos[zzu[j]+8*zzv[j]]=j;
       width=buf[images[idx].sof+7]*256+buf[images[idx].sof+8];  // in pixels
@@ -2985,38 +2988,18 @@ int jpegModel(Mixer& m) {
       jassert(width>0);
       mcusize*=64;  // coefficients per MCU
       row=column=0;
-    
-      for (i = 0; i < 10; i++)
-        blockN[i] = mcusize * width;
 
-      // more blocks than components, we have subsampling
-      if (nf < mcusize>>6) {
-        int x = 0;
-        int s = 0;
-        for (i = 0; i < nf; i++) {
-          // nBlocks tells us the number of blocks of each component
-          if (nBlocks[i]!=1) {
-            int h = SamplingFactors[i]>>4;
-            int v = SamplingFactors[i]&0xf;
-
-            if (h) {
-              blockW[x] += h*(v-1)*64;
-              s = h;
-              while (s < nBlocks[i]){
-                blockW[x+s] = blockW[x];
-                s+=h;
-              }
-            }
-
-            for (s = 0; s < h; s++)
-              blockN[x+s] -= h*(v-1)*64;
-            for (s = h; s < nBlocks[i]; s++)
-              blockN[x+s] = h*64;
-          }
-
-          x+=nBlocks[i];
-        }
-      } 
+      // we can have more blocks than components then we have subsampling
+      int x=0, y=0; 
+      for (j = 0; j<(mcusize>>6); j++) {
+        int i = color[j];
+        int w = SamplingFactors[i]>>4, h = SamplingFactors[i]&0xf;
+        blockW[j] = x==0?mcusize-64*(w-1):64;
+        blockN[j] = y==0?mcusize*width-64*w*(h-1):w*64;
+        x++;
+        if (x>=w) { x=0; y++; }
+        if (y>=h) { x=0; y=0; }
+      }
     }
   }
 
@@ -3134,23 +3117,23 @@ int jpegModel(Mixer& m) {
               run_pred[i]=run_pred[i+3]=0;
               for (int st=0; st<10; ++st) {
                 const int zz2=min(zz+st, 63);
-                int p=(sumu[zzu[zz2]]*i+sumv[zzv[zz2]]*(2-i));
+                int p=sumu[zzu[zz2]]*i+sumv[zzv[zz2]]*(2-i);
                 p/=(images[idx].qtab[q+zz2]+1)*181*(16+zzv[zz2])*(16+zzu[zz2])/128;
                 if (zz2==0) p-=cbuf2[cpos_dc-ls[acomp]];
                 p=(p<0?-1:+1)*ilog(10*abs(p)+1);
                 if (st==0) {
                   adv_pred[i]=p;
                 }
-                else if (abs(p)>abs(adv_pred[i])+2) {
-                  run_pred[i]=st*2+(p>0);
-                  if (abs(p)>abs(adv_pred[i])+16) run_pred[i+3]=st*2+(p>0);
-                  break;
+                else if (abs(p)>abs(adv_pred[i])+2 && abs(adv_pred[i]) < 210) {
+                  if (run_pred[i]==0) run_pred[i]=st*2+(p>0);
+                  if (abs(p)>abs(adv_pred[i])+21 && run_pred[i+3]==0) run_pred[i+3]=st*2+(p>0);
                 }
               }
               adv_pred[i]/=10;
             }
             x=2*sumu[zzu[zz]]+2*sumv[zzv[zz]];
             for (int i=0; i<8; ++i) x-=(zzu[zz]<i)*sumu[i]+(zzv[zz]<i)*sumv[i];
+            x=(x*6+sumu[zzu[zz]]*zzu[zz]+sumv[zzv[zz]]*zzv[zz])/(zzu[zz]+zzv[zz]+6);
             x/=(images[idx].qtab[q+zz]+1)*181;
             if (zz==0) x-=cbuf2[cpos_dc-ls[acomp]];
             adv_pred[3]=(x<0?-1:+1)*ilog(10*abs(x)+1)/10;
@@ -3165,18 +3148,20 @@ int jpegModel(Mixer& m) {
               }
               lcp[i]=x;
             }
-            
-            x=0;
-            int pcol=-1, prevcolcount=0;
-            for (int i=0; i<mcupos>>6; i++) if (color[i]!=color[acomp]) pcol=i;
-            for (int i=0; i<mcupos>>6; i++) if (color[i]==color[pcol]) {
-              x+=cbuf2[cpos-((mcupos>>6)-i)*64];
-              if (zz==0) x-=cbuf2[cpos_dc-((mcupos>>6)-i)*64-ls[i]];
-              prevcolcount++;
+
+            int prev1=0,prev2=0,cnt1=0,cnt2=0;
+            for (int i=0; i<acomp; i++) {
+              x=0;
+              x+=cbuf2[cpos-(acomp-i)*64];
+              if (zz==0) x-=cbuf2[cpos_dc-(acomp-i)*64-ls[i]];
+              if (color[i]==color[acomp]-1) { prev1+=x; cnt1++; }
+              if (color[acomp]>1 && color[i]==color[0]) { prev2+=x; cnt2++; }
             }
-            if (prevcolcount>0) x/=prevcolcount;
-            prev_coef=(x<0?-1:+1)*ilog(10*abs(x)+1)/10;
-            
+            if (cnt1>0) prev1/=cnt1;
+            if (cnt2>0) prev2/=cnt2;
+            prev_coef=(prev1<0?-1:+1)*ilog(10*abs(prev1)+1)/10+(cnt1<<16);
+            prev_coef2=(prev2<0?-1:+1)*ilog(10*abs(prev2)+1)/10;
+           
             if (column==0) run_pred[1]=run_pred[2], run_pred[0]=0, adv_pred[1]=adv_pred[2], adv_pred[0]=1;
             if (row==0) run_pred[1]=run_pred[0], run_pred[2]=0, adv_pred[1]=adv_pred[0], adv_pred[2]=1;
           } // !!!!
@@ -3190,6 +3175,13 @@ int jpegModel(Mixer& m) {
   if (!images[idx].jpeg || !images[idx].data) return images[idx].next_jpeg;
   if (buf(1+(!bpos))==FF) {
     m.add(128);
+    m.set(0, 9);
+    m.set(0, 1025); 
+    m.set(buf(1), 1024);
+    return 1;
+  }
+  if (rstlen>0 && rstlen==column+row*width-rstpos && mcupos==0 && (int)huffcode==(1<<huffbits)-1) {
+    m.add(4095);
     m.set(0, 9);
     m.set(0, 1025); 
     m.set(buf(1), 1024);
@@ -3228,17 +3220,17 @@ int jpegModel(Mixer& m) {
     int n=hc*32;
     cxt[0]=hash(++n, coef, adv_pred[2]+(run_pred[2]<<8), ssum2>>6, prev_coef/8);
     cxt[1]=hash(++n, coef, adv_pred[0]+(run_pred[0]<<8), ssum2>>6, prev_coef/8);
-    cxt[2]=hash(++n, coef, adv_pred[1]+(run_pred[1]<<8), ssum2>>6, prev_coef/8);
+    cxt[2]=hash(++n, coef, adv_pred[1]/2+(run_pred[1]<<8), ssum2>>6);
     cxt[3]=hash(++n, rs1, adv_pred[2], run_pred[5]/2, prev_coef);
     cxt[4]=hash(++n, rs1, adv_pred[0], run_pred[3]/2, prev_coef);
-    cxt[5]=hash(++n, rs1, adv_pred[1], run_pred[4], prev_coef);
+    cxt[5]=hash(++n, rs1, adv_pred[1]/2, run_pred[4]);
     cxt[6]=hash(++n, adv_pred[2]/2, run_pred[2], adv_pred[0]/2, run_pred[0]);
     cxt[7]=hash(++n, cbuf[cpos-blockN[mcupos>>6]], adv_pred[3], run_pred[1]);
     cxt[8]=hash(++n, cbuf[cpos-blockW[mcupos>>6]], adv_pred[3], run_pred[1]);
     cxt[9]=hash(++n, lcp[0]/2, lcp[1]/2, adv_pred[1], run_pred[1]);
     cxt[10]=hash(++n, lcp[0]/2, lcp[1]/2, mcupos&63);
-    cxt[11]=hash(++n, zu, lcp[0], lcp[2]/3, prev_coef/4);
-    cxt[12]=hash(++n, zv, lcp[1], lcp[3]/3, prev_coef/4);
+    cxt[11]=hash(++n, zu/2, lcp[0], lcp[2]/3, prev_coef/4+((prev_coef2/4)<<20));
+    cxt[12]=hash(++n, zv/2, lcp[1], lcp[3]/3, prev_coef/4+((prev_coef2/4)<<20));
     cxt[13]=hash(++n, mcupos>>1);
     cxt[14]=hash(++n, mcupos&63, column>>1);
     cxt[15]=hash(++n, column>>3, lcp[0]+256*(lcp[2]/4), lcp[1]+256*(lcp[3]/4));
@@ -3254,8 +3246,8 @@ int jpegModel(Mixer& m) {
     cxt[25]=hash(++n, zv, lcp[1], adv_pred[2]/4, run_pred[5]);
     cxt[26]=hash(++n, zu, lcp[0], adv_pred[0]/4, run_pred[3]);
     cxt[27]=hash(++n, lcp[0], lcp[1], adv_pred[3]);
-    cxt[28]=hash(++n, coef, prev_coef);
-    cxt[29]=hash(++n, coef, ilog( (ssum*(1+log2((1+mcupos)&0x3F)))/((mcupos&0x3F)+1) +1), cbuf[cpos-64]);
+    cxt[28]=hash(++n, coef, prev_coef, prev_coef2/2);
+    cxt[29]=hash(++n, coef, ssum>>2, cbuf[cpos-64]);
   }
 
   // Predict next bit
@@ -3271,7 +3263,7 @@ int jpegModel(Mixer& m) {
 
   m1.set(column==0, 2);  
   m1.set( coef+256*min(3,huffbits), 1024 );
-  m1.set( (hc&0x1FE)*2+min(3,ilog2(zu+zv+1)), 1024 );
+  m1.set( (hc&0x1FE)*2+min(3,ilog2(zu+zv)), 1024 );
   int pr=m1.p();
   m.add(stretch(pr)>>2);
   m.add((pr>>4)-(255-((pr>>4))));
@@ -3281,9 +3273,9 @@ int jpegModel(Mixer& m) {
   pr=a2.p(pr, (hc&511)|(coef<<9), 1023);
   m.add(stretch(pr)>>2);
   m.add((pr>>4)-(255-((pr>>4))));
-  m.set( 1 + (zu+zv<4)+(huffbits>6)*2+(column==0)*4, 9 );
-  m.set( 1 + (hc&0xFF) + 256*min(3,ilog2(zu+zv+1)), 1025 );
-  m.set( coef+256*min(3,huffbits), 1024 );
+  m.set( 1 + (zu+zv<5)+(huffbits>8)*2+(column==0)*4, 9 );
+  m.set( 1 + (hc&0xFF) + 256*min(3,(zu+zv)/3), 1025 );
+  m.set( coef+256*min(3,huffbits/2), 1024 );
   return 1;
   
 }
