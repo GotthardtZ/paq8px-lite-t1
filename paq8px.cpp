@@ -2665,10 +2665,10 @@ int jpegModel(Mixer& m) {
 
   static IntBuf cbuf2(0x20000);
   static Array<int> adv_pred(4), sumu(8), sumv(8), run_pred(6);
-  static int prev_coef=0, prev_coef2=0;
+  static int prev_coef=0, prev_coef2=0, prev_coef_rs=0;
   static Array<int> ls(10);  // block -> distance to previous block
   static Array<int> blockW(10), blockN(10), SamplingFactors(4);
-  static Array<int> lcp(4), zpos(64);
+  static Array<int> lcp(5), zpos(64);
 
     //for parsing Quantization tables
   static int dqt_state = -1, dqt_end = 0, qnum = 0;
@@ -3148,16 +3148,24 @@ int jpegModel(Mixer& m) {
               }
               lcp[i]=x;
             }
+            if (zzu[zz]*zzv[zz]){
+              const int zz2=zpos[zzu[zz]+8*zzv[zz]-9];
+              x=(images[idx].qtab[q+zz2]+1)*cbuf2[cpos_dc+zz2]/(images[idx].qtab[q+zz]+1);
+              lcp[4]=(x<0?-1:+1)*ilog(10*abs(x)+1)/10;
+            }
+            else
+              lcp[4]=255;
 
-            int prev1=0,prev2=0,cnt1=0,cnt2=0;
+            int prev1=0,prev2=0,cnt1=0,cnt2=0,r=0,s=0;
+            prev_coef_rs = cbuf[cpos-64];
             for (int i=0; i<acomp; i++) {
               x=0;
               x+=cbuf2[cpos-(acomp-i)*64];
               if (zz==0) x-=cbuf2[cpos_dc-(acomp-i)*64-ls[i]];
-              if (color[i]==color[acomp]-1) { prev1+=x; cnt1++; }
+              if (color[i]==color[acomp]-1) { prev1+=x; cnt1++; r+=cbuf[cpos-(acomp-i)*64]>>4; s+=cbuf[cpos-(acomp-i)*64]&0xF; }
               if (color[acomp]>1 && color[i]==color[0]) { prev2+=x; cnt2++; }
             }
-            if (cnt1>0) prev1/=cnt1;
+            if (cnt1>0) prev1/=cnt1, r/=cnt1, s/=cnt1, prev_coef_rs=(r<<4)|s;
             if (cnt2>0) prev2/=cnt2;
             prev_coef=(prev1<0?-1:+1)*ilog(10*abs(prev1)+1)/10+(cnt1<<16);
             prev_coef2=(prev2<0?-1:+1)*ilog(10*abs(prev2)+1)/10;
@@ -3189,7 +3197,7 @@ int jpegModel(Mixer& m) {
   }
 
   // Context model
-  const int N=30; // size of t, number of contexts
+  const int N=31; // size of t, number of contexts
   static BH<9> t(MEM);  // context hash -> bit history
     // As a cache optimization, the context does not include the last 1-2
     // bits of huffcode if the length (huffbits) is not a multiple of 3.
@@ -3228,7 +3236,7 @@ int jpegModel(Mixer& m) {
     cxt[7]=hash(++n, cbuf[cpos-blockN[mcupos>>6]], adv_pred[3], run_pred[1]);
     cxt[8]=hash(++n, cbuf[cpos-blockW[mcupos>>6]], adv_pred[3], run_pred[1]);
     cxt[9]=hash(++n, lcp[0]/2, lcp[1]/2, adv_pred[1], run_pred[1]);
-    cxt[10]=hash(++n, lcp[0]/2, lcp[1]/2, mcupos&63);
+    cxt[10]=hash(++n, lcp[0]/2, lcp[1]/2, mcupos&63, lcp[4]/3);
     cxt[11]=hash(++n, zu/2, lcp[0], lcp[2]/3, prev_coef/4+((prev_coef2/4)<<20));
     cxt[12]=hash(++n, zv/2, lcp[1], lcp[3]/3, prev_coef/4+((prev_coef2/4)<<20));
     cxt[13]=hash(++n, mcupos>>1);
@@ -3236,8 +3244,8 @@ int jpegModel(Mixer& m) {
     cxt[15]=hash(++n, column>>3, lcp[0]+256*(lcp[2]/4), lcp[1]+256*(lcp[3]/4));
     cxt[16]=hash(++n, ssum>>3, mcupos&63);
     cxt[17]=hash(++n, rs1, mcupos&63, run_pred[1]);
-    cxt[18]=hash(++n, mcupos>>3, ssum2>>5, adv_pred[3], prev_coef/2);
-    cxt[19]=hash(++n, lcp[0]/4, lcp[1]/4, adv_pred[1]/4, prev_coef/2);
+    cxt[18]=hash(++n, coef, ssum2>>5, adv_pred[3]/2, (comp)?hash(prev_coef/3,prev_coef2/3):ssum/((mcupos&0x3F)+1));
+    cxt[19]=hash(++n, lcp[0]/4, lcp[1]/4, adv_pred[1]/4, hash( (comp)?prev_coef/4+((prev_coef2/4)<<20):lcp[4]/2, min(7,zu+zv), ssum/(2*(zu+zv)+1) ) );
     cxt[20]=hash(++n, cbuf[cpos-blockN[mcupos>>6]], adv_pred[2]/4, run_pred[2]);
     cxt[21]=hash(++n, cbuf[cpos-blockW[mcupos>>6]], adv_pred[0]/4, run_pred[0]);
     cxt[22]=hash(++n, adv_pred[2], run_pred[2]);
@@ -3247,7 +3255,8 @@ int jpegModel(Mixer& m) {
     cxt[26]=hash(++n, zu, lcp[0], adv_pred[0]/4, run_pred[3]);
     cxt[27]=hash(++n, lcp[0], lcp[1], adv_pred[3]);
     cxt[28]=hash(++n, coef, prev_coef, prev_coef2/2);
-    cxt[29]=hash(++n, coef, ssum>>2, cbuf[cpos-64]);
+    cxt[29]=hash(++n, coef, ssum>>2, prev_coef_rs);
+    cxt[30]=hash(++n, coef, adv_pred[1]/2, hash(lcp[0]/2,lcp[2]/2,lcp[3]/2) );
   }
 
   // Predict next bit
