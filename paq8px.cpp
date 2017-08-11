@@ -1912,7 +1912,8 @@ void wordModel(Mixer& m, Filetype filetype) {
   static U32 xword0=0,xword1=0,xword2=0,cword0=0,ccword=0;
   static U32 number0=0, number1=0;  // hashes
   static U32 text0=0;  // hash stream of letters
-  static ContextMap cm(MEM*16, 44);
+  static U32 lastLetter=0, lastUpper=0, wordGap=0;
+  static ContextMap cm(MEM*16, 44 +1);
   static int nl1=-3, nl=-2, w=0;  // previous, current newline position
   static U32 mask = 0;
   static Array<int> wpos(0x10000);  // last position of word
@@ -1924,8 +1925,13 @@ void wordModel(Mixer& m, Filetype filetype) {
     if (words&0x80000000) --wordcount;
     spaces=spaces*2;
     words=words*2;
-    if (c>='A' && c<='Z') c+='a'-'A';
+    lastUpper=min(lastUpper+1,63);
+    lastLetter=min(lastLetter+1,63);
+    if (c>='A' && c<='Z') c+='a'-'A', lastUpper=0;
     if ((c>='a' && c<='z') || c==1 || c==2 ||(c>=128 &&(b2!=3))) {
+      if (!wordlen)
+        wordGap=lastLetter;
+      lastLetter=0;
       ++words, ++wordcount;
       word0^=hash(word0, c,0);
       text0=text0*997*16+c;
@@ -2035,6 +2041,16 @@ void wordModel(Mixer& m, Filetype filetype) {
     cm.set(hash(530,mask&0xff,col));
     cm.set(hash(531,mask,buf(2),buf(3)));
     cm.set(hash(532,mask&0x1ff,f4&0x00fff0));
+
+    cm.set(hash(h, llog(wordGap), mask&0x1FF, 
+      ((wordlen1 > 3)<<6)|
+      ((wordlen > 0)<<5)|
+      ((spafdo == wordlen + 2)<<4)|
+      ((spafdo == wordlen + wordlen1 + 3)<<3)|
+      ((spafdo >= lastLetter + wordlen1 + wordGap)<<2)|
+      ((lastUpper < lastLetter + wordlen1)<<1)|
+      (lastUpper < wordlen + wordlen1 + wordGap)
+    ));
   }
   cm.mix(m);
 }
@@ -2269,7 +2285,7 @@ void im24bitModel(Mixer& m, int w, int alpha=0) {
   const int SC=0x20000;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm10(512);
-  static ContextMap cm(MEM*4, 13+6);
+  static ContextMap cm(MEM*4, 13+7);
   static int color = -1;
   static int stride  = 3;
   static int ctx, padding, lastPos, x = 0;
@@ -2302,7 +2318,8 @@ void im24bitModel(Mixer& m, int w, int alpha=0) {
     cm.set(hash( Clamp4(W+N-NW,W,NW,N,NE), LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
     cm.set(hash( (NNN+N+4)/8, Clip(N*3-NN*3+NNN)>>1 ));
     cm.set(hash( (WWW+W+4)/8, Clip(W*3-WW*3+WWW)>>1 ));
-    cm.set( (W+Clip(NE*3-NNE*3+buf(w*3-stride)))/4 );
+    cm.set(hash(++i, (W+Clip(NE*3-NNE*3+buf(w*3-stride)))/4 ));
+    cm.set(hash(++i, Clip((-buf(4*stride)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buf(w*3-stride)*4-buf(w*4-stride),N,NE,buf(w-2*stride),buf(w-3*stride)))/5)/4 ));
 
     cm.set(hash(++i, buf(stride)));
     cm.set(hash(++i, buf(stride), buf(1)));
@@ -2668,7 +2685,7 @@ int jpegModel(Mixer& m) {
   static int prev_coef=0, prev_coef2=0, prev_coef_rs=0;
   static Array<int> ls(10);  // block -> distance to previous block
   static Array<int> blockW(10), blockN(10), SamplingFactors(4);
-  static Array<int> lcp(5), zpos(64);
+  static Array<int> lcp(7), zpos(64);
 
     //for parsing Quantization tables
   static int dqt_state = -1, dqt_end = 0, qnum = 0;
@@ -3038,7 +3055,7 @@ int jpegModel(Mixer& m) {
               jassert(mcupos>=0 && mcupos<=mcusize && mcupos<=640);
               while (cpos&63) {
                 cbuf2[cpos]=0;
-                cbuf[cpos++]=0;
+                cbuf[cpos]=(!rs)?0:(63-(cpos&63))<<4; cpos++; rs++;
               }
             }
             else {  // rs = r zeros + s extra bits for the next nonzero value
@@ -3103,13 +3120,13 @@ int jpegModel(Mixer& m) {
               // necessarily in this MCU
               int offset_DC_N = cpos_dc - blockN[acomp];
               for (int i=0; i<64; ++i) {
-                sumu[zzu[i]]+=(zzv[i]&1?-1:1)*(zzv[i]?16*(16+zzv[i]):181)*(images[idx].qtab[q+i]+1)*cbuf2[offset_DC_N+i];
-                sumv[zzv[i]]+=(zzu[i]&1?-1:1)*(zzu[i]?16*(16+zzu[i]):181)*(images[idx].qtab[q+i]+1)*cbuf2[offset_DC_W+i];
+                sumu[zzu[i]]+=(zzv[i]&1?-1:1)*(zzv[i]?16*(16+zzv[i]):185)*(images[idx].qtab[q+i]+1)*cbuf2[offset_DC_N+i];
+                sumv[zzv[i]]+=(zzu[i]&1?-1:1)*(zzu[i]?16*(16+zzu[i]):185)*(images[idx].qtab[q+i]+1)*cbuf2[offset_DC_W+i];
               }
             }
             else {
-              sumu[zzu[zz-1]]-=(zzv[zz-1]?16*(16+zzv[zz-1]):181)*(images[idx].qtab[q+zz-1]+1)*cbuf2[cpos-1];
-              sumv[zzv[zz-1]]-=(zzu[zz-1]?16*(16+zzu[zz-1]):181)*(images[idx].qtab[q+zz-1]+1)*cbuf2[cpos-1];
+              sumu[zzu[zz-1]]-=(zzv[zz-1]?16*(16+zzv[zz-1]):185)*(images[idx].qtab[q+zz-1]+1)*cbuf2[cpos-1];
+              sumv[zzv[zz-1]]-=(zzu[zz-1]?16*(16+zzu[zz-1]):185)*(images[idx].qtab[q+zz-1]+1)*cbuf2[cpos-1];
             }
 
             for (int i=0; i<3; ++i)
@@ -3118,7 +3135,7 @@ int jpegModel(Mixer& m) {
               for (int st=0; st<10; ++st) {
                 const int zz2=min(zz+st, 63);
                 int p=sumu[zzu[zz2]]*i+sumv[zzv[zz2]]*(2-i);
-                p/=(images[idx].qtab[q+zz2]+1)*181*(16+zzv[zz2])*(16+zzu[zz2])/128;
+                p/=(images[idx].qtab[q+zz2]+1)*185*(16+zzv[zz2])*(16+zzu[zz2])/128;
                 if (zz2==0 && (norst || ls[acomp]==64)) p-=cbuf2[cpos_dc-ls[acomp]];
                 p=(p<0?-1:+1)*ilog(abs(p)+1);
                 if (st==0) {
@@ -3133,7 +3150,7 @@ int jpegModel(Mixer& m) {
             x=2*sumu[zzu[zz]]+2*sumv[zzv[zz]];
             for (int i=0; i<8; ++i) x-=(zzu[zz]<i)*sumu[i]+(zzv[zz]<i)*sumv[i];
             x=(x*6+sumu[zzu[zz]]*zzu[zz]+sumv[zzv[zz]]*zzv[zz])/(zzu[zz]+zzv[zz]+6);
-            x/=(images[idx].qtab[q+zz]+1)*181;
+            x/=(images[idx].qtab[q+zz]+1)*185;
             if (zz==0 && (norst || ls[acomp]==64)) x-=cbuf2[cpos_dc-ls[acomp]];
             adv_pred[3]=(x<0?-1:+1)*ilog(abs(x)+1);
 
@@ -3151,9 +3168,15 @@ int jpegModel(Mixer& m) {
               const int zz2=zpos[zzu[zz]+8*zzv[zz]-9];
               x=(images[idx].qtab[q+zz2]+1)*cbuf2[cpos_dc+zz2]/(images[idx].qtab[q+zz]+1);
               lcp[4]=(x<0?-1:+1)*ilog(10*abs(x)+1)/10;
+
+              x=(images[idx].qtab[q+zpos[8*zzv[zz]]]+1)*cbuf2[cpos_dc+zpos[8*zzv[zz]]]/(images[idx].qtab[q+zz]+1);
+              lcp[5]=(x<0?-1:+1)*ilog(10*abs(x)+1)/10;
+
+              x=(images[idx].qtab[q+zpos[zzu[zz]]]+1)*cbuf2[cpos_dc+zpos[zzu[zz]]]/(images[idx].qtab[q+zz]+1);
+              lcp[6]=(x<0?-1:+1)*ilog(10*abs(x)+1)/10;
             }
             else
-              lcp[4]=255;
+              lcp[4]=lcp[5]=lcp[6]=255;
 
             int prev1=0,prev2=0,cnt1=0,cnt2=0,r=0,s=0;
             prev_coef_rs = cbuf[cpos-64];
@@ -3196,7 +3219,7 @@ int jpegModel(Mixer& m) {
   }
 
   // Context model
-  const int N=31; // size of t, number of contexts
+  const int N=32; // size of t, number of contexts
   static BH<9> t(MEM);  // context hash -> bit history
     // As a cache optimization, the context does not include the last 1-2
     // bits of huffcode if the length (huffbits) is not a multiple of 3.
@@ -3218,7 +3241,7 @@ int jpegModel(Mixer& m) {
   // Update context
   const int comp=color[mcupos>>6];
   const int coef=(mcupos&63)|comp<<6;
-  const int hc=(huffcode*4+((mcupos&63)==0)*2+(comp==0))|1<<(huffbits+2);  
+  const int hc=(huffcode*4+((mcupos&63)==0)*2+(comp==0))|1<<(huffbits+2);
   const bool firstcol=column==0 && blockW[mcupos>>6]>mcupos;
   static int hbcount=2;
   if (++hbcount>2 || huffbits==0) hbcount=0;
@@ -3239,7 +3262,7 @@ int jpegModel(Mixer& m) {
     cxt[10]=hash(++n, lcp[0]/2, lcp[1]/2, mcupos&63, lcp[4]/3);
     cxt[11]=hash(++n, zu/2, lcp[0], lcp[2]/3, prev_coef/4+((prev_coef2/4)<<20));
     cxt[12]=hash(++n, zv/2, lcp[1], lcp[3]/3, prev_coef/4+((prev_coef2/4)<<20));
-    cxt[13]=hash(++n, min(7,zu+zv));
+    cxt[13]=hash(++n, min(5+2*(!comp),zu+zv));
     cxt[14]=hash(++n, mcupos&63, column>>1);
     cxt[15]=hash(++n, column>>3, lcp[0]+256*(lcp[2]/4), lcp[1]+256*(lcp[3]/4));
     cxt[16]=hash(++n, ssum>>3, mcupos&63);
@@ -3256,7 +3279,8 @@ int jpegModel(Mixer& m) {
     cxt[27]=hash(++n, lcp[0], lcp[1], adv_pred[3]/16);
     cxt[28]=hash(++n, coef, prev_coef, prev_coef2/2);
     cxt[29]=hash(++n, coef, ssum>>2, prev_coef_rs);
-    cxt[30]=hash(++n, coef, adv_pred[1]/14, hash(lcp[0]/2,lcp[2]/2,lcp[3]/2));
+    cxt[30]=hash(++n, coef, adv_pred[1]/17, hash(lcp[(zu<zv)]/3,lcp[2]/3,lcp[3]/3));
+    cxt[31]=hash(++n, coef, adv_pred[3]/11, hash(lcp[(zu<zv)]/5,lcp[2+3*(zu*zv>1)]/5,lcp[3+3*(zu*zv>1)]/5));
   }
 
   // Predict next bit
