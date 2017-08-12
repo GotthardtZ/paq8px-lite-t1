@@ -3132,8 +3132,8 @@ int jpegModel(Mixer& m) {
             for (int i=0; i<3; ++i)
             {
               run_pred[i]=run_pred[i+3]=0;
-              for (int st=0; st<10; ++st) {
-                const int zz2=min(zz+st, 63);
+              for (int st=0; st<10 && zz+st<64; ++st) {
+                const int zz2=zz+st;
                 int p=sumu[zzu[zz2]]*i+sumv[zzv[zz2]]*(2-i);
                 p/=(images[idx].qtab[q+zz2]+1)*185*(16+zzv[zz2])*(16+zzu[zz2])/128;
                 if (zz2==0 && (norst || ls[acomp]==64)) p-=cbuf2[cpos_dc-ls[acomp]];
@@ -3147,36 +3147,36 @@ int jpegModel(Mixer& m) {
                 }
               }
             }
-            x=2*sumu[zzu[zz]]+2*sumv[zzv[zz]];
-            for (int i=0; i<8; ++i) x-=(zzu[zz]<i)*sumu[i]+(zzv[zz]<i)*sumv[i];
-            x=(x*6+sumu[zzu[zz]]*zzu[zz]+sumv[zzv[zz]]*zzv[zz])/(zzu[zz]+zzv[zz]+6);
+            x=0;
+            for (int i=0; i<8; ++i) x+=(zzu[zz]<i)*sumu[i]+(zzv[zz]<i)*sumv[i];
+            x=(sumu[zzu[zz]]*(2+zzu[zz])+sumv[zzv[zz]]*(2+zzv[zz])-x*2)*4/(zzu[zz]+zzv[zz]+16);
             x/=(images[idx].qtab[q+zz]+1)*185;
             if (zz==0 && (norst || ls[acomp]==64)) x-=cbuf2[cpos_dc-ls[acomp]];
             adv_pred[3]=(x<0?-1:+1)*ilog(abs(x)+1);
 
             for (int i=0; i<4; ++i) {
               const int a=(i&1?zzv[zz]:zzu[zz]), b=(i&2?2:1);
-              if (a<b) x=255;
+              if (a<b) x=65535;
               else {
                 const int zz2=zpos[zzu[zz]+8*zzv[zz]-(i&1?8:1)*b];
                 x=(images[idx].qtab[q+zz2]+1)*cbuf2[cpos_dc+zz2]/(images[idx].qtab[q+zz]+1);
-                x=(x<0?-1:+1)*ilog(10*abs(x)+1)/10;
+                x=(x<0?-1:+1)*(ilog(abs(x)+1)+16);
               }
               lcp[i]=x;
             }
             if (zzu[zz]*zzv[zz]){
               const int zz2=zpos[zzu[zz]+8*zzv[zz]-9];
               x=(images[idx].qtab[q+zz2]+1)*cbuf2[cpos_dc+zz2]/(images[idx].qtab[q+zz]+1);
-              lcp[4]=(x<0?-1:+1)*ilog(10*abs(x)+1)/10;
+              lcp[4]=(x<0?-1:+1)*(ilog(abs(x)+1)+16);
 
               x=(images[idx].qtab[q+zpos[8*zzv[zz]]]+1)*cbuf2[cpos_dc+zpos[8*zzv[zz]]]/(images[idx].qtab[q+zz]+1);
-              lcp[5]=(x<0?-1:+1)*ilog(10*abs(x)+1)/10;
+              lcp[5]=(x<0?-1:+1)*(ilog(abs(x)+1)+16);
 
               x=(images[idx].qtab[q+zpos[zzu[zz]]]+1)*cbuf2[cpos_dc+zpos[zzu[zz]]]/(images[idx].qtab[q+zz]+1);
-              lcp[6]=(x<0?-1:+1)*ilog(10*abs(x)+1)/10;
+              lcp[6]=(x<0?-1:+1)*(ilog(abs(x)+1)+16);
             }
             else
-              lcp[4]=lcp[5]=lcp[6]=255;
+              lcp[4]=lcp[5]=lcp[6]=65535;
 
             int prev1=0,prev2=0,cnt1=0,cnt2=0,r=0,s=0;
             prev_coef_rs = cbuf[cpos-64];
@@ -3189,8 +3189,8 @@ int jpegModel(Mixer& m) {
             }
             if (cnt1>0) prev1/=cnt1, r/=cnt1, s/=cnt1, prev_coef_rs=(r<<4)|s;
             if (cnt2>0) prev2/=cnt2;
-            prev_coef=(prev1<0?-1:+1)*ilog(10*abs(prev1)+1)/10+(cnt1<<16);
-            prev_coef2=(prev2<0?-1:+1)*ilog(10*abs(prev2)+1)/10;
+            prev_coef=(prev1<0?-1:+1)*ilog(abs(prev1)+1)+(cnt1<<20);
+            prev_coef2=(prev2<0?-1:+1)*ilog(abs(prev2)+1);
            
             if (column==0 && blockW[acomp]>64*acomp) run_pred[1]=run_pred[2], run_pred[0]=0, adv_pred[1]=adv_pred[2], adv_pred[0]=0;
             if (row==0 && blockN[acomp]>64*acomp) run_pred[1]=run_pred[0], run_pred[2]=0, adv_pred[1]=adv_pred[0], adv_pred[2]=0;
@@ -3249,38 +3249,38 @@ int jpegModel(Mixer& m) {
   const int zu=zzu[mcupos&63], zv=zzv[mcupos&63];
   if (hbcount==0) {
     int n=hc*32;
-    cxt[0]=hash(++n, coef, adv_pred[2]/12+(run_pred[2]<<8), ssum2>>6, prev_coef/8);
-    cxt[1]=hash(++n, coef, adv_pred[0]/12+(run_pred[0]<<8), ssum2>>6, prev_coef/8);
+    cxt[0]=hash(++n, coef, adv_pred[2]/12+(run_pred[2]<<8), ssum2>>6, prev_coef/72);
+    cxt[1]=hash(++n, coef, adv_pred[0]/12+(run_pred[0]<<8), ssum2>>6, prev_coef/72);
     cxt[2]=hash(++n, coef, adv_pred[1]/11+(run_pred[1]<<8), ssum2>>6);
-    cxt[3]=hash(++n, rs1, adv_pred[2]/7, run_pred[5]/2, prev_coef);
-    cxt[4]=hash(++n, rs1, adv_pred[0]/7, run_pred[3]/2, prev_coef);
+    cxt[3]=hash(++n, rs1, adv_pred[2]/7, run_pred[5]/2, prev_coef/10);
+    cxt[4]=hash(++n, rs1, adv_pred[0]/7, run_pred[3]/2, prev_coef/10);
     cxt[5]=hash(++n, rs1, adv_pred[1]/11, run_pred[4]);
     cxt[6]=hash(++n, adv_pred[2]/14, run_pred[2], adv_pred[0]/14, run_pred[0]);
-    cxt[7]=hash(++n, cbuf[cpos-blockN[mcupos>>6]], adv_pred[3]/17, run_pred[1]);
-    cxt[8]=hash(++n, cbuf[cpos-blockW[mcupos>>6]], adv_pred[3]/17, run_pred[1]);
-    cxt[9]=hash(++n, lcp[0]/2, lcp[1]/2, adv_pred[1]/7, run_pred[1]);
-    cxt[10]=hash(++n, lcp[0]/2, lcp[1]/2, mcupos&63, lcp[4]/3);
-    cxt[11]=hash(++n, zu/2, lcp[0], lcp[2]/3, prev_coef/4+((prev_coef2/4)<<20));
-    cxt[12]=hash(++n, zv/2, lcp[1], lcp[3]/3, prev_coef/4+((prev_coef2/4)<<20));
-    cxt[13]=hash(++n, min(5+2*(!comp),zu+zv));
+    cxt[7]=hash(++n, cbuf[cpos-blockN[mcupos>>6]]>>4, adv_pred[3]/17, run_pred[1], run_pred[5]);
+    cxt[8]=hash(++n, cbuf[cpos-blockW[mcupos>>6]]>>4, adv_pred[3]/17, run_pred[1], run_pred[3]);
+    cxt[9]=hash(++n, lcp[0]/22, lcp[1]/22, adv_pred[1]/7, run_pred[1]);
+    cxt[10]=hash(++n, lcp[0]/22, lcp[1]/22, mcupos&63, lcp[4]/30);
+    cxt[11]=hash(++n, zu/2, lcp[0]/13, lcp[2]/30, prev_coef/40+((prev_coef2/28)<<20));
+    cxt[12]=hash(++n, zv/2, lcp[1]/13, lcp[3]/30, prev_coef/40+((prev_coef2/28)<<20));
+    cxt[13]=hash(++n, rs1, prev_coef/42, prev_coef2/34, hash(lcp[0]/60,lcp[2]/14,lcp[1]/60,lcp[3]/14));
     cxt[14]=hash(++n, mcupos&63, column>>1);
-    cxt[15]=hash(++n, column>>3, lcp[0]+256*(lcp[2]/4), lcp[1]+256*(lcp[3]/4));
+    cxt[15]=hash(++n, column>>3, min(5+2*(!comp),zu+zv), hash(lcp[0]/10,lcp[2]/40,lcp[1]/10,lcp[3]/40));
     cxt[16]=hash(++n, ssum>>3, mcupos&63);
     cxt[17]=hash(++n, rs1, mcupos&63, run_pred[1]);
-    cxt[18]=hash(++n, coef, ssum2>>5, adv_pred[3]/30, (comp)?hash(prev_coef/3,prev_coef2/3):ssum/((mcupos&0x3F)+1));
-    cxt[19]=hash(++n, lcp[0]/4, lcp[1]/4, adv_pred[1]/28, hash( (comp)?prev_coef/4+((prev_coef2/4)<<20):lcp[4]/2, min(7,zu+zv), ssum/(2*(zu+zv)+1) ) );
+    cxt[18]=hash(++n, coef, ssum2>>5, adv_pred[3]/30, (comp)?hash(prev_coef/22,prev_coef2/50):ssum/((mcupos&0x3F)+1));
+    cxt[19]=hash(++n, lcp[0]/40, lcp[1]/40, adv_pred[1]/28, hash( (comp)?prev_coef/40+((prev_coef2/40)<<20):lcp[4]/22, min(7,zu+zv), ssum/(2*(zu+zv)+1) ) );
     cxt[20]=hash(++n, zv, cbuf[cpos-blockN[mcupos>>6]], adv_pred[2]/28, run_pred[2]);
     cxt[21]=hash(++n, zu, cbuf[cpos-blockW[mcupos>>6]], adv_pred[0]/28, run_pred[0]);
     cxt[22]=hash(++n, adv_pred[2]/7, run_pred[2]);
     cxt[23]=hash(n, adv_pred[0]/7, run_pred[0]);
     cxt[24]=hash(n, adv_pred[1]/7, run_pred[1]);
-    cxt[25]=hash(++n, zv, lcp[1], adv_pred[2]/16, run_pred[5]);
-    cxt[26]=hash(++n, zu, lcp[0], adv_pred[0]/16, run_pred[3]);
-    cxt[27]=hash(++n, lcp[0], lcp[1], adv_pred[3]/16);
-    cxt[28]=hash(++n, coef, prev_coef, prev_coef2/2);
+    cxt[25]=hash(++n, zv, lcp[1]/14, adv_pred[2]/16, run_pred[5]);
+    cxt[26]=hash(++n, zu, lcp[0]/14, adv_pred[0]/16, run_pred[3]);
+    cxt[27]=hash(++n, lcp[0]/14, lcp[1]/14, adv_pred[3]/16);
+    cxt[28]=hash(++n, coef, prev_coef/10, prev_coef2/20);
     cxt[29]=hash(++n, coef, ssum>>2, prev_coef_rs);
-    cxt[30]=hash(++n, coef, adv_pred[1]/17, hash(lcp[(zu<zv)]/3,lcp[2]/3,lcp[3]/3));
-    cxt[31]=hash(++n, coef, adv_pred[3]/11, hash(lcp[(zu<zv)]/5,lcp[2+3*(zu*zv>1)]/5,lcp[3+3*(zu*zv>1)]/5));
+    cxt[30]=hash(++n, coef, adv_pred[1]/17, hash(lcp[(zu<zv)]/24,lcp[2]/20,lcp[3]/24));
+    cxt[31]=hash(++n, coef, adv_pred[3]/11, hash(lcp[(zu<zv)]/50,lcp[2+3*(zu*zv>1)]/50,lcp[3+3*(zu*zv>1)]/50));
   }
 
   // Predict next bit
@@ -3294,9 +3294,9 @@ int jpegModel(Mixer& m) {
    default: { int hc=1+(huffcode&1); for (int i=0; i<N; ++i){ cp[i]+=hc, m1.add(p=stretch(sm[i].p(*cp[i]))); if (level>7) m.add(p>>2); }} break;
   }
   
-  m1.set(firstcol, 2);  
-  m1.set( coef+256*min(3,huffbits), 1024 );
-  m1.set( (hc&0x1FE)*2+min(3,ilog2(zu+zv)), 1024 );
+  m1.set(firstcol, 2);
+  m1.set(coef+256*min(3,huffbits), 1024);
+  m1.set((hc&0x1FE)*2+min(3,ilog2(zu+zv)), 1024);
   int pr=m1.p();
   m.add(stretch(pr)>>2);
   m.add((pr>>4)-(255-((pr>>4))));
@@ -3306,9 +3306,9 @@ int jpegModel(Mixer& m) {
   pr=a2.p(pr, (hc&511)|(coef<<9), 1023);
   m.add(stretch(pr)>>2);
   m.add((pr>>4)-(255-((pr>>4))));
-  m.set( 1 + (zu+zv<5)+(huffbits>8)*2+firstcol*4, 9 );
-  m.set( 1 + (hc&0xFF) + 256*min(3,(zu+zv)/3), 1025 );
-  m.set( coef+256*min(3,huffbits/2), 1024 );
+  m.set(1 + (zu+zv<5)+(huffbits>8)*2+firstcol*4, 9);
+  m.set(1 + (hc&0xFF) + 256*min(3,(zu+zv)/3), 1025);
+  m.set(coef+256*min(3,huffbits/2), 1024);
   return 1;
   
 }
