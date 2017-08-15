@@ -3160,20 +3160,20 @@ int jpegModel(Mixer& m) {
               else {
                 const int zz2=zpos[zzu[zz]+8*zzv[zz]-(i&1?8:1)*b];
                 x=(images[idx].qtab[q+zz2]+1)*cbuf2[cpos_dc+zz2]/(images[idx].qtab[q+zz]+1);
-                x=(x<0?-1:+1)*(ilog(abs(x)+1)+16);
+                x=(x<0?-1:+1)*(ilog(abs(x)+1)+(x!=0?17:0));
               }
               lcp[i]=x;
             }
             if (zzu[zz]*zzv[zz]){
               const int zz2=zpos[zzu[zz]+8*zzv[zz]-9];
               x=(images[idx].qtab[q+zz2]+1)*cbuf2[cpos_dc+zz2]/(images[idx].qtab[q+zz]+1);
-              lcp[4]=(x<0?-1:+1)*(ilog(abs(x)+1)+16);
+              lcp[4]=(x<0?-1:+1)*(ilog(abs(x)+1)+(x!=0?17:0));
 
               x=(images[idx].qtab[q+zpos[8*zzv[zz]]]+1)*cbuf2[cpos_dc+zpos[8*zzv[zz]]]/(images[idx].qtab[q+zz]+1);
-              lcp[5]=(x<0?-1:+1)*(ilog(abs(x)+1)+16);
+              lcp[5]=(x<0?-1:+1)*(ilog(abs(x)+1)+(x!=0?17:0));
 
               x=(images[idx].qtab[q+zpos[zzu[zz]]]+1)*cbuf2[cpos_dc+zpos[zzu[zz]]]/(images[idx].qtab[q+zz]+1);
-              lcp[6]=(x<0?-1:+1)*(ilog(abs(x)+1)+16);
+              lcp[6]=(x<0?-1:+1)*(ilog(abs(x)+1)+(x!=0?17:0));
             }
             else
               lcp[4]=lcp[5]=lcp[6]=65535;
@@ -3189,8 +3189,8 @@ int jpegModel(Mixer& m) {
             }
             if (cnt1>0) prev1/=cnt1, r/=cnt1, s/=cnt1, prev_coef_rs=(r<<4)|s;
             if (cnt2>0) prev2/=cnt2;
-            prev_coef=(prev1<0?-1:+1)*ilog(abs(prev1)+1)+(cnt1<<20);
-            prev_coef2=(prev2<0?-1:+1)*ilog(abs(prev2)+1);
+            prev_coef=(prev1<0?-1:+1)*ilog(11*abs(prev1)+1)+(cnt1<<20);
+            prev_coef2=(prev2<0?-1:+1)*ilog(11*abs(prev2)+1);
            
             if (column==0 && blockW[acomp]>64*acomp) run_pred[1]=run_pred[2], run_pred[0]=0, adv_pred[1]=adv_pred[2], adv_pred[0]=0;
             if (row==0 && blockN[acomp]>64*acomp) run_pred[1]=run_pred[0], run_pred[2]=0, adv_pred[1]=adv_pred[0], adv_pred[2]=0;
