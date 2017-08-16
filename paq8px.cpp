@@ -4234,7 +4234,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
   int bmp=0,imgbpp=0,bmpx=0,bmpy=0,bmpof=0,hdrless=0;  // For BMP detection
   int rgbi=0,rgbx=0,rgby=0;  // For RGB detection
   int tga=0,tgax=0,tgay=0,tgaz=0,tgat=0;  // For TGA detection
-  int pgm=0,pgmcomment=0,pgmw=0,pgmh=0,pgm_ptr=0,pgmc=0,pgmn=0;  // For PBM, PGM, PPM detection
+  int pgm=0,pgmcomment=0,pgmw=0,pgmh=0,pgm_ptr=0,pgmc=0,pgmn=0,pamatr=0,pamd=0;  // For PBM, PGM, PPM, PAM detection
   char pgm_buf[32];
   int cdi=0,cda=0,cdm=0;  // For CD sectors detection
   U32 cdf=0;
@@ -4491,22 +4491,34 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
       }
     }
 
-    // Detect .pbm .pgm .ppm image
+    // Detect .pbm .pgm .ppm .pam image
     if ((buf0&0xfff0ff)==0x50300a) {
       pgmn=(buf0&0xf00)>>8;
-      if (pgmn>=4 && pgmn<=6) pgm=i,pgm_ptr=pgmw=pgmh=pgmc=pgmcomment=0;
+      if ((pgmn>=4 && pgmn<=6) || pgmn==7) pgm=i,pgm_ptr=pgmw=pgmh=pgmc=pgmcomment=pamatr=pamd=0;
     }
     if (pgm) {
       if (i-pgm==1 && c==0x23) pgmcomment=1; //pgm comment
       if (!pgmcomment && pgm_ptr) {
         int s=0;
-        if (c==0x20 && !pgmw) s=1;
+        if (pgmn==7) {
+           if ((buf1&0xffff)==0x5749 && buf0==0x44544820) pgm_ptr=0, pamatr=1; // WIDTH
+           if ((buf1&0xffffff)==0x484549 && buf0==0x47485420) pgm_ptr=0, pamatr=2; // HEIGHT
+           if ((buf1&0xffffff)==0x4d4158 && buf0==0x56414c20) pgm_ptr=0, pamatr=3; // MAXVAL
+           if ((buf1&0xffff)==0x4445 && buf0==0x50544820) pgm_ptr=0, pamatr=4; // DEPTH
+           if ((buf2&0xff)==0x54 && buf1==0x55504c54 && buf0==0x59504520) pgm_ptr=0, pamatr=5; // TUPLTYPE
+           if ((buf1&0xffffff)==0x454e44 && buf0==0x4844520a) pgm_ptr=0, pamatr=6; // ENDHDR
+           if (c==0x0a) {
+             if (pamatr==0) pgm=0;
+             else if (pamatr<5) s=pamatr;
+             if (pamatr!=6) pamatr=0;
+           }
+        } else if (c==0x20 && !pgmw) s=1;
         else if (c==0x0a && !pgmh) s=2;
         else if (c==0x0a && !pgmc && pgmn!=4) s=3;
         if (s) {
           pgm_buf[pgm_ptr++]=0;
           int v=atoi(pgm_buf);
-          if (s==1) pgmw=v; else if (s==2) pgmh=v; else if (s==3) pgmc=v;
+          if (s==1) pgmw=v; else if (s==2) pgmh=v; else if (s==3) pgmc=v; else if (s==4) pamd=v;
           if (v==0 || (s==3 && v>255)) pgm=0; else pgm_ptr=0;
         }
       }
@@ -4514,8 +4526,9 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
       if (pgm_ptr>=32) pgm=0;
       if (pgmcomment && c==0x0a) pgmcomment=0;
       if (pgmw && pgmh && !pgmc && pgmn==4) IMG_DET(IMAGE1,pgm-2,i-pgm+3,(pgmw+7)/8,pgmh);
-      if (pgmw && pgmh && pgmc && pgmn==5) IMG_DET(IMAGE8GRAY,pgm-2,i-pgm+3,pgmw,pgmh);
-      if (pgmw && pgmh && pgmc && pgmn==6) IMG_DET(IMAGE24,pgm-2,i-pgm+3,pgmw*3,pgmh);
+      if (pgmw && pgmh && pgmc && (pgmn==5 || (pgmn==7 && pamd==1 && pamatr==6))) IMG_DET(IMAGE8GRAY,pgm-2,i-pgm+3,pgmw,pgmh);
+      if (pgmw && pgmh && pgmc && (pgmn==6 || (pgmn==7 && pamd==3 && pamatr==6))) IMG_DET(IMAGE24,pgm-2,i-pgm+3,pgmw*3,pgmh);
+      if (pgmw && pgmh && pgmc && (pgmn==7 && pamd==4 && pamatr==6)) IMG_DET(IMAGE32,pgm-2,i-pgm+3,pgmw*4,pgmh);
     }
 
     // Detect .rgb image
@@ -4764,6 +4777,53 @@ int decode_bmp(Encoder& en, int size, int width, FILE *out, FMode mode, int &dif
       }
     }
     for (int j=0; j<width%3; j++) {
+      if (mode==FDECOMPRESS) {
+        fputc(en.decompress(), out);
+      }
+      else if (mode==FCOMPARE) {
+        if (en.decompress()!=getc(out) && !diffFound) diffFound=p+j+1;
+      }
+    }
+  }
+  return size;
+}
+
+// 32-bit image
+void encode_im32(FILE* in, FILE* out, int len, int width) {
+  int r,g,b,a;
+  for (int i=0; i<len/width; i++) {
+    for (int j=0; j<width/4; j++) {
+      b=fgetc(in), g=fgetc(in), r=fgetc(in); a=fgetc(in);
+      fputc(g, out);
+      fputc(g-r, out);
+      fputc(g-b, out);
+      fputc(a, out);
+    }
+    for (int j=0; j<width%4; j++) fputc(fgetc(in), out);
+  }
+}
+
+int decode_im32(Encoder& en, int size, int width, FILE *out, FMode mode, int &diffFound) {
+  int r,g,b,a,p;
+  bool rgb = (width&(1<<31))>0;
+  if (rgb) width^=(1<<31);
+  for (int i=0; i<size/width; i++) {
+    p=i*width;
+    for (int j=0; j<width/4; j++) {
+      b=en.decompress(), g=en.decompress(), r=en.decompress(), a=en.decompress();
+      if (mode==FDECOMPRESS) {
+        fputc(b-r, out); fputc(b, out); fputc(b-g, out); fputc(a, out);
+        if (!j && !(i&0xf)) en.print_status();
+      }
+      else if (mode==FCOMPARE) {
+        if (((b-r)&255)!=getc(out) && !diffFound) diffFound=p+1;
+        if (b!=getc(out) && !diffFound) diffFound=p+2;
+        if (((b-g)&255)!=getc(out) && !diffFound) diffFound=p+3;
+        if (((a)&255)!=getc(out) && !diffFound) diffFound=p+4;
+        p+=4;
+      }
+    }
+    for (int j=0; j<width%4; j++) {
       if (mode==FDECOMPRESS) {
         fputc(en.decompress(), out);
       }
@@ -5331,11 +5391,12 @@ void direct_encode_block(Filetype type, FILE *in, int len, Encoder &en, int info
 void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it=0, float p1=0.0, float p2=1.0);
 
 void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int info, char *blstr, int it, float p1, float p2, long begin) {
-  if (type==EXE || type==CD || type==IMAGE24 || type==ZLIB || type==BASE64 || type==GIF) {
+  if (type==EXE || type==CD || type==IMAGE24 || type==IMAGE32 || type==ZLIB || type==BASE64 || type==GIF) {
     FILE* tmp=tmpfile();  // temporary encoded file
     if (!tmp) perror("tmpfile"), quit();
     int diffFound=0;
     if (type==IMAGE24) encode_bmp(in, tmp, len, info);
+    else if (type==IMAGE32) encode_im32(in, tmp, len, info);
     else if (type==EXE) encode_exe(in, tmp, len, begin);
     else if (type==CD) encode_cd(in, tmp, len, info);
     else if (type==ZLIB) diffFound=encode_zlib(in, tmp, len)?0:1;
@@ -5348,6 +5409,7 @@ void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int i
       en.setFile(tmp);
       fseek(in, begin, SEEK_SET);
       if (type==IMAGE24) decode_bmp(en, tmpsize, info, in, FCOMPARE, diffFound);
+      else if (type==IMAGE32) decode_im32(en, tmpsize, info, in, FCOMPARE, diffFound);
       else if (type==EXE) decode_exe(en, tmpsize, in, FCOMPARE, diffFound);
       else if (type==CD) decode_cd(tmp, tmpsize, in, FCOMPARE, diffFound);
       else if (type==ZLIB) decode_zlib(tmp, tmpsize, in, FCOMPARE, diffFound);
@@ -5381,13 +5443,13 @@ void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int i
         }
       } else if (type==EXE) {
         direct_encode_block(type, tmp, tmpsize, en);
-      } else if (type==IMAGE24) {
+      } else if (type==IMAGE24 || type==IMAGE32) {
         direct_encode_block(type, tmp, tmpsize, en, info);
       }
     }
     fclose(tmp);  // deletes
   } else {
-    const int i1=(type==IMAGE1 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE32 || type==AUDIO)?info:-1;
+    const int i1=(type==IMAGE1 || type==IMAGE8 || type==IMAGE8GRAY || type==AUDIO)?info:-1;
     direct_encode_block(type, in, len, en, i1);
   }
 }
@@ -5487,6 +5549,7 @@ int decompressRecursive(FILE *out, long n, Encoder& en, FMode mode, int it=0) {
       info=0; for (int i=0; i<4; ++i) { info<<=8; info+=en.decompress(); }
     }
     if (type==IMAGE24) len=decode_bmp(en, len, info, out, mode, diffFound);
+    else if (type==IMAGE32) decode_im32(en, len, info, out, mode, diffFound);
     else if (type==EXE) len=decode_exe(en, len, out, mode, diffFound);
     else if (type==CD || type==ZLIB || type==GIF || type==BASE64) {
       tmp=tmpfile();
