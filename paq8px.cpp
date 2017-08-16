@@ -629,6 +629,42 @@ typedef unsigned char  U8;
 typedef unsigned short U16;
 typedef unsigned int   U32;
 
+#ifndef UNIX
+typedef unsigned int uint;
+typedef unsigned long long qword;
+
+const uint g_PageFlag0 = 0x1000;
+const uint g_PageMask0 = 0x1000-1;
+uint g_PageFlag = g_PageFlag0;
+uint g_PageMask = g_PageMask0;
+
+template< class T >
+T* VAlloc( qword size ) {
+  void* r;
+  size *= sizeof(T);
+  qword s = (size+g_PageMask) & (~qword(g_PageMask));
+  Retry:
+//printf( "s=%I64X sizeof(size_t)=%i\n", s, sizeof(size_t) );
+#ifndef X64
+  if( s>=(qword(1)<<32) ) r=0; else
+#endif
+  r = VirtualAlloc(0, s, g_PageFlag, PAGE_READWRITE );
+//printf( "r=%08X\n", r );
+  if( (r==0) && (g_PageMask!=g_PageMask0) ) {
+    g_PageFlag = g_PageFlag0;
+    g_PageMask = g_PageMask0; 
+    s = size;
+    goto Retry;
+  }
+  return (T*)r;
+}
+
+template< class T >
+void VFree( T* p ) {
+  VirtualFree( p, 0, MEM_RELEASE );
+}
+#endif
+
 // min, max functions
 inline int min(int a, int b) {return a<b?a:b;}
 inline int max(int a, int b) {return a<b?b:a;}
@@ -679,40 +715,6 @@ public:
   }
 } programChecker;
 
-                          typedef unsigned int uint;
-typedef unsigned long long qword;
-
-const uint g_PageFlag0 = 0x1000;
-const uint g_PageMask0 = 0x1000-1;
-uint g_PageFlag = g_PageFlag0;
-uint g_PageMask = g_PageMask0;
-
-template< class T >
-T* VAlloc( qword size ) {
-  void* r;
-  size *= sizeof(T);
-  qword s = (size+g_PageMask) & (~qword(g_PageMask));
-  Retry:
-//printf( "s=%I64X sizeof(size_t)=%i\n", s, sizeof(size_t) );
-#ifndef X64
-  if( s>=(qword(1)<<32) ) r=0; else
-#endif
-  r = VirtualAlloc(0, s, g_PageFlag, PAGE_READWRITE );
-//printf( "r=%08X\n", r );
-  if( (r==0) && (g_PageMask!=g_PageMask0) ) {
-    g_PageFlag = g_PageFlag0;
-    g_PageMask = g_PageMask0; 
-    s = size;
-    goto Retry;
-  }
-  return (T*)r;
-}
-
-
-template< class T >
-void VFree( T* p ) {
-  VirtualFree( p, 0, MEM_RELEASE );
-}
 //////////////////////////// Array ////////////////////////////
 
 // Array<T> a(n); creates n elements of T initialized to 0 bits.
@@ -782,6 +784,7 @@ template<class T> void Array<T>::create(int i) {
   }
   const int sz=n*sizeof(T);
   programChecker.alloc(sz);
+#ifndef UNIX  
   char* r;
 
   if( sz>(1<<24) ) {
@@ -795,17 +798,26 @@ template<class T> void Array<T>::create(int i) {
   }
 
   data = (T*)r; //ptr;
+#else
+  ptr = (char*)calloc(sz, 1);
+  if (!ptr) quit("Out of memory");
+  data = (T*)ptr;
+#endif
 }
 
 template<class T> Array<T>::~Array() {
   programChecker.alloc(-n*sizeof(T));
-                             const int sz=n*sizeof(T);
+#ifndef UNIX   
+  const int sz=n*sizeof(T);
 
   if( sz>(1<<24) ) {
     VFree(ptr);
   } else {
     free(ptr);
   }
+#else
+  free(ptr);
+#endif
 }
 
 template<class T> void Array<T>::push_back(const T& x) {
@@ -3517,7 +3529,11 @@ void exeModel(Mixer& m) {
   const int N=14;
   static ContextMap cm(MEM, N);
   if (!bpos) {
-    for (int i=0; i<N; ++i) cm.set(execxt(i+1, buf(1)*(i>6)));
+    int mask0=0, count0=0;
+    for (int i=0; i<N; ++i){
+      if (i) mask0=mask0*2+(buf(i-1)==0), count0+=mask0&1;
+      cm.set(hash(execxt(i+1, buf(1)*(i>6)), ((1<<N)|mask0)*(count0*N/2>=i) ));
+    }
   }
   cm.mix(m);
 }
@@ -3655,13 +3671,15 @@ void dmcModel(Mixer& m) {
 
 void nestModel(Mixer& m)
 {
-  static int ic=0, bc=0, pc=0,vc=0, qc=0, lvc=0, wc=0;
-  static ContextMap cm(MEM, 10);
+  static int ic=0, bc=0, pc=0,vc=0, qc=0, lvc=0, wc=0, ac=0, ec=0, uc=0, sense1=0, sense2=0, w=0;
+  static ContextMap cm(MEM, 10+2);
   if (bpos==0) {
     int c=c4&255, matched=1, vv;
+    w*=((vc&7)>0 && (vc&7)<3);
+    if (c&0x80) w = w*11*32 + c;
     const int lc = (c >= 'A' && c <= 'Z'?c+'a'-'A':c);
-    if (lc == 'a' || lc == 'e' || lc == 'i' || lc == 'o' || lc == 'u') vv = 1; else
-    if (lc >= 'a' && lc <= 'z') vv = 2; else
+    if (lc == 'a' || lc == 'e' || lc == 'i' || lc == 'o' || lc == 'u'){ vv = 1; w = w*997*8 + (lc/4-22); } else
+    if (lc >= 'a' && lc <= 'z'){ vv = 2; w = w*271*32 + lc-97; } else
     if (lc == ' ' || lc == '.' || lc == ',' || lc == '\n') vv = 3; else
     if (lc >= '0' && lc <= '9') vv = 4; else
     if (lc == 'y') vv = 5; else
@@ -3673,18 +3691,18 @@ void nestModel(Mixer& m)
     }
     switch(c) {
       case ' ': qc = 0; break;
-      case '(': ic += 513; break;
-      case ')': ic -= 513; break;
-      case '[': ic += 17; break;
-      case ']': ic -= 17; break;
+      case '(': ic += 31; break;
+      case ')': ic -= 31; break;
+      case '[': ic += 11; break;
+      case ']': ic -= 11; break;
       case '<': ic += 23; qc += 34; break;
       case '>': ic -= 23; qc /= 5; break;
       case ':': pc = 20; break;
-      case '{': ic += 22; break;
-      case '}': ic -= 22; break;
+      case '{': ic += 17; break;
+      case '}': ic -= 17; break;
       case '|': pc += 223; break;
       case '"': pc += 0x40; break;
-      case '\'': pc += 0x42; break;
+      case '\'': pc += 0x42; if (c!=(U8)(c4>>8)) sense2^=1; else ac+=(2*sense2-1); break;
       case '\n': pc = qc = 0; break;
       case '.': pc = 0; break;
       case '!': pc = 0; break;
@@ -3701,14 +3719,16 @@ void nestModel(Mixer& m)
       case '/': pc += 0x11;
                 if (buf.size() > 1 && buf(1) == '<') qc += 74;
                 break;
-      case '=': pc += 87; break;
+      case '=': pc += 87; if (c!=(U8)(c4>>8)) sense1^=1; else ec+=(2*sense1-1); break;
       default: matched = 0;
     }
+    if (c4==0x266C743B) uc=min(7,uc+1);
+    else if (c4==0x2667743B) uc-=(uc>0);
     if (matched) bc = 0; else bc += 1;
-    if (bc > 300) bc = ic = pc = qc = 0;
+    if (bc > 300) bc = ic = pc = qc = uc = 0;
 
-
-
+    cm.set(hash( (vv>0 && vv<3)?0:(lc|0x100), ic&0x3FF, ec&0x7, ac&0x7, uc ));
+    cm.set(hash(ic, w, ilog2(bc+1)));
     cm.set((3*vc+77*pc+373*ic+qc)&0xffff);
     cm.set((31*vc+27*pc+281*qc)&0xffff);
     cm.set((13*vc+271*ic+qc+bc)&0xffff);
