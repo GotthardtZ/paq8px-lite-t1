@@ -3748,6 +3748,12 @@ void nestModel(Mixer& m)
 ====== XML model ======
 */
 
+#define CacheSize (1<<5)
+
+#if (CacheSize&(CacheSize-1)) || (CacheSize<8)
+  #error Cache size must be a power of 2 bigger than 4
+#endif
+
 struct XMLAttribute {
   U32 Name, Value, Length;
 };
@@ -3768,7 +3774,7 @@ struct XMLTag {
 };
 
 struct XMLTagCache {
-  XMLTag Tags[8];
+  XMLTag Tags[CacheSize];
   U32 Index;
 };
 
@@ -3795,6 +3801,49 @@ enum XMLState {
   ReadComment        = 7,
 };
 
+#define DetectContent(){ \
+  if ((c4&0xF0F0F0F0)==0x30303030){ \
+    int i = 0, j = 0; \
+    while ((i<4) && ( (j=(c4>>(8*i))&0xFF)>=0x30 && j<=0x39 )) \
+      i++; \
+\
+    if (i==4 && ( ((c8&0xFDF0F0FD)==0x2D30302D && buf(9)>=0x30 && buf(9)<=0x39) || ((c8&0xF0FDF0FD)==0x302D302D) )) \
+      (*Content).Type |= Date; \
+  } \
+  else if (((c8&0xF0F0FDF0)==0x30302D30 || (c8&0xF0F0F0FD)==0x3030302D) && buf(9)>=0x30 && buf(9)<=0x39){ \
+    int i = 2, j = 0; \
+    while ((i<4) && ( (j=(c8>>(8*i))&0xFF)>=0x30 && j<=0x39 )) \
+      i++; \
+\
+    if (i==4 && (c4&0xF0FDF0F0)==0x302D3030) \
+      (*Content).Type |= Date; \
+  } \
+\
+  if ((c4&0xF0FFF0F0)==0x303A3030 && buf(5)>=0x30 && buf(5)<=0x39 && ((buf(6)<0x30 || buf(6)>0x39) || ((c8&0xF0F0FF00)==0x30303A00 && (buf(9)<0x30 || buf(9)>0x39)))) \
+    (*Content).Type |= Time; \
+\
+  if ((*Content).Length>=8 && (c8&0x80808080)==0 && (c4&0x80808080)==0) \
+    (*Content).Type |= Text; \
+\
+  if ((c8&0xF0F0FF)==0x3030C2 && (c4&0xFFF0F0FF)==0xB0303027){ \
+    int i = 2; \
+    while ((i<7) && buf(i)>=0x30 && buf(i)<=0x39) \
+      i+=(i&1)*2+1; \
+\
+    if (i==10) \
+      (*Content).Type |= Coordinates; \
+  } \
+\
+  if ((c4&0xFFFFFA)==0xC2B042 && B!=0x47 && (((c4>>24)>=0x30 && (c4>>24)<=0x39) || ((c4>>24)==0x20 && (buf(5)>=0x30 && buf(5)<=0x39)))) \
+    (*Content).Type |= Temperature; \
+\
+  if (B>=0x30 && B<=0x39) \
+    (*Content).Type |= Number; \
+\
+  if (c4==0x4953424E && buf(5)==0x20) \
+    (*Content).Type |= ISBN; \
+} 
+
 void XMLModel(Mixer& m){
   static ContextMap cm(MEM/4, 4);
   static XMLTagCache Cache;
@@ -3803,14 +3852,14 @@ void XMLModel(Mixer& m){
 
   if (bpos==0) {
     U8 B = (U8)c4;
-    XMLTag *pTag, *Tag = &Cache.Tags[ Cache.Index&7 ];
+    XMLTag *pTag = &Cache.Tags[ (Cache.Index-1)&(CacheSize-1) ], *Tag = &Cache.Tags[ Cache.Index&(CacheSize-1) ];
     XMLAttribute *Attribute = &((*Tag).Attributes.Items[ (*Tag).Attributes.Index&3 ]);
     XMLContent *Content = &(*Tag).Content;
     pState = State;
     c8 = (c8<<8)|buf(5);
     if ((B==0x09 || B==0x20) && (B==(U8)(c4>>8) || !WhiteSpaceRun)){
       WhiteSpaceRun++;
-      IndentTab=(B==0x09);
+      IndentTab = (B==0x09);
     }
     else{
       if ((State==None || (State==ReadContent && (*Content).Length<=LineEnding+WhiteSpaceRun)) && WhiteSpaceRun>1+IndentTab && WhiteSpaceRun!=pWSRun){
@@ -3820,17 +3869,19 @@ void XMLModel(Mixer& m){
       WhiteSpaceRun=0;
     }
     if (B==0x0A)
-      LineEnding=((U8)(c4>>8)==0x0A)?2:1;
+      LineEnding = 1+((U8)(c4>>8)==0x0D);
 
     switch (State){
       case None : {
-        pTag = &Cache.Tags[ (Cache.Index-1)&7 ];
         if (B==0x3C){
           State = ReadTagName;
           memset(Tag, 0, sizeof(XMLTag));
           (*Tag).Level = ((*pTag).EndTag || (*pTag).Empty)?(*pTag).Level:(*pTag).Level+1;
         }
-        cm.set(hash(pState, State, ((*pTag).Level+1)*IndentStep - WhiteSpaceRun ));
+        if ((*Tag).Level>1)
+          DetectContent();
+        
+        cm.set(hash(pState, State, ((*pTag).Level+1)*IndentStep - WhiteSpaceRun));
         break;
       }
       case ReadTagName : {
@@ -3838,7 +3889,7 @@ void XMLModel(Mixer& m){
           State = ReadTag;
         else if ((B==0x3A || (B>='A' && B<='Z') || B==0x5F || (B>='a' && B<='z')) || ((*Tag).Length>0 && (B==0x2D || B==0x2E || (B>='0' && B<='9')))){
           (*Tag).Length++;
-          (*Tag).Name = (*Tag).Name * 263 * 32 + B;
+          (*Tag).Name = (*Tag).Name * 263 * 32 + (B&0xDF);
         }
         else if (B == 0x3E){
           if ((*Tag).EndTag){
@@ -3871,8 +3922,14 @@ void XMLModel(Mixer& m){
           State = ReadCDATA;
           (*Tag).Level = max(0,(*Tag).Level-1);
         }
+        
+        int i = 1;
+        do{
+          pTag = &Cache.Tags[ (Cache.Index-i)&(CacheSize-1) ];
+          i+=1+((*pTag).EndTag && Cache.Tags[ (Cache.Index-i-1)&(CacheSize-1) ].Name==(*pTag).Name);
+        }
+        while ( i<CacheSize && ((*pTag).EndTag || (*pTag).Empty) );
 
-        pTag = &Cache.Tags[ (Cache.Index-1)&7 ];
         cm.set(hash(pState*8+State, (*Tag).Name, (*Tag).Level, (*pTag).Name, (*pTag).Level!=(*Tag).Level ));
         break;
       }
@@ -3889,7 +3946,7 @@ void XMLModel(Mixer& m){
         }
         else if (B!=0x09 && B!=0x0A && B!=0x0D && B!=0x20){
           State = ReadAttributeName;
-          (*Attribute).Name = B;
+          (*Attribute).Name = B&0xDF;
         }
         cm.set(hash(pState, State, (*Tag).Name, B, (*Tag).Attributes.Index ));
         break;
@@ -3901,7 +3958,7 @@ void XMLModel(Mixer& m){
             (*Content).Type |= Link;
         }
         else if (B!=0x22 && B!=0x27 && B!=0x3D)
-          (*Attribute).Name = (*Attribute).Name * 263 * 32 + B;
+          (*Attribute).Name = (*Attribute).Name * 263 * 32 + (B&0xDF);
 
         cm.set(hash(pState*8+State, (*Attribute).Name, (*Tag).Attributes.Index, (*Tag).Name, (*Content).Type ));
         break;
@@ -3912,7 +3969,7 @@ void XMLModel(Mixer& m){
           State = ReadTag;
         }
         else{
-          (*Attribute).Value = (*Attribute).Value* 263 * 32 + B;
+          (*Attribute).Value = (*Attribute).Value* 263 * 32 + (B&0xDF);
           (*Attribute).Length++;
           if ((c8&0xDFDFDFDF)==0x48545450 && ((c4>>8)==0x3A2F2F || c4==0x733A2F2F))
             (*Content).Type |= URL;
@@ -3924,53 +3981,14 @@ void XMLModel(Mixer& m){
         if (B==0x3C){
           State = ReadTagName;
           Cache.Index++;
-          memset(&Cache.Tags[ Cache.Index&7 ], 0, sizeof(XMLTag));
-          Cache.Tags[ Cache.Index&7 ].Level = (*Tag).Level+1;
+          memset(&Cache.Tags[ Cache.Index&(CacheSize-1) ], 0, sizeof(XMLTag));
+          Cache.Tags[ Cache.Index&(CacheSize-1) ].Level = (*Tag).Level+1;
         }
         else{
           (*Content).Length++;
-          (*Content).Data = (*Content).Data * 997*16 + B&0xDF;
+          (*Content).Data = (*Content).Data * 997*16 + (B&0xDF);
 
-          if ((c4&0xF0F0F0F0)==0x30303030){
-            int i, j = 0;
-            while ((i<4) && ( (j=(c4>>(8*i))&0xFF)>=0x30 && j<=0x39 ))
-              i++;
-
-            if (i==4 && ( ((c8&0xFDF0F0FD)==0x2D30302D && buf(9)>=0x30 && buf(9)<=0x39) || ((c8&0xF0FDF0FD)==0x302D302D) ))
-              (*Content).Type |= Date;
-          }
-          else if (((c8&0xF0F0FDF0)==0x30302D30 || (c8&0xF0F0F0FD)==0x3030302D) && buf(9)>=0x30 && buf(9)<=0x39){
-            int i=2, j = 0;
-            while ((i<4) && ( (j=(c8>>(8*i))&0xFF)>=0x30 && j<=0x39 ))
-              i++;
-
-            if (i==4 && (c4&0xF0FDF0F0)==0x302D3030)
-              (*Content).Type |= Date;
-          }
-
-          if ((c4&0xF0FFF0F0)==0x303A3030 && buf(5)>=0x30 && buf(5)<=0x39 && ((buf(6)<0x30 || buf(6)>0x39) || ((c8&0xF0F0FF00)==0x30303A00 && (buf(9)<0x30 || buf(9)>0x39))))
-            (*Content).Type |= Time;
-
-          if ((*Content).Length>=8 && (c8&0x80808080)==0 && (c4&0x80808080)==0)
-            (*Content).Type |= Text;
-
-          if ((c8&0xF0F0FF)==0x3030C2 && (c4&0xFFF0F0FF)==0xB0303027){
-            int i = 2;
-            while ((i<7) && buf(i)>=0x30 && buf(i)<=0x39)
-              i+=(i&1)*2+1;
-
-            if (i==10)
-              (*Content).Type |= Coordinates;
-          }
-          
-          if ((c4&0xFFFFFA)==0xC2B042 && B!=0x47 && (((c4>>24)>=0x30 && (c4>>24)<=0x39) || ((c4>>24)==0x20 && (buf(5)>=0x30 && buf(5)<=0x39))))
-            (*Content).Type |= Temperature;
-
-          if (B>=0x30 && B<=0x39)
-            (*Content).Type |= Number;
-
-          if (c4==0x4953424E && buf(5)==0x20)
-            (*Content).Type |= ISBN;
+          DetectContent();
         }
         cm.set(hash(pState, State, (*Tag).Name, c4&0xC0FF ));
         break;
@@ -3993,7 +4011,7 @@ void XMLModel(Mixer& m){
       }
     }
 
-    pTag = &Cache.Tags[ (Cache.Index-1)&7 ];
+    pTag = &Cache.Tags[ (Cache.Index-1)&(CacheSize-1) ];
     cm.set(hash(State, (*Tag).Level, pState*2+(*Tag).EndTag, (*Tag).Name));
     cm.set(hash((*pTag).Name, State*2+(*pTag).EndTag, (*pTag).Content.Type, (*Tag).Content.Type));
     cm.set(hash(State*2+(*Tag).EndTag, (*Tag).Name, (*Tag).Content.Type, c4&0xE0FF));
@@ -4486,7 +4504,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
   int e8e9last=0;   // offset of most recent CALL or JMP
 
   int soi=0, sof=0, sos=0, app=0;  // For JPEG detection - position where found
-  int wavi=0,wavsize=0,wavch=0,wavbps=0,wavm=0;  // For WAVE detection
+  int wavi=0,wavsize=0,wavch=0,wavbps=0,wavm=0,wavtype=0,wavlen=0,wavlist=0;  // For WAVE detection
   int aiff=0,aiffm=0,aiffs=0;  // For AIFF detection
   int s3mi=0,s3mno=0,s3mni=0;  // For S3M detection
   int bmp=0,imgbpp=0,bmpx=0,bmpy=0,bmpof=0,hdrless=0;  // For BMP detection
@@ -4630,20 +4648,46 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
     // Detect .wav file header
     if (buf0==0x52494646) wavi=i,wavm=0;
     if (wavi) {
-      const int p=i-wavi;
+      int p=i-wavi;
       if (p==4) wavsize=bswap(buf0);
-      else if (p==8 && buf0!=0x57415645) wavi=0;
-      else if (p==16 && (buf1!=0x666d7420 || bswap(buf0)!=16)) wavi=0;
-      else if (p==22) wavch=bswap(buf0)&0xffff;
-      else if (p==34) wavbps=bswap(buf0)&0xffff;
-      else if (p==40+wavm && buf1!=0x64617461) wavm+=bswap(buf0)+8,wavi=(wavm>0xfffff?0:wavi);
-      else if (p==40+wavm) {
-        int wavd=bswap(buf0);
-        if ((wavch==1 || wavch==2) && (wavbps==8 || wavbps==16) && wavd>0 && wavsize>=wavd+36
-           && wavd%((wavbps/8)*wavch)==0) AUD_DET(AUDIO,wavi-3,44+wavm,wavd,wavch+wavbps/4-3);
-        wavi=0;
-      }
-    }
+			else if (p==8){
+				wavtype=(buf0==0x57415645)?1:(buf0==0x7366626B)?2:0;
+				if (!wavtype) wavi=0;
+			}
+			else if (wavtype){
+				if (wavtype==1) {
+					if (p==16 && (buf1!=0x666d7420 || bswap(buf0)!=16)) wavi=0;
+					else if (p==22) wavch=bswap(buf0)&0xffff;
+					else if (p==34) wavbps=bswap(buf0)&0xffff;
+					else if (p==40+wavm && buf1!=0x64617461) wavm+=bswap(buf0)+8,wavi=(wavm>0xfffff?0:wavi);
+					else if (p==40+wavm) {
+						int wavd=bswap(buf0);
+						if ((wavch==1 || wavch==2) && (wavbps==8 || wavbps==16) && wavd>0 && wavsize>=wavd+36
+							 && wavd%((wavbps/8)*wavch)==0) AUD_DET(AUDIO,wavi-3,44+wavm,wavd,wavch+wavbps/4-3);
+						wavi=0;
+					}
+				}
+				else{
+					if ((p==16 && buf1!=0x4C495354) || (p==20 && buf0!=0x494E464F))
+						wavi=0;
+					else if (p>20 && buf1==0x4C495354 && (wavi*=(buf0!=0))){
+						wavlen = bswap(buf0);
+						wavlist = i;
+					}
+					else if (wavlist){
+						p=i-wavlist;
+						if (p==8 && (buf1!=0x73647461 || buf0!=0x736D706C))
+							wavi=0;
+						else if (p==12){
+							int wavd = bswap(buf0);
+							if (wavd && (wavd+12)==wavlen)
+								AUD_DET(AUDIO,wavi-3,(12+wavlist-(wavi-3)+1)&~1,wavd,1+16/4-3);
+							wavi=0;
+						}
+					}
+				}
+			}
+		}
 
     // Detect .aiff file header
     if (buf0==0x464f524d) aiff=i,aiffs=0; // FORM
