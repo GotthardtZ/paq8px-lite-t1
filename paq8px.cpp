@@ -4681,7 +4681,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
 						else if (p==12){
 							int wavd = bswap(buf0);
 							if (wavd && (wavd+12)==wavlen)
-								AUD_DET(AUDIO,wavi-3,(12+wavlist+1)&~1,wavd,1+16/4-3);
+								AUD_DET(AUDIO,wavi-3,(12+wavlist-(wavi-3)+1)&~1,wavd,1+16/4-3);
 							wavi=0;
 						}
 					}
