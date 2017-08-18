@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Release by Jan Ondrus, July 28, 2017
+/* paq8px file compressor/archiver.  Released on August 18, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -927,6 +927,12 @@ U32 c4=0, f4=0, b2=0; // Last 4 whole bytes, packed.  Last byte is bits 0-7.
 int bpos=0; // bits in c0 (0 to 7)
 Buf buf;  // Rotating input queue set by Predictor
 int blpos=0; // Relative position in block
+
+#define CacheSize (1<<5)
+
+#if (CacheSize&(CacheSize-1)) || (CacheSize<8)
+  #error Cache size must be a power of 2 bigger than 4
+#endif
 
 ///////////////////////////// ilog //////////////////////////////
 
@@ -3508,34 +3514,573 @@ void wavModel(Mixer& m, int info) {
 }
 
 //////////////////////////// exeModel /////////////////////////
+/*
+  Model for x86/x64 code.
+  Based on the previous paq* exe models and on DisFilter (http://www.farbrausch.de/~fg/code/disfilter/) by Fabian Giesen.
 
-// Model x86 code.  The contexts are sparse containing only those
-// bits relevant to parsing (2 prefixes, opcode, and mod and r/m fields
-// of modR/M byte).
+  Attemps to parse the input stream as x86/x64 instructions, and quantizes them into 32-bit representations that are then
+  used as context to predict the next bits, and also extracts possible sparse contexts at several previous positions that
+  are relevant to parsing (prefixes, opcode, Mod and R/M fields of the ModRM byte, Scale field of the SIB byte)
+
+  Changelog:
+  (18/08/2017) v98: Initial release by Márcio Pais
+*/
 
 inline int pref(int i) { return (buf(i)==0x0f)+2*(buf(i)==0x66)+3*(buf(i)==0x67); }
 
 // Get context at buf(i) relevant to parsing 32-bit x86 code
 U32 execxt(int i, int x=0) {
-  int prefix=0, opcode=0, modrm=0;
+  int prefix=0, opcode=0, modrm=0, sib=0;
   if (i) prefix+=4*pref(i--);
   if (i) prefix+=pref(i--);
   if (i) opcode+=buf(i--);
   if (i) modrm+=buf(i)&0xc7;
-  return prefix|opcode<<4|modrm<<12|x<<20;
+  if (i&&((modrm&0x07)==4)&&(modrm<0xc0)) sib=buf(i)&0xc0;
+  return prefix|opcode<<4|modrm<<12|x<<20|sib<<(28-6);
 }
 
-void exeModel(Mixer& m) {
-  const int N=14;
-  static ContextMap cm(MEM, N);
-  if (!bpos) {
-    int mask0=0, count0=0;
-    for (int i=0; i<N; ++i){
-      if (i) mask0=mask0*2+(buf(i-1)==0), count0+=mask0&1;
-      cm.set(hash(execxt(i+1, buf(1)*(i>6)), ((1<<N)|mask0)*(count0*N/2>=i) ));
+// formats
+enum InstructionFormat {
+  // encoding mode
+  fNM = 0x0,      // no ModRM
+  fAM = 0x1,      // no ModRM, "address mode" (jumps or direct addresses)
+  fMR = 0x2,      // ModRM present
+  fMEXTRA = 0x3,  // ModRM present, includes extra bits for opcode
+  fMODE = 0x3,    // bitmask for mode
+
+  // no ModRM: size of immediate operand
+  fNI = 0x0,      // no immediate
+  fBI = 0x4,      // byte immediate
+  fWI = 0x8,      // word immediate
+  fDI = 0xc,      // dword immediate
+  fTYPE = 0xc,    // type mask
+
+  // address mode: type of address operand
+  fAD = 0x0,      // absolute address
+  fDA = 0x4,      // dword absolute jump target
+  fBR = 0x8,      // byte relative jump target
+  fDR = 0xc,      // dword relative jump target
+
+  // others
+  fERR = 0xf,     // denotes invalid opcodes
+};
+
+// 1 byte opcodes
+const static U8 Table1[256] = {
+  // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 0
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 1
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 2
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 3
+
+  fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 4
+  fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 5
+  fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fDI,fMR|fDI,fNM|fBI,fMR|fBI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 6
+  fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR, // 7
+
+  fMR|fBI,fMR|fDI,fMR|fBI,fMR|fBI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 8
+  fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fAM|fDA,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 9
+  fAM|fAD,fAM|fAD,fAM|fAD,fAM|fAD,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // a
+  fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI, // b
+
+  fMR|fBI,fMR|fBI,fNM|fWI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fBI,fMR|fDI,fNM|fBI,fNM|fNI,fNM|fWI,fNM|fNI,fNM|fNI,fNM|fBI,fERR   ,fNM|fNI, // c
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fBI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // d
+  fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fAM|fDR,fAM|fDR,fAM|fAD,fAM|fBR,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // e
+  fNM|fNI,fERR   ,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fMEXTRA,fMEXTRA,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fMEXTRA,fMEXTRA, // f
+};
+
+// 2 byte opcodes
+const static U8 Table2[256] = {
+  // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fNM|fNI,fERR   ,fNM|fNI,fNM|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 0
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 1
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 2
+  fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fERR   ,fNM|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 3
+
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 4
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 5
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 6
+  fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI, // 7
+
+  fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR, // 8
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 9
+  fNM|fNI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fBI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fBI,fMR|fNI,fERR   ,fMR|fNI, // a
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // b
+
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // c
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // d
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // e
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   , // f
+};
+
+// 3 byte opcodes $0F38XX
+const static U8 Table3_38[256] = {
+  // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   , // 0
+  fMR|fNI,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fERR   ,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fERR   , // 1
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   , // 2
+  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 3
+  fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 4
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 5
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 6
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 7
+  fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 8
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 9
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // a
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // b
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // c
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // d
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // e
+  fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // f
+};
+
+// 3 byte opcodes $0F3AXX
+const static U8 Table3_3A[256] = {
+  // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI, // 0
+  fERR   ,fERR   ,fERR   ,fERR   ,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 1
+  fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 2
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 3
+  fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 4
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 5
+  fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 6
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 7
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 8
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 9
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // a
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // b
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // c
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // d
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // e
+  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // f
+};
+
+// escape opcodes using ModRM byte to get more variants
+const static U8 TableX[32] = {
+  // 0       1       2       3       4       5       6       7
+  fMR|fBI,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // escapes for 0xf6
+  fMR|fDI,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // escapes for 0xf7
+  fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // escapes for 0xfe
+  fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fMR|fNI,fERR   ,fMR|fNI,fERR   , // escapes for 0xff
+};
+
+const static U8 InvalidX64Ops[19] = {0x06, 0x07, 0x16, 0x17, 0x1E, 0x1F, 0x27, 0x2F, 0x37, 0x3F, 0x60, 0x61, 0x62, 0x82, 0x9A, 0xD4, 0xD5, 0xD6, 0xEA,};
+const static U8 X64Prefixes[8] = {0x26, 0x2E, 0x36, 0x3E, 0x9B, 0xF0, 0xF2, 0xF3,};
+
+enum Prefixes {
+  ES_OVERRIDE = 0x26,
+  CS_OVERRIDE = 0x2E,
+  SS_OVERRIDE = 0x36,
+  DS_OVERRIDE = 0x3E,
+  FS_OVERRIDE = 0x64,
+  GS_OVERRIDE = 0x65,
+  AD_OVERRIDE = 0x67,
+  WAIT_FPU    = 0x9B,
+  LOCK        = 0xF0,
+  REP_N_STR   = 0xF2,
+  REP_STR     = 0xF3,
+};
+
+enum Opcodes {
+  // 1-byte opcodes of special interest (for one reason or another)
+  OP_2BYTE  = 0x0f,     // start of 2-byte opcode
+  OP_OSIZE  = 0x66,     // operand size prefix
+  OP_CALLF  = 0x9a,
+  OP_RETNI  = 0xc2,     // ret near+immediate
+  OP_RETN   = 0xc3,
+  OP_ENTER  = 0xc8,
+  OP_INT3   = 0xcc,
+  OP_INTO   = 0xce,
+  OP_CALLN  = 0xe8,
+  OP_JMPF   = 0xea,
+  OP_ICEBP  = 0xf1,
+};
+
+enum ExeState {
+  Start             =  0,
+  Pref_Op_Size      =  1,
+  Pref_MultiByte_Op =  2,
+  ParseFlags        =  3,
+  ExtraFlags        =  4,
+  ReadModRM         =  5,
+  Read_OP3_38       =  6,
+  Read_OP3_3A       =  7,
+  ReadSIB           =  8,
+  Read8             =  9,
+  Read16            = 10,
+  Read32            = 11,
+  Read8_ModRM       = 12,
+  Read16_f          = 13,
+  Read32_ModRM      = 14,
+  Error             = 15,
+};
+
+struct OpCache {
+  U32 Op[CacheSize];
+  U32 Index;
+};
+
+struct Instruction {
+  U32 Data;
+  U8 Prefix, Code, ModRM, SIB, REX, Flags, BytesRead;
+  bool MustCheckREX, Decoding, o16, imm8;
+};
+
+#define CodeShift            3
+#define CodeMask             (0xFF<<CodeShift)
+#define ClearCodeMask        (-1)^CodeMask
+#define PrefixMask           (1<<CodeShift)-1
+#define OperandSizeOverride  (0x01<<(8+CodeShift))
+#define MultiByteOpcode      (0x02<<(8+CodeShift))
+#define PrefixREX            (0x04<<(8+CodeShift))
+#define Prefix38             (0x08<<(8+CodeShift))
+#define Prefix3A             (0x10<<(8+CodeShift))
+#define HasExtraFlags        (0x20<<(8+CodeShift))
+#define HasModRM             (0x40<<(8+CodeShift))
+#define ModRMShift           7+8+CodeShift
+#define SIBScaleShift        ModRMShift+8-6
+#define RegDWordDisplacement (0x01<<(8+SIBScaleShift))
+#define AddressMode          (0x02<<(8+SIBScaleShift))
+#define TypeShift            2+8+SIBScaleShift
+#define ModRM_mod            0xC0
+#define ModRM_reg            0x38
+#define ModRM_rm             0x07
+#define SIB_scale            0xC0
+#define SIB_index            0x38
+#define SIB_base             0x07
+#define REX_w                0x08
+
+#define MinRequired          8 // minimum required consecutive valid instructions to be considered as code
+
+inline bool IsInvalidX64Op(U8 Op){
+  for (int i=0; i<19; i++){
+    if (Op == InvalidX64Ops[i])
+      return true;
+  }
+  return false;
+}
+
+inline bool IsValidX64Prefix(U8 Prefix){
+  for (int i=0; i<8; i++){
+    if (Prefix == X64Prefixes[i])
+      return true;
+  }
+  return ((Prefix>=0x40 && Prefix<=0x4F) || (Prefix>=0x64 && Prefix<=0x67));
+}
+
+void ProcessMode(Instruction &Op, ExeState &State){
+  if ((Op.Flags&fMODE)==fAM){
+    Op.Data|=AddressMode;
+    Op.BytesRead = 0;
+    switch (Op.Flags&fTYPE){
+      case fDR : Op.Data|=(2<<TypeShift);
+      case fDA : Op.Data|=(1<<TypeShift);
+      case fAD : {
+        State = Read32;
+        break;
+      }
+      case fBR : {
+        Op.Data|=(2<<TypeShift);
+        State = Read8;
+      }
     }
   }
+  else{
+    switch (Op.Flags&fTYPE){
+      case fBI : State = Read8; break;
+      case fWI : {
+        State = Read16;
+        Op.Data|=(1<<TypeShift);
+        Op.BytesRead = 0;
+        break;
+      }
+      case fDI : {
+        // x64 Move with 8byte immediate? [REX.W is set, opcodes 0xB8+r]
+        Op.imm8=((Op.REX & REX_w)>0 && (Op.Code&0xF8)==0xB8);
+        if (!Op.o16 || Op.imm8){
+          State = Read32;
+          Op.Data|=(2<<TypeShift);
+        }
+        else{
+          State = Read16;
+          Op.Data|=(3<<TypeShift);
+        }
+        Op.BytesRead = 0;
+      }
+      default: State = Start; /*no immediate*/
+    }
+  }
+}
+
+void ProcessFlags2(Instruction &Op, ExeState &State){
+  //if arriving from state ExtraFlags, we've already read the ModRM byte
+  if ((Op.Flags&fMODE)==fMR && State!=ExtraFlags){
+    State = ReadModRM;
+    return;
+  }
+  ProcessMode(Op, State);
+}
+
+void ProcessFlags(Instruction &Op, ExeState &State){
+  if (Op.Code==OP_CALLF || Op.Code==OP_JMPF || Op.Code==OP_ENTER){
+    Op.BytesRead = 0;
+    State = Read16_f;
+    return; //must exit, ENTER has ModRM too
+  }
+  ProcessFlags2(Op, State);
+}
+
+void CheckFlags(Instruction &Op, ExeState &State){
+  //must peek at ModRM byte to read the REG part, so we can know the opcode
+  if (Op.Flags==fMEXTRA)
+    State = ExtraFlags;
+  else if (Op.Flags==fERR){
+    memset(&Op, 0, sizeof(Instruction));
+    State = Error;
+  }
+  else
+    ProcessFlags(Op, State);
+}
+
+void ReadFlags(Instruction &Op, ExeState &State){
+  Op.Flags = Table1[Op.Code];
+  CheckFlags(Op, State);
+}
+
+void ProcessModRM(Instruction &Op, ExeState &State){
+  if ((Op.ModRM & ModRM_mod)==0x40)
+    State = Read8_ModRM; //register+byte displacement
+  else if ((Op.ModRM & ModRM_mod)==0x80 || (Op.ModRM & (ModRM_mod|ModRM_rm))==0x05 || (Op.ModRM<0x40 && (Op.SIB & SIB_base)==0x05) ){
+    State = Read32_ModRM; //register+dword displacement
+    Op.BytesRead = 0;
+  }
+  else
+    ProcessMode(Op, State);
+}
+
+void ApplyCodeAndSetFlag(Instruction &Op, U32 Flag = 0){
+  Op.Data&=ClearCodeMask; \
+  Op.Data|=(Op.Code<<CodeShift)|Flag;
+}
+
+inline U32 OpN(OpCache &Cache, U32 n){
+  return Cache.Op[ (Cache.Index-n)&(CacheSize-1) ];
+}
+
+bool exeModel(Mixer& m, U32 *Status = NULL) {
+  const int N=max(2,level);
+  static ContextMap cm(MEM*2, N+8);
+  static OpCache Cache;
+  static ExeState pState = Start, State = Start;
+  static Instruction Op;
+  static U32 TotalOps = 0, OpMask = 0, Context = 0;
+  static bool Valid = false;
+  if (!bpos) {
+    pState = State;
+    U8 B = (U8)c4;
+    
+    switch (State){
+      case Start: case Error: {
+        // previous code may have just been a REX prefix
+        bool Skip = false;
+        if (Op.MustCheckREX){
+          Op.MustCheckREX = false;
+          // valid x64 code?
+          if (!IsInvalidX64Op(B) && !IsValidX64Prefix(B)){
+            Op.REX = Op.Code;
+            Op.Code = B;
+            Op.Data = PrefixREX|(Op.Code<<CodeShift)|(Op.Data&PrefixMask); 
+            Skip = true;
+          }
+        }
+        
+        Op.ModRM = Op.SIB = Op.REX = Op.Flags = Op.BytesRead = 0;       
+        if (!Skip){
+          Op.Code = B;
+          // possible REX prefix?
+          Op.MustCheckREX = ((Op.Code&0xF0)==0x40) && (!(Op.Decoding && (Op.Data&PrefixMask==1)));
+          
+          // check prefixes
+          Op.Prefix = (Op.Code==ES_OVERRIDE || Op.Code==CS_OVERRIDE || Op.Code==SS_OVERRIDE || Op.Code==DS_OVERRIDE) + //invalid in x64
+                      (Op.Code==FS_OVERRIDE)*2 +
+                      (Op.Code==GS_OVERRIDE)*3 +
+                      (Op.Code==AD_OVERRIDE)*4 +
+                      (Op.Code==WAIT_FPU)*5 +
+                      (Op.Code==LOCK)*6 +
+                      (Op.Code==REP_N_STR || Op.Code==REP_STR)*7;
+
+          if (!Op.Decoding){
+            TotalOps+=(Op.Data!=0)-(Cache.Index && Cache.Op[ Cache.Index&(CacheSize-1) ]!=0);
+            OpMask = (OpMask<<1)|(State!=Error);
+            
+            Cache.Op[ Cache.Index&(CacheSize-1) ] = Op.Data;
+            Cache.Index++;
+
+            if (!Op.Prefix)
+              Op.Data = Op.Code<<CodeShift;
+            else{
+              Op.Data = Op.Prefix;
+              Op.Decoding = true;
+              break;
+            }
+          }
+          else{
+            // we only have enough bits for one prefix, so the
+            // instruction will be encoded with the last one
+            if (!Op.Prefix){
+              Op.Data|=(Op.Code<<CodeShift);
+              Op.Decoding = false;
+            }
+            else{
+              Op.Data = Op.Prefix;
+              break;
+            }
+          }
+        }
+
+        if (Op.o16=(Op.Code==OP_OSIZE))
+          State = Pref_Op_Size;
+        else if (Op.Code==OP_2BYTE)
+          State = Pref_MultiByte_Op;
+        else
+          ReadFlags(Op, State);
+
+        break;
+      }
+      case Pref_Op_Size : {
+        Op.Code = B;
+        ApplyCodeAndSetFlag(Op, OperandSizeOverride);
+        ReadFlags(Op, State);
+        break;
+      }
+      case Pref_MultiByte_Op : {
+        Op.Code = B;        
+        Op.Data|=MultiByteOpcode;
+
+        if (Op.Code==0x38)
+          State = Read_OP3_38;
+        else if (Op.Code==0x3A)
+          State = Read_OP3_3A;
+        else{
+          ApplyCodeAndSetFlag(Op);
+          Op.Flags = Table2[Op.Code];
+          CheckFlags(Op, State);
+        }
+        break;
+      }
+      case ParseFlags : {
+        ProcessFlags(Op, State);
+        break;
+      }
+      case ExtraFlags : case ReadModRM : {
+        Op.ModRM = B;
+        Op.Data|=(Op.ModRM<<ModRMShift)|HasModRM;
+        Op.SIB = 0;
+        if (Op.Flags==fMEXTRA){
+          Op.Data|=HasExtraFlags;
+          Op.Flags = TableX[ ((Op.ModRM>>3)&0x07) | ((Op.Code&0x01)<<3) | ((Op.Code&0x08)<<1) ];
+          if (Op.Flags==fERR){
+            memset(&Op, 0, sizeof(Instruction));
+            State = Error;
+            break;
+          }
+          ProcessFlags(Op, State);
+          break;
+        }
+
+        if ((Op.ModRM & ModRM_rm)==4 && Op.ModRM<ModRM_mod){
+          State = ReadSIB;
+          break;
+        }
+
+        ProcessModRM(Op, State);
+        break;
+      }
+      case Read_OP3_38 : case Read_OP3_3A : {
+        Op.Code = B;
+        ApplyCodeAndSetFlag(Op, Prefix38<<(State-Read_OP3_38));
+        Op.Flags = (State==Read_OP3_38)?Table3_38[Op.Code]:Table3_3A[Op.Code];
+        CheckFlags(Op, State);
+        break;
+      }
+      case ReadSIB : {
+        Op.SIB = B;
+        Op.Data|=((Op.SIB & SIB_scale)<<SIBScaleShift);
+        ProcessModRM(Op, State);
+        break;
+      }
+      case Read8 : case Read16 : case Read32 : {
+        if (++Op.BytesRead>=(2*(State-Read8)<<Op.imm8)){
+          Op.BytesRead = 0;
+          Op.imm8 = false;
+          State = Start;
+        }
+        break;
+      }
+      case Read8_ModRM : {
+        ProcessMode(Op, State);
+        break;
+      }
+      case Read16_f : {
+        if (++Op.BytesRead==2){
+          Op.BytesRead = 0;
+          ProcessFlags2(Op, State);
+        }
+        break;
+      }
+      case Read32_ModRM : {
+        Op.Data|=RegDWordDisplacement;
+        if (++Op.BytesRead==4){
+          Op.BytesRead = 0;
+          ProcessMode(Op, State);
+        }
+        break;
+      }
+    }
+
+    Valid = (TotalOps>2*MinRequired) && ((OpMask&((1<<MinRequired)-1))==((1<<MinRequired)-1));
+    Context = State+16*Op.BytesRead+16*(Op.REX & REX_w);
+    if (Status)
+        *Status = Context;
+
+    U32 mask=0, count0=0;
+    for (int i=0, j=0; i<N; ++i){
+      if (i) mask=mask*2+(buf(i-1)==0), count0+=mask&1;
+      cm.set(hash(execxt(j=(i<4)?i+1:5+(i-4)*2, buf(1)*(j>6)), ((1<<N)|mask)*(count0*N/2>=i), (0x08|(blpos&0x07))*(i<4) ));
+    }
+
+    mask = PrefixMask|(0xFC<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A;
+    cm.set(hash(OpN(Cache, 1)&(mask|RegDWordDisplacement|AddressMode), State+16*Op.BytesRead, Op.Data&mask, Op.REX ));
+    
+    mask = 0x04|(0xFE<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A|((ModRM_mod|ModRM_reg)<<ModRMShift);
+    cm.set(hash(
+      OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, OpN(Cache, 3)&mask,
+      Context+256*((Op.ModRM&ModRM_mod)==ModRM_mod),
+      Op.Data&((mask|PrefixREX)^(ModRM_mod<<ModRMShift))
+    ));
+    
+    mask = 0x04|CodeMask;
+    cm.set(hash(OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, OpN(Cache, 3)&mask, OpN(Cache, 4)&mask, (Op.Data&mask)|(State<<11)|(Op.BytesRead<<15)));
+
+    mask = 0x04|(0xFC<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A;
+    cm.set(hash(State+16*Op.BytesRead, Op.Data&mask, OpMask&0x07, Op.Flags, ((Op.SIB & SIB_base)==5)*4+((Op.ModRM & ModRM_reg)==ModRM_reg)*2+((Op.ModRM & ModRM_mod)==0)));
+
+    mask = PrefixMask|CodeMask|OperandSizeOverride|MultiByteOpcode|PrefixREX|Prefix38|Prefix3A|HasExtraFlags|HasModRM|((ModRM_mod|ModRM_rm)<<ModRMShift);
+    cm.set(hash(Op.Data&mask, State+16*Op.BytesRead, Op.Flags));
+
+    mask = PrefixMask|CodeMask|OperandSizeOverride|MultiByteOpcode|Prefix38|Prefix3A|HasExtraFlags|HasModRM;
+    cm.set(hash(OpN(Cache, 1)&mask, State, Op.BytesRead*2+((Op.REX&REX_w)>0), Op.Data&((U16)(mask^OperandSizeOverride))));
+
+    mask = 0x04|(0xFE<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A|(ModRM_reg<<ModRMShift);
+    cm.set(hash(OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, State+16*Op.BytesRead, Op.Data&(mask|PrefixMask|CodeMask)));
+
+    cm.set(State+16*Op.BytesRead);
+  }
+
   cm.mix(m);
+  if (level>7)
+    m.set(Context, 256);
+  return Valid;
 }
 
 //////////////////////////// indirectModel /////////////////////
@@ -3745,14 +4290,13 @@ void nestModel(Mixer& m)
 }
 
 /*
-====== XML model ======
+  XML Model.
+  Attempts to parse the tag structure and detect specific content types.
+  
+  Changelog:
+  (17/08/2017) v96: Initial release by Márcio Pais
+  (17/08/2017) v97: Bug fixes (thank you Mauro Vezzosi) and improvements.
 */
-
-#define CacheSize (1<<5)
-
-#if (CacheSize&(CacheSize-1)) || (CacheSize<8)
-  #error Cache size must be a power of 2 bigger than 4
-#endif
 
 struct XMLAttribute {
   U32 Name, Value, Length;
@@ -4026,7 +4570,7 @@ void XMLModel(Mixer& m){
 int contextModel2() {
   static ContextMap cm(MEM*32, 9);
   static RunContextMap rcm7(MEM), rcm9(MEM), rcm10(MEM);
-  static Mixer m(952, 3095+768+1024*(level>7), 7+(level>7));
+  static Mixer m(960, 3095+768+(1024+256)*(level>7), 7+2*(level>7));
   static U32 cxt[16];  // order 0-11 contexts
   static Filetype ft2,filetype=DEFAULT;
   static int size=0;  // bytes remaining in block
@@ -4092,7 +4636,7 @@ int contextModel2() {
     dmcModel(m);
     nestModel(m);
     XMLModel(m);
-    if (filetype==EXE) exeModel(m);
+    if (filetype==EXE || level>7) exeModel(m);
   }
 
 
@@ -4650,44 +5194,44 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
     if (wavi) {
       int p=i-wavi;
       if (p==4) wavsize=bswap(buf0);
-			else if (p==8){
-				wavtype=(buf0==0x57415645)?1:(buf0==0x7366626B)?2:0;
-				if (!wavtype) wavi=0;
-			}
-			else if (wavtype){
-				if (wavtype==1) {
-					if (p==16 && (buf1!=0x666d7420 || bswap(buf0)!=16)) wavi=0;
-					else if (p==22) wavch=bswap(buf0)&0xffff;
-					else if (p==34) wavbps=bswap(buf0)&0xffff;
-					else if (p==40+wavm && buf1!=0x64617461) wavm+=bswap(buf0)+8,wavi=(wavm>0xfffff?0:wavi);
-					else if (p==40+wavm) {
-						int wavd=bswap(buf0);
-						if ((wavch==1 || wavch==2) && (wavbps==8 || wavbps==16) && wavd>0 && wavsize>=wavd+36
-							 && wavd%((wavbps/8)*wavch)==0) AUD_DET(AUDIO,wavi-3,44+wavm,wavd,wavch+wavbps/4-3);
-						wavi=0;
-					}
-				}
-				else{
-					if ((p==16 && buf1!=0x4C495354) || (p==20 && buf0!=0x494E464F))
-						wavi=0;
-					else if (p>20 && buf1==0x4C495354 && (wavi*=(buf0!=0))){
-						wavlen = bswap(buf0);
-						wavlist = i;
-					}
-					else if (wavlist){
-						p=i-wavlist;
-						if (p==8 && (buf1!=0x73647461 || buf0!=0x736D706C))
-							wavi=0;
-						else if (p==12){
-							int wavd = bswap(buf0);
-							if (wavd && (wavd+12)==wavlen)
-								AUD_DET(AUDIO,wavi-3,(12+wavlist-(wavi-3)+1)&~1,wavd,1+16/4-3);
-							wavi=0;
-						}
-					}
-				}
-			}
-		}
+      else if (p==8){
+        wavtype=(buf0==0x57415645)?1:(buf0==0x7366626B)?2:0;
+        if (!wavtype) wavi=0;
+      }
+      else if (wavtype){
+        if (wavtype==1) {
+          if (p==16 && (buf1!=0x666d7420 || bswap(buf0)!=16)) wavi=0;
+          else if (p==22) wavch=bswap(buf0)&0xffff;
+          else if (p==34) wavbps=bswap(buf0)&0xffff;
+          else if (p==40+wavm && buf1!=0x64617461) wavm+=bswap(buf0)+8,wavi=(wavm>0xfffff?0:wavi);
+          else if (p==40+wavm) {
+            int wavd=bswap(buf0);
+            if ((wavch==1 || wavch==2) && (wavbps==8 || wavbps==16) && wavd>0 && wavsize>=wavd+36
+               && wavd%((wavbps/8)*wavch)==0) AUD_DET(AUDIO,wavi-3,44+wavm,wavd,wavch+wavbps/4-3);
+            wavi=0;
+          }
+        }
+        else{
+          if ((p==16 && buf1!=0x4C495354) || (p==20 && buf0!=0x494E464F))
+            wavi=0;
+          else if (p>20 && buf1==0x4C495354 && (wavi*=(buf0!=0))){
+            wavlen = bswap(buf0);
+            wavlist = i;
+          }
+          else if (wavlist){
+            p=i-wavlist;
+            if (p==8 && (buf1!=0x73647461 || buf0!=0x736D706C))
+              wavi=0;
+            else if (p==12){
+              int wavd = bswap(buf0);
+              if (wavd && (wavd+12)==wavlen)
+                AUD_DET(AUDIO,wavi-3,(12+wavlist-(wavi-3)+1)&~1,wavd,1+16/4-3);
+              wavi=0;
+            }
+          }
+        }
+      }
+    }
 
     // Detect .aiff file header
     if (buf0==0x464f524d) aiff=i,aiffs=0; // FORM
