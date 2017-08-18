@@ -3245,7 +3245,7 @@ int jpegModel(Mixer& m) {
   static Array<U32> cxt(N);  // context hashes
   static Array<U8*> cp(N);  // context pointers
   static StateMap sm[N];
-  static Mixer m1(32, 2050, 3);
+  static Mixer m1(N+1, 2050, 3);
   static APM a1(0x8000), a2(0x20000);
 
 
@@ -3534,7 +3534,7 @@ U32 execxt(int i, int x=0) {
   if (i) prefix+=4*pref(i--);
   if (i) prefix+=pref(i--);
   if (i) opcode+=buf(i--);
-  if (i) modrm+=buf(i)&0xc7;
+  if (i) modrm+=buf(i--)&0xc7;
   if (i&&((modrm&0x07)==4)&&(modrm<0xc0)) sib=buf(i)&0xc0;
   return prefix|opcode<<4|modrm<<12|x<<20|sib<<(28-6);
 }
@@ -3728,8 +3728,8 @@ struct Instruction {
 
 #define CodeShift            3
 #define CodeMask             (0xFF<<CodeShift)
-#define ClearCodeMask        (-1)^CodeMask
-#define PrefixMask           (1<<CodeShift)-1
+#define ClearCodeMask        ((-1)^CodeMask)
+#define PrefixMask           ((1<<CodeShift)-1)
 #define OperandSizeOverride  (0x01<<(8+CodeShift))
 #define MultiByteOpcode      (0x02<<(8+CodeShift))
 #define PrefixREX            (0x04<<(8+CodeShift))
@@ -3737,11 +3737,11 @@ struct Instruction {
 #define Prefix3A             (0x10<<(8+CodeShift))
 #define HasExtraFlags        (0x20<<(8+CodeShift))
 #define HasModRM             (0x40<<(8+CodeShift))
-#define ModRMShift           7+8+CodeShift
-#define SIBScaleShift        ModRMShift+8-6
+#define ModRMShift           (7+8+CodeShift)
+#define SIBScaleShift        (ModRMShift+8-6)
 #define RegDWordDisplacement (0x01<<(8+SIBScaleShift))
 #define AddressMode          (0x02<<(8+SIBScaleShift))
-#define TypeShift            2+8+SIBScaleShift
+#define TypeShift            (2+8+SIBScaleShift)
 #define ModRM_mod            0xC0
 #define ModRM_reg            0x38
 #define ModRM_rm             0x07
@@ -4043,10 +4043,11 @@ bool exeModel(Mixer& m, U32 *Status = NULL) {
     if (Status)
         *Status = Context;
 
-    U32 mask=0, count0=0;
+    int mask=0, count0=0;
     for (int i=0, j=0; i<N; ++i){
       if (i) mask=mask*2+(buf(i-1)==0), count0+=mask&1;
-      cm.set(hash(execxt(j=(i<4)?i+1:5+(i-4)*2, buf(1)*(j>6)), ((1<<N)|mask)*(count0*N/2>=i), (0x08|(blpos&0x07))*(i<4) ));
+      j=(i<4)?i+1:5+(i-4)*2;
+      cm.set(hash(execxt(j, buf(1)*(j>6)), ((1<<N)|mask)*(count0*N/2>=i), (0x08|(blpos&0x07))*(i<4) ));
     }
 
     mask = PrefixMask|(0xFC<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A;
