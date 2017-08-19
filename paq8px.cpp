@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on August 18, 2017
+/* paq8px file compressor/archiver.  Released on August 19, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -2216,8 +2216,7 @@ void recordModel(Mixer& m) {
   co.mix(m);
   cp.mix(m);
 
-  if (level>7)
-    m.set( (rlen[0]>2)*( (bpos<<7)|mxCtx ), 1024 );
+  m.set( (rlen[0]>2)*( (bpos<<7)|mxCtx ), 1024 );
 }
 
 
@@ -3182,7 +3181,7 @@ int jpegModel(Mixer& m) {
               }
               lcp[i]=x;
             }
-            if (zzu[zz]*zzv[zz]){
+            if ((zzu[zz]*zzv[zz])!=0){
               const int zz2=zpos[zzu[zz]+8*zzv[zz]-9];
               x=(images[idx].qtab[q+zz2]+1)*cbuf2[cpos_dc+zz2]/(images[idx].qtab[q+zz]+1);
               lcp[4]=(x<0?-1:+1)*(ilog(abs(x)+1)+(x!=0?17:0));
@@ -3307,9 +3306,9 @@ int jpegModel(Mixer& m) {
   int p;
  switch(hbcount)
   {
-   case 0: for (int i=0; i<N; ++i){ cp[i]=t[cxt[i]]+1, m1.add(p=stretch(sm[i].p(*cp[i]))); if (level>7) m.add(p>>2);} break;
-   case 1: { int hc=1+(huffcode&1)*3; for (int i=0; i<N; ++i){ cp[i]+=hc, m1.add(p=stretch(sm[i].p(*cp[i]))); if (level>7) m.add(p>>2); }} break;
-   default: { int hc=1+(huffcode&1); for (int i=0; i<N; ++i){ cp[i]+=hc, m1.add(p=stretch(sm[i].p(*cp[i]))); if (level>7) m.add(p>>2); }} break;
+   case 0: for (int i=0; i<N; ++i){ cp[i]=t[cxt[i]]+1, m1.add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>2);} break;
+   case 1: { int hc=1+(huffcode&1)*3; for (int i=0; i<N; ++i){ cp[i]+=hc, m1.add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>2); }} break;
+   default: { int hc=1+(huffcode&1); for (int i=0; i<N; ++i){ cp[i]+=hc, m1.add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>2); }} break;
   }
   
   m1.set(firstcol, 2);
@@ -3524,20 +3523,8 @@ void wavModel(Mixer& m, int info) {
 
   Changelog:
   (18/08/2017) v98: Initial release by Márcio Pais
+  (19/08/2017) v99: Bug fixes, tables for instruction categorization, other small improvements
 */
-
-inline int pref(int i) { return (buf(i)==0x0f)+2*(buf(i)==0x66)+3*(buf(i)==0x67); }
-
-// Get context at buf(i) relevant to parsing 32-bit x86 code
-U32 execxt(int i, int x=0) {
-  int prefix=0, opcode=0, modrm=0, sib=0;
-  if (i) prefix+=4*pref(i--);
-  if (i) prefix+=pref(i--);
-  if (i) opcode+=buf(i--);
-  if (i) modrm+=buf(i--)&0xc7;
-  if (i&&((modrm&0x07)==4)&&(modrm<0xc0)) sib=buf(i)&0xc0;
-  return prefix|opcode<<4|modrm<<12|x<<20|sib<<(28-6);
-}
 
 // formats
 enum InstructionFormat {
@@ -3613,7 +3600,7 @@ const static U8 Table2[256] = {
   fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   , // f
 };
 
-// 3 byte opcodes $0F38XX
+// 3 byte opcodes 0F38XX
 const static U8 Table3_38[256] = {
   // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
   fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   , // 0
@@ -3634,7 +3621,7 @@ const static U8 Table3_38[256] = {
   fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // f
 };
 
-// 3 byte opcodes $0F3AXX
+// 3 byte opcodes 0F3AXX
 const static U8 Table3_3A[256] = {
   // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
   fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI, // 0
@@ -3666,6 +3653,324 @@ const static U8 TableX[32] = {
 
 const static U8 InvalidX64Ops[19] = {0x06, 0x07, 0x16, 0x17, 0x1E, 0x1F, 0x27, 0x2F, 0x37, 0x3F, 0x60, 0x61, 0x62, 0x82, 0x9A, 0xD4, 0xD5, 0xD6, 0xEA,};
 const static U8 X64Prefixes[8] = {0x26, 0x2E, 0x36, 0x3E, 0x9B, 0xF0, 0xF2, 0xF3,};
+
+enum InstructionCategory {
+  OP_INVALID              =  0,
+  OP_PREFIX_SEGREG        =  1,
+  OP_PREFIX               =  2,
+  OP_PREFIX_X87FPU        =  3,
+  OP_GEN_DATAMOV          =  4,
+  OP_GEN_STACK            =  5,
+  OP_GEN_CONVERSION       =  6,
+  OP_GEN_ARITH_DECIMAL    =  7,
+  OP_GEN_ARITH_BINARY     =  8,
+  OP_GEN_LOGICAL          =  9,
+  OP_GEN_SHF_ROT          = 10,
+  OP_GEN_BIT              = 11,
+  OP_GEN_BRANCH           = 12,
+  OP_GEN_BRANCH_COND      = 13,
+  OP_GEN_BREAK            = 14,
+  OP_GEN_STRING           = 15,
+  OP_GEN_INOUT            = 16,
+  OP_GEN_FLAG_CONTROL     = 17,
+  OP_GEN_SEGREG           = 18,
+  OP_GEN_CONTROL          = 19,
+  OP_SYSTEM               = 20,
+  OP_X87_DATAMOV          = 21,
+  OP_X87_ARITH            = 22,
+  OP_X87_COMPARISON       = 23,
+  OP_X87_TRANSCENDENTAL   = 24,
+  OP_X87_LOAD_CONSTANT    = 25,
+  OP_X87_CONTROL          = 26,
+  OP_X87_CONVERSION       = 27,
+  OP_STATE_MANAGEMENT     = 28,
+  OP_MMX                  = 29,
+  OP_SSE                  = 30,
+  OP_SSE_DATAMOV          = 31,
+};
+
+const static U8 TypeOp1[256] = {
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //03
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_STACK         , //07
+  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , //0B
+  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_STACK         , OP_PREFIX            , //0F
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //13
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_STACK         , //17
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //1B
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_STACK         , //1F
+  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , //23
+  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //27
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //2B
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //2F
+  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , //33
+  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //37
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //3B
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //3F
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //43
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //47
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //4B
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //4F
+  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //53
+  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //57
+  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //5B
+  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //5F
+  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_BREAK         , OP_GEN_CONVERSION    , //63
+  OP_PREFIX_SEGREG     , OP_PREFIX_SEGREG     , OP_PREFIX            , OP_PREFIX            , //67
+  OP_GEN_STACK         , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_ARITH_BINARY  , //6B
+  OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , //6F
+  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //73
+  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //77
+  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //7B
+  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //7F
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //83
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //87
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //8B
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_STACK         , //8F
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //93
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //97
+  OP_GEN_CONVERSION    , OP_GEN_CONVERSION    , OP_GEN_BRANCH        , OP_PREFIX_X87FPU     , //9B
+  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //9F
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //A3
+  OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , //A7
+  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_STRING        , OP_GEN_STRING        , //AB
+  OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , //AF
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //B3
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //B7
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //BB
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //BF
+  OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_GEN_BRANCH        , OP_GEN_BRANCH        , //C3
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //C7
+  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_BRANCH        , OP_GEN_BRANCH        , //CB
+  OP_GEN_BREAK         , OP_GEN_BREAK         , OP_GEN_BREAK         , OP_GEN_BREAK         , //CF
+  OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , //D3
+  OP_GEN_ARITH_DECIMAL , OP_GEN_ARITH_DECIMAL , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //D7
+  OP_X87_ARITH         , OP_X87_DATAMOV       , OP_X87_ARITH         , OP_X87_DATAMOV       , //DB
+  OP_X87_ARITH         , OP_X87_DATAMOV       , OP_X87_ARITH         , OP_X87_DATAMOV       , //DF
+  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //E3
+  OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , //E7
+  OP_GEN_BRANCH        , OP_GEN_BRANCH        , OP_GEN_BRANCH        , OP_GEN_BRANCH        , //EB
+  OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , //EF
+  OP_PREFIX            , OP_GEN_BREAK         , OP_PREFIX            , OP_PREFIX            , //F3
+  OP_SYSTEM            , OP_GEN_FLAG_CONTROL  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //F7
+  OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , //FB
+  OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , OP_GEN_ARITH_BINARY  , OP_GEN_BRANCH        , //FF
+};
+
+const static U8 TypeOp2[256] = {
+  OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //03
+  OP_INVALID           , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //07
+  OP_SYSTEM            , OP_SYSTEM            , OP_INVALID           , OP_GEN_CONTROL       , //0B
+  OP_INVALID           , OP_GEN_CONTROL       , OP_INVALID           , OP_INVALID           , //0F
+  OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , //13
+  OP_SSE               , OP_SSE               , OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , //17
+  OP_SSE               , OP_GEN_CONTROL       , OP_GEN_CONTROL       , OP_GEN_CONTROL       , //1B
+  OP_GEN_CONTROL       , OP_GEN_CONTROL       , OP_GEN_CONTROL       , OP_GEN_CONTROL       , //1F
+  OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //23
+  OP_SYSTEM            , OP_INVALID           , OP_SYSTEM            , OP_INVALID           , //27
+  OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , OP_SSE               , OP_SSE               , //2B
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //2F
+  OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //33
+  OP_SYSTEM            , OP_SYSTEM            , OP_INVALID           , OP_INVALID           , //37
+  OP_PREFIX            , OP_INVALID           , OP_PREFIX            , OP_INVALID           , //3B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //3F
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //43
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //47
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //4B
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //4F
+  OP_SSE_DATAMOV       , OP_SSE               , OP_SSE               , OP_SSE               , //53
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //57
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //5B
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //5F
+  OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //63
+  OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //67
+  OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //6B
+  OP_INVALID           , OP_INVALID           , OP_MMX               , OP_MMX               , //6F
+  OP_SSE               , OP_MMX               , OP_MMX               , OP_MMX               , //73
+  OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //77
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7B
+  OP_INVALID           , OP_INVALID           , OP_MMX               , OP_MMX               , //7F
+  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //83
+  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //87
+  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //8B
+  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //8F
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //93
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //97
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //9B
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //9F
+  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_CONTROL       , OP_GEN_BIT           , //A3
+  OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_INVALID           , OP_INVALID           , //A7
+  OP_GEN_STACK         , OP_GEN_STACK         , OP_SYSTEM            , OP_GEN_BIT           , //AB
+  OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_STATE_MANAGEMENT  , OP_GEN_ARITH_BINARY  , //AF
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_BIT           , //B3
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_CONVERSION    , OP_GEN_CONVERSION    , //B7
+  OP_INVALID           , OP_GEN_CONTROL       , OP_GEN_BIT           , OP_GEN_BIT           , //BB
+  OP_GEN_BIT           , OP_GEN_BIT           , OP_GEN_CONVERSION    , OP_GEN_CONVERSION    , //BF
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_SSE               , OP_SSE               , //C3
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_GEN_DATAMOV       , //C7
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //CB
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //CF
+  OP_INVALID           , OP_MMX               , OP_MMX               , OP_MMX               , //D3
+  OP_SSE               , OP_MMX               , OP_INVALID           , OP_SSE               , //D7
+  OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //DB
+  OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //DF
+  OP_SSE               , OP_MMX               , OP_SSE               , OP_MMX               , //E3
+  OP_SSE               , OP_MMX               , OP_INVALID           , OP_SSE               , //E7
+  OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //EB
+  OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //EF
+  OP_INVALID           , OP_MMX               , OP_MMX               , OP_MMX               , //F3
+  OP_SSE               , OP_MMX               , OP_SSE               , OP_SSE               , //F7
+  OP_MMX               , OP_MMX               , OP_MMX               , OP_SSE               , //FB
+  OP_MMX               , OP_MMX               , OP_MMX               , OP_INVALID           , //FF
+};
+
+const static U8 TypeOp3_38[256] = {
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //03
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //07
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //0B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //0F
+  OP_SSE               , OP_INVALID           , OP_INVALID           , OP_INVALID           , //13
+  OP_SSE               , OP_SSE               , OP_INVALID           , OP_SSE               , //17
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //1B
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_INVALID           , //1F
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //23
+  OP_SSE               , OP_SSE               , OP_INVALID           , OP_INVALID           , //27
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //2B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //2F
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //33
+  OP_SSE               , OP_SSE               , OP_INVALID           , OP_SSE               , //37
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //3B
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //3F
+  OP_SSE               , OP_SSE               , OP_INVALID           , OP_INVALID           , //43
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //47
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4F
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //53
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //57
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5F
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //63
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //67
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6F
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //73
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //77
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7F
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //83
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //87
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8F
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //93
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //97
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9F
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A3
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A7
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AB
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AF
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B3
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B7
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BB
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BF
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C3
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C7
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CB
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CF
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D3
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D7
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DB
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DF
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E3
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E7
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EB
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EF
+  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_INVALID           , OP_INVALID           , //F3
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //F7
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FB
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FF
+};
+
+const static U8 TypeOp3_3A[256] = {
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //03
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //07
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //0B
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //0F
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //13
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //17
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //1B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //1F
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_INVALID           , //23
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //27
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //2B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //2F
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //33
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //37
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //3B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //3F
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_INVALID           , //43
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //47
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4F
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //53
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //57
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5F
+  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //63
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //67
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6F
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //73
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //77
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7F
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //83
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //87
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8F
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //93
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //97
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9B
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9F
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A3
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A7
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AB
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AF
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B3
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B7
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BB
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BF
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C3
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C7
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CB
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CF
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D3
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D7
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DB
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DF
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E3
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E7
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EB
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EF
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //F3
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //F7
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FB
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FF
+};
+
+const static U8 TypeOpX[32] = {
+  // escapes for F6
+  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_ARITH_BINARY  ,
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  ,
+  // escapes for F7
+  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_ARITH_BINARY  ,
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  ,
+  // escapes for FE
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_INVALID           , OP_INVALID           ,
+  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           ,
+  // escapes for FF
+  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_BRANCH        , OP_GEN_BRANCH        ,
+  OP_GEN_BRANCH        , OP_GEN_BRANCH        , OP_GEN_STACK         , OP_INVALID           ,
+};
 
 enum Prefixes {
   ES_OVERRIDE = 0x26,
@@ -3722,7 +4027,7 @@ struct OpCache {
 
 struct Instruction {
   U32 Data;
-  U8 Prefix, Code, ModRM, SIB, REX, Flags, BytesRead;
+  U8 Prefix, Code, ModRM, SIB, REX, Flags, BytesRead, Size, Category;
   bool MustCheckREX, Decoding, o16, imm8;
 };
 
@@ -3742,6 +4047,8 @@ struct Instruction {
 #define RegDWordDisplacement (0x01<<(8+SIBScaleShift))
 #define AddressMode          (0x02<<(8+SIBScaleShift))
 #define TypeShift            (2+8+SIBScaleShift)
+#define CategoryShift        5
+#define CategoryMask         ((1<<CategoryShift)-1)
 #define ModRM_mod            0xC0
 #define ModRM_reg            0x38
 #define ModRM_rm             0x07
@@ -3844,6 +4151,7 @@ void CheckFlags(Instruction &Op, ExeState &State){
 
 void ReadFlags(Instruction &Op, ExeState &State){
   Op.Flags = Table1[Op.Code];
+  Op.Category = TypeOp1[Op.Code];
   CheckFlags(Op, State);
 }
 
@@ -3867,18 +4175,36 @@ inline U32 OpN(OpCache &Cache, U32 n){
   return Cache.Op[ (Cache.Index-n)&(CacheSize-1) ];
 }
 
-bool exeModel(Mixer& m, U32 *Status = NULL) {
-  const int N=max(2,level);
-  static ContextMap cm(MEM*2, N+8);
+inline U32 OpNCateg(U32 &Mask, U32 n){
+  return ((Mask>>(CategoryShift*(n-1)))&CategoryMask);
+}
+
+inline int pref(int i) { return (buf(i)==0x0f)+2*(buf(i)==0x66)+3*(buf(i)==0x67); }
+
+// Get context at buf(i) relevant to parsing 32-bit x86 code
+U32 execxt(int i, int x=0) {
+  int prefix=0, opcode=0, modrm=0, sib=0;
+  if (i) prefix+=4*pref(i--);
+  if (i) prefix+=pref(i--);
+  if (i) opcode+=buf(i--);
+  if (i) modrm+=buf(i--)&(ModRM_mod|ModRM_rm);
+  if (i&&((modrm&ModRM_rm)==4)&&(modrm<ModRM_mod)) sib=buf(i)&SIB_scale;
+  return prefix|opcode<<4|modrm<<12|x<<20|sib<<(28-6);
+}
+
+bool exeModel(Mixer& m, bool Forced = false, U32 *Status = NULL) {
+  const int N1=8, N2=9;
+  static ContextMap cm(MEM*2, N1+N2);
   static OpCache Cache;
+  static U32 StateBH[256];
   static ExeState pState = Start, State = Start;
   static Instruction Op;
-  static U32 TotalOps = 0, OpMask = 0, Context = 0;
+  static U32 TotalOps = 0, OpMask = 0, OpCategMask = 0, Context = 0;
   static bool Valid = false;
   if (!bpos) {
     pState = State;
     U8 B = (U8)c4;
-    
+    Op.Size++;
     switch (State){
       case Start: case Error: {
         // previous code may have just been a REX prefix
@@ -3898,7 +4224,7 @@ bool exeModel(Mixer& m, U32 *Status = NULL) {
         if (!Skip){
           Op.Code = B;
           // possible REX prefix?
-          Op.MustCheckREX = ((Op.Code&0xF0)==0x40) && (!(Op.Decoding && (Op.Data&PrefixMask==1)));
+          Op.MustCheckREX = ((Op.Code&0xF0)==0x40) && (!(Op.Decoding && ((Op.Data&PrefixMask)==1)));
           
           // check prefixes
           Op.Prefix = (Op.Code==ES_OVERRIDE || Op.Code==CS_OVERRIDE || Op.Code==SS_OVERRIDE || Op.Code==DS_OVERRIDE) + //invalid in x64
@@ -3912,6 +4238,8 @@ bool exeModel(Mixer& m, U32 *Status = NULL) {
           if (!Op.Decoding){
             TotalOps+=(Op.Data!=0)-(Cache.Index && Cache.Op[ Cache.Index&(CacheSize-1) ]!=0);
             OpMask = (OpMask<<1)|(State!=Error);
+            OpCategMask = (OpCategMask<<CategoryShift)|(Op.Category);
+            Op.Size = 0;
             
             Cache.Op[ Cache.Index&(CacheSize-1) ] = Op.Data;
             Cache.Index++;
@@ -3920,6 +4248,7 @@ bool exeModel(Mixer& m, U32 *Status = NULL) {
               Op.Data = Op.Code<<CodeShift;
             else{
               Op.Data = Op.Prefix;
+              Op.Category = TypeOp1[Op.Code];
               Op.Decoding = true;
               break;
             }
@@ -3933,12 +4262,13 @@ bool exeModel(Mixer& m, U32 *Status = NULL) {
             }
             else{
               Op.Data = Op.Prefix;
+              Op.Category = TypeOp1[Op.Code];
               break;
             }
           }
         }
 
-        if (Op.o16=(Op.Code==OP_OSIZE))
+        if ((Op.o16=(Op.Code==OP_OSIZE)))
           State = Pref_Op_Size;
         else if (Op.Code==OP_2BYTE)
           State = Pref_MultiByte_Op;
@@ -3964,6 +4294,7 @@ bool exeModel(Mixer& m, U32 *Status = NULL) {
         else{
           ApplyCodeAndSetFlag(Op);
           Op.Flags = Table2[Op.Code];
+          Op.Category = TypeOp2[Op.Code];
           CheckFlags(Op, State);
         }
         break;
@@ -3978,7 +4309,9 @@ bool exeModel(Mixer& m, U32 *Status = NULL) {
         Op.SIB = 0;
         if (Op.Flags==fMEXTRA){
           Op.Data|=HasExtraFlags;
-          Op.Flags = TableX[ ((Op.ModRM>>3)&0x07) | ((Op.Code&0x01)<<3) | ((Op.Code&0x08)<<1) ];
+          int i = ((Op.ModRM>>3)&0x07) | ((Op.Code&0x01)<<3) | ((Op.Code&0x08)<<1);
+          Op.Flags = TableX[i];
+          Op.Category = TypeOpX[i];
           if (Op.Flags==fERR){
             memset(&Op, 0, sizeof(Instruction));
             State = Error;
@@ -3999,7 +4332,14 @@ bool exeModel(Mixer& m, U32 *Status = NULL) {
       case Read_OP3_38 : case Read_OP3_3A : {
         Op.Code = B;
         ApplyCodeAndSetFlag(Op, Prefix38<<(State-Read_OP3_38));
-        Op.Flags = (State==Read_OP3_38)?Table3_38[Op.Code]:Table3_3A[Op.Code];
+        if (State==Read_OP3_38){
+          Op.Flags = Table3_38[Op.Code];
+          Op.Category = TypeOp3_38[Op.Code];
+        }
+        else{
+          Op.Flags = Table3_3A[Op.Code];
+          Op.Category = TypeOp3_3A[Op.Code];
+        }
         CheckFlags(Op, State);
         break;
       }
@@ -4039,48 +4379,70 @@ bool exeModel(Mixer& m, U32 *Status = NULL) {
     }
 
     Valid = (TotalOps>2*MinRequired) && ((OpMask&((1<<MinRequired)-1))==((1<<MinRequired)-1));
-    Context = State+16*Op.BytesRead+16*(Op.REX & REX_w);
-    if (Status)
-        *Status = Context;
+    Context = State+16*Op.BytesRead+128*(Op.REX & REX_w);
+    StateBH[Context] = (StateBH[Context]<<8)|B;
 
-    int mask=0, count0=0;
-    for (int i=0, j=0; i<N; ++i){
-      if (i) mask=mask*2+(buf(i-1)==0), count0+=mask&1;
-      j=(i<4)?i+1:5+(i-4)*2;
-      cm.set(hash(execxt(j, buf(1)*(j>6)), ((1<<N)|mask)*(count0*N/2>=i), (0x08|(blpos&0x07))*(i<4) ));
+    if (Valid || Forced){
+      int mask=0, count0=0;
+      for (int i=0, j=0; i<N1; ++i){
+        if (i) mask=mask*2+(buf(i-1)==0), count0+=mask&1;
+        j=(i<4)?i+1:5+(i-4)*(2+(i>6));
+        cm.set(hash(execxt(j, buf(1)*(j>6)), ((1<<N1)|mask)*(count0*N1/2>=i), (0x08|(blpos&0x07))*(i<4)));
+      }
+
+      mask = PrefixMask|(0xF8<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A;
+      cm.set(hash(OpN(Cache, 1)&(mask|RegDWordDisplacement|AddressMode), State+16*Op.BytesRead, Op.Data&mask, Op.REX, Op.Category));
+      
+      mask = 0x04|(0xFE<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A|((ModRM_mod|ModRM_reg)<<ModRMShift);
+      cm.set(hash(
+        OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, OpN(Cache, 3)&mask,
+        Context+256*((Op.ModRM & ModRM_mod)==ModRM_mod),
+        Op.Data&((mask|PrefixREX)^(ModRM_mod<<ModRMShift))
+      ));
+      
+      mask = 0x04|CodeMask;
+      cm.set(hash(OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, OpN(Cache, 3)&mask, OpN(Cache, 4)&mask, (Op.Data&mask)|(State<<11)|(Op.BytesRead<<15)));
+
+      mask = 0x04|(0xFC<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A;
+      cm.set(hash(State+16*Op.BytesRead, Op.Data&mask, Op.Category*8 + (OpMask&0x07), Op.Flags, ((Op.SIB & SIB_base)==5)*4+((Op.ModRM & ModRM_reg)==ModRM_reg)*2+((Op.ModRM & ModRM_mod)==0)));
+
+      mask = PrefixMask|CodeMask|OperandSizeOverride|MultiByteOpcode|PrefixREX|Prefix38|Prefix3A|HasExtraFlags|HasModRM|((ModRM_mod|ModRM_rm)<<ModRMShift);
+      cm.set(hash(Op.Data&mask, State+16*Op.BytesRead, Op.Flags));
+
+      mask = PrefixMask|CodeMask|OperandSizeOverride|MultiByteOpcode|Prefix38|Prefix3A|HasExtraFlags|HasModRM;
+      cm.set(hash(OpN(Cache, 1)&mask, State, Op.BytesRead*2+((Op.REX&REX_w)>0), Op.Data&((U16)(mask^OperandSizeOverride))));
+
+      mask = 0x04|(0xFE<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A|(ModRM_reg<<ModRMShift);
+      cm.set(hash(OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, State+16*Op.BytesRead, Op.Data&(mask|PrefixMask|CodeMask)));
+
+      cm.set(State+16*Op.BytesRead);
+
+      cm.set(hash(
+        (0x100|B)*(Op.BytesRead>0),
+        State+16*pState+256*Op.BytesRead,
+        ((Op.Flags&fMODE)==fAM)*16 + (Op.REX & REX_w) + (Op.o16)*4 + ((Op.Code & 0xFE)==0xE8)*2 + ((Op.Data & MultiByteOpcode)!=0 && (Op.Code & 0xF0)==0x80)
+      ));
     }
-
-    mask = PrefixMask|(0xFC<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A;
-    cm.set(hash(OpN(Cache, 1)&(mask|RegDWordDisplacement|AddressMode), State+16*Op.BytesRead, Op.Data&mask, Op.REX ));
-    
-    mask = 0x04|(0xFE<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A|((ModRM_mod|ModRM_reg)<<ModRMShift);
-    cm.set(hash(
-      OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, OpN(Cache, 3)&mask,
-      Context+256*((Op.ModRM&ModRM_mod)==ModRM_mod),
-      Op.Data&((mask|PrefixREX)^(ModRM_mod<<ModRMShift))
-    ));
-    
-    mask = 0x04|CodeMask;
-    cm.set(hash(OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, OpN(Cache, 3)&mask, OpN(Cache, 4)&mask, (Op.Data&mask)|(State<<11)|(Op.BytesRead<<15)));
-
-    mask = 0x04|(0xFC<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A;
-    cm.set(hash(State+16*Op.BytesRead, Op.Data&mask, OpMask&0x07, Op.Flags, ((Op.SIB & SIB_base)==5)*4+((Op.ModRM & ModRM_reg)==ModRM_reg)*2+((Op.ModRM & ModRM_mod)==0)));
-
-    mask = PrefixMask|CodeMask|OperandSizeOverride|MultiByteOpcode|PrefixREX|Prefix38|Prefix3A|HasExtraFlags|HasModRM|((ModRM_mod|ModRM_rm)<<ModRMShift);
-    cm.set(hash(Op.Data&mask, State+16*Op.BytesRead, Op.Flags));
-
-    mask = PrefixMask|CodeMask|OperandSizeOverride|MultiByteOpcode|Prefix38|Prefix3A|HasExtraFlags|HasModRM;
-    cm.set(hash(OpN(Cache, 1)&mask, State, Op.BytesRead*2+((Op.REX&REX_w)>0), Op.Data&((U16)(mask^OperandSizeOverride))));
-
-    mask = 0x04|(0xFE<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A|(ModRM_reg<<ModRMShift);
-    cm.set(hash(OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, State+16*Op.BytesRead, Op.Data&(mask|PrefixMask|CodeMask)));
-
-    cm.set(State+16*Op.BytesRead);
   }
 
-  cm.mix(m);
-  if (level>7)
-    m.set(Context, 256);
+  if (Valid || Forced)
+    cm.mix(m);
+  else{
+      for (int i=0; i<N1+N2; ++i)
+        m.add(0);
+  }
+  U8 s = ((StateBH[Context]>>(28-bpos))&0x08) |
+         ((StateBH[Context]>>(21-bpos))&0x04) |
+         ((StateBH[Context]>>(14-bpos))&0x02) |
+         ((StateBH[Context]>>( 7-bpos))&0x01) |
+         ((Op.Category==OP_GEN_BRANCH)<<4)|
+         (((c0&((1<<bpos)-1))==0)<<5);
+
+  m.set(Context*4+(s>>4), 1024);
+  m.set(State*64+bpos*8+(Op.BytesRead>0)*4+(s>>4), 1024);
+
+  if (Status)
+    *Status = Valid|(Context<<1)|(s<<9);
   return Valid;
 }
 
@@ -4571,7 +4933,7 @@ void XMLModel(Mixer& m){
 int contextModel2() {
   static ContextMap cm(MEM*32, 9);
   static RunContextMap rcm7(MEM), rcm9(MEM), rcm10(MEM);
-  static Mixer m(960, 3095+768+(1024+256)*(level>7), 7+2*(level>7));
+  static Mixer m(968, 3095+768+1024+1024*2, 7+3);
   static U32 cxt[16];  // order 0-11 contexts
   static Filetype ft2,filetype=DEFAULT;
   static int size=0;  // bytes remaining in block
@@ -4637,7 +4999,7 @@ int contextModel2() {
     dmcModel(m);
     nestModel(m);
     XMLModel(m);
-    if (filetype==EXE || level>7) exeModel(m);
+    exeModel(m, filetype==EXE);
   }
 
 
