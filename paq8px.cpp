@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on August 19, 2017
+/* paq8px file compressor/archiver.  Released on August 23, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -919,6 +919,10 @@ typedef enum {DEFAULT, JPEG, HDR, IMAGE1, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, 
 int level=DEFAULT_OPTION;  // Compression level 0 to 8
 #define MEM (0x10000<<level)
 int y=0;  // Last bit, 0 or 1, set by encoder
+
+struct ModelStats{
+  U32 XML, x86_64, Record;
+};
 
 // Global context set by Predictor and available to all models.
 
@@ -2098,7 +2102,7 @@ inline unsigned ilog2(unsigned x) {
 
 #define SPACE 0x20
 
-void recordModel(Mixer& m) {
+void recordModel(Mixer& m, ModelStats *Stats = NULL) {
   static int cpos1[256] , cpos2[256], cpos3[256], cpos4[256];
   static int wpos1[0x10000]; // buf(1..2) -> last position
   static int rlen[3] = {2,3,4}; // run length and 2 candidates
@@ -2217,6 +2221,8 @@ void recordModel(Mixer& m) {
   cp.mix(m);
 
   m.set( (rlen[0]>2)*( (bpos<<7)|mxCtx ), 1024 );
+  if (Stats)
+    (*Stats).Record = (min(0xFFFF,rlen[0])<<16)|min(0xFFFF,col);
 }
 
 
@@ -2302,7 +2308,7 @@ void im24bitModel(Mixer& m, int w, int alpha=0) {
   const int SC=0x20000;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm10(512);
-  static ContextMap cm(MEM*4, 13+7);
+  static ContextMap cm(MEM*4, 13+9);
   static int color = -1;
   static int stride  = 3;
   static int ctx, padding, lastPos, x = 0;
@@ -2328,7 +2334,7 @@ void im24bitModel(Mixer& m, int w, int alpha=0) {
     const int logvar=ilog(var);
     int i=color<<5;
 
-    int WWW=buf(3*stride), WW=buf(2*stride), W=buf(stride), NW=buf(w+stride), N=buf(w), NE=buf(w-stride), NNW=buf(w*2+stride), NN=buf(w*2), NNE=buf(w*2-stride), NNN=buf(w*3);
+    int WWW=buf(3*stride), WW=buf(2*stride), W=buf(stride), NW=buf(w+stride), N=buf(w), NE=buf(w-stride),  NEE=buf(w-2*stride), NNW=buf(w*2+stride), NN=buf(w*2), NNE=buf(w*2-stride), NNEE=buf((w-stride)*2), NNN=buf(w*3);
     ctx = (min(color,stride)<<9)|((abs(W-N)>8)<<8)|((W>N)<<7)|((W>NW)<<6)|((abs(N-NW)>8)<<5)|((N>NW)<<4)|((abs(N-NE)>8)<<3)|((N>NE)<<2)|((W>WW)<<1)|(N>NN);
     cm.set(hash( (N+1)>>1, LogMeanDiffQt(N,Clip(NN*2-NNN)) ));
     cm.set(hash( (W+1)>>1, LogMeanDiffQt(W,Clip(WW*2-WWW)) ));
@@ -2337,6 +2343,8 @@ void im24bitModel(Mixer& m, int w, int alpha=0) {
     cm.set(hash( (WWW+W+4)/8, Clip(W*3-WW*3+WWW)>>1 ));
     cm.set(hash(++i, (W+Clip(NE*3-NNE*3+buf(w*3-stride)))/4 ));
     cm.set(hash(++i, Clip((-buf(4*stride)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buf(w*3-stride)*4-buf(w*4-stride),N,NE,buf(w-2*stride),buf(w-3*stride)))/5)/4 ));
+    cm.set( Clip(NEE+N-NNEE) );
+    cm.set( Clip(NN+W-NNW) );
 
     cm.set(hash(++i, buf(stride)));
     cm.set(hash(++i, buf(stride), buf(1)));
@@ -4192,7 +4200,7 @@ U32 execxt(int i, int x=0) {
   return prefix|opcode<<4|modrm<<12|x<<20|sib<<(28-6);
 }
 
-bool exeModel(Mixer& m, bool Forced = false, U32 *Status = NULL) {
+bool exeModel(Mixer& m, bool Forced = false, ModelStats *Stats = NULL) {
   const int N1=8, N2=9;
   static ContextMap cm(MEM*2, N1+N2);
   static OpCache Cache;
@@ -4379,7 +4387,7 @@ bool exeModel(Mixer& m, bool Forced = false, U32 *Status = NULL) {
     }
 
     Valid = (TotalOps>2*MinRequired) && ((OpMask&((1<<MinRequired)-1))==((1<<MinRequired)-1));
-    Context = State+16*Op.BytesRead+128*(Op.REX & REX_w);
+    Context = State+16*Op.BytesRead+16*(Op.REX & REX_w);
     StateBH[Context] = (StateBH[Context]<<8)|B;
 
     if (Valid || Forced){
@@ -4441,8 +4449,8 @@ bool exeModel(Mixer& m, bool Forced = false, U32 *Status = NULL) {
   m.set(Context*4+(s>>4), 1024);
   m.set(State*64+bpos*8+(Op.BytesRead>0)*4+(s>>4), 1024);
 
-  if (Status)
-    *Status = Valid|(Context<<1)|(s<<9);
+  if (Stats)
+    (*Stats).x86_64 = Valid|(Context<<1)|(s<<9);
   return Valid;
 }
 
@@ -4751,9 +4759,10 @@ enum XMLState {
     (*Content).Type |= ISBN; \
 } 
 
-void XMLModel(Mixer& m){
+void XMLModel(Mixer& m, ModelStats *Stats = NULL){
   static ContextMap cm(MEM/4, 4);
   static XMLTagCache Cache;
+  static U32 StateBH[8];
   static XMLState State = None, pState = None;
   static U32 c8, WhiteSpaceRun = 0, pWSRun = 0, IndentTab = 0, IndentStep = 2, LineEnding = 2;
 
@@ -4918,12 +4927,20 @@ void XMLModel(Mixer& m){
       }
     }
 
+    StateBH[State] = (StateBH[State]<<8)|B;
     pTag = &Cache.Tags[ (Cache.Index-1)&(CacheSize-1) ];
     cm.set(hash(State, (*Tag).Level, pState*2+(*Tag).EndTag, (*Tag).Name));
     cm.set(hash((*pTag).Name, State*2+(*pTag).EndTag, (*pTag).Content.Type, (*Tag).Content.Type));
     cm.set(hash(State*2+(*Tag).EndTag, (*Tag).Name, (*Tag).Content.Type, c4&0xE0FF));
   }
   cm.mix(m);
+  U8 s = ((StateBH[State]>>(28-bpos))&0x08) |
+         ((StateBH[State]>>(21-bpos))&0x04) |
+         ((StateBH[State]>>(14-bpos))&0x02) |
+         ((StateBH[State]>>( 7-bpos))&0x01) |
+         ((bpos)<<4);
+  if (Stats)
+    (*Stats).XML = (s<<3)|State;
 }
 
 //////////////////////////// contextModel //////////////////////
@@ -4938,6 +4955,7 @@ int contextModel2() {
   static Filetype ft2,filetype=DEFAULT;
   static int size=0;  // bytes remaining in block
   static int info=0;  // image width or audio type
+  static ModelStats stats;
 
   // Parse filetype and size
   if (bpos==0) {
@@ -4993,13 +5011,13 @@ int contextModel2() {
   if (level>=4 && filetype!=IMAGE1) {
     sparseModel(m,ismatch,order);
     distanceModel(m);
-    recordModel(m);
+    recordModel(m, &stats);
     wordModel(m, filetype);
     indirectModel(m);
     dmcModel(m);
     nestModel(m);
-    XMLModel(m);
-    exeModel(m, filetype==EXE);
+    XMLModel(m, &stats);
+    exeModel(m, filetype==EXE, &stats);
   }
 
 
@@ -5710,12 +5728,12 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
       if (!pgmcomment && pgm_ptr) {
         int s=0;
         if (pgmn==7) {
-           if ((buf1&0xffff)==0x5749 && buf0==0x44544820) pgm_ptr=0, pamatr=1; // WIDTH
-           if ((buf1&0xffffff)==0x484549 && buf0==0x47485420) pgm_ptr=0, pamatr=2; // HEIGHT
-           if ((buf1&0xffffff)==0x4d4158 && buf0==0x56414c20) pgm_ptr=0, pamatr=3; // MAXVAL
-           if ((buf1&0xffff)==0x4445 && buf0==0x50544820) pgm_ptr=0, pamatr=4; // DEPTH
-           if ((buf2&0xff)==0x54 && buf1==0x55504c54 && buf0==0x59504520) pgm_ptr=0, pamatr=5; // TUPLTYPE
-           if ((buf1&0xffffff)==0x454e44 && buf0==0x4844520a) pgm_ptr=0, pamatr=6; // ENDHDR
+           if ((buf1&0xdfdf)==0x5749 && (buf0&0xdfdfdfff)==0x44544820) pgm_ptr=0, pamatr=1; // WIDTH
+           if ((buf1&0xdfdfdf)==0x484549 && (buf0&0xdfdfdfff)==0x47485420) pgm_ptr=0, pamatr=2; // HEIGHT
+           if ((buf1&0xdfdfdf)==0x4d4158 && (buf0&0xdfdfdfff)==0x56414c20) pgm_ptr=0, pamatr=3; // MAXVAL
+           if ((buf1&0xdfdf)==0x4445 && (buf0&0xdfdfdfff)==0x50544820) pgm_ptr=0, pamatr=4; // DEPTH
+           if ((buf2&0xdf)==0x54 && (buf1&0xdfdfdfdf)==0x55504c54 && (buf0&0xdfdfdfff)==0x59504520) pgm_ptr=0, pamatr=5; // TUPLTYPE
+           if ((buf1&0xdfdfdf)==0x454e44 && (buf0&0xdfdfdfff)==0x4844520a) pgm_ptr=0, pamatr=6; // ENDHDR
            if (c==0x0a) {
              if (pamatr==0) pgm=0;
              else if (pamatr<5) s=pamatr;
