@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on August 23, 2017
+/* paq8px file compressor/archiver.  Released on August 26, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -2803,7 +2803,7 @@ int jpegModel(Mixer& m) {
   if (bpos && !images[idx].jpeg) return images[idx].next_jpeg;
   if (!bpos && images[idx].app>0){
     --images[idx].app;
-    if (idx<MaxEmbeddedLevel && buf(4)==FF && buf(3)==SOI && buf(2)==FF && (buf(1)==0xC0 || buf(1)==0xC4 || (buf(1)>=0xDB && buf(1)<=0xFE)) )
+    if (idx<MaxEmbeddedLevel && buf(4)==FF && buf(3)==SOI && buf(2)==FF && ((buf(1)&0xFE)==0xC0 || buf(1)==0xC4 || (buf(1)>=0xDB && buf(1)<=0xFE)) )
       memset(&images[++idx], 0, sizeof(JPEGImage));
   }
   if (images[idx].app>0) return images[idx].next_jpeg;
@@ -2845,7 +2845,7 @@ int jpegModel(Mixer& m) {
     // FF 00 is interpreted as FF (to distinguish from RSTx, DNL, EOI).
 
     // Detect JPEG (SOI followed by a valid marker)
-    if (!images[idx].jpeg && buf(4)==FF && buf(3)==SOI && buf(2)==FF && (buf(1)==0xC0 || buf(1)==0xC4 || (buf(1)>=0xDB && buf(1)<=0xFE)) ){
+    if (!images[idx].jpeg && buf(4)==FF && buf(3)==SOI && buf(2)==FF && ((buf(1)&0xFE)==0xC0 || buf(1)==0xC4 || (buf(1)>=0xDB && buf(1)<=0xFE)) ){      
       images[idx].jpeg=1;
       images[idx].offset = pos-4;
       images[idx].sos=images[idx].sof=images[idx].htsize=images[idx].data=0, images[idx].app=(buf(1)>>4==0xE)*2;
@@ -2865,7 +2865,7 @@ int jpegModel(Mixer& m) {
     if (!images[idx].jpeg) return images[idx].next_jpeg;
 
     // Detect APPx, COM or other markers, so we can skip them
-    if (!images[idx].data && !images[idx].app && buf(4)==FF && (((buf(3)>=0xC1) && (buf(3)<=0xCF) && (buf(3)!=DHT)) || ((buf(3)>=0xDC) && (buf(3)<=0xFE)))){
+    if (!images[idx].data && !images[idx].app && buf(4)==FF && (((buf(3)>0xC1) && (buf(3)<=0xCF) && (buf(3)!=DHT)) || ((buf(3)>=0xDC) && (buf(3)<=0xFE)))){
       images[idx].app=buf(2)*256+buf(1)+2;
       if (idx>0)
         jassert( pos + images[idx].app < images[idx].offset + images[idx-1].app );
@@ -2878,7 +2878,7 @@ int jpegModel(Mixer& m) {
         images[idx].sos=pos-5, images[idx].data=images[idx].sos+len+2, images[idx].jpeg=2;
     }
     if (buf(4)==FF && buf(3)==DHT && images[idx].htsize<8) images[idx].ht[images[idx].htsize++]=pos-4;
-    if (buf(4)==FF && buf(3)==SOF0) images[idx].sof=pos-4;
+    if (buf(4)==FF && (buf(3)&0xFE)==SOF0) images[idx].sof=pos-4;
 
     // Parse Quantizazion tables
     if (buf(4)==FF && buf(3)==DQT)
@@ -5556,11 +5556,11 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
     // Detect end by any code other than RST0-RST7 (FF D9-D7) or
     // a byte stuff (FF 00).
 
-    if (!soi && i>=3 && (buf0&0xffffff00)==0xffd8ff00 && ((U8)buf0==0xC0 || (U8)buf0==0xC4 || ((U8)buf0>=0xDB && (U8)buf0<=0xFE) )) soi=i, app=i+2, sos=sof=0;
+    if (!soi && i>=3 && (buf0&0xffffff00)==0xffd8ff00 && ((buf0&0xFE)==0xC0 || (U8)buf0==0xC4 || ((U8)buf0>=0xDB && (U8)buf0<=0xFE) )) soi=i, app=i+2, sos=sof=0;
     if (soi) {
       if (app==i && (buf0>>24)==0xff &&
-         ((buf0>>16)&0xff)>0xc0 && ((buf0>>16)&0xff)<0xff) app=i+(buf0&0xffff)+2;
-      if (app<i && (buf1&0xff)==0xff && (buf0&0xff0000ff)==0xc0000008) sof=i;
+         ((buf0>>16)&0xff)>0xc1 && ((buf0>>16)&0xff)<0xff) app=i+(buf0&0xffff)+2;
+      if (app<i && (buf1&0xff)==0xff && (buf0&0xfe0000ff)==0xc0000008) sof=i;
       if (sof && sof>soi && i-sof<0x1000 && (buf0&0xffff)==0xffda) {
         sos=i;
         if (type!=JPEG) return fseek(in, start+soi-3, SEEK_SET), JPEG;
