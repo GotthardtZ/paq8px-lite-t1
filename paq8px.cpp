@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on August 26, 2017
+/* paq8px file compressor/archiver.  Released on August 29, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -2354,8 +2354,8 @@ void im24bitModel(Mixer& m, int w, int alpha=0) {
     cm.set(hash(++i, buf(w), buf(1), buf(2)));
     cm.set(hash(++i, (buf(stride)+buf(w))>>3, buf(1)>>4, buf(2)>>4));
     cm.set(hash(++i, buf(1), buf(2)));
-    cm.set(hash(++i, buf(stride), buf(1)-buf(4)));
-    cm.set(hash(++i, buf(stride)+buf(1)-buf(4)));
+    cm.set(hash(++i, buf(stride), buf(1)-buf(stride)));
+    cm.set(hash(++i, buf(stride)+buf(1)-buf(stride)));
     cm.set(hash(++i, buf(w), buf(1)-buf(w+1)));
     cm.set(hash(++i, buf(w)+buf(1)-buf(w+1)));
     cm.set(hash(++i, mean, logvar>>4));
@@ -2385,8 +2385,8 @@ void im24bitModel(Mixer& m, int w, int alpha=0) {
   static int col=0;
   if (++col>=stride*8) col=0;
   m.set( ctx, 2048 );
-  m.set(col, stride*8);
-  m.set((buf(1+(alpha && !color))>>4)*stride+(x%stride), stride*16);
+  m.set(col, 32);
+  m.set((buf(1+(alpha && !color))>>4)*stride+(x%stride), 64);
   m.set(c0, 256);
 }
 
@@ -2572,8 +2572,8 @@ void im8bitModel(Mixer& m, int w, int gray = 0) {
 
 void im1bitModel(Mixer& m, int w) {
   static U32 r0, r1, r2, r3;  // last 4 rows, bit 8 is over current pixel
-  static Array<U8> t(0x10200);  // model: cxt -> state
-  const int N=4+1+1+1+1+1;  // number of contexts
+  static Array<U8> t(0x23000);  // model: cxt -> state
+  const int N=11;  // number of contexts
   static int cxt[N];  // contexts
   static StateMap sm[N];
 
@@ -2589,12 +2589,15 @@ void im1bitModel(Mixer& m, int w) {
   r3+=r3+((buf(w+w+w-1)>>(7-bpos))&1);
   cxt[0]=(r0&0x7)|(r1>>4&0x38)|(r2>>3&0xc0);
   cxt[1]=0x100+((r0&1)|(r1>>4&0x3e)|(r2>>2&0x40)|(r3>>1&0x80));
-  cxt[2]=0x200+((r0&0x3f)^(r1&0x3ffe)^(r2<<2&0x7f00)^(r3<<5&0xf800));
-  cxt[3]=0x400+((r0&0x3e)^(r1&0x0c0c)^(r2&0xc800));
-  cxt[4]=0x800+(((r1&0x30)^(r3&0x0c0c))|(r0&3));
-  cxt[5]=0x1000+((!r0&0x444)|(r1&0xC0C)|(r2&0xAE3)|(r3&0x51C));
-  cxt[6]=0x2000+((r0&1)|(r1>>4&0x1d)|(r2>>1&0x60)|(r3&0xC0));
-  cxt[7]=0x4000+((r0>>4&0x2AC)|(r1&0xA4)|(r2&0x349)|(!r3&0x14D));
+  cxt[2]=0x200+((r0&1)|(r1>>4&0x1d)|(r2>>1&0x60)|(r3&0xC0));
+  cxt[3]=0x300+(y|((r0<<1)&4)|((r1>>1)&0xF0)|((r2>>3)&0xA));
+  cxt[4]=0x400+((r0>>4&0x2AC)|(r1&0xA4)|(r2&0x349)|(!(r3&0x14D)));
+  cxt[5]=0x800+(y|((r1>>4)&0xE)|((r2>>1)&0x70)|((r3<<2)&0x380));
+  cxt[6]=0xC00+(((r1&0x30)^(r3&0x0c0c))|(r0&3));
+  cxt[7]=0x1000+((!(r0&0x444))|(r1&0xC0C)|(r2&0xAE3)|(r3&0x51C));
+  cxt[8]=0x2000+((r0&7)|((r1>>1)&0x3F8)|((r2<<5)&0xC00));
+  cxt[9]=0x3000+((r0&0x3f)^(r1&0x3ffe)^(r2<<2&0x7f00)^(r3<<5&0xf800));
+  cxt[10]=0x13000+((r0&0x3e)^(r1&0x0c0c)^(r2&0xc800));
 
   // predict
   for (i=0; i<N; ++i) m.add(stretch(sm[i].p(t[cxt[i]])));
@@ -2620,8 +2623,8 @@ void dump(const char* msg, int p) {
 
 #define finish(success){ \
   int length = pos - images[idx].offset; \
-  if (success && idx && pos-lastPos==1) \
-    printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bEmbedded JPEG at offset %d, size: %d bytes, level %d\nCompressing... ", images[idx].offset-pos+blpos, length, idx), fflush(stdout); \
+  /*if (success && idx && pos-lastPos==1)*/ \
+    /*printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bEmbedded JPEG at offset %d, size: %d bytes, level %d\nCompressing... ", images[idx].offset-pos+blpos, length, idx), fflush(stdout);*/ \
   memset(&images[idx], 0, sizeof(JPEGImage)); \
   mcusize=0,dqt_state=-1; \
   idx-=(idx>0); \
@@ -4201,13 +4204,13 @@ U32 execxt(int i, int x=0) {
 }
 
 bool exeModel(Mixer& m, bool Forced = false, ModelStats *Stats = NULL) {
-  const int N1=8, N2=9;
+  const int N1=8, N2=10;
   static ContextMap cm(MEM*2, N1+N2);
   static OpCache Cache;
   static U32 StateBH[256];
   static ExeState pState = Start, State = Start;
   static Instruction Op;
-  static U32 TotalOps = 0, OpMask = 0, OpCategMask = 0, Context = 0;
+  static U32 TotalOps = 0, OpMask = 0, OpCategMask = 0, Context = 0, BrkPoint = 0, BrkCtx = 0;
   static bool Valid = false;
   if (!bpos) {
     pState = State;
@@ -4258,6 +4261,7 @@ bool exeModel(Mixer& m, bool Forced = false, ModelStats *Stats = NULL) {
               Op.Data = Op.Prefix;
               Op.Category = TypeOp1[Op.Code];
               Op.Decoding = true;
+              BrkCtx = hash(1+(BrkPoint = 0), Op.Prefix, OpCategMask&CategoryMask);
               break;
             }
           }
@@ -4271,6 +4275,7 @@ bool exeModel(Mixer& m, bool Forced = false, ModelStats *Stats = NULL) {
             else{
               Op.Data = Op.Prefix;
               Op.Category = TypeOp1[Op.Code];
+              BrkCtx = hash(1+(BrkPoint = 1), Op.Prefix, OpCategMask&CategoryMask);
               break;
             }
           }
@@ -4282,13 +4287,14 @@ bool exeModel(Mixer& m, bool Forced = false, ModelStats *Stats = NULL) {
           State = Pref_MultiByte_Op;
         else
           ReadFlags(Op, State);
-
+        BrkCtx = hash(1+(BrkPoint = 2), State, Op.Code, (OpCategMask&CategoryMask), OpN(Cache,1)&((ModRM_mod|ModRM_reg|ModRM_rm)<<ModRMShift));
         break;
       }
       case Pref_Op_Size : {
         Op.Code = B;
         ApplyCodeAndSetFlag(Op, OperandSizeOverride);
         ReadFlags(Op, State);
+        BrkCtx = hash(1+(BrkPoint = 3), State);
         break;
       }
       case Pref_MultiByte_Op : {
@@ -4305,10 +4311,12 @@ bool exeModel(Mixer& m, bool Forced = false, ModelStats *Stats = NULL) {
           Op.Category = TypeOp2[Op.Code];
           CheckFlags(Op, State);
         }
+        BrkCtx = hash(1+(BrkPoint = 4), State);
         break;
       }
       case ParseFlags : {
         ProcessFlags(Op, State);
+        BrkCtx = hash(1+(BrkPoint = 5), State);
         break;
       }
       case ExtraFlags : case ReadModRM : {
@@ -4323,18 +4331,22 @@ bool exeModel(Mixer& m, bool Forced = false, ModelStats *Stats = NULL) {
           if (Op.Flags==fERR){
             memset(&Op, 0, sizeof(Instruction));
             State = Error;
+            BrkCtx = hash(1+(BrkPoint = 6), State);
             break;
           }
           ProcessFlags(Op, State);
+          BrkCtx = hash(1+(BrkPoint = 7), State);
           break;
         }
 
         if ((Op.ModRM & ModRM_rm)==4 && Op.ModRM<ModRM_mod){
           State = ReadSIB;
+          BrkCtx = hash(1+(BrkPoint = 8), State);
           break;
         }
 
         ProcessModRM(Op, State);
+        BrkCtx = hash(1+(BrkPoint = 9), State, Op.Code );
         break;
       }
       case Read_OP3_38 : case Read_OP3_3A : {
@@ -4349,12 +4361,14 @@ bool exeModel(Mixer& m, bool Forced = false, ModelStats *Stats = NULL) {
           Op.Category = TypeOp3_3A[Op.Code];
         }
         CheckFlags(Op, State);
+        BrkCtx = hash(1+(BrkPoint = 10), State);
         break;
       }
       case ReadSIB : {
         Op.SIB = B;
         Op.Data|=((Op.SIB & SIB_scale)<<SIBScaleShift);
         ProcessModRM(Op, State);
+        BrkCtx = hash(1+(BrkPoint = 11), State, Op.SIB&SIB_scale);
         break;
       }
       case Read8 : case Read16 : case Read32 : {
@@ -4363,10 +4377,12 @@ bool exeModel(Mixer& m, bool Forced = false, ModelStats *Stats = NULL) {
           Op.imm8 = false;
           State = Start;
         }
+        BrkCtx = hash(1+(BrkPoint = 12), State, Op.Flags&fMODE, Op.BytesRead, ((Op.BytesRead>1)?(buf(Op.BytesRead)<<8):0)|((Op.BytesRead)?B:0) );
         break;
       }
       case Read8_ModRM : {
         ProcessMode(Op, State);
+        BrkCtx = hash(1+(BrkPoint = 13), State);
         break;
       }
       case Read16_f : {
@@ -4374,6 +4390,7 @@ bool exeModel(Mixer& m, bool Forced = false, ModelStats *Stats = NULL) {
           Op.BytesRead = 0;
           ProcessFlags2(Op, State);
         }
+        BrkCtx = hash(1+(BrkPoint = 14), State);
         break;
       }
       case Read32_ModRM : {
@@ -4382,6 +4399,7 @@ bool exeModel(Mixer& m, bool Forced = false, ModelStats *Stats = NULL) {
           Op.BytesRead = 0;
           ProcessMode(Op, State);
         }
+        BrkCtx = hash(1+(BrkPoint = 15), State);
         break;
       }
     }
@@ -4397,6 +4415,8 @@ bool exeModel(Mixer& m, bool Forced = false, ModelStats *Stats = NULL) {
         j=(i<4)?i+1:5+(i-4)*(2+(i>6));
         cm.set(hash(execxt(j, buf(1)*(j>6)), ((1<<N1)|mask)*(count0*N1/2>=i), (0x08|(blpos&0x07))*(i<4)));
       }
+      
+      cm.set(BrkCtx);
 
       mask = PrefixMask|(0xF8<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A;
       cm.set(hash(OpN(Cache, 1)&(mask|RegDWordDisplacement|AddressMode), State+16*Op.BytesRead, Op.Data&mask, Op.REX, Op.Category));
@@ -4448,6 +4468,7 @@ bool exeModel(Mixer& m, bool Forced = false, ModelStats *Stats = NULL) {
 
   m.set(Context*4+(s>>4), 1024);
   m.set(State*64+bpos*8+(Op.BytesRead>0)*4+(s>>4), 1024);
+  m.set( (BrkCtx&0x1FF)|((s&0x20)<<4), 1024 );
 
   if (Stats)
     (*Stats).x86_64 = Valid|(Context<<1)|(s<<9);
@@ -4950,7 +4971,7 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
 int contextModel2() {
   static ContextMap cm(MEM*32, 9);
   static RunContextMap rcm7(MEM), rcm9(MEM), rcm10(MEM);
-  static Mixer m(968, 3095+768+1024+1024*2, 7+3);
+  static Mixer m(976, 3095+768+(1024+1024*3)*(level>=4), 7+4*(level>=4));
   static U32 cxt[16];  // order 0-11 contexts
   static Filetype ft2,filetype=DEFAULT;
   static int size=0;  // bytes remaining in block
@@ -5432,7 +5453,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
   int wavi=0,wavsize=0,wavch=0,wavbps=0,wavm=0,wavtype=0,wavlen=0,wavlist=0;  // For WAVE detection
   int aiff=0,aiffm=0,aiffs=0;  // For AIFF detection
   int s3mi=0,s3mno=0,s3mni=0;  // For S3M detection
-  int bmp=0,imgbpp=0,bmpx=0,bmpy=0,bmpof=0,hdrless=0;  // For BMP detection
+  int bmp=0,imgbpp=0,bmpx=0,bmpy=0,bmpof=0,bmps=0,hdrless=0;  // For BMP detection
   int rgbi=0,rgbx=0,rgby=0;  // For RGB detection
   int tga=0,tgax=0,tgay=0,tgaz=0,tgat=0;  // For TGA detection
   int pgm=0,pgmcomment=0,pgmw=0,pgmh=0,pgm_ptr=0,pgmc=0,pgmn=0,pamatr=0,pamd=0;  // For PBM, PGM, PPM, PAM detection
@@ -5441,7 +5462,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
   U32 cdf=0;
   unsigned char zbuf[32], zin[1<<16], zout[1<<16]; // For ZLIB stream detection
   int zbufpos=0,zzippos=-1;
-  int pdfim=0,pdfimw=0,pdfimh=0,pdfimb=0,pdfimp=0;
+  int pdfim=0,pdfimw=0,pdfimh=0,pdfimb=0,pdfgray=0,pdfimp=0;
   int b64s=0,b64i=0,b64line=0,b64nl=0; // For base64 detection
   int gif=0,gifa=0,gifi=0,gifw=0,gifc=0,gifb=0; // For GIF detection
 
@@ -5502,10 +5523,12 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
       }
       if (streamLength>0) {
         info=0;
-        if (pdfimw>0 && pdfimh>0) {
-          if (pdfimb==8 && (int)strm.total_out==pdfimw*pdfimh) info=(8<<24)+pdfimw;
+        if (pdfimw>0 && pdfimw<0x1000000 && pdfimh>0) {
+          if (pdfimb==8 && (int)strm.total_out==pdfimw*pdfimh) info=(((pdfgray<<7)|8)<<24)+pdfimw;
           if (pdfimb==8 && (int)strm.total_out==pdfimw*pdfimh*3) info=(24<<24)+pdfimw*3;
           if (pdfimb==4 && (int)strm.total_out==((pdfimw+1)/2)*pdfimh) info=(8<<24)+((pdfimw+1)/2);
+          if (pdfimb==1 && (int)strm.total_out==((pdfimw+7)/8)*pdfimh) info=(1<<24)+((pdfimw+7)/8);
+          pdfgray=0;
         }
         return fseek(in, start+i-31, SEEK_SET),detd=streamLength,ZLIB;
       }
@@ -5516,7 +5539,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
                 +(int)zbuf[(zbufpos+28)%32]+((int)zbuf[(zbufpos+29)%32])*256;
         if (nlen<256 && i+30+nlen<n) zzippos=i+30+nlen;
     }
-    if (i-pdfimp>1024) pdfim=pdfimw=pdfimh=pdfimb=0;
+    if (i-pdfimp>1024) pdfim=pdfimw=pdfimh=pdfimb=pdfgray=0;
     if (pdfim>1 && !(isspace(c) || isdigit(c))) pdfim=1;
     if (pdfim==2 && isdigit(c)) pdfimw=pdfimw*10+(c-'0');
     if (pdfim==3 && isdigit(c)) pdfimh=pdfimh*10+(c-'0');
@@ -5526,6 +5549,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
     if (pdfim && (buf1&0xffffff)==0x2f4865 && buf0==0x69676874) pdfim=3,pdfimh=0; // /Height
     if (pdfim && buf3==0x42697473 && buf2==0x50657243 && buf1==0x6f6d706f
        && buf0==0x6e656e74 && zbuf[(zbufpos+15)%32]=='/') pdfim=4,pdfimb=0; // /BitsPerComponent
+    if (pdfim && (buf2&0xFFFFFF)==0x2F4465 && buf1==0x76696365 && buf0==0x47726179) pdfgray=1; // /DeviceGray
 
     // CD sectors detection (mode 1 and mode 2 form 1+2 - 2352 bytes)
     if (buf1==0x00ffffff && buf0==0xffffffff && !cdi) cdi=i,cda=-1,cdm=0;
@@ -5679,42 +5703,50 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
     }
 
     // Detect .bmp image
-    if ( !bmp && (((buf0&0xffff)==16973) || (!(buf0&0xFFFFFF) && ((buf0>>24)==0x28))) ) //possible 'BM' or headerless DIB
-      imgbpp=bmpx=bmpy=0,hdrless=!(U8)buf0,bmpof=hdrless*68,bmp=i-hdrless*16;
-    if (bmp) {
+    if ( !(bmp || hdrless) && (((buf0&0xffff)==16973) || (!(buf0&0xFFFFFF) && ((buf0>>24)==0x28))) ) //possible 'BM' or headerless DIB
+      imgbpp=bmpx=bmpy=0,hdrless=!(U8)buf0,bmpof=hdrless*54,bmp=i-hdrless*16;
+    if (bmp || hdrless) {
       const int p=i-bmp;
       if (p==12) bmpof=bswap(buf0);
-      else if (p==16 && buf0!=0x28000000) bmp=0; //BITMAPINFOHEADER (0x28)
-      else if (p==20) bmpx=bswap(buf0),bmp=((bmpx==0||bmpx>0x30000)?0:bmp); //width
-      else if (p==24) bmpy=abs((int)bswap(buf0)),bmp=((bmpy==0||bmpy>0x10000)?0:bmp); //height
-      else if (p==27) imgbpp=c,bmp=((imgbpp!=1 && imgbpp!=8 && imgbpp!=24 && imgbpp!=32)?0:bmp);
-      else if ((p==31) && buf0) bmp=0;
+      else if (p==16 && buf0!=0x28000000) bmp=hdrless=0; //BITMAPINFOHEADER (0x28)
+      else if (p==20) bmpx=bswap(buf0),bmp=((bmpx==0||bmpx>0x30000)?(hdrless=0):bmp); //width
+      else if (p==24) bmpy=abs((int)bswap(buf0)),bmp=((bmpy==0||bmpy>0x10000)?(hdrless=0):bmp); //height
+      else if (p==27) imgbpp=c,bmp=((imgbpp!=1 && imgbpp!=8 && imgbpp!=24 && imgbpp!=32)?(hdrless=0):bmp);
+      else if ((p==31) && buf0) bmp=hdrless=0;
+      else if (p==36) bmps=bswap(buf0);
       // check number of colors in palette (4 bytes), must be 0 (default) or <= 1<<bpp.
       // also check if image is too small, since it might not be worth it to use the image models
       else if (p==48){
-        if ( (!buf0 || ((bswap(buf0)<=(U32)(1<<imgbpp)) && (imgbpp<=8))) && (((bmpx*bmpy*imgbpp)>>3)>512) ) {
+        if ( (!buf0 || ((bswap(buf0)<=(U32)(1<<imgbpp)) && (imgbpp<=8))) && (((bmpx*bmpy*imgbpp)>>3)>64) ) {
           // possible icon/cursor?
-          if (hdrless && (bmpx*2==bmpy) && (
-            (bmpx==8)   || (bmpx==10) || (bmpx==14) || (bmpx==16) || (bmpx==20) ||
-            (bmpx==22)  || (bmpx==24) || (bmpx==32) || (bmpx==40) || (bmpx==48) ||
-            (bmpx==60)  || (bmpx==64) || (bmpx==72) || (bmpx==80) || (bmpx==96) ||
-            (bmpx==128) || (bmpx==256)
-          ))
+          if (hdrless && (bmpx*2==bmpy) && imgbpp>1 &&
+             (
+              (bmps>0 && bmps==( (bmpx*bmpy*(imgbpp+1))>>4 )) ||
+              ((!bmps || bmps<((bmpx*bmpy*imgbpp)>>3)) && (
+               (bmpx==8)   || (bmpx==10) || (bmpx==14) || (bmpx==16) || (bmpx==20) ||
+               (bmpx==22)  || (bmpx==24) || (bmpx==32) || (bmpx==40) || (bmpx==48) ||
+               (bmpx==60)  || (bmpx==64) || (bmpx==72) || (bmpx==80) || (bmpx==96) ||
+               (bmpx==128) || (bmpx==256)
+              ))
+             )
+          )
             bmpy=bmpx;
 
           // if DIB and not 24bpp, we must calculate the data offset based on BPP or num. of entries in color palette
           if (hdrless && (imgbpp<=24))
-            bmpof+=(buf0)?bswap(buf0)*4:4<<imgbpp;
+            bmpof+=((buf0)?bswap(buf0)*4:4<<imgbpp);
+          bmpof+=(bmp-1)*(bmp<1);
 
-          if (imgbpp==1) IMG_DET(IMAGE1,bmp-1,bmpof,(((bmpx-1)>>5)+1)*4,bmpy);
+          if (hdrless && bmps && bmps<((bmpx*bmpy*imgbpp)>>3)) { /*Guard against erroneous DIB detections*/ }
+          else if (imgbpp==1) IMG_DET(IMAGE1,max(0,bmp-1),bmpof,(((bmpx-1)>>5)+1)*4,bmpy);
           else if (imgbpp==8){
             fseek(in, start+bmp+53, SEEK_SET);
-            IMG_DET( (IsGrayscalePalette(in, (buf0)?bswap(buf0):1<<imgbpp, 1))?IMAGE8GRAY:IMAGE8,bmp-1,bmpof,(bmpx+3)&-4,bmpy);
+            IMG_DET( (IsGrayscalePalette(in, (buf0)?bswap(buf0):1<<imgbpp, 1))?IMAGE8GRAY:IMAGE8,max(0,bmp-1),bmpof,(bmpx+3)&-4,bmpy);
           }
-          else if (imgbpp==24) IMG_DET(IMAGE24,bmp-1,bmpof,((bmpx*3)+3)&-4,bmpy);
-          else if (imgbpp==32) IMG_DET(IMAGE32,bmp-1,bmpof,bmpx*4,bmpy);
+          else if (imgbpp==24) IMG_DET(IMAGE24,max(0,bmp-1),bmpof,((bmpx*3)+3)&-4,bmpy);
+          else if (imgbpp==32) IMG_DET(IMAGE32,max(0,bmp-1),bmpof,bmpx*4,bmpy);
         }
-        bmp=0;
+        bmp=hdrless=0;
       }
     }
 
@@ -6653,8 +6685,8 @@ void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int i
       if (type==CD || type==ZLIB || type==BASE64 || type==GIF) {
         en.compress(type), en.compress(tmpsize>>24), en.compress(tmpsize>>16);
         en.compress(tmpsize>>8), en.compress(tmpsize);
-        if (type==ZLIB && info>0) {// PDF image
-          Filetype type2=(info>>24)==24?IMAGE24:IMAGE8;
+        if (type==ZLIB && info) {// PDF image
+          Filetype type2=(info>>24)==24?IMAGE24:((info<0)?IMAGE8GRAY:((info>>24)>1?IMAGE8:IMAGE1));
           int hdrsize=7+5*fgetc(tmp);
           rewind(tmp);
           direct_encode_block(HDR, tmp, hdrsize, en);
@@ -6715,7 +6747,7 @@ void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it, float
       if (type==AUDIO) printf(" (%s)", audiotypes[info%4]);
       else if (type==IMAGE1 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32) printf(" (width: %d)", info);
       else if (type==CD) printf(" (m%d/f%d)", info==1?1:2, info!=3?1:2);
-      else if (type==ZLIB && info>0) printf(" (image)");
+      else if (type==ZLIB && info) printf(" (image %dbpp%s)",(info>>24)&0x7F,(info<0)?" grayscale":"");
       printf("\n");
       transform_encode_block(type, in, len, en, info, blstr, it, p1, p2, begin);
       p1=p2;
@@ -7126,9 +7158,11 @@ int main(int argc, char** argv) {
       assert(p);
       fsize[i]=atol(p);
       assert(fsize[i]>=0);
-      while (*p!='\t') ++p; *(p++)='\0';
+      while (*p!='\t') ++p;
+      *(p++)='\0';
       fname[i]=mode==COMPRESS?q:p;
-      while (*p!='\n') ++p; *(p++)='\0';
+      while (*p!='\n') ++p;
+      *(p++)='\0';
       if (mode==COMPRESS) { while (*q!='\n') ++q; *(q++)='\0'; }
     }
 
