@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on August 29, 2017
+/* paq8px file compressor/archiver.  Released on August 31, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -726,7 +726,7 @@ public:
 // a.pop_back() decreases size by 1, does not free memory.
 // Copy and assignment are not supported.
 
-template <class T> class Array {
+template <class T, const int Align=16> class Array {
 private:
   int n;     // user size
   int reserved;  // actual size
@@ -757,7 +757,7 @@ private:
   Array& operator=(const Array&);
 };
 
-template<class T> void Array<T>::resize(int i) {
+template<class T, const int Align> void Array<T,Align>::resize(int i) {
   if (i<=reserved) {
     n=i;
     return;
@@ -775,9 +775,9 @@ template<class T> void Array<T>::resize(int i) {
   }
 }
 
-template<class T> void Array<T>::create(int i) {
+template<class T, const int Align> void Array<T,Align>::create(int i) {
   n=reserved=i;
-  if (i<=0) {
+  if (i<=0 || Align&(Align-1)) {
     data=0;
     ptr=0;
     return;
@@ -790,14 +790,14 @@ template<class T> void Array<T>::create(int i) {
   if( sz>(1<<24) ) {
     r = ptr = VAlloc<char>( sz );
   } else {
-    int flag = (sz>=16);
-    ptr = (char*)calloc( sz+(flag?15:0), 1 );
+    int flag = (sz>=Align);
+    ptr = (char*)calloc( sz+(flag?(Align-1):0), 1 );
     if( !ptr ) quit("Out of memory");
     r = ptr;
-    if( flag ) { r = ptr + 15; r -= (r-((char*)0))&15; }
+    if( flag ) { r = ptr + (Align-1); r -= (r-((char*)0))&(Align-1); }
   }
 
-  data = (T*)r; //ptr;
+  data = (T*)r;
 #else
   ptr = (char*)calloc(sz, 1);
   if (!ptr) quit("Out of memory");
@@ -805,7 +805,7 @@ template<class T> void Array<T>::create(int i) {
 #endif
 }
 
-template<class T> Array<T>::~Array() {
+template<class T, const int Align> Array<T,Align>::~Array() {
   programChecker.alloc(-n*sizeof(T));
 #ifndef UNIX   
   const int sz=n*sizeof(T);
@@ -820,7 +820,7 @@ template<class T> Array<T>::~Array() {
 #endif
 }
 
-template<class T> void Array<T>::push_back(const T& x) {
+template<class T, const int Align> void Array<T,Align>::push_back(const T& x) {
   if (n==reserved) {
     int saven=n;
     resize(max(1, n*2));
@@ -915,7 +915,7 @@ public:
 
 /////////////////////// Global context /////////////////////////
 
-typedef enum {DEFAULT, JPEG, HDR, IMAGE1, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF} Filetype;
+typedef enum {DEFAULT, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF} Filetype;
 int level=DEFAULT_OPTION;  // Compression level 0 to 8
 #define MEM (0x10000<<level)
 int y=0;  // Last bit, 0 or 1, set by encoder
@@ -1576,6 +1576,49 @@ inline  U8* BH<B>::operator[](U32 i) {
   return &t[i*B+1];
 }
 
+//////////////////////////// HashTable /////////////////////////
+
+// A HashTable maps a 32-bit index to an array of B bytes.
+// The first byte is a checksum using the upper 8 bits of the
+// index.  The second byte is a priority (0 = empty) for hash
+// replacement.  The index need not be a hash.
+
+// HashTable<B> h(n) - create using n bytes  n and B must be 
+//     powers of 2 with n >= B*4, and B >= 2.
+// h[i] returns array [1..B-1] of bytes indexed by i, creating and
+//     replacing another element if needed.  Element 0 is the
+//     checksum and should not be modified.
+
+template <int B>
+class HashTable {
+  Array<U8,64> t;  // table: 1 element = B bytes: checksum priority data data
+  const int N;  // size in bytes
+public:
+  HashTable(int n): t(n), N(n) {
+    assert(B>=2 && (B&B-1)==0);
+    assert(N>=B*4 && (N&N-1)==0);
+  }
+  U8* operator[](U32 i);
+};
+
+template <int B>
+inline U8* HashTable<B>::operator[](U32 i) {
+  i*=123456791;
+  i=i<<16|i>>16;
+  i*=234567891;
+  int chk=i>>24;
+  i=i*B&(N-B);
+  U8 *p = &t[0];
+  if (p[i]==chk) return p+i;
+  if (p[i^B]==chk) return p+(i^B);
+  if (p[i^B*2]==chk) return p+(i^B*2);
+  if (p[i+1]>p[(i+1)^B] || p[i+1]>p[(i+1)^B*2]) i^=B;
+  if (p[i+1]>p[(i+1)^B^B*2]) i^=B^B*2;
+  memset(p+i, 0, B);
+  p[i]=chk;
+  return p+i;
+}
+
 /////////////////////////// ContextMap /////////////////////////
 //
 // A ContextMap maps contexts to a bit histories and makes predictions
@@ -1931,28 +1974,40 @@ int matchModel(Mixer& m) {
 static U32 frstchar=0, spafdo=0, spaces=0, spacecount=0, words=0, wordcount=0,wordlen=0,wordlen1=0;
 void wordModel(Mixer& m, Filetype filetype) {
   static U32 word0=0, word1=0, word2=0, word3=0, word4=0, word5=0;  // hashes
+  static U32 wrdhsh=0;
   static U32 xword0=0,xword1=0,xword2=0,cword0=0,ccword=0;
   static U32 number0=0, number1=0;  // hashes
   static U32 text0=0;  // hash stream of letters
-  static U32 lastLetter=0, lastUpper=0, wordGap=0;
-  static ContextMap cm(MEM*16, 44 +1);
+  static U32 lastLetter=0, firstLetter=0, lastUpper=0, lastDigit=0, wordGap=0;
+  static ContextMap cm(MEM*16, 44 +1+1+1);
   static int nl1=-3, nl=-2, w=0;  // previous, current newline position
-  static U32 mask = 0;
+  static U32 mask=0, mask2=0;
   static Array<int> wpos(0x10000);  // last position of word
 
   // Update word hashes
   if (bpos==0) {
-    int c=c4&255,f=0;
+    int c=c4&255,pC=(U8)c4>>8,f=0;
     if (spaces&0x80000000) --spacecount;
     if (words&0x80000000) --wordcount;
     spaces=spaces*2;
     words=words*2;
     lastUpper=min(lastUpper+1,63);
     lastLetter=min(lastLetter+1,63);
+    mask2<<=2;
     if (c>='A' && c<='Z') c+='a'-'A', lastUpper=0;
     if ((c>='a' && c<='z') || c==1 || c==2 ||(c>=128 &&(b2!=3))) {
-      if (!wordlen)
-        wordGap=lastLetter;
+      if (!wordlen){
+        // model syllabification with "+"
+        if ((lastLetter==3 && (c4&0xFFFF00)==0x2B0A00) || (lastLetter==4 && (c4&0xFFFFFF00)==0x2B0D0A00)){
+          word0 = word1;
+          wordlen = wordlen1;
+        }
+        else{
+          wordGap = lastLetter;
+          firstLetter = c;
+          wrdhsh = 0;
+        }
+      }
       lastLetter=0;
       ++words, ++wordcount;
       word0^=hash(word0, c,0);
@@ -1961,6 +2016,16 @@ void wordModel(Mixer& m, Filetype filetype) {
       wordlen=min(wordlen,45);
       f=0;
       w=word0&(wpos.size()-1);
+      if ((c=='a' || c=='e' || c=='i' || c=='o' || c=='u') || (c=='y' && (wordlen>0 && pC!='a' && pC!='e' && pC!='i' && pC!='o' && pC!='u'))){
+        mask2++;
+        wrdhsh = wrdhsh*997*8+(c/4-22);
+      }
+      else if (c>='b' && c<='z'){
+        mask2+=2;
+        wrdhsh = wrdhsh*271*32+(c-97);
+      }
+      else
+        wrdhsh = wrdhsh*11*32+c;
     }
     else {
       if (word0) {
@@ -1980,30 +2045,32 @@ void wordModel(Mixer& m, Filetype filetype) {
       if ((c4&0xFFFF)==0x3D3D) xword1=word1,xword2=word2; // ==
       if ((c4&0xFFFF)==0x2727) xword1=word1,xword2=word2; // ''
       if (c==32 || c==10) { ++spaces, ++spacecount; if (c==10 ) nl1=nl, nl=pos-1;}
-      else if (c=='.' || c=='!' || c=='?' || c==',' || c==';' || c==':') spafdo=0,ccword=c;
+      else if (c=='.' || c=='!' || c=='?' || c==',' || c==';' || c==':') spafdo=0,ccword=c,mask2+=3;
       else { ++spafdo; spafdo=min(63,spafdo); }
     }
+    lastDigit=min(0xFF,lastDigit+1);
     if (c>='0' && c<='9') {
         number0^=hash(number0, c,1);
+        lastDigit = 0;
     }
     else if (number0) {
       number1=number0;
       number0=0,ccword=0;
     }
 
-    int col=min(255, pos-nl);
+    U32 col=min(255, pos-nl);
     int above=buf[nl1+col];
     if (col<=2) frstchar=(col==2?min(c,96):0);
     if (frstchar=='[' && c==32)    {if(buf(3)==']' || buf(4)==']' ) frstchar=96,xword0=0;}
     cm.set(hash(513,spafdo, spaces,ccword));
     cm.set(hash(514,frstchar, c));
-    cm.set(hash(515,col, frstchar));
+    cm.set(hash(515,col, frstchar, (lastUpper<col)*4+(mask2&3)));
     cm.set(hash(516,spaces, (words&255)));
     cm.set(hash(256,number0, word2));
     cm.set(hash(257,number0, word1));
     cm.set(hash(258,number1, c,ccword));
     cm.set(hash(259,number0, number1));
-    cm.set(hash(260,word0, number1));
+    cm.set(hash(260,word0, number1, lastDigit<wordGap+wordlen));
     cm.set(hash(518,wordlen1,col));
     cm.set(hash(519,c,spacecount/2));
     U32 h=wordcount*64+spacecount;
@@ -2019,7 +2086,7 @@ void wordModel(Mixer& m, Filetype filetype) {
     cm.set(hash(263,word0, 0));
     cm.set(hash(264,h, word1));
     cm.set(hash(265,word0, word1));
-    cm.set(hash(266,h, word1,word2));
+    cm.set(hash(266,h, word1,word2,lastUpper<wordlen));
     cm.set(hash(268,text0&0xfffff, 0));
     cm.set(hash(269,word0, xword0));
     cm.set(hash(270,word0, xword1));
@@ -2073,6 +2140,8 @@ void wordModel(Mixer& m, Filetype filetype) {
       ((lastUpper < lastLetter + wordlen1)<<1)|
       (lastUpper < wordlen + wordlen1 + wordGap)
     ));
+    cm.set(hash(col,wordlen1,above&0x5F,c4&0x5F));
+    cm.set(hash( mask2&0x3F, wrdhsh&0xFFF, (0x100|firstLetter)*(wordlen<6),(wordGap>4)*2+(wordlen1>5)) );
   }
   cm.mix(m);
 }
@@ -2564,6 +2633,67 @@ void im8bitModel(Mixer& m, int w, int gray = 0) {
   m.set(col, 8);
   m.set((buf(w)+buf(1))>>4, 32);
   m.set(c0, 256);
+}
+
+//////////////////////////// im4bitModel /////////////////////////////////
+
+// Model for 4-bit image data
+void im4bitModel(Mixer& m, int w) {
+  static HashTable<16> t(MEM/2);
+  const int S=11; // number of contexts
+  static U8* cp[S];
+  static StateMap sm[S];
+  static U8 WW=0, W=0, NWW=0, NW=0, N=0, NE=0, NEE=0, NNWW = 0, NNW=0, NN=0, NNE=0, NNEE=0;
+  static int col=0, line=0, run=0, prevColor=0, px=0;
+  int i;
+  if (!cp[0]){
+    for (i=0;i<S;i++)
+      cp[i]=t[263*i]+1;
+  }
+  for (i=0;i<S;i++)
+    *cp[i]=nex(*cp[i],y);
+
+  if (!bpos || bpos==4){
+      WW=W, NWW=NW, NW=N, N=NE, NE=NEE, NNWW=NWW, NNW=NN, NN=NNE, NNE=NNEE;
+      if (!bpos)
+        W=c4&0xF, NEE=buf(w-1)>>4, NNEE=buf(w*2-1)>>4;
+      else
+        W=c0&0xF, NEE=buf(w-1)&0xF, NNEE=buf(w*2-1)&0xF;
+      run=(W!=WW || !col)?(prevColor=WW,0):min(0xFFF,run+1);
+      px=1, i=0;
+
+      cp[i++]=t[hash(W,NW,N)]+1;
+      cp[i++]=t[hash(N, min(0xFFF, col/8))]+1;
+      cp[i++]=t[hash(W,NW,N,NN,NE)]+1;
+      cp[i++]=t[hash(W, N, NE+NNE*16, NEE+NNEE*16)]+1;
+      cp[i++]=t[hash(W, N, NW+NNW*16, NWW+NNWW*16)]+1;
+      cp[i++]=t[hash(W, ilog2(run+1), prevColor, col/max(1,w/2) )]+1;
+      cp[i++]=t[hash(NE, min(0x3FF, (col+line)/max(1,w*8)))]+1;
+      cp[i++]=t[hash(NW, (col-line)/max(1,w*8))]+1;
+      cp[i++]=t[hash(WW*16+W,NN*16+N,NNWW*16+NW)]+1;
+      cp[i++]=t[N+NN*16]+1;
+      cp[i++]=t[-1]+1;
+      
+      col*=(++col)<w*2;
+      line+=(!col);
+  }
+  else{
+    px+=px+y;
+    int j=(y+1)<<(bpos&3);
+    for (i=0;i<S;i++)
+      cp[i]+=j;
+  }
+
+  // predict
+  for (i=0; i<S; i++)
+    m.add(stretch(sm[i].p(*cp[i])));
+
+  m.set(W*16+px, 256);
+  m.set(min(31,col/max(1,w/16))+N*32, 512);
+  m.set((bpos&3)+4*W+64*min(7,ilog2(run+1)), 512);
+  m.set(W+NE*16+(bpos&3)*256, 1024);
+  m.set(px, 16);
+  m.set(0,1);  
 }
 
 //////////////////////////// im1bitModel /////////////////////////////////
@@ -4948,7 +5078,7 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
       }
     }
 
-    StateBH[State] = (StateBH[State]<<8)|B;
+    StateBH[pState] = (StateBH[pState]<<8)|B;
     pTag = &Cache.Tags[ (Cache.Index-1)&(CacheSize-1) ];
     cm.set(hash(State, (*Tag).Level, pState*2+(*Tag).EndTag, (*Tag).Name));
     cm.set(hash((*pTag).Name, State*2+(*pTag).EndTag, (*pTag).Content.Type, (*Tag).Content.Type));
@@ -4971,7 +5101,7 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
 int contextModel2() {
   static ContextMap cm(MEM*32, 9);
   static RunContextMap rcm7(MEM), rcm9(MEM), rcm10(MEM);
-  static Mixer m(976, 3095+768+(1024+1024*3)*(level>=4), 7+4*(level>=4));
+  static Mixer m(984, 3095+768+(1024+1024*3)*(level>=4), 7+4*(level>=4));
   static U32 cxt[16];  // order 0-11 contexts
   static Filetype ft2,filetype=DEFAULT;
   static int size=0;  // bytes remaining in block
@@ -4983,7 +5113,7 @@ int contextModel2() {
     --size;
     ++blpos;
     if (size==-1) ft2=(Filetype)buf(1);
-    if (size==-5 && ft2!=IMAGE1 && ft2!=IMAGE8 && ft2!=IMAGE8GRAY && ft2!=IMAGE24 && ft2!=IMAGE32 && ft2!=AUDIO) {
+    if (size==-5 && ft2!=IMAGE1 && ft2!=IMAGE4 && ft2!=IMAGE8 && ft2!=IMAGE8GRAY && ft2!=IMAGE24 && ft2!=IMAGE32 && ft2!=AUDIO) {
       size=buf(4)<<24|buf(3)<<16|buf(2)<<8|buf(1);
       if (ft2==CD || ft2==ZLIB || ft2==BASE64 || ft2==GIF) size=0;
       blpos=0;
@@ -5003,6 +5133,7 @@ int contextModel2() {
   // Test for special file types
   int ismatch=ilog(matchModel(m));  // Length of longest matching context
   if (filetype==IMAGE1) im1bitModel(m, info);
+  if (filetype==IMAGE4) return im4bitModel(m, info), m.p();
   if (filetype==IMAGE8) return im8bitModel(m, info), m.p();
   if (filetype==IMAGE8GRAY) return im8bitModel(m, info, 1), m.p();
   if (filetype==IMAGE24) return im24bitModel(m, info), m.p();
@@ -5711,7 +5842,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
       else if (p==16 && buf0!=0x28000000) bmp=hdrless=0; //BITMAPINFOHEADER (0x28)
       else if (p==20) bmpx=bswap(buf0),bmp=((bmpx==0||bmpx>0x30000)?(hdrless=0):bmp); //width
       else if (p==24) bmpy=abs((int)bswap(buf0)),bmp=((bmpy==0||bmpy>0x10000)?(hdrless=0):bmp); //height
-      else if (p==27) imgbpp=c,bmp=((imgbpp!=1 && imgbpp!=8 && imgbpp!=24 && imgbpp!=32)?(hdrless=0):bmp);
+      else if (p==27) imgbpp=c,bmp=((imgbpp!=1 && imgbpp!=4 && imgbpp!=8 && imgbpp!=24 && imgbpp!=32)?(hdrless=0):bmp);
       else if ((p==31) && buf0) bmp=hdrless=0;
       else if (p==36) bmps=bswap(buf0);
       // check number of colors in palette (4 bytes), must be 0 (default) or <= 1<<bpp.
@@ -5739,6 +5870,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
 
           if (hdrless && bmps && bmps<((bmpx*bmpy*imgbpp)>>3)) { /*Guard against erroneous DIB detections*/ }
           else if (imgbpp==1) IMG_DET(IMAGE1,max(0,bmp-1),bmpof,(((bmpx-1)>>5)+1)*4,bmpy);
+          else if (imgbpp==4) IMG_DET(IMAGE4,max(0,bmp-1),bmpof,((bmpx*4+31)>>5)*4,bmpy);
           else if (imgbpp==8){
             fseek(in, start+bmp+53, SEEK_SET);
             IMG_DET( (IsGrayscalePalette(in, (buf0)?bswap(buf0):1<<imgbpp, 1))?IMAGE8GRAY:IMAGE8,max(0,bmp-1),bmpof,(bmpx+3)&-4,bmpy);
@@ -6708,14 +6840,14 @@ void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int i
     }
     fclose(tmp);  // deletes
   } else {
-    const int i1=(type==IMAGE1 || type==IMAGE8 || type==IMAGE8GRAY || type==AUDIO)?info:-1;
+    const int i1=(type==IMAGE1 || type==IMAGE4 || type==IMAGE8 || type==IMAGE8GRAY || type==AUDIO)?info:-1;
     direct_encode_block(type, in, len, en, i1);
   }
 }
 
 void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it, float p1, float p2) {
-  static const char* typenames[14]={"default", "jpeg", "hdr",
-    "1b-image", "8b-image", "8b-img-grayscale", "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif"};
+  static const char* typenames[15]={"default", "jpeg", "hdr",
+    "1b-image", "4b-image", "8b-image", "8b-img-grayscale", "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif"};
   static const char* audiotypes[4]={"8b mono", "8b stereo", "16b mono",
     "16b stereo"};
   Filetype type=DEFAULT;
@@ -6745,7 +6877,7 @@ void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it, float
       sprintf(blstr,"%s%d",b2,blnum++);
       printf(" %-11s | %-16s |%10d bytes [%ld - %ld]",blstr,typenames[type],len,begin,end-1);
       if (type==AUDIO) printf(" (%s)", audiotypes[info%4]);
-      else if (type==IMAGE1 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32) printf(" (width: %d)", info);
+      else if (type==IMAGE1 || type==IMAGE4 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32) printf(" (width: %d)", info);
       else if (type==CD) printf(" (m%d/f%d)", info==1?1:2, info!=3?1:2);
       else if (type==ZLIB && info) printf(" (image %dbpp%s)",(info>>24)&0x7F,(info<0)?" grayscale":"");
       printf("\n");
@@ -6804,7 +6936,7 @@ int decompressRecursive(FILE *out, long n, Encoder& en, FMode mode, int it=0) {
     len|=en.decompress()<<8;
     len|=en.decompress();
 
-    if (type==IMAGE1 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32 || type==AUDIO) {
+    if (type==IMAGE1 || type==IMAGE4 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32 || type==AUDIO) {
       info=0; for (int i=0; i<4; ++i) { info<<=8; info+=en.decompress(); }
     }
     if (type==IMAGE24) len=decode_bmp(en, len, info, out, mode, diffFound);
