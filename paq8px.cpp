@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on September 02, 2017
+/* paq8px file compressor/archiver.  Released on September 03, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -915,7 +915,12 @@ public:
 
 /////////////////////// Global context /////////////////////////
 
-typedef enum {DEFAULT, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF} Filetype;
+typedef enum {DEFAULT=0, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF, PNG24, PNG32} Filetype;
+
+inline bool hasRecursion(Filetype ft) { return ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF; }
+inline bool hasInfo(Filetype ft) { return ft==IMAGE1 || ft==IMAGE4 || ft==IMAGE8 || ft==IMAGE8GRAY || ft==IMAGE24 || ft==IMAGE32 || ft==AUDIO || ft==PNG24 || ft==PNG32; }
+inline bool hasTransform(Filetype ft) { return ft==IMAGE24 || ft==IMAGE32 || ft==EXE || ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF; }
+
 int level=DEFAULT_OPTION;  // Compression level 0 to 8
 #define MEM (0x10000<<level)
 int y=0;  // Last bit, 0 or 1, set by encoder
@@ -938,8 +943,6 @@ int blpos=0; // Relative position in block
   #error Cache size must be a power of 2 bigger than 4
 #endif
 
-#define PNGFlag (1<<31)
-#define GrayFlag (1<<30)
 
 ///////////////////////////// ilog //////////////////////////////
 
@@ -2398,23 +2401,22 @@ inline U8 Paeth(U8 W, U8 N, U8 NW){
 
 // Model for filtered (PNG) or unfiltered 24/32-bit image data
 
-void im24bitModel(Mixer& m, int info, int alpha=0) {
+void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
   const int SC=0x20000;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm10(512);
   static ContextMap cm(MEM*4, 13+11);
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
-  static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
+  static U8 WWW, WW, W, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 px = 0; // current PNG filter prediction
   static int color = -1;
   static int stride = 3;
-  static int ctx, padding, lastPos, filter=0, filterOn=0, x=0, w=0, line=0, isPNG=0;
+  static int ctx, padding, lastPos, filter=0, filterOn=0, x=0, w=0, line=0;
 
   if (!bpos) {
     if ((color < 0) || (pos-lastPos != 1)){
       stride = 3+alpha;
       w = info&0xFFFFFF;
-      isPNG = (info&PNGFlag)!=0;
       padding = w%stride;
       x = color = line = 0;
     }
@@ -2470,7 +2472,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0) {
       int i=color<<5;
 
       if (!isPNG){
-        WWW=buf(3*stride), WW=buf(2*stride), W=buf(stride), NWW=buf(w+2*stride), NW=buf(w+stride), N=buf(w), NE=buf(w-stride), NEE=buf(w-2*stride), NNWW=buf((w+stride)*2), NNW=buf(w*2+stride), NN=buf(w*2), NNE=buf(w*2-stride), NNEE=buf((w-stride)*2), NNN=buf(w*3);
+        WWW=buf(3*stride), WW=buf(2*stride), W=buf(stride), NW=buf(w+stride), N=buf(w), NE=buf(w-stride), NEE=buf(w-2*stride), NNWW=buf((w+stride)*2), NNW=buf(w*2+stride), NN=buf(w*2), NNE=buf(w*2-stride), NNEE=buf((w-stride)*2), NNN=buf(w*3);
         int mean=W+NW+N+NE;
         const int var=(W*W+NW*NW+N*N+NE*NE-mean*mean/4)>>2;
         mean>>=2;
@@ -2513,7 +2515,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0) {
       }
       else{
         i|=(filterOn)?((0x100|filter)<<8):0;
-        WWW=buffer(3*stride), WW=buffer(2*stride), W=buffer(stride), NWW=buffer(w+2*stride), NW=buffer(w+stride), N=buffer(w), NE=buffer(w-stride), NEE=buffer(w-2*stride), NNWW=buffer((w+stride)*2), NNW=buffer(w*2+stride), NN=buffer(w*2), NNE=buffer(w*2-stride), NNEE=buffer((w-stride)*2), NNN=buffer(w*3);
+        WWW=buffer(3*stride), WW=buffer(2*stride), W=buffer(stride), NW=buffer(w+stride), N=buffer(w), NE=buffer(w-stride), NEE=buffer(w-2*stride), NNWW=buffer((w+stride)*2), NNW=buffer(w*2+stride), NN=buffer(w*2), NNE=buffer(w*2-stride), NNEE=buffer((w-stride)*2), NNN=buffer(w*3);
 
         cm.set(hash(++i, Clip(W+N-NW)-px, Clip(W+buffer(1)-buffer(stride+1))-px));
         cm.set(hash(++i, N-px, Clip(N+buffer(1)-buffer(w+1))-px));
@@ -5221,9 +5223,9 @@ int contextModel2() {
     --size;
     ++blpos;
     if (size==-1) ft2=(Filetype)buf(1);
-    if (size==-5 && ft2!=IMAGE1 && ft2!=IMAGE4 && ft2!=IMAGE8 && ft2!=IMAGE8GRAY && ft2!=IMAGE24 && ft2!=IMAGE32 && ft2!=AUDIO) {
+    if (size==-5 && !hasInfo(ft2)) {
       size=buf(4)<<24|buf(3)<<16|buf(2)<<8|buf(1);
-      if (ft2==CD || ft2==ZLIB || ft2==BASE64 || ft2==GIF) size=0;
+      if (hasRecursion(ft2)) size=0;
       blpos=0;
     }
     if (size==-9) {
@@ -5246,6 +5248,8 @@ int contextModel2() {
   if (filetype==IMAGE8GRAY) return im8bitModel(m, info, 1), m.p();
   if (filetype==IMAGE24) return im24bitModel(m, info), m.p();
   if (filetype==IMAGE32) return im24bitModel(m, info, 1), m.p();
+  if (filetype==PNG24) return im24bitModel(m, info, 0, 1), m.p();
+  if (filetype==PNG32) return im24bitModel(m, info, 1, 1), m.p();
   if (filetype==AUDIO) return wavModel(m, info), m.p();
   if (filetype==JPEG) if (jpegModel(m)) return m.p();
 
@@ -5785,15 +5789,15 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
       if (streamLength>0) {
         info=0;
         if (pdfimw>0 && pdfimw<0x1000000 && pdfimh>0) {
-          if (pdfimb==8 && (int)strm.total_out==pdfimw*pdfimh) info=(((pdfgray<<6)|8)<<24)+pdfimw;
-          if (pdfimb==8 && (int)strm.total_out==pdfimw*pdfimh*3) info=(24<<24)+pdfimw*3;
-          if (pdfimb==4 && (int)strm.total_out==((pdfimw+1)/2)*pdfimh) info=(8<<24)+((pdfimw+1)/2);
-          if (pdfimb==1 && (int)strm.total_out==((pdfimw+7)/8)*pdfimh) info=(1<<24)+((pdfimw+7)/8);
+          if (pdfimb==8 && (int)strm.total_out==pdfimw*pdfimh) info=((pdfgray?IMAGE8GRAY:IMAGE8)<<24)|pdfimw;
+          if (pdfimb==8 && (int)strm.total_out==pdfimw*pdfimh*3) info=(IMAGE24<<24)|pdfimw*3;
+          if (pdfimb==4 && (int)strm.total_out==((pdfimw+1)/2)*pdfimh) info=(IMAGE4<<24)|((pdfimw+1)/2);
+          if (pdfimb==1 && (int)strm.total_out==((pdfimw+7)/8)*pdfimh) info=(IMAGE1<<24)|((pdfimw+7)/8);
           pdfgray=0;
         }
         else if (png && pngw<0x1000000 && lastchunk==0x49444154/*IDAT*/){
-          if (pngbps==8 && pngtype==2 && (int)strm.total_out==(pngw*3+1)*pngh) info=PNGFlag|(24<<24)|(pngw*3), png=0;
-          else if (pngbps==8 && pngtype==6 && (int)strm.total_out==(pngw*4+1)*pngh) info=PNGFlag|(32<<24)|(pngw*4), png=0;
+          if (pngbps==8 && pngtype==2 && (int)strm.total_out==(pngw*3+1)*pngh) info=(PNG24<<24)|(pngw*3), png=0;
+          else if (pngbps==8 && pngtype==6 && (int)strm.total_out==(pngw*4+1)*pngh) info=(PNG32<<24)|(pngw*4), png=0;
         }
         return fseek(in, start+i-31, SEEK_SET),detd=streamLength,ZLIB;
       }
@@ -6151,7 +6155,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
         if (c>0 && gifb && gifc!=gifb) gifw=0;
         if (c>0) gifb=gifc,gifc=c,gifi+=c+1;
         else if (!gifw) gif=2,gifi=i+3;
-        else return fseek(in, start+gifa-1, SEEK_SET),detd=i-gifa+2,info=gifw,dett=GIF;
+        else return fseek(in, start+gifa-1, SEEK_SET),detd=i-gifa+2,info=(IMAGE8<<24)|gifw,dett=GIF;
       }
       if (gif==5 && i==gifi) {
         if (c>0) gifi+=c+1; else gif=2,gifi=i+3;
@@ -6181,7 +6185,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
       relpos[r]=i;
     }
     if (i-e8e9last>0x4000) {
-      if (type==EXE) return fseek(in, start+e8e9last, SEEK_SET), DEFAULT;
+      if (type==EXE) return info=start, fseek(in, start+e8e9last, SEEK_SET), DEFAULT;
       e8e9count=e8e9pos=0;
     }
 
@@ -6429,7 +6433,7 @@ int decode_exe(Encoder& en, int size, FILE *out, FMode mode, int &diffFound) {
   return size;
 }
 
-int encode_zlib(FILE* in, FILE* out, int len) {
+int encode_zlib(FILE* in, FILE* out, int len, int &hdrsize) {
   const int BLOCK=1<<16, LIMIT=128;
   U8 zin[BLOCK*2],zout[BLOCK],zrec[BLOCK*2], diffByte[81*LIMIT];
   int diffPos[81*LIMIT];
@@ -6540,6 +6544,7 @@ int encode_zlib(FILE* in, FILE* out, int len) {
     } while (main_strm.avail_out==0 && main_ret==Z_BUF_ERROR);
     if (main_ret!=Z_BUF_ERROR && main_ret!=Z_STREAM_END) break;
   }
+  hdrsize=diffCount[index]*5+7;
   return main_ret==Z_STREAM_END;
 }
 
@@ -6750,10 +6755,11 @@ void encode_base64(FILE* in, FILE* out, int len) {
   free(ptr);
 }
 
-int encode_gif(FILE* in, FILE* out, int len) {
-  int codesize=fgetc(in),diffpos=0,hdrsize=6,clearpos=0,bsize=0;
+int encode_gif(FILE* in, FILE* out, int len, int &hdrsize) {
+  int codesize=fgetc(in),diffpos=0,clearpos=0,bsize=0;
   int beginin=ftell(in),beginout=ftell(out);
   U8 output[4096];
+  hdrsize=6;
   fputc(hdrsize>>8, out);
   fputc(hdrsize&255, out);
   fputc(bsize, out);
@@ -6915,31 +6921,42 @@ void direct_encode_block(Filetype type, FILE *in, int len, Encoder &en, int info
 
 void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it=0, float p1=0.0, float p2=1.0);
 
+int decode_func(Filetype type, Encoder &en, FILE *tmp, int len, int info, FILE *out, FMode mode, int &diffFound) {
+  if (type==IMAGE24) return decode_bmp(en, len, info, out, mode, diffFound);
+  else if (type==IMAGE32) return decode_im32(en, len, info, out, mode, diffFound);
+  else if (type==EXE) return decode_exe(en, len, out, mode, diffFound);
+  else if (type==CD) return decode_cd(tmp, len, out, mode, diffFound);
+  else if (type==ZLIB) return decode_zlib(tmp, len, out, mode, diffFound);
+  else if (type==BASE64) return decode_base64(tmp, out, mode, diffFound);
+  else if (type==GIF) return decode_gif(tmp, len, out, mode, diffFound);
+  else { assert(true); return 0; }
+}
+
+int encode_func(Filetype type, FILE *in, FILE *tmp, int len, int info, int &hdrsize) {
+  if (type==IMAGE24) encode_bmp(in, tmp, len, info);
+  else if (type==IMAGE32) encode_im32(in, tmp, len, info);
+  else if (type==EXE) encode_exe(in, tmp, len, info);
+  else if (type==CD) encode_cd(in, tmp, len, info);
+  else if (type==ZLIB) return encode_zlib(in, tmp, len, hdrsize)?0:1;
+  else if (type==BASE64) encode_base64(in, tmp, len);
+  else if (type==GIF) return encode_gif(in, tmp, len, hdrsize)?0:1;
+  else assert(true);
+  return 0;
+}
+
 void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int info, char *blstr, int it, float p1, float p2, long begin) {
-  if (type==EXE || type==CD || type==IMAGE24 || type==IMAGE32 || type==ZLIB || type==BASE64 || type==GIF) {
+  if (hasTransform(type)) {
     FILE* tmp=tmpfile();  // temporary encoded file
     if (!tmp) perror("tmpfile"), quit();
-    int diffFound=0;
-    if (type==IMAGE24) encode_bmp(in, tmp, len, info);
-    else if (type==IMAGE32) encode_im32(in, tmp, len, info);
-    else if (type==EXE) encode_exe(in, tmp, len, begin);
-    else if (type==CD) encode_cd(in, tmp, len, info);
-    else if (type==ZLIB) diffFound=encode_zlib(in, tmp, len)?0:1;
-    else if (type==BASE64) encode_base64(in, tmp, len);
-    else if (type==GIF) diffFound=encode_gif(in, tmp, len)?0:1;
+    int hdrsize=0;
+    int diffFound=encode_func(type, in, tmp, len, info, hdrsize);
     const long tmpsize=ftell(tmp);
     fseek(tmp, tmpsize, SEEK_SET);
     if (!diffFound) {
       rewind(tmp);
       en.setFile(tmp);
       fseek(in, begin, SEEK_SET);
-      if (type==IMAGE24) decode_bmp(en, tmpsize, info, in, FCOMPARE, diffFound);
-      else if (type==IMAGE32) decode_im32(en, tmpsize, info, in, FCOMPARE, diffFound);
-      else if (type==EXE) decode_exe(en, tmpsize, in, FCOMPARE, diffFound);
-      else if (type==CD) decode_cd(tmp, tmpsize, in, FCOMPARE, diffFound);
-      else if (type==ZLIB) decode_zlib(tmp, tmpsize, in, FCOMPARE, diffFound);
-      else if (type==BASE64) decode_base64(tmp, in, FCOMPARE, diffFound);
-      else if (type==GIF) decode_gif(tmp, tmpsize, in, FCOMPARE, diffFound);
+      decode_func(type, en, tmp, tmpsize, info, in, FCOMPARE, diffFound);
     }
     // Test fails, compress without transform
     if (diffFound || fgetc(tmp)!=EOF) {
@@ -6948,49 +6965,29 @@ void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int i
       direct_encode_block(DEFAULT, in, len, en);
     } else {
       rewind(tmp);
-      if (type==CD || type==ZLIB || type==BASE64 || type==GIF) {
+      if (hasRecursion(type)) {
         en.compress(type), en.compress(tmpsize>>24), en.compress(tmpsize>>16);
         en.compress(tmpsize>>8), en.compress(tmpsize);
-        if (type==ZLIB && info) {// PDF or PNG image
-          Filetype type2 = DEFAULT;
-          switch ((info>>24)&0x3F){
-            case 32 : type2 = IMAGE32; break;
-            case 24 : type2 = IMAGE24; break;
-            case 8 : type2 = ((info&GrayFlag)>0)?IMAGE8GRAY:IMAGE8; break;
-            case 1 : type2 = IMAGE1;
-          }
-          int hdrsize=7+5*fgetc(tmp);
-          rewind(tmp);
+        Filetype type2=(Filetype)(info>>24);
+        if (type2!=DEFAULT) {
           direct_encode_block(HDR, tmp, hdrsize, en);
-          if (!(info&PNGFlag))
-            transform_encode_block(type2, tmp, tmpsize-hdrsize, en, info&0xffffff, blstr, it, p1, p2, hdrsize);
-          else
-            direct_encode_block(type2, tmp, tmpsize-hdrsize, en, info&(0xFFFFFF|PNGFlag|GrayFlag));
-        } else if (type==GIF) {
-          int hdrsize=fgetc(tmp);
-          hdrsize=(hdrsize<<8)+fgetc(tmp);
-          rewind(tmp);
-          direct_encode_block(HDR, tmp, hdrsize, en);
-          direct_encode_block(IMAGE8, tmp, tmpsize-hdrsize, en, info);
+          transform_encode_block(type2, tmp, tmpsize-hdrsize, en, info&0xffffff, blstr, it, p1, p2, hdrsize);
         } else {
           compressRecursive(tmp, tmpsize, en, blstr, it+1, p1, p2);
         }
-      } else if (type==EXE) {
-        direct_encode_block(type, tmp, tmpsize, en);
-      } else if (type==IMAGE24 || type==IMAGE32) {
-        direct_encode_block(type, tmp, tmpsize, en, info);
+      } else {
+        direct_encode_block(type, tmp, tmpsize, en, hasInfo(type)?info:-1);
       }
     }
     fclose(tmp);  // deletes
   } else {
-    const int i1=(type==IMAGE1 || type==IMAGE4 || type==IMAGE8 || type==IMAGE8GRAY || type==AUDIO)?info:-1;
-    direct_encode_block(type, in, len, en, i1);
+    direct_encode_block(type, in, len, en, hasInfo(type)?info:-1);
   }
 }
 
 void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it, float p1, float p2) {
-  static const char* typenames[15]={"default", "jpeg", "hdr",
-    "1b-image", "4b-image", "8b-image", "8b-img-grayscale", "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif"};
+  static const char* typenames[17]={"default", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
+    "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif", "png-24b", "png-32b"};
   static const char* audiotypes[4]={"8b mono", "8b stereo", "16b mono",
     "16b stereo"};
   Filetype type=DEFAULT;
@@ -7021,8 +7018,8 @@ void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it, float
       printf(" %-11s | %-16s |%10d bytes [%ld - %ld]",blstr,typenames[type],len,begin,end-1);
       if (type==AUDIO) printf(" (%s)", audiotypes[info%4]);
       else if (type==IMAGE1 || type==IMAGE4 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32) printf(" (width: %d)", info);
+      else if (hasRecursion(type) && (info>>24) > 0) printf(" (%s)",typenames[info>>24]);
       else if (type==CD) printf(" (m%d/f%d)", info==1?1:2, info!=3?1:2);
-      else if (type==ZLIB && info) printf(" (image %dbpp%s)",(info>>24)&0x3F,((info&GrayFlag)>0)?" grayscale":"");
       printf("\n");
       transform_encode_block(type, in, len, en, info, blstr, it, p1, p2, begin);
       p1=p2;
@@ -7070,8 +7067,7 @@ bool makedir(const char* dir) {
 int decompressRecursive(FILE *out, long n, Encoder& en, FMode mode, int it=0) {
   Filetype type;
   long len, i=0;
-  int diffFound=0, info;
-  FILE *tmp;
+  int diffFound=0, info=0;
   while (i<n) {
     type=(Filetype)en.decompress();
     len=en.decompress()<<24;
@@ -7079,24 +7075,20 @@ int decompressRecursive(FILE *out, long n, Encoder& en, FMode mode, int it=0) {
     len|=en.decompress()<<8;
     len|=en.decompress();
 
-    if (type==IMAGE1 || type==IMAGE4 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32 || type==AUDIO) {
+    if (hasInfo(type)) {
       info=0; for (int i=0; i<4; ++i) { info<<=8; info+=en.decompress(); }
     }
-    if (type==IMAGE24 && !(info&PNGFlag) /*To skip the color transform on PNG filtered data*/) len=decode_bmp(en, len, info, out, mode, diffFound);
-    else if (type==IMAGE32 && !(info&PNGFlag) /*To skip the color transform on PNG filtered data*/) decode_im32(en, len, info, out, mode, diffFound);
-    else if (type==EXE) len=decode_exe(en, len, out, mode, diffFound);
-    else if (type==CD || type==ZLIB || type==GIF || type==BASE64) {
-      tmp=tmpfile();
+    if (hasRecursion(type)) {
+      FILE *tmp=tmpfile();
       if (!tmp) perror("tmpfile"), quit();
       decompressRecursive(tmp, len, en, FDECOMPRESS, it+1);
       if (mode!=FDISCARD) {
         rewind(tmp);
-        if (type==CD) len=decode_cd(tmp, len, out, mode, diffFound);
-        if (type==ZLIB) len=decode_zlib(tmp, len, out, mode, diffFound);
-        if (type==BASE64) len=decode_base64(tmp, out, mode, diffFound);
-        if (type==GIF) len=decode_gif(tmp, len, out, mode, diffFound);
+        if (hasTransform(type)) len=decode_func(type, en, tmp, len, info, out, mode, diffFound);
       }
       fclose(tmp);
+    } else if (hasTransform(type)) {
+      len=decode_func(type, en, NULL, len, info, out, mode, diffFound);
     } else {
       for (int j=0; j<len; ++j) {
         if (!(j&0xfff)) en.print_status();
