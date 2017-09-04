@@ -916,10 +916,10 @@ public:
 
 /////////////////////// Global context /////////////////////////
 
-typedef enum {DEFAULT=0, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF, PNG24, PNG32} Filetype;
+typedef enum {DEFAULT=0, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF, PNG8, PNG24, PNG32} Filetype;
 
 inline bool hasRecursion(Filetype ft) { return ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF; }
-inline bool hasInfo(Filetype ft) { return ft==IMAGE1 || ft==IMAGE4 || ft==IMAGE8 || ft==IMAGE8GRAY || ft==IMAGE24 || ft==IMAGE32 || ft==AUDIO || ft==PNG24 || ft==PNG32; }
+inline bool hasInfo(Filetype ft) { return ft==IMAGE1 || ft==IMAGE4 || ft==IMAGE8 || ft==IMAGE8GRAY || ft==IMAGE24 || ft==IMAGE32 || ft==AUDIO || ft==PNG8 || ft==PNG24 || ft==PNG32; }
 inline bool hasTransform(Filetype ft) { return ft==IMAGE24 || ft==IMAGE32 || ft==EXE || ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF; }
 
 int level=DEFAULT_OPTION;  // Compression level 0 to 8
@@ -2406,7 +2406,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
   const int SC=0x20000;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm10(512);
-  static ContextMap cm(MEM*4, 13+11);
+  static ContextMap cm(MEM*4, 13+18);
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
   static U8 WWW, WW, W, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 px = 0; // current PNG filter prediction
@@ -2490,6 +2490,13 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set( Clip(NN+W-NNW) );
         cm.set(hash(++i, buf(1)));
         cm.set(hash(++i, buf(2)));
+        cm.set(hash(++i, Clip(W+N-NW)/2, Clip(W+buf(1)-buf(stride+1))/2 ));
+        cm.set(hash(Clip(N*2-NN)/2, LogMeanDiffQt(N,Clip(NN*2-NNN))));
+        cm.set(hash(Clip(W*2-WW)/2, LogMeanDiffQt(W,Clip(WW*2-WWW))));
+        cm.set( Clamp4(N*3-NN*3+NNN,W,NW,N,NE)/2 );
+        cm.set( Clamp4(W*3-WW*3+WWW,W,N,NE,NEE)/2 );
+        cm.set(hash(++i, LogMeanDiffQt(W,buf(stride+1)), Clamp4((buf(1)*W)/max(1,buf(stride+1)),W,N,NE,NEE) ));
+        cm.set(hash(++i, Clamp4(N+buf(2)-buf(w+2),W,NW,N,NE) ));
 
         cm.set(hash(++i, W));
         cm.set(hash(++i, W, buf(1)));
@@ -2573,7 +2580,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
     if (++col>=stride*8) col=0;
     m.set(5+ctx, 2048+5 );
     m.set(col+(isPNG?(ctx&7)+1:0)*32, 8*32);
-    m.set(((isPNG?buffer(1):buf(1+(alpha && !color)))>>4)*stride+(x%stride) + min(5,(filter+1)*filterOn)*64, 6*64);
+    m.set( ((isPNG?buffer(1):0)>>4)*stride+(x%stride) + min(5,(filter+1)*filterOn)*64, 6*64);
     m.set(c0+256*(isPNG && abs(R1-128)>8), 256*2);
   }
   else{
@@ -5270,6 +5277,7 @@ int contextModel2() {
   if (filetype==IMAGE8GRAY) return im8bitModel(m, info, 1), m.p();
   if (filetype==IMAGE24) return im24bitModel(m, info), m.p();
   if (filetype==IMAGE32) return im24bitModel(m, info, 1), m.p();
+  if (filetype==PNG8) return im8bitModel(m, info, 0), m.p();
   if (filetype==PNG24) return im24bitModel(m, info, 0, 1), m.p();
   if (filetype==PNG32) return im24bitModel(m, info, 1, 1), m.p();
   if (filetype==AUDIO) return wavModel(m, info, &stats), m.p();
@@ -5823,6 +5831,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
         else if (png && pngw<0x1000000 && lastchunk==0x49444154/*IDAT*/){
           if (pngbps==8 && pngtype==2 && (int)strm.total_out==(pngw*3+1)*pngh) info=(PNG24<<24)|(pngw*3), png=0;
           else if (pngbps==8 && pngtype==6 && (int)strm.total_out==(pngw*4+1)*pngh) info=(PNG32<<24)|(pngw*4), png=0;
+          else if (pngbps==8 && pngtype==3 && (int)strm.total_out==(pngw+1)*pngh) info=(PNG8<<24)|(pngw), png=0;
         }
         return fseek(in, start+i-31, SEEK_SET),detd=streamLength,ZLIB;
       }
@@ -7015,8 +7024,8 @@ void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int i
 }
 
 void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it, float p1, float p2) {
-  static const char* typenames[17]={"default", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
-    "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif", "png-24b", "png-32b"};
+  static const char* typenames[18]={"default", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
+    "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif", "png-8b", "png-24b", "png-32b"};
   static const char* audiotypes[4]={"8b mono", "8b stereo", "16b mono",
     "16b stereo"};
   Filetype type=DEFAULT;
@@ -7044,9 +7053,9 @@ void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it, float
     if (len>0) {
       en.set_status_range(p1,p2=p1+pscale*len);
       sprintf(blstr,"%s%d",b2,blnum++);
-      printf(" %-11s | %-16s |%10d bytes [%ld - %ld]",blstr,typenames[type],len,begin,end-1);
+      printf(" %-11s | %-16s |%10d bytes [%ld - %ld]",blstr,typenames[(type==ZLIB && (info>>24)>=PNG8)?info>>24:type],len,begin,end-1);
       if (type==AUDIO) printf(" (%s)", audiotypes[info%4]);
-      else if (type==IMAGE1 || type==IMAGE4 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32) printf(" (width: %d)", info);
+      else if (type==IMAGE1 || type==IMAGE4 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32 || (type==ZLIB && (info>>24)>=PNG8)) printf(" (width: %d)", (type==ZLIB)?(info&0xFFFFFF):info);
       else if (hasRecursion(type) && (info>>24) > 0) printf(" (%s)",typenames[info>>24]);
       else if (type==CD) printf(" (m%d/f%d)", info==1?1:2, info!=3?1:2);
       printf("\n");
