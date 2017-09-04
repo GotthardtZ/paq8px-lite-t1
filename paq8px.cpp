@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on September 03, 2017
+/* paq8px file compressor/archiver.  Released on September 04, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -628,6 +628,7 @@ Added gif recompression
 typedef unsigned char  U8;
 typedef unsigned short U16;
 typedef unsigned int   U32;
+typedef signed char int8_t;
 
 #ifndef UNIX
 typedef unsigned int uint;
@@ -2411,14 +2412,14 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
   static U8 px = 0; // current PNG filter prediction
   static int color = -1;
   static int stride = 3;
-  static int ctx, padding, lastPos, filter=0, filterOn=0, x=0, w=0, line=0;
+  static int ctx, padding, lastPos, filter=0, filterOn=0, x=0, w=0, line=0, R1=0, R2=0;
 
   if (!bpos) {
     if ((color < 0) || (pos-lastPos != 1)){
       stride = 3+alpha;
       w = info&0xFFFFFF;
       padding = w%stride;
-      x = color = line = 0;
+      x = color = line = filterOn = 0;
     }
     else{
       x*=(++x)<w+isPNG;
@@ -2512,12 +2513,22 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         scm7.set(NE+buf(1)-buf(w-stride+1));
         scm8.set(N+NE-NNE);
         scm9.set(mean>>1|(logvar<<1&0x180));
+
+        ctx = (min(color,stride-1)<<9)|((abs(W-N)>8)<<8)|((W>N)<<7)|((W>NW)<<6)|((abs(N-NW)>8)<<5)|((N>NW)<<4)|((abs(N-NE)>8)<<3)|((N>NE)<<2)|((W>WW)<<1)|(N>NN);
       }
       else{
         i|=(filterOn)?((0x100|filter)<<8):0;
         WWW=buffer(3*stride), WW=buffer(2*stride), W=buffer(stride), NW=buffer(w+stride), N=buffer(w), NE=buffer(w-stride), NEE=buffer(w-2*stride), NNWW=buffer((w+stride)*2), NNW=buffer(w*2+stride), NN=buffer(w*2), NNE=buffer(w*2-stride), NNEE=buffer((w-stride)*2), NNN=buffer(w*3);
+        int residuals[5] = { ((int8_t)buf(stride+(x<=stride)))+128,
+                             ((int8_t)buf(1+(x<2)))+128,
+                             ((int8_t)buf(stride+1+(x<=stride)))+128,
+                             ((int8_t)buf(2+(x<3)))+128,
+                             ((int8_t)buf(stride+2+(x<=stride)))+128
+                           };
+        R1 = (residuals[1]*residuals[0])/max(1,residuals[2]);
+        R2 = (residuals[3]*residuals[0])/max(1,residuals[4]);
 
-        cm.set(hash(++i, Clip(W+N-NW)-px, Clip(W+buffer(1)-buffer(stride+1))-px));
+        cm.set(hash(++i, Clip(W+N-NW)-px, Clip(W+buffer(1)-buffer(stride+1))-px, R1));
         cm.set(hash(++i, N-px, Clip(N+buffer(1)-buffer(w+1))-px));
         cm.set(hash(++i, Clip(NE+N-NNE)-px, Clip(NE+buffer(1)-buffer(w-stride+1))-px));
         cm.set(hash(++i, Clip(NW+N-NNW)-px, Clip(NW+buffer(1)-buffer(w+stride+1))-px));
@@ -2528,11 +2539,18 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(hash(++i, Clip(W+N-NW)-px, Clip(N+NE-NNE)-Clip(N+NW-NNW)));
         cm.set(hash(++i, buf(stride+(x<=stride)), buf(1+(x<2)), buf(2+(x<3))));
         cm.set(hash(++i, buf(1+(x<2)), px));
-        cm.set(hash(++i, Clip(N*3-NN*3+NNN)-px));
-        cm.set(hash(++i, Clip(W*3-WW*3+WWW)-px));
-        cm.set(hash(++i, (W+Clip(NE*3-NNE*3+buffer(w*3-stride)))/2-px));
+        cm.set(hash(i>>8, Clip(N*3-NN*3+NNN)-px));
+        cm.set(hash(i>>8, Clip(W*3-WW*3+WWW)-px));
+        cm.set(hash(++i, (W+Clip(NE*3-NNE*3+buffer(w*3-stride)))/2-px, R2));
+        cm.set(hash(++i, (W+NEE)/2-px, R1/2 ));
+        cm.set(hash(++i, Clip(W+buffer(1)-buffer(stride+1))-px, R1));
+        cm.set(hash(++i, Clip(N+buffer(1)-buffer(w+1))-px));
+        cm.set(hash(++i, Clip(NW+buffer(1)-buffer(w+stride+1))-px));
+        cm.set(hash(i>>8, Clamp4(W+N-NW,W,NW,N,NE)/8, px));
+        cm.set(~0x5ca1ab1e);
+
+        ctx = (min(color,stride-1)<<9)|((abs(W-N)>8)<<8)|((W>N)<<7)|((W>NW)<<6)|((abs(N-NW)>8)<<5)|((N>NW)<<4)|((N>NE)<<3)|min(5,(filter+1)*filterOn);
       }
-      ctx = (min(color,stride)<<9)|((abs(W-N)>8)<<8)|((W>N)<<7)|((W>NW)<<6)|((abs(N-NW)>8)<<5)|((N>NW)<<4)|((abs(N-NE)>8)<<3)|((N>NE)<<2)|((W>WW)<<1)|(N>NN);
     }
   }
 
@@ -2554,9 +2572,9 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
     static int col=0;
     if (++col>=stride*8) col=0;
     m.set(5+ctx, 2048+5 );
-    m.set(col, 32);
-    m.set((buffer(1+(alpha && !color))>>4)*stride+(x%stride), 64);
-    m.set(c0, 256);
+    m.set(col+(isPNG?(ctx&7)+1:0)*32, 8*32);
+    m.set(((isPNG?buffer(1):buf(1+(alpha && !color)))>>4)*stride+(x%stride) + min(5,(filter+1)*filterOn)*64, 6*64);
+    m.set(c0+256*(isPNG && abs(R1-128)>8), 256*2);
   }
   else{
     m.add( -2048+((filter>>(7-bpos))&1)*4096 );
@@ -3620,7 +3638,7 @@ inline int X2(int i) {
   }
 }
 
-void wavModel(Mixer& m, int info) {
+void wavModel(Mixer& m, int info, ModelStats *Stats = NULL) {
   static int pr[3][2], n[2], counter[2];
   static double F[49][49][2],L[49][49];
   int j,k,l,i=0;
@@ -3647,7 +3665,7 @@ void wavModel(Mixer& m, int info) {
   }
   // Select previous samples and predicted sample as context
   if (!bpos && blpos>=w) {
-    /*const int*/ ch=blpos%w;
+    ch=blpos%w;
     const int msb=ch%(bits>>3);
     const int chn=ch/(bits>>3);
     if (!msb) {
@@ -3751,7 +3769,11 @@ void wavModel(Mixer& m, int info) {
   scm6.mix(m);
   scm7.mix(m);
   cm.mix(m);
-  if (level>=4) recordModel(m);
+  if (level>=4){
+    if (Stats)
+      (*Stats).Record = (w<<16)|((*Stats).Record&0xFFFF);
+    recordModel(m, Stats);
+  }
   static int col=0;
   if (++col>=w*8) col=0;
   //m.set(3, 8);
@@ -5250,7 +5272,7 @@ int contextModel2() {
   if (filetype==IMAGE32) return im24bitModel(m, info, 1), m.p();
   if (filetype==PNG24) return im24bitModel(m, info, 0, 1), m.p();
   if (filetype==PNG32) return im24bitModel(m, info, 1, 1), m.p();
-  if (filetype==AUDIO) return wavModel(m, info), m.p();
+  if (filetype==AUDIO) return wavModel(m, info, &stats), m.p();
   if (filetype==JPEG) if (jpegModel(m)) return m.p();
 
   // Normal model
@@ -5668,8 +5690,11 @@ bool IsGrayscalePalette(FILE* in, int n = 256, int isRGBA = 0){
 
     //"j" is the index of the current byte in this color entry
     int j = i%stride;
-    if (!j)
-      res = (res&((b-(res&0xFF)==order)<<8))|b; // load first component of this entry
+    if (!j){
+      // load first component of this entry
+      res = (res&((b-(res&0xFF)==order)<<8));
+      res|=(res)?b:0;
+    }
     else if (j==3)
       res&=((!b || (b==0xFF))*0x1FF); // alpha/attribute component must be zero or 0xFF
     else
@@ -5697,7 +5722,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
   int s3mi=0,s3mno=0,s3mni=0;  // For S3M detection
   int bmp=0,imgbpp=0,bmpx=0,bmpy=0,bmpof=0,bmps=0,hdrless=0;  // For BMP detection
   int rgbi=0,rgbx=0,rgby=0;  // For RGB detection
-  int tga=0,tgax=0,tgay=0,tgaz=0,tgat=0;  // For TGA detection
+  int tga=0,tgax=0,tgay=0,tgaz=0,tgat=0,tgaid=0,tgamap=0;  // For TGA detection
   int pgm=0,pgmcomment=0,pgmw=0,pgmh=0,pgm_ptr=0,pgmc=0,pgmn=0,pamatr=0,pamd=0;  // For PBM, PGM, PPM, PAM detection
   char pgm_buf[32];
   int cdi=0,cda=0,cdm=0;  // For CD sectors detection
@@ -5706,7 +5731,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
   int zbufpos=0,zzippos=-1;
   int pdfim=0,pdfimw=0,pdfimh=0,pdfimb=0,pdfgray=0,pdfimp=0;
   int b64s=0,b64i=0,b64line=0,b64nl=0; // For base64 detection
-  int gif=0,gifa=0,gifi=0,gifw=0,gifc=0,gifb=0; // For GIF detection
+  int gif=0,gifa=0,gifi=0,gifw=0,gifc=0,gifb=0,gifplt=0,gifgray=0; // For GIF detection
   int png=0, pngw=0, pngh=0, pngbps=0, pngtype=0, lastchunk=0, nextchunk=0; // For PNG detection
 
   // For image detection
@@ -5864,7 +5889,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
         && (buf0&0xff)!=0 && (buf0&0xf8)!=0xd0) return DEFAULT;
 
     // Detect .wav file header
-    if (buf0==0x52494646) wavi=i,wavm=0;
+    if (buf0==0x52494646) wavi=i,wavm=wavlen=0;
     if (wavi) {
       int p=i-wavi;
       if (p==4) wavsize=bswap(buf0);
@@ -5874,12 +5899,13 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
       }
       else if (wavtype){
         if (wavtype==1) {
-          if (p==16 && (buf1!=0x666d7420 || bswap(buf0)!=16)) wavi=0;
-          else if (p==22) wavch=bswap(buf0)&0xffff;
-          else if (p==34) wavbps=bswap(buf0)&0xffff;
-          else if (p==40+wavm && buf1!=0x64617461) wavm+=bswap(buf0)+8,wavi=(wavm>0xfffff?0:wavi);
-          else if (p==40+wavm) {
+          if (p==16+wavlen && (buf1!=0x666d7420 || bswap(buf0)!=16)) wavlen=((bswap(buf0)+1)&(-2))+8, wavi*=(buf1==0x666d7420 && bswap(buf0)!=16);
+          else if (p==22+wavlen) wavch=bswap(buf0)&0xffff;
+          else if (p==34+wavlen) wavbps=bswap(buf0)&0xffff;
+          else if (p==40+wavlen+wavm && buf1!=0x64617461) wavm+=((bswap(buf0)+1)&(-2))+8,wavi=(wavm>0xfffff?0:wavi);
+          else if (p==40+wavlen+wavm) {
             int wavd=bswap(buf0);
+            wavlen=0;
             if ((wavch==1 || wavch==2) && (wavbps==8 || wavbps==16) && wavd>0 && wavsize>=wavd+36
                && wavd%((wavbps/8)*wavch)==0) AUD_DET(AUDIO,wavi-3,44+wavm,wavd,wavch+wavbps/4-3);
             wavi=0;
@@ -6118,19 +6144,21 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
     }
 
     // Detect .tga image (8-bit 256 colors or 24-bit uncompressed)
-    if (buf1==0x00010100 && buf0==0x00000118) tga=i,tgax=tgay,tgaz=8,tgat=1;
-    else if (buf1==0x00000200 && buf0==0x00000000) tga=i,tgax=tgay,tgaz=24,tgat=2;
-    else if (buf1==0x00000300 && buf0==0x00000000) tga=i,tgax=tgay,tgaz=8,tgat=3;
+    if ((buf1&0xFFFFFF)==0x00010100 && (buf0&0xFFFFFFC7)==0x00000100 && (c==16 || c==24 || c==32)) tga=i,tgax=tgay,tgaz=8,tgat=1,tgaid=buf1>>24,tgamap=c/8;
+    else if ((buf1&0xFFFFFF)==0x00000200 && buf0==0x00000000) tga=i,tgax=tgay,tgaz=24,tgat=2;
+    else if ((buf1&0xFFFFFF)==0x00000300 && buf0==0x00000000) tga=i,tgax=tgay,tgaz=8,tgat=3;
     if (tga) {
       if (i-tga==8) tga=(buf1==0?tga:0),tgax=(bswap(buf0)&0xffff),tgay=(bswap(buf0)>>16);
       else if (i-tga==10) {
-        if (tgaz==(int)((buf0&0xffff)>>8) && tgax && tgay) {
+        if ((buf0&0xFFF7)==32<<8)
+          tgaz=32;
+        if ((tgaz<<8)==(int)(buf0&0xFFD7) && tgax && tgay) {
           if (tgat==1){
             fseek(in, start+tga+11, SEEK_SET);
-            IMG_DET( (IsGrayscalePalette(in))?IMAGE8GRAY:IMAGE8,tga-7,18+256*3,tgax,tgay);
+            IMG_DET( (IsGrayscalePalette(in))?IMAGE8GRAY:IMAGE8,tga-7,18+tgaid+256*tgamap,tgax,tgay);
           }
-          else if (tgat==2) IMG_DET(IMAGE24,tga-7,18,tgax*3,tgay);
-          else if (tgat==3) IMG_DET(IMAGE8,tga-7,18,tgax,tgay);
+          else if (tgat==2) IMG_DET((tgaz==24)?IMAGE24:IMAGE32,tga-7,18+tgaid,tgax*(tgaz>>3),tgay);
+          else if (tgat==3) IMG_DET(IMAGE8GRAY,tga-7,18+tgaid,tgax,tgay);
         }
         tga=0;
       }
@@ -6143,7 +6171,8 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
     }
     if (!gif && (buf1&0xffff)==0x4749 && (buf0==0x46383961 || buf0==0x46383761)) gif=1,gifi=i+5;
     if (gif) {
-      if (gif==1 && i==gifi) gif=2,gifi=i+5+((c&128)?(3*(2<<(c&7))):0);
+      if (gif==1 && i==gifi) gif=2, gifi = i+5+(gifplt=(c&128)?(3*(2<<(c&7))):0);
+      if (gif==2 && gifplt && i==gifi-gifplt-2) gifgray = IsGrayscalePalette(in, gifplt/3), gifplt = 0;
       if (gif==2 && i==gifi) {
         if ((buf0&0xff0000)==0x210000) gif=5,gifi=i;
         else if ((buf0&0xff0000)==0x2c0000) gif=3,gifi=i;
@@ -6155,7 +6184,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
         if (c>0 && gifb && gifc!=gifb) gifw=0;
         if (c>0) gifb=gifc,gifc=c,gifi+=c+1;
         else if (!gifw) gif=2,gifi=i+3;
-        else return fseek(in, start+gifa-1, SEEK_SET),detd=i-gifa+2,info=(IMAGE8<<24)|gifw,dett=GIF;
+        else return fseek(in, start+gifa-1, SEEK_SET),detd=i-gifa+2,info=((gifgray?IMAGE8GRAY:IMAGE8)<<24)|gifw,dett=GIF;
       }
       if (gif==5 && i==gifi) {
         if (c>0) gifi+=c+1; else gif=2,gifi=i+3;
