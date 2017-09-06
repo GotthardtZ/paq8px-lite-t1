@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on September 04, 2017
+/* paq8px file compressor/archiver.  Released on September 06, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -916,10 +916,10 @@ public:
 
 /////////////////////// Global context /////////////////////////
 
-typedef enum {DEFAULT=0, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF, PNG8, PNG24, PNG32} Filetype;
+typedef enum {DEFAULT=0, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF, PNG8, PNG8GRAY, PNG24, PNG32} Filetype;
 
 inline bool hasRecursion(Filetype ft) { return ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF; }
-inline bool hasInfo(Filetype ft) { return ft==IMAGE1 || ft==IMAGE4 || ft==IMAGE8 || ft==IMAGE8GRAY || ft==IMAGE24 || ft==IMAGE32 || ft==AUDIO || ft==PNG8 || ft==PNG24 || ft==PNG32; }
+inline bool hasInfo(Filetype ft) { return ft==IMAGE1 || ft==IMAGE4 || ft==IMAGE8 || ft==IMAGE8GRAY || ft==IMAGE24 || ft==IMAGE32 || ft==AUDIO || ft==PNG8 || ft==PNG8GRAY || ft==PNG24 || ft==PNG32; }
 inline bool hasTransform(Filetype ft) { return ft==IMAGE24 || ft==IMAGE32 || ft==EXE || ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF; }
 
 int level=DEFAULT_OPTION;  // Compression level 0 to 8
@@ -2406,13 +2406,13 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
   const int SC=0x20000;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm10(512);
-  static ContextMap cm(MEM*4, 13+18);
+  static ContextMap cm(MEM*4, 13+18+3);
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
-  static U8 WWW, WW, W, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
+  static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 px = 0; // current PNG filter prediction
   static int color = -1;
   static int stride = 3;
-  static int ctx, padding, lastPos, filter=0, filterOn=0, x=0, w=0, line=0, R1=0, R2=0;
+  static int ctx, padding, lastPos, filter=0, filterOn=0, columns=0, x=0, w=0, line=0, R1=0, R2=0;
 
   if (!bpos) {
     if ((color < 0) || (pos-lastPos != 1)){
@@ -2420,6 +2420,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
       w = info&0xFFFFFF;
       padding = w%stride;
       x = color = line = filterOn = 0;
+      columns = max(1,w/max(1,ilog2(w)*3));
     }
     else{
       x*=(++x)<w+isPNG;
@@ -2439,7 +2440,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
       if (isPNG){
         switch (filter){
           case 1: {
-            buffer.Add((U8)( B + buffer(stride)*(x>stride+1) ) );
+            buffer.Add((U8)( B + buffer(stride)*(x>stride+1 || !x) ) );
             filterOn = x>stride;
             px = buffer(stride);
             break;
@@ -2450,27 +2451,27 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
             break;
           }
           case 3: {
-            buffer.Add((U8)( B + (buffer(w)*(line>0) + buffer(stride)*(x>stride+1))/2 ) );
+            buffer.Add((U8)( B + (buffer(w)*(line>0) + buffer(stride)*(x>stride+1 || !x))/2 ) );
             filterOn = (x>stride || line>0);
-            px = (buffer(stride)+buffer(w))/2;
+            px = (buffer(stride)*(x>stride)+buffer(w)*(line>0))/2;
             break;
           }
           case 4: {
-            buffer.Add((U8)( B + Paeth(buffer(stride)*(x>stride+1), buffer(w)*(line>0), buffer(w+stride)*(line>0 && x>stride+1)) ) );
+            buffer.Add((U8)( B + Paeth(buffer(stride)*(x>stride+1 || !x), buffer(w)*(line>0), buffer(w+stride)*(line>0 && (x>stride+1 || !x))) ) );
             filterOn = (x>stride || line>0);
-            px = Paeth(buffer(stride),buffer(w),buffer(w+stride));
+            px = Paeth(buffer(stride)*(x>stride),buffer(w)*(line>0),buffer(w+stride)*(x>stride && line>0));
             break;
           }
           default: buffer.Add(B);
             filterOn = false;
-            px = buffer(w);
+            px = 0;
         }
         px*=filterOn;
       }
     }
 
     if (x || !isPNG){
-      int i=color<<5;
+      int i=color<<5, column=(x-isPNG)/columns;
 
       if (!isPNG){
         WWW=buf(3*stride), WW=buf(2*stride), W=buf(stride), NW=buf(w+stride), N=buf(w), NE=buf(w-stride), NEE=buf(w-2*stride), NNWW=buf((w+stride)*2), NNW=buf(w*2+stride), NN=buf(w*2), NNE=buf(w*2-stride), NNEE=buf((w-stride)*2), NNN=buf(w*3);
@@ -2479,24 +2480,27 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         mean>>=2;
         const int logvar=ilog(var);
 
-        cm.set(hash( (N+1)>>1, LogMeanDiffQt(N,Clip(NN*2-NNN)) ));
-        cm.set(hash( (W+1)>>1, LogMeanDiffQt(W,Clip(WW*2-WWW)) ));
-        cm.set(hash( Clamp4(W+N-NW,W,NW,N,NE), LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
-        cm.set(hash( (NNN+N+4)/8, Clip(N*3-NN*3+NNN)>>1 ));
-        cm.set(hash( (WWW+W+4)/8, Clip(W*3-WW*3+WWW)>>1 ));
-        cm.set(hash(++i, (W+Clip(NE*3-NNE*3+buf(w*3-stride)))/4 ));
-        cm.set(hash(++i, Clip((-buf(4*stride)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buf(w*3-stride)*4-buf(w*4-stride),N,NE,buf(w-2*stride),buf(w-3*stride)))/5)/4 ));
-        cm.set( Clip(NEE+N-NNEE) );
-        cm.set( Clip(NN+W-NNW) );
+        cm.set(hash((N+1)>>1, LogMeanDiffQt(N,Clip(NN*2-NNN))));
+        cm.set(hash((W+1)>>1, LogMeanDiffQt(W,Clip(WW*2-WWW))));
+        cm.set(hash(Clamp4(W+N-NW,W,NW,N,NE), LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
+        cm.set(hash((NNN+N+4)/8, Clip(N*3-NN*3+NNN)>>1 ));
+        cm.set(hash((WWW+W+4)/8, Clip(W*3-WW*3+WWW)>>1 ));
+        cm.set(hash(++i, (W+Clip(NE*3-NNE*3+buf(w*3-stride)))/4, LogMeanDiffQt(N,(NW+NE)/2)));
+        cm.set(hash(++i, Clip((-buf(4*stride)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buf(w*3-stride)*4-buf(w*4-stride),N,NE,buf(w-2*stride),buf(w-3*stride)))/5)/4));
+        cm.set(hash(Clip(NEE+N-NNEE), LogMeanDiffQt(W,Clip(NW+NE-NNE))));
+        cm.set(hash(Clip(NN+W-NNW), LogMeanDiffQt(W,Clip(NNW+WW-NNWW))));
         cm.set(hash(++i, buf(1)));
         cm.set(hash(++i, buf(2)));
-        cm.set(hash(++i, Clip(W+N-NW)/2, Clip(W+buf(1)-buf(stride+1))/2 ));
+        cm.set(hash(++i, Clip(W+N-NW)/2, Clip(W+buf(1)-buf(stride+1))/2));
         cm.set(hash(Clip(N*2-NN)/2, LogMeanDiffQt(N,Clip(NN*2-NNN))));
         cm.set(hash(Clip(W*2-WW)/2, LogMeanDiffQt(W,Clip(WW*2-WWW))));
-        cm.set( Clamp4(N*3-NN*3+NNN,W,NW,N,NE)/2 );
-        cm.set( Clamp4(W*3-WW*3+WWW,W,N,NE,NEE)/2 );
-        cm.set(hash(++i, LogMeanDiffQt(W,buf(stride+1)), Clamp4((buf(1)*W)/max(1,buf(stride+1)),W,N,NE,NEE) ));
-        cm.set(hash(++i, Clamp4(N+buf(2)-buf(w+2),W,NW,N,NE) ));
+        cm.set(Clamp4(N*3-NN*3+NNN,W,NW,N,NE)/2);
+        cm.set(Clamp4(W*3-WW*3+WWW,W,N,NE,NEE)/2);
+        cm.set(hash(++i, LogMeanDiffQt(W,buf(stride+1)), Clamp4((buf(1)*W)/max(1,buf(stride+1)),W,N,NE,NEE)));
+        cm.set(hash(++i, Clamp4(N+buf(2)-buf(w+2),W,NW,N,NE)));
+        cm.set(hash(++i, Clip(W+N-NW), column));
+        cm.set(hash(++i, Clip(N*2-NN), LogMeanDiffQt(W,Clip(NW*2-NNW))));
+        cm.set(hash(++i, Clip(W*2-WW), LogMeanDiffQt(N,Clip(NW*2-NWW))));
 
         cm.set(hash(++i, W));
         cm.set(hash(++i, W, buf(1)));
@@ -2525,7 +2529,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
       }
       else{
         i|=(filterOn)?((0x100|filter)<<8):0;
-        WWW=buffer(3*stride), WW=buffer(2*stride), W=buffer(stride), NW=buffer(w+stride), N=buffer(w), NE=buffer(w-stride), NEE=buffer(w-2*stride), NNWW=buffer((w+stride)*2), NNW=buffer(w*2+stride), NN=buffer(w*2), NNE=buffer(w*2-stride), NNEE=buffer((w-stride)*2), NNN=buffer(w*3);
+        WWW=buffer(3*stride), WW=buffer(2*stride), W=buffer(stride), NWW=buffer(w+2*stride), NW=buffer(w+stride), N=buffer(w), NE=buffer(w-stride), NEE=buffer(w-2*stride), NNWW=buffer((w+stride)*2), NNW=buffer(w*2+stride), NN=buffer(w*2), NNE=buffer(w*2-stride), NNEE=buffer((w-stride)*2), NNN=buffer(w*3);
         int residuals[5] = { ((int8_t)buf(stride+(x<=stride)))+128,
                              ((int8_t)buf(1+(x<2)))+128,
                              ((int8_t)buf(stride+1+(x<=stride)))+128,
@@ -2549,11 +2553,19 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(hash(i>>8, Clip(N*3-NN*3+NNN)-px));
         cm.set(hash(i>>8, Clip(W*3-WW*3+WWW)-px));
         cm.set(hash(++i, (W+Clip(NE*3-NNE*3+buffer(w*3-stride)))/2-px, R2));
-        cm.set(hash(++i, (W+NEE)/2-px, R1/2 ));
+        cm.set(hash(++i, (W+NEE)/2-px, R1/2));
         cm.set(hash(++i, Clip(W+buffer(1)-buffer(stride+1))-px, R1));
         cm.set(hash(++i, Clip(N+buffer(1)-buffer(w+1))-px));
         cm.set(hash(++i, Clip(NW+buffer(1)-buffer(w+stride+1))-px));
         cm.set(hash(i>>8, Clamp4(W+N-NW,W,NW,N,NE)/8, px));
+        cm.set(hash(++i, (W+Clamp4(NE*3-NNE*3+buffer(w*3-stride),W,N,NE,NEE))/2-px, LogMeanDiffQt(N,(NW+NE)/2)));
+        cm.set(hash(++i, Clamp4(W+N-NW,W,NW,N,NE)-px, column));
+        cm.set(hash(++i, Clip(N*3-NN*3+NNN)-px, LogMeanDiffQt(W,Clip(NW*2-NNW))));
+        cm.set(hash(++i, Clip(W*3-WW*3+WWW)-px, LogMeanDiffQt(N,Clip(NW*2-NWW))));
+        cm.set(hash(i>>8, Clip(N+NE-NNE)-px, column));
+        cm.set(hash(i>>8, Clip(N+NW-NNW)-px, column));
+        cm.set(hash(++i, Clip(NE+buffer(1)-buffer(w-stride+1))-px, column));
+        cm.set(hash(++i, Clip(NW+buffer(1)-buffer(w+stride+1))-px, column));
         cm.set(~0x5ca1ab1e);
 
         ctx = (min(color,stride-1)<<9)|((abs(W-N)>8)<<8)|((W>N)<<7)|((W>NW)<<6)|((abs(N-NW)>8)<<5)|((N>NW)<<4)|((N>NE)<<3)|min(5,(filter+1)*filterOn);
@@ -2578,9 +2590,9 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
     }
     static int col=0;
     if (++col>=stride*8) col=0;
-    m.set(5+ctx, 2048+5 );
+    m.set(5+ctx, 2048+5);
     m.set(col+(isPNG?(ctx&7)+1:0)*32, 8*32);
-    m.set( ((isPNG?buffer(1):0)>>4)*stride+(x%stride) + min(5,(filter+1)*filterOn)*64, 6*64);
+    m.set(((isPNG?buffer(1):0)>>4)*stride+(x%stride) + min(5,(filter+1)*filterOn)*64, 6*64);
     m.set(c0+256*(isPNG && abs(R1-128)>8), 256*2);
   }
   else{
@@ -2592,177 +2604,314 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
 //////////////////////////// im8bitModel /////////////////////////////////
 
 // Model for 8-bit image data
-void im8bitModel(Mixer& m, int w, int gray = 0) {
+void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
   const int SC=0x20000;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC*2),scm7(SC);
   static ContextMap cm(MEM*4, 45+12 +5);
+  static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
+  static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
+  static U8 px = 0, res = 0; // current PNG filter prediction, expected residual
   static int itype=0, id8=1, id9=1;
-  static int ctx, col=0;
+  static int ctx, lastPos=0, col=0, line=0, x=0, columns=0, filter=0, filterOn=0;
   // Select nearby pixels as context
   if (!bpos) {
-    assert(w>3);
-    int mean=buf(1)+buf(w-1)+buf(w)+buf(w+1);
-    const int var=(sqrbuf(1)+sqrbuf(w-1)+sqrbuf(w)+sqrbuf(w+1)-mean*mean/4)>>2;
-    mean>>=2;
-    const int logvar=ilog(var);
-    int i=0;
+    if (isPNG){
+      if (pos!=lastPos+1){
+        x = line = filterOn = 0;
+        columns = max(1,w/max(1,ilog2(w)*2));
+      }
+      else{
+        x*=(++x)<w+isPNG;
+        line+=(!x);
+      }
+      lastPos = pos;
 
-    const int errr=(buf(2)+buf(w+1)-buf(w));
-    if(abs(errr-buf(w-1)+buf(1)-buf(w))>255) id8++; else id9++;
-    if (blpos==0) id8=id9=1,itype=0;    // reset on new block
-    if(blpos%w==0 && blpos>w) itype=(id9/id8)<4; // select model
+      if (x==1)
+        filter = (U8)c4;
+      else{
+        U8 B = (U8)c4;
 
-    if (itype==0) { //faster, for smooth images
-      cm.set(hash(++i,buf(1),0));
-      cm.set(hash(++i,buf(w-1),0));
-      cm.set(hash(++i,buf(w-2),0));
-      cm.set(hash(++i,buf(2),0));
-      cm.set(hash(++i,buf(w*2-1),0));
-      cm.set(hash(++i,buf(w-1)+buf(1)-buf(w),buf(1)));
-      cm.set(hash(++i,buf(w+1),0));
-      cm.set(hash(++i,buf(w*2-2),0));
-      cm.set(hash(++i,2*buf(w-1)-buf(w*2-1),buf(1)));
-      cm.set(hash(++i,2*buf(1)-buf(2),buf(1)));
-      cm.set(hash(++i,(abs(buf(1)-buf(2))+abs(buf(w-1)-buf(w))+abs(buf(w-1)-buf(w-2))),buf(1)));
-      cm.set(hash(++i,(abs(buf(1)-buf(w))+abs(buf(w-1)-buf(w*2-1))+abs(buf(w-2)-buf(w*2-2))),buf(1)));
-      cm.set(hash(++i,abs(errr-buf(w-1)+buf(1)-buf(w)),buf(1)));
-      cm.set(hash(++i,mean,logvar));
-      cm.set(hash(++i,2*buf(1)-buf(2),2*buf(w-1)-buf(w*2-1)));
-      cm.set(hash(++i,(abs(buf(1)-buf(2))+abs(buf(w-1)-buf(w))+abs(buf(w-1)-buf(w-2))), (abs(buf(1)-buf(w))+abs(buf(w-1)-buf(w*2-1))+abs(buf(w-2)-buf(w*2-2)))));
-      cm.set(hash(++i,buf(1)>>2, buf(w)>>2));
-      cm.set(hash(++i,buf(1)>>2, buf(2)>>2));
-      cm.set(hash(++i,buf(w)>>2, buf(w*2)>>2));
-      cm.set(hash(++i,buf(1)>>2, buf(w-1)>>2));
-      cm.set(hash(++i,buf(w)>>2, buf(w+1)>>2));
-      cm.set(hash(++i,buf(w+1)>>2, buf(w+2)>>2));
-      cm.set(hash(++i,(buf(w+1)+buf(w*2+2))>>1));
-      cm.set(hash(++i,(buf(w-1)+buf(w*2-2))>>1));
-      cm.set(hash(++i,2*buf(w-1)-buf(w*2-1),buf(w-1)));
-      cm.set(hash(++i,2*buf(1)-buf(2),buf(w-1)));
-      cm.set(hash(++i,buf(w*2-1),buf(w-2),buf(1)));
-      cm.set(hash(++i,(buf(1)+buf(w))>>1));
-      cm.set(hash(++i,(buf(1)+buf(2))>>1));
-      cm.set(hash(++i,(buf(w)+buf(w*2))>>1));
-      cm.set(hash(++i,(buf(1)+buf(w-1))>>1));
-      cm.set(hash(++i,(buf(w)+buf(w+1))>>1));
-      cm.set(hash(++i,(buf(w+1)+buf(w+2))>>1));
-      cm.set(hash(++i,(buf(w+1)+buf(w*2+2))>>1));
-      cm.set(hash(++i,(buf(w-1)+buf(w*2-2))>>1));
-      cm.set(hash(++i,buf(w*2-2),buf(w-1),buf(1)));
-      cm.set(hash(++i,buf(w+1),buf(w-1),buf(w-2),buf(1)));
-      cm.set(hash(++i,2*buf(1)-buf(2),buf(w-2),buf(w*2-2)));
-      cm.set(hash(++i,buf(2),buf(w+1),buf(w),buf(w-1)));
-      cm.set(hash(++i,buf(w*3), buf(w),buf(1)));
-      cm.set(hash(++i,buf(w)>>2, buf(3)>>2, buf(w-1)>>2));
-      cm.set(hash(++i,buf(3)>>2, buf(w-2)>>2, buf(w*2-2)>>2));
-      cm.set(hash(++i,buf(w)>>2, buf(1)>>2, buf(w-1)>>2));
-      cm.set(hash(++i,buf(w-1)>>2, buf(w)>>2, buf(w+1)>>2));
-      cm.set(hash(++i,buf(1)>>2, buf(w-1)>>2, buf(w*2-1)>>2));
-    } else {
-      i=512;
-      cm.set(hash(++i,buf(1),0));
-      cm.set(hash(++i,buf(2), 0));
-      cm.set(hash(++i,buf(w), 0));
-      cm.set(hash(++i,buf(w+1), 0));
-      cm.set(hash(++i,buf(w-1), 0));
-      cm.set(hash(++i,(buf(2)+buf(w)-buf(w+1)), 0));
-      cm.set(hash(++i,(buf(w)+buf(2)-buf(w+1))>>1, 0));
-      cm.set(hash(++i,(buf(2)+buf(w+1))>>1, 0));
-      cm.set(hash(++i,(buf(w-1)-buf(w)), buf(1)>>1));
-      cm.set(hash(++i,(buf(w)-buf(w+1)), buf(1)>>1));
-      cm.set(hash(++i,(buf(w+1)+buf(2)), buf(1)>>1));
-      cm.set(hash(++i,buf(1)>>2, buf(w)>>2));
-      cm.set(hash(++i,buf(1)>>2, buf(2)>>2));
-      cm.set(hash(++i,buf(w)>>2, buf(w*2)>>2));
-      cm.set(hash(++i,buf(1)>>2, buf(w-1)>>2));
-      cm.set(hash(++i,buf(w)>>2, buf(w+1)>>2));
-      cm.set(hash(++i,buf(w+1)>>2, buf(w+2)>>2));
-      cm.set(hash(++i,buf(w+1)>>2, buf(w*2+2)>>2));
-      cm.set(hash(++i,buf(w-1)>>2, buf(w*2-2)>>2));
-      cm.set(hash(++i,(buf(1)+buf(w))>>1));
-      cm.set(hash(++i,(buf(1)+buf(2))>>1));
-      cm.set(hash(++i,(buf(w)+buf(w*2))>>1));
-      cm.set(hash(++i,(buf(1)+buf(w-1))>>1));
-      cm.set(hash(++i,(buf(w)+buf(w+1))>>1));
-      cm.set(hash(++i,(buf(w+1)+buf(w+2))>>1));
-      cm.set(hash(++i,(buf(w+1)+buf(w*2+2))>>1));
-      cm.set(hash(++i,(buf(w-1)+buf(w*2-2))>>1));
-      cm.set(hash(++i,buf(w)>>2, buf(1)>>2, buf(w-1)>>2));
-      cm.set(hash(++i,buf(w-1)>>2, buf(w)>>2, buf(w+1)>>2));
-      cm.set(hash(++i,buf(1)>>2, buf(w-1)>>2, buf(w*2-1)>>2));
-      cm.set(hash(++i,(buf(3)+buf(w))>>1, buf(1)>>2, buf(2)>>2));
-      cm.set(hash(++i,(buf(2)+buf(1))>>1,(buf(w)+buf(w*2))>>1,buf(w-1)>>2));
-      cm.set(hash(++i,(buf(2)+buf(1))>>2,(buf(w-1)+buf(w))>>2));
-      cm.set(hash(++i,(buf(2)+buf(1))>>1,(buf(w)+buf(w*2))>>1));
-      cm.set(hash(++i,(buf(2)+buf(1))>>1,(buf(w-1)+buf(w*2-2))>>1));
-      cm.set(hash(++i,(buf(2)+buf(1))>>1,(buf(w+1)+buf(w*2+2))>>1));
-      cm.set(hash(++i,(buf(w)+buf(w*2))>>1,(buf(w-1)+buf(w*2+2))>>1));
-      cm.set(hash(++i,(buf(w-1)+buf(w))>>1,(buf(w)+buf(w+1))>>1));
-      cm.set(hash(++i,(buf(1)+buf(w-1))>>1,(buf(w)+buf(w*2))>>1));
-      cm.set(hash(++i,(buf(1)+buf(w-1))>>2,(buf(w)+buf(w+1))>>2));
-      cm.set(hash(++i,(((buf(1)-buf(w-1))>>1)+buf(w))>>2));
-      cm.set(hash(++i,(((buf(w-1)-buf(w))>>1)+buf(1))>>2));
-      cm.set(hash(++i,(-buf(1)+buf(w-1)+buf(w))>>2));
-      cm.set(hash(++i,(buf(1)*2-buf(2))>>1));
-      cm.set(hash(++i,mean,logvar));
-      cm.set(hash(++i,(buf(w)*2-buf(w*2))>>1));
-      cm.set(hash(++i,(buf(1)+buf(w)-buf(w+1))>>1));
-      cm.set(hash(++i,(buf(4)+buf(3))>>2,(buf(w-1)+buf(w))>>2));
-      cm.set(hash(++i,(buf(4)+buf(3))>>1,(buf(w)+buf(w*2))>>1));
-      cm.set(hash(++i,(buf(4)+buf(3))>>1,(buf(w-1)+buf(w*2-2))>>1));
-      cm.set(hash(++i,(buf(4)+buf(3))>>1,(buf(w+1)+buf(w*2+2))>>1));
-      cm.set(hash(++i,(buf(4)+buf(1))>>2,(buf(w-3)+buf(w))>>2));
-      cm.set(hash(++i,(buf(4)+buf(1))>>1,(buf(w)+buf(w*2))>>1));
-      cm.set(hash(++i,(buf(4)+buf(1))>>1,(buf(w-3)+buf(w*2-3))>>1));
-      cm.set(hash(++i,(buf(4)+buf(1))>>1,(buf(w+3)+buf(w*2+3))>>1));
-      cm.set(hash(++i,buf(w)>>2, buf(3)>>2, buf(w-1)>>2));
-      cm.set(hash(++i,buf(3)>>2, buf(w-2)>>2, buf(w*2-2)>>2));
-    }
+        switch (filter){
+          case 1: {
+            buffer.Add((U8)( B + buffer(1)*(x>2 || !x) ) );
+            filterOn = x>1;
+            px = buffer(1);
+            break;
+          }
+          case 2: {
+            buffer.Add((U8)( B + buffer(w)*(filterOn=(line>0)) ) );
+            px = buffer(w);
+            break;
+          }
+          case 3: {
+            buffer.Add((U8)( B + (buffer(w)*(line>0) + buffer(1)*(x>2 || !x))/2 ) );
+            filterOn = (x>1 || line>0);
+            px = (buffer(1)*(x>1)+buffer(w)*(line>0))/2;
+            break;
+          }
+          case 4: {
+            buffer.Add((U8)( B + Paeth(buffer(1)*(x>2 || !x), buffer(w)*(line>0), buffer(w+1)*(line>0 && (x>2 || !x))) ) );
+            filterOn = (x>1 || line>0);
+            px = Paeth(buffer(1)*(x>1),buffer(w)*(line>0),buffer(w+1)*(x>1 && line>0));
+            break;
+          }
+          default: buffer.Add(B);
+            filterOn = false;
+            px = 0;
+        }
+        px*=filterOn;
+      }
+      
+      if (x){
+        int i=((filter+1)*filterOn)<<5, column=(x-1)/columns;
+        WWW=buffer(3), WW=buffer(2), W=buffer(1), NWW=buffer(w+2), NW=buffer(w+1), N=buffer(w), NE=buffer(w-1), NEE=buffer(w-2), NNWW=buffer(w*2+2), NNW=buffer(w*2+1), NN=buffer(w*2), NNE=buffer(w*2-1), NNEE=buffer(w*2-2), NNN=buffer(w*3);
 
-    int WWW=buf(3), WW=buf(2), W=buf(1), NW=buf(w+1), N=buf(w), NE=buf(w-1), NEE=buf(w-2), NNW=buf(w*2+1), NN=buf(w*2), NNE=buf(w*2-1), NNN=buf(w*3);
+        if (gray){
+          cm.set(hash(++i, N, px));
+          cm.set(hash(++i, N-px));
+          cm.set(hash(++i, W, px));
+          cm.set(hash(++i, NW, px));
+          cm.set(hash(++i, NE, px));
+          cm.set(hash(++i, N, NN, px));
+          cm.set(hash(++i, W, WW, px));
+          cm.set(hash(++i, NE, NNEE, px ));
+          cm.set(hash(++i, NW, NNWW, px ));
+          cm.set(hash(++i, (Clamp4(W+N-NW,W,NW,N,NE)-px)/2, LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
+          cm.set(hash(++i, (W-px)/4, (NE-px)/4, column));
+          cm.set(hash(++i, (Clip(W*2-WW)-px)/4, (Clip(N*2-NN)-px)/4));
+          cm.set(hash(++i, (Clamp4(N+NE-NNE,W,N,NE,NEE)-px)/4, column));
+          cm.set(hash(++i, (Clamp4(N+NW-NNW,W,NW,N,NE)-px)/4, column));
+          cm.set(hash(++i, (W+NEE)/4, px, column));
+          cm.set(hash(++i, Clip(W+N-NW)-px, column));
+          cm.set(hash(++i, Clamp4(N*3-NN*3+NNN,W,N,NN,NE), px, LogMeanDiffQt(W,Clip(NW*2-NNW))));
+          cm.set(hash(++i, Clamp4(W*3-WW*3+WWW,W,N,NE,NEE), px, LogMeanDiffQt(N,Clip(NW*2-NWW))));
+          cm.set(hash(++i, (W+Clamp4(NE*3-NNE*3+buffer(w*3-1),W,N,NE,NEE))/2, px, LogMeanDiffQt(N,(NW+NE)/2)));
+          cm.set(hash(++i, (N+NNN)/8, Clip(N*3-NN*3+NNN)/4, px));
+          cm.set(hash(++i, (W+WWW)/8, Clip(W*3-WW*3+WWW)/4, px));
+          cm.set(hash(++i, Clip((-buffer(4)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buffer(w*3-1)*4-buffer(w*4-1),N,NE,buffer(w-2),buffer(w-3)))/5)-px));
+          cm.set(hash(++i, Clip(N*2-NN)-px, LogMeanDiffQt(N,Clip(NN*2-NNN))));
+          cm.set(hash(++i, Clip(W*2-WW)-px, LogMeanDiffQt(NE,Clip(N*2-NW))));
+          cm.set(~0xde7ec7ed);
 
-    if (gray){
-      ctx = min(0x1F,(blpos%w)/max(1,w/32))|( ( ((abs(W-N)*16>W+N)<<1)|(abs(N-NW)>8) )<<5 )|((W+N)&0x180);
-
-      cm.set(hash( ++i, (N+1)>>1, LogMeanDiffQt(N,Clip(NN*2-NNN)) ));
-      cm.set(hash( ++i, (W+1)>>1, LogMeanDiffQt(W,Clip(WW*2-WWW)) ));
-      cm.set(hash( ++i, Clamp4(W+N-NW,W,NW,N,NE), LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
-      cm.set(hash( ++i, (NNN+N+4)/8, Clip(N*3-NN*3+NNN)>>1 ));
-      cm.set(hash( ++i, (WWW+W+4)/8, Clip(W*3-WW*3+WWW)>>1 ));
+          ctx = ((abs(W-N)>8)<<10)|((W>N)<<9)|((abs(N-NW)>8)<<8)|((N>NW)<<7)|((abs(N-NE)>8)<<6)|((N>NE)<<5)|((W>WW)<<4)|((N>NN)<<3)|min(5,(filter+1)*filterOn);
+          res = Clamp4(W+N-NW,W,NW,N,NE)-px;
+        }
+        else{
+          cm.set(hash(++i, W, px));
+          cm.set(hash(++i, W, px, column));
+          cm.set(hash(++i, N, px));
+          cm.set(hash(++i, N, px, column));
+          cm.set(hash(++i, NW, px));
+          cm.set(hash(++i, NW, px, column));
+          cm.set(hash(++i, NE, px));
+          cm.set(hash(++i, NE, px, column));
+          cm.set(hash(++i, NWW, px));
+          cm.set(hash(++i, NEE, px));
+          cm.set(hash(++i, WW, px));
+          cm.set(hash(++i, NN, px));
+          cm.set(hash(++i, W, N, px));
+          cm.set(hash(++i, W, NW, px));
+          cm.set(hash(++i, W, NE, px));
+          cm.set(hash(++i, W, NEE, px));
+          cm.set(hash(++i, W, NWW, px));
+          cm.set(hash(++i, N, NW, px));
+          cm.set(hash(++i, N, NE, px));
+          cm.set(hash(++i, NW, NE, px));
+          cm.set(hash(++i, W, WW, px));
+          cm.set(hash(++i, N, NN, px));
+          cm.set(hash(++i, NW, NNWW, px));
+          cm.set(hash(++i, NE, NNEE, px));
+          cm.set(hash(++i, NW, NWW, px));
+          cm.set(hash(++i, NW, NNW, px));
+          cm.set(hash(++i, NE, NEE, px));
+          cm.set(hash(++i, NE, NNE, px));
+          cm.set(hash(++i, N, NNW, px));
+          cm.set(hash(++i, N, NNE, px));
+          cm.set(hash(++i, N, NNN, px));
+          cm.set(hash(++i, W, WWW, px));
+          cm.set(hash(++i, WW, NEE, px));
+          cm.set(hash(++i, W, buffer(w-3), px));
+          cm.set(hash(++i, W, buffer(w-4), px));
+          cm.set(hash(++i, px, column));
+          cm.set(hash(++i, px));
+          
+          ctx = min(0x1F,(x-1)/min(0x20,columns));
+          res = W;
+        }
+      }
     }
     else{
-      ctx = min(0x1F,(blpos%w)/max(1,w/32));
+      int mean=buf(1)+buf(w-1)+buf(w)+buf(w+1);
+      const int var=(sqrbuf(1)+sqrbuf(w-1)+sqrbuf(w)+sqrbuf(w+1)-mean*mean/4)>>2;
+      mean>>=2;
+      const int logvar=ilog(var);
+      int i=0;
 
-      cm.set(hash( ++i, W, NEE ));
-      cm.set(hash( ++i, WW, NN ));
-      cm.set(hash( ++i, W, WWW ));
-      cm.set(hash( ++i, N, NNN ));
-      cm.set(hash( ++i, NNW, NN ));
+      const int errr=(buf(2)+buf(w+1)-buf(w));
+      if(abs(errr-buf(w-1)+buf(1)-buf(w))>255) id8++; else id9++;
+      if (blpos==0) id8=id9=1,itype=0;    // reset on new block
+      if(blpos%w==0 && blpos>w) itype=(id9/id8)<4; // select model
+
+      if (itype==0) { //faster, for smooth images
+        cm.set(hash(++i,buf(1),0));
+        cm.set(hash(++i,buf(w-1),0));
+        cm.set(hash(++i,buf(w-2),0));
+        cm.set(hash(++i,buf(2),0));
+        cm.set(hash(++i,buf(w*2-1),0));
+        cm.set(hash(++i,buf(w-1)+buf(1)-buf(w),buf(1)));
+        cm.set(hash(++i,buf(w+1),0));
+        cm.set(hash(++i,buf(w*2-2),0));
+        cm.set(hash(++i,2*buf(w-1)-buf(w*2-1),buf(1)));
+        cm.set(hash(++i,2*buf(1)-buf(2),buf(1)));
+        cm.set(hash(++i,(abs(buf(1)-buf(2))+abs(buf(w-1)-buf(w))+abs(buf(w-1)-buf(w-2))),buf(1)));
+        cm.set(hash(++i,(abs(buf(1)-buf(w))+abs(buf(w-1)-buf(w*2-1))+abs(buf(w-2)-buf(w*2-2))),buf(1)));
+        cm.set(hash(++i,abs(errr-buf(w-1)+buf(1)-buf(w)),buf(1)));
+        cm.set(hash(++i,mean,logvar));
+        cm.set(hash(++i,2*buf(1)-buf(2),2*buf(w-1)-buf(w*2-1)));
+        cm.set(hash(++i,(abs(buf(1)-buf(2))+abs(buf(w-1)-buf(w))+abs(buf(w-1)-buf(w-2))), (abs(buf(1)-buf(w))+abs(buf(w-1)-buf(w*2-1))+abs(buf(w-2)-buf(w*2-2)))));
+        cm.set(hash(++i,buf(1)>>2, buf(w)>>2));
+        cm.set(hash(++i,buf(1)>>2, buf(2)>>2));
+        cm.set(hash(++i,buf(w)>>2, buf(w*2)>>2));
+        cm.set(hash(++i,buf(1)>>2, buf(w-1)>>2));
+        cm.set(hash(++i,buf(w)>>2, buf(w+1)>>2));
+        cm.set(hash(++i,buf(w+1)>>2, buf(w+2)>>2));
+        cm.set(hash(++i,(buf(w+1)+buf(w*2+2))>>1));
+        cm.set(hash(++i,(buf(w-1)+buf(w*2-2))>>1));
+        cm.set(hash(++i,2*buf(w-1)-buf(w*2-1),buf(w-1)));
+        cm.set(hash(++i,2*buf(1)-buf(2),buf(w-1)));
+        cm.set(hash(++i,buf(w*2-1),buf(w-2),buf(1)));
+        cm.set(hash(++i,(buf(1)+buf(w))>>1));
+        cm.set(hash(++i,(buf(1)+buf(2))>>1));
+        cm.set(hash(++i,(buf(w)+buf(w*2))>>1));
+        cm.set(hash(++i,(buf(1)+buf(w-1))>>1));
+        cm.set(hash(++i,(buf(w)+buf(w+1))>>1));
+        cm.set(hash(++i,(buf(w+1)+buf(w+2))>>1));
+        cm.set(hash(++i,(buf(w+1)+buf(w*2+2))>>1));
+        cm.set(hash(++i,(buf(w-1)+buf(w*2-2))>>1));
+        cm.set(hash(++i,buf(w*2-2),buf(w-1),buf(1)));
+        cm.set(hash(++i,buf(w+1),buf(w-1),buf(w-2),buf(1)));
+        cm.set(hash(++i,2*buf(1)-buf(2),buf(w-2),buf(w*2-2)));
+        cm.set(hash(++i,buf(2),buf(w+1),buf(w),buf(w-1)));
+        cm.set(hash(++i,buf(w*3), buf(w),buf(1)));
+        cm.set(hash(++i,buf(w)>>2, buf(3)>>2, buf(w-1)>>2));
+        cm.set(hash(++i,buf(3)>>2, buf(w-2)>>2, buf(w*2-2)>>2));
+        cm.set(hash(++i,buf(w)>>2, buf(1)>>2, buf(w-1)>>2));
+        cm.set(hash(++i,buf(w-1)>>2, buf(w)>>2, buf(w+1)>>2));
+        cm.set(hash(++i,buf(1)>>2, buf(w-1)>>2, buf(w*2-1)>>2));
+      } else {
+        i=512;
+        cm.set(hash(++i,buf(1),0));
+        cm.set(hash(++i,buf(2), 0));
+        cm.set(hash(++i,buf(w), 0));
+        cm.set(hash(++i,buf(w+1), 0));
+        cm.set(hash(++i,buf(w-1), 0));
+        cm.set(hash(++i,(buf(2)+buf(w)-buf(w+1)), 0));
+        cm.set(hash(++i,(buf(w)+buf(2)-buf(w+1))>>1, 0));
+        cm.set(hash(++i,(buf(2)+buf(w+1))>>1, 0));
+        cm.set(hash(++i,(buf(w-1)-buf(w)), buf(1)>>1));
+        cm.set(hash(++i,(buf(w)-buf(w+1)), buf(1)>>1));
+        cm.set(hash(++i,(buf(w+1)+buf(2)), buf(1)>>1));
+        cm.set(hash(++i,buf(1)>>2, buf(w)>>2));
+        cm.set(hash(++i,buf(1)>>2, buf(2)>>2));
+        cm.set(hash(++i,buf(w)>>2, buf(w*2)>>2));
+        cm.set(hash(++i,buf(1)>>2, buf(w-1)>>2));
+        cm.set(hash(++i,buf(w)>>2, buf(w+1)>>2));
+        cm.set(hash(++i,buf(w+1)>>2, buf(w+2)>>2));
+        cm.set(hash(++i,buf(w+1)>>2, buf(w*2+2)>>2));
+        cm.set(hash(++i,buf(w-1)>>2, buf(w*2-2)>>2));
+        cm.set(hash(++i,(buf(1)+buf(w))>>1));
+        cm.set(hash(++i,(buf(1)+buf(2))>>1));
+        cm.set(hash(++i,(buf(w)+buf(w*2))>>1));
+        cm.set(hash(++i,(buf(1)+buf(w-1))>>1));
+        cm.set(hash(++i,(buf(w)+buf(w+1))>>1));
+        cm.set(hash(++i,(buf(w+1)+buf(w+2))>>1));
+        cm.set(hash(++i,(buf(w+1)+buf(w*2+2))>>1));
+        cm.set(hash(++i,(buf(w-1)+buf(w*2-2))>>1));
+        cm.set(hash(++i,buf(w)>>2, buf(1)>>2, buf(w-1)>>2));
+        cm.set(hash(++i,buf(w-1)>>2, buf(w)>>2, buf(w+1)>>2));
+        cm.set(hash(++i,buf(1)>>2, buf(w-1)>>2, buf(w*2-1)>>2));
+        cm.set(hash(++i,(buf(3)+buf(w))>>1, buf(1)>>2, buf(2)>>2));
+        cm.set(hash(++i,(buf(2)+buf(1))>>1,(buf(w)+buf(w*2))>>1,buf(w-1)>>2));
+        cm.set(hash(++i,(buf(2)+buf(1))>>2,(buf(w-1)+buf(w))>>2));
+        cm.set(hash(++i,(buf(2)+buf(1))>>1,(buf(w)+buf(w*2))>>1));
+        cm.set(hash(++i,(buf(2)+buf(1))>>1,(buf(w-1)+buf(w*2-2))>>1));
+        cm.set(hash(++i,(buf(2)+buf(1))>>1,(buf(w+1)+buf(w*2+2))>>1));
+        cm.set(hash(++i,(buf(w)+buf(w*2))>>1,(buf(w-1)+buf(w*2+2))>>1));
+        cm.set(hash(++i,(buf(w-1)+buf(w))>>1,(buf(w)+buf(w+1))>>1));
+        cm.set(hash(++i,(buf(1)+buf(w-1))>>1,(buf(w)+buf(w*2))>>1));
+        cm.set(hash(++i,(buf(1)+buf(w-1))>>2,(buf(w)+buf(w+1))>>2));
+        cm.set(hash(++i,(((buf(1)-buf(w-1))>>1)+buf(w))>>2));
+        cm.set(hash(++i,(((buf(w-1)-buf(w))>>1)+buf(1))>>2));
+        cm.set(hash(++i,(-buf(1)+buf(w-1)+buf(w))>>2));
+        cm.set(hash(++i,(buf(1)*2-buf(2))>>1));
+        cm.set(hash(++i,mean,logvar));
+        cm.set(hash(++i,(buf(w)*2-buf(w*2))>>1));
+        cm.set(hash(++i,(buf(1)+buf(w)-buf(w+1))>>1));
+        cm.set(hash(++i,(buf(4)+buf(3))>>2,(buf(w-1)+buf(w))>>2));
+        cm.set(hash(++i,(buf(4)+buf(3))>>1,(buf(w)+buf(w*2))>>1));
+        cm.set(hash(++i,(buf(4)+buf(3))>>1,(buf(w-1)+buf(w*2-2))>>1));
+        cm.set(hash(++i,(buf(4)+buf(3))>>1,(buf(w+1)+buf(w*2+2))>>1));
+        cm.set(hash(++i,(buf(4)+buf(1))>>2,(buf(w-3)+buf(w))>>2));
+        cm.set(hash(++i,(buf(4)+buf(1))>>1,(buf(w)+buf(w*2))>>1));
+        cm.set(hash(++i,(buf(4)+buf(1))>>1,(buf(w-3)+buf(w*2-3))>>1));
+        cm.set(hash(++i,(buf(4)+buf(1))>>1,(buf(w+3)+buf(w*2+3))>>1));
+        cm.set(hash(++i,buf(w)>>2, buf(3)>>2, buf(w-1)>>2));
+        cm.set(hash(++i,buf(3)>>2, buf(w-2)>>2, buf(w*2-2)>>2));
+      }
+
+      /*int*/ WWW=buf(3), WW=buf(2), W=buf(1), NW=buf(w+1), N=buf(w), NE=buf(w-1), NEE=buf(w-2), NNW=buf(w*2+1), NN=buf(w*2), NNE=buf(w*2-1), NNN=buf(w*3);
+
+      if (gray){
+        ctx = min(0x1F,(blpos%w)/max(1,w/32))|( ( ((abs(W-N)*16>W+N)<<1)|(abs(N-NW)>8) )<<5 )|((W+N)&0x180);
+
+        cm.set(hash( ++i, (N+1)>>1, LogMeanDiffQt(N,Clip(NN*2-NNN)) ));
+        cm.set(hash( ++i, (W+1)>>1, LogMeanDiffQt(W,Clip(WW*2-WWW)) ));
+        cm.set(hash( ++i, Clamp4(W+N-NW,W,NW,N,NE), LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
+        cm.set(hash( ++i, (NNN+N+4)/8, Clip(N*3-NN*3+NNN)>>1 ));
+        cm.set(hash( ++i, (WWW+W+4)/8, Clip(W*3-WW*3+WWW)>>1 ));
+      }
+      else{
+        ctx = min(0x1F,(blpos%w)/max(1,w/32));
+
+        cm.set(hash( ++i, W, NEE ));
+        cm.set(hash( ++i, WW, NN ));
+        cm.set(hash( ++i, W, WWW ));
+        cm.set(hash( ++i, N, NNN ));
+        cm.set(hash( ++i, NNW, NN ));
+      }
+
+      scm1.set((buf(1)+buf(w))>>1);
+      scm2.set((buf(1)+buf(w)-buf(w+1))>>1);
+      scm3.set((buf(1)*2-buf(2))>>1);
+      scm4.set((buf(w)*2-buf(w*2))>>1);
+      scm5.set((buf(1)+buf(w)-buf(w-1))>>1);
+      scm6.set(mean>>1|(logvar<<1&0x180));
     }
-
-    scm1.set((buf(1)+buf(w))>>1);
-    scm2.set((buf(1)+buf(w)-buf(w+1))>>1);
-    scm3.set((buf(1)*2-buf(2))>>1);
-    scm4.set((buf(w)*2-buf(w*2))>>1);
-    scm5.set((buf(1)+buf(w)-buf(w-1))>>1);
-    scm6.set(mean>>1|(logvar<<1&0x180));
   }
 
   // Predict next bit
-  scm1.mix(m);
-  scm2.mix(m);
-  scm3.mix(m);
-  scm4.mix(m);
-  scm5.mix(m);
-  scm6.mix(m);
-  scm7.mix(m); // Amazingly but improves compression!
-  cm.mix(m);
-  if (++col>=8) col=0; // reset after every 24 columns?
-  m.set( (gray)?ctx:ctx|((bpos>4)<<8), 512 );
-  m.set(col, 8);
-  m.set((buf(w)+buf(1))>>4, 32);
-  m.set(c0, 256);
+  if (x || !isPNG){
+    cm.mix(m);
+    if (!isPNG){
+      scm1.mix(m);
+      scm2.mix(m);
+      scm3.mix(m);
+      scm4.mix(m);
+      scm5.mix(m);
+      scm6.mix(m);
+      scm7.mix(m); // Amazingly but improves compression!
+    }
+    col=(col+1)&7;
+    m.set(5+ctx, 2048+5);
+    m.set(col*2+(isPNG && c0==((0x100|res)>>(8-bpos))) + min(5,(filter+1)*filterOn)*16, 6*16);
+    m.set(((isPNG?px:buf(w)+buf(1))>>4) + min(5,(filter+1)*filterOn)*32, 6*32);
+    m.set(c0, 256);
+  }
+  else{
+    m.add( -2048+((filter>>(7-bpos))&1)*4096 );
+    m.set(min(4,filter),5);
+  }
 }
 
 //////////////////////////// im4bitModel /////////////////////////////////
@@ -5277,7 +5426,8 @@ int contextModel2() {
   if (filetype==IMAGE8GRAY) return im8bitModel(m, info, 1), m.p();
   if (filetype==IMAGE24) return im24bitModel(m, info), m.p();
   if (filetype==IMAGE32) return im24bitModel(m, info, 1), m.p();
-  if (filetype==PNG8) return im8bitModel(m, info, 0), m.p();
+  if (filetype==PNG8) return im8bitModel(m, info, 0, 1), m.p();
+  if (filetype==PNG8GRAY) return im8bitModel(m, info, 1, 1), m.p();
   if (filetype==PNG24) return im24bitModel(m, info, 0, 1), m.p();
   if (filetype==PNG32) return im24bitModel(m, info, 1, 1), m.p();
   if (filetype==AUDIO) return wavModel(m, info, &stats), m.p();
@@ -5740,7 +5890,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
   int pdfim=0,pdfimw=0,pdfimh=0,pdfimb=0,pdfgray=0,pdfimp=0;
   int b64s=0,b64i=0,b64line=0,b64nl=0; // For base64 detection
   int gif=0,gifa=0,gifi=0,gifw=0,gifc=0,gifb=0,gifplt=0,gifgray=0; // For GIF detection
-  int png=0, pngw=0, pngh=0, pngbps=0, pngtype=0, lastchunk=0, nextchunk=0; // For PNG detection
+  int png=0, pngw=0, pngh=0, pngbps=0, pngtype=0, pnggray=0, lastchunk=0, nextchunk=0; // For PNG detection
 
   // For image detection
   static int deth=0,detd=0;  // detected header/data size in bytes
@@ -5757,7 +5907,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
     buf0=buf0<<8|c;
 
     // detect PNG images
-    if (!png && buf3==0x89504E47 /*%PNG*/ && buf2==0x0D0A1A0A && buf1==0x0000000D && buf0==0x49484452) png=i, lastchunk=buf3;
+    if (!png && buf3==0x89504E47 /*%PNG*/ && buf2==0x0D0A1A0A && buf1==0x0000000D && buf0==0x49484452) png=i, pngtype=-1, lastchunk=buf3;
     if (png){
       const int p=i-png;
       if (p==12){
@@ -5765,8 +5915,11 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
         pngh = buf1;
         pngbps = buf0>>24;
         pngtype = (U8)(buf0>>16);
+        pnggray = 0;
         png*=((buf0&0xFFFF)==0 && pngw && pngh && pngbps==8 && (!pngtype || pngtype==2 || pngtype==3 || pngtype==4 || pngtype==6));
       }
+      else if (p>12 && pngtype<0)
+        png = 0;
       else if (p==17){
         png*=((buf1&0xFF)==0);
         nextchunk =(png)?i+8:0;
@@ -5775,6 +5928,10 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
         nextchunk+=buf1+4/*CRC*/+8/*Chunk length+Id*/;
         lastchunk = buf0;
         png*=(lastchunk!=0x49454E44/*IEND*/);
+        if (lastchunk==0x504C5445/*PLTE*/){
+          png*=(buf1%3==0);
+          pnggray = (png && IsGrayscalePalette(in, buf1/3));
+        }
       }
     }
 
@@ -5831,7 +5988,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
         else if (png && pngw<0x1000000 && lastchunk==0x49444154/*IDAT*/){
           if (pngbps==8 && pngtype==2 && (int)strm.total_out==(pngw*3+1)*pngh) info=(PNG24<<24)|(pngw*3), png=0;
           else if (pngbps==8 && pngtype==6 && (int)strm.total_out==(pngw*4+1)*pngh) info=(PNG32<<24)|(pngw*4), png=0;
-          else if (pngbps==8 && pngtype==3 && (int)strm.total_out==(pngw+1)*pngh) info=(PNG8<<24)|(pngw), png=0;
+          else if (pngbps==8 && (!pngtype || pngtype==3) && (int)strm.total_out==(pngw+1)*pngh) info=(((!pngtype || pnggray)?PNG8GRAY:PNG8)<<24)|(pngw), png=0;
         }
         return fseek(in, start+i-31, SEEK_SET),detd=streamLength,ZLIB;
       }
@@ -7024,8 +7181,8 @@ void transform_encode_block(Filetype type, FILE *in, int len, Encoder &en, int i
 }
 
 void compressRecursive(FILE *in, long n, Encoder &en, char *blstr, int it, float p1, float p2) {
-  static const char* typenames[18]={"default", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
-    "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif", "png-8b", "png-24b", "png-32b"};
+  static const char* typenames[19]={"default", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
+    "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif", "png-8b", "png-8b-grayscale", "png-24b", "png-32b"};
   static const char* audiotypes[4]={"8b mono", "8b stereo", "16b mono",
     "16b stereo"};
   Filetype type=DEFAULT;
