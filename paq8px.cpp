@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on September 06, 2017
+/* paq8px file compressor/archiver.  Released on September 07, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -2406,13 +2406,13 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
   const int SC=0x20000;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm10(512);
-  static ContextMap cm(MEM*4, 13+18+3);
+  static ContextMap cm(MEM*4, 13+23);
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 px = 0; // current PNG filter prediction
   static int color = -1;
   static int stride = 3;
-  static int ctx, padding, lastPos, filter=0, filterOn=0, columns=0, x=0, w=0, line=0, R1=0, R2=0;
+  static int ctx, padding, lastPos, filter=0, filterOn=0, columns=0, column=0, x=0, w=0, line=0, R1=0, R2=0;
 
   if (!bpos) {
     if ((color < 0) || (pos-lastPos != 1)){
@@ -2471,7 +2471,8 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
     }
 
     if (x || !isPNG){
-      int i=color<<5, column=(x-isPNG)/columns;
+      int i=color<<5;
+      column=(x-isPNG)/columns;
 
       if (!isPNG){
         WWW=buf(3*stride), WW=buf(2*stride), W=buf(stride), NW=buf(w+stride), N=buf(w), NE=buf(w-stride), NEE=buf(w-2*stride), NNWW=buf((w+stride)*2), NNW=buf(w*2+stride), NN=buf(w*2), NNE=buf(w*2-stride), NNEE=buf((w-stride)*2), NNN=buf(w*3);
@@ -2501,6 +2502,8 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(hash(++i, Clip(W+N-NW), column));
         cm.set(hash(++i, Clip(N*2-NN), LogMeanDiffQt(W,Clip(NW*2-NNW))));
         cm.set(hash(++i, Clip(W*2-WW), LogMeanDiffQt(N,Clip(NW*2-NWW))));
+        cm.set(hash( (W+NEE)/2, LogMeanDiffQt(W,(WW+NE)/2) ));
+        cm.set(Clamp4(Clip(W*2-WW) + Clip(N*2-NN) - Clip(NW*2-NNWW), W, NW, N, NE));
 
         cm.set(hash(++i, W));
         cm.set(hash(++i, W, buf(1)));
@@ -2566,6 +2569,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(hash(i>>8, Clip(N+NW-NNW)-px, column));
         cm.set(hash(++i, Clip(NE+buffer(1)-buffer(w-stride+1))-px, column));
         cm.set(hash(++i, Clip(NW+buffer(1)-buffer(w+stride+1))-px, column));
+        cm.set(hash(++i, Clamp4(Clip(W*2-WW)+Clip(N*2-NN)-Clip(NW*2-NNWW),W,NW,N,NE)-px ));
         cm.set(~0x5ca1ab1e);
 
         ctx = (min(color,stride-1)<<9)|((abs(W-N)>8)<<8)|((W>N)<<7)|((W>NW)<<6)|((abs(N-NW)>8)<<5)|((N>NW)<<4)|((N>NE)<<3)|min(5,(filter+1)*filterOn);
@@ -2590,14 +2594,16 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
     }
     static int col=0;
     if (++col>=stride*8) col=0;
-    m.set(5+ctx, 2048+5);
-    m.set(col+(isPNG?(ctx&7)+1:0)*32, 8*32);
+    m.set(5, 6);
+    m.set(min(63,column)+((ctx>>3)&0xC0), 256);
+    m.set(ctx, 2048);
+    m.set(col+(isPNG?(ctx&7)+1:(c0==((0x100|((N+W)/2))>>(8-bpos))))*32, 8*32);
     m.set(((isPNG?buffer(1):0)>>4)*stride+(x%stride) + min(5,(filter+1)*filterOn)*64, 6*64);
     m.set(c0+256*(isPNG && abs(R1-128)>8), 256*2);
   }
   else{
     m.add( -2048+((filter>>(7-bpos))&1)*4096 );
-    m.set(min(4,filter),5);
+    m.set(min(4,filter), 6);
   }
 }
 
@@ -2613,7 +2619,7 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 px = 0, res = 0; // current PNG filter prediction, expected residual
   static int itype=0, id8=1, id9=1;
-  static int ctx, lastPos=0, col=0, line=0, x=0, columns=0, filter=0, filterOn=0;
+  static int ctx, lastPos=0, col=0, line=0, x=0, columns=0, column=0, filter=0, filterOn=0;
   // Select nearby pixels as context
   if (!bpos) {
     if (isPNG){
@@ -2664,7 +2670,8 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
       }
       
       if (x){
-        int i=((filter+1)*filterOn)<<5, column=(x-1)/columns;
+        int i=((filter+1)*filterOn)<<5;
+        column=(x-1)/columns;
         WWW=buffer(3), WW=buffer(2), W=buffer(1), NWW=buffer(w+2), NW=buffer(w+1), N=buffer(w), NE=buffer(w-1), NEE=buffer(w-2), NNWW=buffer(w*2+2), NNW=buffer(w*2+1), NN=buffer(w*2), NNE=buffer(w*2-1), NNEE=buffer(w*2-2), NNN=buffer(w*3);
 
         if (gray){
@@ -2860,7 +2867,7 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
         cm.set(hash(++i,buf(3)>>2, buf(w-2)>>2, buf(w*2-2)>>2));
       }
 
-      /*int*/ WWW=buf(3), WW=buf(2), W=buf(1), NW=buf(w+1), N=buf(w), NE=buf(w-1), NEE=buf(w-2), NNW=buf(w*2+1), NN=buf(w*2), NNE=buf(w*2-1), NNN=buf(w*3);
+      WWW=buf(3), WW=buf(2), W=buf(1), NW=buf(w+1), N=buf(w), NE=buf(w-1), NEE=buf(w-2), NNW=buf(w*2+1), NN=buf(w*2), NNE=buf(w*2-1), NNN=buf(w*3);
 
       if (gray){
         ctx = min(0x1F,(blpos%w)/max(1,w/32))|( ( ((abs(W-N)*16>W+N)<<1)|(abs(N-NW)>8) )<<5 )|((W+N)&0x180);
@@ -2907,6 +2914,8 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
     m.set(col*2+(isPNG && c0==((0x100|res)>>(8-bpos))) + min(5,(filter+1)*filterOn)*16, 6*16);
     m.set(((isPNG?px:buf(w)+buf(1))>>4) + min(5,(filter+1)*filterOn)*32, 6*32);
     m.set(c0, 256);
+    if (gray)
+      m.set(min(63,column), 64);
   }
   else{
     m.add( -2048+((filter>>(7-bpos))&1)*4096 );
@@ -5431,7 +5440,7 @@ int contextModel2() {
   if (filetype==PNG24) return im24bitModel(m, info, 0, 1), m.p();
   if (filetype==PNG32) return im24bitModel(m, info, 1, 1), m.p();
   if (filetype==AUDIO) return wavModel(m, info, &stats), m.p();
-  if (filetype==JPEG) if (jpegModel(m)) return m.p();
+  if ((filetype==JPEG || filetype==HDR)) if (jpegModel(m)) return m.p();
 
   // Normal model
   if (bpos==0) {
