@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on September 09, 2017
+/* paq8px file compressor/archiver.  Released on September 17, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -1463,7 +1463,10 @@ protected:
 
 public:
   StateMap(int n=256);
-
+  void Reset(int Rate=0){
+    for (int i=0; i<N; ++i)
+      t[i]=(t[i]&0xfffffc00)|min(Rate, t[i]&0x3FF);
+  }
   // update bit y (0..1), predict next bit in context cx
   int p(int cx, int limit=1023) {
     assert(cx>=0 && cx<N);
@@ -1758,7 +1761,9 @@ public:
     *cp = (Prediction<<10)|Count;
     B+=(y && B>1);
     cp=&Data[Context+B];
-    m.add(stretch((((*cp)>>10)+512)>>10)/2);
+    Prediction = (((*cp)>>10)+512)>>10;
+    m.add(stretch(Prediction)/4);
+    m.add((Prediction-2048)/4);
     bCount<<=1; B<<=1;
     if (bCount==Mask){
       bCount=1;
@@ -1829,12 +1834,15 @@ class ContextMap {
   Array<U8*> runp; // C [0..3] = count, value, unused, unused
   StateMap *sm;    // C maps of state -> p
   int cn;          // Next context to set by set()
-  void update(U32 cx, int c);  // train model that context cx predicts c
+  U8 bit, lastByte;
+  //void update(U32 cx, int c);  // train model that context cx predicts c
   int mix1(Mixer& m, int cc, int bp, int c1, int y1);
     // mix() with global context passed as arguments to improve speed.
 public:
   ContextMap(int m, int c=1);  // m = memory in bytes, a power of 2, C = c
   ~ContextMap();
+  void Train(U8 B);
+  void FinishTraining(int Rate=0){ for (int i=0; i<C; ++i) sm[i].Reset(Rate); }
   void set(U32 cx, int next=-1);   // set next whole byte context to cx
     // if next is 0 then set order does not matter
   int mix(Mixer& m) {return mix1(m, c0, bpos, buf(1), y);}
@@ -1862,6 +1870,7 @@ ContextMap::ContextMap(int m, int c): C(c), t(m>>6), cp(c), cp0(c),
     cp0[i]=cp[i]=&t[0].bh[0][0];
     runp[i]=cp[i]+3;
   }
+  bit=lastByte=0;
 }
 
 ContextMap::~ContextMap() {
@@ -1876,6 +1885,63 @@ inline void ContextMap::set(U32 cx, int next) {
   cx=cx*987654323+i;  // permute (don't hash) cx to spread the distribution
   cx=cx<<16|cx>>16;
   cxt[i]=cx*123456791+i;
+}
+
+void ContextMap::Train(U8 B){
+  U8 bits = 1;
+  for (int k=0;k<8;k++){
+    for (int i=0; i<cn; ++i){
+      if (cp[i])
+        *cp[i]=nex(*cp[i], bit);
+
+      // Update context pointers
+      if (k>1 && runp[i][0]==0)
+       cp[i]=0;
+      else
+      {
+       switch(k)
+       {
+        case 1: case 3: case 6: cp[i]=cp0[i]+1+(bits&1); break;
+        case 4: case 7: cp[i]=cp0[i]+3+(bits&3); break;
+        case 2: case 5: cp0[i]=cp[i]=t[(cxt[i]+bits)&(t.size()-1)].get(cxt[i]>>16); break;
+        default:
+        {
+         cp0[i]=cp[i]=t[(cxt[i]+bits)&(t.size()-1)].get(cxt[i]>>16);
+         // Update pending bit histories for bits 2-7
+         if (cp0[i][3]==2) {
+           const int c=cp0[i][4]+256;
+           U8 *p=t[(cxt[i]+(c>>6))&(t.size()-1)].get(cxt[i]>>16);
+           p[0]=1+((c>>5)&1);
+           p[1+((c>>5)&1)]=1+((c>>4)&1);
+           p[3+((c>>4)&3)]=1+((c>>3)&1);
+           p=t[(cxt[i]+(c>>3))&(t.size()-1)].get(cxt[i]>>16);
+           p[0]=1+((c>>2)&1);
+           p[1+((c>>2)&1)]=1+((c>>1)&1);
+           p[3+((c>>1)&3)]=1+(c&1);
+           cp0[i][6]=0;
+         }
+         // Update run count of previous context
+         if (runp[i][0]==0)  // new context
+           runp[i][0]=2, runp[i][1]=lastByte;
+         else if (runp[i][1]!=lastByte)  // different byte in context
+           runp[i][0]=1, runp[i][1]=lastByte;
+         else if (runp[i][0]<254)  // same byte in context
+           runp[i][0]+=2;
+         else if (runp[i][0]==255)
+           runp[i][0]=128;
+         runp[i]=cp0[i]+3;
+        } break;
+       }
+      }
+      
+      if (cp[i])
+        sm[i].p(*cp[i]);
+    }
+    bit = (B>>(7-k))&1;
+    bits+=bits + bit;
+  }
+  cn=0;
+  lastByte=B;
 }
 
 // Update the model with bit y1, and predict next bit to mixer m.
@@ -2453,11 +2519,11 @@ inline U8 Paeth(U8 W, U8 N, U8 NW){
 
 void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
   const int SC=0x20000;
-  const int nMaps = 10;
+  const int nMaps = 14;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm10(512);
   static ContextMap cm(MEM*4, 13+23);
-  static StationaryMap Map[nMaps] = { 12, 12, 12, 8, 8, 8, 8, 8, 8, 0 };
+  static StationaryMap Map[nMaps] = { 12, 12, 12, 12, 10, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 px = 0; // current PNG filter prediction
@@ -2599,33 +2665,38 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         R2 = (residuals[3]*residuals[0])/max(1,residuals[4]);
 
         cm.set(hash(++i, Clip(W+N-NW)-px, Clip(W+buffer(1)-buffer(stride+1))-px, R1));
-        cm.set(hash(++i, N-px, Clip(N+buffer(1)-buffer(w+1))-px));
-        cm.set(hash(++i, Clip(NE+N-NNE)-px, Clip(NE+buffer(1)-buffer(w-stride+1))-px));
-        cm.set(hash(++i, Clip(NW+N-NNW)-px, Clip(NW+buffer(1)-buffer(w+stride+1))-px));
-        cm.set(hash(++i, Clip(N*2-NN)-px, LogMeanDiffQt(N,Clip(NN*2-NNN))));
-        cm.set(hash(++i, Clip(W*2-WW)-px, LogMeanDiffQt(W,Clip(WW*2-WWW))));
-        cm.set(hash(++i, Clip(N+buffer(1)-buffer(w+1))-px, Clip(N+buffer(2)-buffer(w+2))-px));
-        cm.set(hash(++i, Clip(W+buffer(1)-buffer(stride+1))-px, Clip(W+buffer(2)-buffer(stride+2))-px));
+        cm.set(hash(++i, Clip(W+N-NW)-px, LogMeanDiffQt(buffer(1),Clip(buffer(stride+1)+buffer(w+1)-buffer(w+stride+1)))));
+        cm.set(hash(++i, Clip(W+N-NW)-px, LogMeanDiffQt(buffer(2),Clip(buffer(stride+2)+buffer(w+2)-buffer(w+stride+2))), R2/4));
         cm.set(hash(++i, Clip(W+N-NW)-px, Clip(N+NE-NNE)-Clip(N+NW-NNW)));
-        cm.set(hash(++i, buf(stride+(x<=stride)), buf(1+(x<2)), buf(2+(x<3))));
-        cm.set(hash(++i, buf(1+(x<2)), px));
-        cm.set(hash(i>>8, Clip(N*3-NN*3+NNN)-px));
-        cm.set(hash(i>>8, Clip(W*3-WW*3+WWW)-px));
-        cm.set(hash(++i, (W+Clip(NE*3-NNE*3+buffer(w*3-stride)))/2-px, R2));
-        cm.set(hash(++i, (W+NEE)/2-px, R1/2));
+        cm.set(hash(++i, Clamp4(W+N-NW,W,NW,N,NE)-px, column));
+        cm.set(hash(i>>8, Clamp4(W+N-NW,W,NW,N,NE)/8, px));
+        cm.set(hash(++i, N-px, Clip(N+buffer(1)-buffer(w+1))-px));
         cm.set(hash(++i, Clip(W+buffer(1)-buffer(stride+1))-px, R1));
         cm.set(hash(++i, Clip(N+buffer(1)-buffer(w+1))-px));
+        cm.set(hash(++i, Clip(N+buffer(1)-buffer(w+1))-px, Clip(N+buffer(2)-buffer(w+2))-px));
+        cm.set(hash(++i, Clip(W+buffer(1)-buffer(stride+1))-px, Clip(W+buffer(2)-buffer(stride+2))-px));
         cm.set(hash(++i, Clip(NW+buffer(1)-buffer(w+stride+1))-px));
-        cm.set(hash(i>>8, Clamp4(W+N-NW,W,NW,N,NE)/8, px));
-        cm.set(hash(++i, (W+Clamp4(NE*3-NNE*3+buffer(w*3-stride),W,N,NE,NEE))/2-px, LogMeanDiffQt(N,(NW+NE)/2)));
-        cm.set(hash(++i, Clamp4(W+N-NW,W,NW,N,NE)-px, column));
-        cm.set(hash(++i, Clip(N*3-NN*3+NNN)-px, LogMeanDiffQt(W,Clip(NW*2-NNW))));
-        cm.set(hash(++i, Clip(W*3-WW*3+WWW)-px, LogMeanDiffQt(N,Clip(NW*2-NWW))));
-        cm.set(hash(i>>8, Clip(N+NE-NNE)-px, column));
-        cm.set(hash(i>>8, Clip(N+NW-NNW)-px, column));
-        cm.set(hash(++i, Clip(NE+buffer(1)-buffer(w-stride+1))-px, column));
         cm.set(hash(++i, Clip(NW+buffer(1)-buffer(w+stride+1))-px, column));
-        cm.set(hash(++i, Clamp4(Clip(W*2-WW)+Clip(N*2-NN)-Clip(NW*2-NNWW),W,NW,N,NE)-px ));
+        cm.set(hash(++i, Clip(NE+buffer(1)-buffer(w-stride+1))-px, column));
+        cm.set(hash(++i, Clip(NE+N-NNE)-px, Clip(NE+buffer(1)-buffer(w-stride+1))-px));
+        cm.set(hash(i>>8, Clip(N+NE-NNE)-px, column));
+        cm.set(hash(++i, Clip(NW+N-NNW)-px, Clip(NW+buffer(1)-buffer(w+stride+1))-px));
+        cm.set(hash(i>>8, Clip(N+NW-NNW)-px, column));
+        cm.set(hash(++i, Clip(NN+W-NNW)-px, LogMeanDiffQt(buffer(1),Clip(buffer(w*2+1)+buffer(stride+1)-buffer(w*2+stride+1)))));
+        cm.set(hash(i>>8, Clip(NN+W-NNW)-px, LogMeanDiffQt(N,Clip(NNN+NW-buffer(w*3+stride)))));
+        cm.set(hash(i>>8, Clip(NN+W-NNW)-px, column));        
+        cm.set(hash(++i, Clip(N*2-NN)-px, LogMeanDiffQt(N,Clip(NN*2-NNN))));
+        cm.set(hash(++i, Clip(W*2-WW)-px, LogMeanDiffQt(W,Clip(WW*2-WWW))));
+        cm.set(hash(i>>8, Clip(N*3-NN*3+NNN)-px));
+        cm.set(hash(++i, Clip(N*3-NN*3+NNN)-px, LogMeanDiffQt(W,Clip(NW*2-NNW))));
+        cm.set(hash(i>>8, Clip(W*3-WW*3+WWW)-px));
+        cm.set(hash(++i, Clip(W*3-WW*3+WWW)-px, LogMeanDiffQt(N,Clip(NW*2-NWW))));
+        cm.set(hash(++i, (W+Clip(NE*3-NNE*3+buffer(w*3-stride)))/2-px, R2));
+        cm.set(hash(++i, (W+Clamp4(NE*3-NNE*3+buffer(w*3-stride),W,N,NE,NEE))/2-px, LogMeanDiffQt(N,(NW+NE)/2)));
+        cm.set(hash(++i, (W+NEE)/2-px, R1/2));
+        cm.set(hash(++i, Clamp4(Clip(W*2-WW)+Clip(N*2-NN)-Clip(NW*2-NNWW),W,NW,N,NE)-px));
+        cm.set(hash(++i, buf(stride+(x<=stride)), buf(1+(x<2)), buf(2+(x<3))));
+        cm.set(hash(++i, buf(1+(x<2)), px));
         cm.set(~0x5ca1ab1e);
 
         ctx = (min(color,stride-1)<<9)|((abs(W-N)>8)<<8)|((W>N)<<7)|((W>NW)<<6)|((abs(N-NW)>8)<<5)|((N>NW)<<4)|((N>NE)<<3)|min(5,(filter+1)*filterOn);
@@ -2634,15 +2705,24 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
       Map[0].set( ((U8)(Clip(W+N-NW)-px))|(LogMeanDiffQt(Clip(N+NE-NNE),Clip(N+NW-NNW))<<8) );
       Map[1].set( ((U8)(Clip(N*2-NN)-px))|(LogMeanDiffQt(W,Clip(NW*2-NNW))<<8) );
       Map[2].set( ((U8)(Clip(W*2-WW)-px))|(LogMeanDiffQt(N,Clip(NW*2-NWW))<<8) );
-      Map[3].set((W+Clamp4(NE*3-NNE*3+(isPNG?buffer(w*3-stride):buf(w*3-stride)),W,N,NE,NEE))/2-px);
-      if (isPNG)
-        Map[4].set( Clip((-buffer(4*stride)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buffer(w*3-stride)*4-buf(w*4-stride),N,NE,buffer(w-2*stride),buffer(w-3*stride)))/5)-px );
-      else
-        Map[4].set( Clip((-buf(4*stride)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buf(w*3-stride)*4-buf(w*4-stride),N,NE,buf(w-2*stride),buf(w-3*stride)))/5));
-      Map[5].set(Clip(W+N-NW)-px);
-      Map[6].set(buf(1+(isPNG && x<2)));
-      Map[7].set((W+NEE)/2-px);
-      Map[8].set(Clip(N*3-NN*3+NNN)-px);
+      if (isPNG){
+        Map[3].set( ((U8)(Clip(W+N-NW)-px))|(LogMeanDiffQt(buffer(1),Clip(buffer(stride+1)+buffer(w+1)-buffer(w+stride+1)))<<8) );
+        Map[4].set( (min(color,stride-1)<<8)|((U8)( Clip(N+buffer(1)-buffer(w+1))-px )) );
+        Map[5].set( Clip((-buffer(4*stride)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buffer(w*3-stride)*4-buf(w*4-stride),N,NE,buffer(w-2*stride),buffer(w-3*stride)))/5)-px );
+        Map[6].set((W+Clamp4(NE*3-NNE*3+buffer(w*3-stride),W,N,NE,NEE))/2-px);
+      }
+      else{
+        Map[3].set( ((U8)Clip(W+N-NW))|(LogMeanDiffQt(buf(1),Clip(buf(stride+1)+buf(w+1)-buf(w+stride+1)))<<8) );
+        Map[4].set( (min(color,stride-1)<<8)|Clip(N+buf(1)-buf(w+1)) );
+        Map[5].set( Clip((-buf(4*stride)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buf(w*3-stride)*4-buf(w*4-stride),N,NE,buf(w-2*stride),buf(w-3*stride)))/5));
+        Map[6].set((W+Clamp4(NE*3-NNE*3+buf(w*3-stride),W,N,NE,NEE))/2-px);
+      }
+      Map[7].set(Clip(W+N-NW)-px);
+      Map[8].set(buf(1+(isPNG && x<2)));
+      Map[9].set((W+NEE)/2-px);
+      Map[10].set(Clip(N*3-NN*3+NNN)-px);
+      Map[11].set(Clip(N+NW-NNW)-px);
+      Map[12].set(Clip(N+NE-NNE)-px);
     }
   }
 
@@ -2682,9 +2762,9 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
 
 // Model for 8-bit image data
 void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
-  const int nMaps = 14;
+  const int nMaps = 15;
   static ContextMap cm(MEM*4, 43);
-  static StationaryMap Map[nMaps] = { 12, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
+  static StationaryMap Map[nMaps] = { 12, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 px = 0, res = 0; // current PNG filter prediction, expected residual
@@ -2746,7 +2826,7 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
       }
     }  
     if (x || !isPNG){
-      int i=((filter+1)*filterOn)<<5;
+      int i=((filter+1)*filterOn)<<6;
       column=(x-isPNG)/columns;
       if (isPNG)
         WWW=buffer(3), WW=buffer(2), W=buffer(1), NWW=buffer(w+2), NW=buffer(w+1), N=buffer(w), NE=buffer(w-1), NEE=buffer(w-2), NNWW=buffer(w*2+2), NNW=buffer(w*2+1), NN=buffer(w*2), NNE=buffer(w*2-1), NNEE=buffer(w*2-2), NNN=buffer(w*3);
@@ -2827,7 +2907,7 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
         if (isPNG)
           cm.set(hash(++i, Clip((-buffer(4)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buffer(w*3-1)*4-buffer(w*4-1),N,NE,buffer(w-2),buffer(w-3)))/5)-px));
         else
-          cm.set(hash(++i, Clip((-buf(4)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buf(w*3-1)*4-buf(w*4-1),N,NE,buf(w-2),buf(w-3)))/5)-px));
+          cm.set(hash(++i, Clip((-buf(4)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buf(w*3-1)*4-buf(w*4-1),N,NE,buf(w-2),buf(w-3)))/5)));
         cm.set(hash(++i, Clip(N*2-NN)-px, LogMeanDiffQt(N,Clip(NN*2-NNN))));
         cm.set(hash(++i, Clip(W*2-WW)-px, LogMeanDiffQt(NE,Clip(N*2-NW))));
         cm.set(~0xde7ec7ed);
@@ -2844,7 +2924,14 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
         Map[9].set((W+NEE)/2-px);
         Map[10].set(Clip(N*3-NN*3+NNN)-px);
         Map[11].set(Clip(W*3-WW*3+WWW)-px);
-        Map[12].set((W+Clip(NE*3-NNE*3+(isPNG?buffer(w*3-1):buf(w*3-1))))/2-px);
+        if (isPNG){
+          Map[12].set((W+Clip(NE*3-NNE*3+buffer(w*3-1)))/2-px);
+          Map[13].set((W+Clip(NEE*3-buffer(w*2-3)*3+buffer(w*3-4)))/2-px);
+        }
+        else{
+          Map[12].set((W+Clip(NE*3-NNE*3+buf(w*3-1)))/2);
+          Map[13].set((W+Clip(NEE*3-buf(w*2-3)*3+buf(w*3-4)))/2);
+        }
 
         if (isPNG)
           ctx = ((abs(W-N)>8)<<10)|((W>N)<<9)|((abs(N-NW)>8)<<8)|((N>NW)<<7)|((abs(N-NE)>8)<<6)|((N>NE)<<5)|((W>WW)<<4)|((N>NN)<<3)|min(5,(filter+1)*filterOn);
@@ -4584,255 +4671,292 @@ U32 execxt(int i, int x=0) {
   return prefix|opcode<<4|modrm<<12|x<<20|sib<<(28-6);
 }
 
-bool exeModel(Mixer& m, bool Forced = false, ModelStats *Stats = NULL) {
+class exeModel{
   const int N1=8, N2=10;
-  static ContextMap cm(MEM*2, N1+N2);
-  static OpCache Cache;
-  static U32 StateBH[256];
-  static ExeState pState = Start, State = Start;
-  static Instruction Op;
-  static U32 TotalOps = 0, OpMask = 0, OpCategMask = 0, Context = 0, BrkPoint = 0, BrkCtx = 0;
-  static bool Valid = false;
-  if (!bpos) {
-    pState = State;
-    U8 B = (U8)c4;
-    Op.Size++;
-    switch (State){
-      case Start: case Error: {
-        // previous code may have just been a REX prefix
-        bool Skip = false;
-        if (Op.MustCheckREX){
-          Op.MustCheckREX = false;
-          // valid x64 code?
-          if (!IsInvalidX64Op(B) && !IsValidX64Prefix(B)){
-            Op.REX = Op.Code;
-            Op.Code = B;
-            Op.Data = PrefixREX|(Op.Code<<CodeShift)|(Op.Data&PrefixMask);
-            Skip = true;
-          }
-        }
+  ContextMap cm;
+  OpCache Cache;
+  U32 StateBH[256];
+  ExeState pState, State;
+  Instruction Op;
+  U32 TotalOps, OpMask, OpCategMask, Context, BrkPoint, BrkCtx;
+  bool Valid;
+  void Update(U8 B, bool Forced = false);
+  void Train();
+public:
+  exeModel() : cm(MEM*2, N1+N2), pState (Start), State( Start), TotalOps(0), OpMask(0), OpCategMask(0), Context(0), BrkPoint(0), BrkCtx(0), Valid(false){
+    memset(&Cache, 0, sizeof(OpCache));
+    memset(&Op, 0, sizeof(Instruction));
+    memset(&StateBH, 0, sizeof(StateBH));
+    Train();
+  }
+  bool Predict(Mixer& m, bool Forced = false, ModelStats *Stats = NULL);
+};
 
-        Op.ModRM = Op.SIB = Op.REX = Op.Flags = Op.BytesRead = 0;
-        if (!Skip){
-          Op.Code = B;
-          // possible REX prefix?
-          Op.MustCheckREX = ((Op.Code&0xF0)==0x40) && (!(Op.Decoding && ((Op.Data&PrefixMask)==1)));
-
-          // check prefixes
-          Op.Prefix = (Op.Code==ES_OVERRIDE || Op.Code==CS_OVERRIDE || Op.Code==SS_OVERRIDE || Op.Code==DS_OVERRIDE) + //invalid in x64
-                      (Op.Code==FS_OVERRIDE)*2 +
-                      (Op.Code==GS_OVERRIDE)*3 +
-                      (Op.Code==AD_OVERRIDE)*4 +
-                      (Op.Code==WAIT_FPU)*5 +
-                      (Op.Code==LOCK)*6 +
-                      (Op.Code==REP_N_STR || Op.Code==REP_STR)*7;
-
-          if (!Op.Decoding){
-            TotalOps+=(Op.Data!=0)-(Cache.Index && Cache.Op[ Cache.Index&(CacheSize-1) ]!=0);
-            OpMask = (OpMask<<1)|(State!=Error);
-            OpCategMask = (OpCategMask<<CategoryShift)|(Op.Category);
-            Op.Size = 0;
-
-            Cache.Op[ Cache.Index&(CacheSize-1) ] = Op.Data;
-            Cache.Index++;
-
-            if (!Op.Prefix)
-              Op.Data = Op.Code<<CodeShift;
-            else{
-              Op.Data = Op.Prefix;
-              Op.Category = TypeOp1[Op.Code];
-              Op.Decoding = true;
-              BrkCtx = hash(1+(BrkPoint = 0), Op.Prefix, OpCategMask&CategoryMask);
-              break;
-            }
-          }
-          else{
-            // we only have enough bits for one prefix, so the
-            // instruction will be encoded with the last one
-            if (!Op.Prefix){
-              Op.Data|=(Op.Code<<CodeShift);
-              Op.Decoding = false;
-            }
-            else{
-              Op.Data = Op.Prefix;
-              Op.Category = TypeOp1[Op.Code];
-              BrkCtx = hash(1+(BrkPoint = 1), Op.Prefix, OpCategMask&CategoryMask);
-              break;
-            }
-          }
-        }
-
-        if ((Op.o16=(Op.Code==OP_OSIZE)))
-          State = Pref_Op_Size;
-        else if (Op.Code==OP_2BYTE)
-          State = Pref_MultiByte_Op;
-        else
-          ReadFlags(Op, State);
-        BrkCtx = hash(1+(BrkPoint = 2), State, Op.Code, (OpCategMask&CategoryMask), OpN(Cache,1)&((ModRM_mod|ModRM_reg|ModRM_rm)<<ModRMShift));
-        break;
-      }
-      case Pref_Op_Size : {
-        Op.Code = B;
-        ApplyCodeAndSetFlag(Op, OperandSizeOverride);
-        ReadFlags(Op, State);
-        BrkCtx = hash(1+(BrkPoint = 3), State);
-        break;
-      }
-      case Pref_MultiByte_Op : {
-        Op.Code = B;
-        Op.Data|=MultiByteOpcode;
-
-        if (Op.Code==0x38)
-          State = Read_OP3_38;
-        else if (Op.Code==0x3A)
-          State = Read_OP3_3A;
-        else{
-          ApplyCodeAndSetFlag(Op);
-          Op.Flags = Table2[Op.Code];
-          Op.Category = TypeOp2[Op.Code];
-          CheckFlags(Op, State);
-        }
-        BrkCtx = hash(1+(BrkPoint = 4), State);
-        break;
-      }
-      case ParseFlags : {
-        ProcessFlags(Op, State);
-        BrkCtx = hash(1+(BrkPoint = 5), State);
-        break;
-      }
-      case ExtraFlags : case ReadModRM : {
-        Op.ModRM = B;
-        Op.Data|=(Op.ModRM<<ModRMShift)|HasModRM;
-        Op.SIB = 0;
-        if (Op.Flags==fMEXTRA){
-          Op.Data|=HasExtraFlags;
-          int i = ((Op.ModRM>>3)&0x07) | ((Op.Code&0x01)<<3) | ((Op.Code&0x08)<<1);
-          Op.Flags = TableX[i];
-          Op.Category = TypeOpX[i];
-          if (Op.Flags==fERR){
-            memset(&Op, 0, sizeof(Instruction));
-            State = Error;
-            BrkCtx = hash(1+(BrkPoint = 6), State);
-            break;
-          }
-          ProcessFlags(Op, State);
-          BrkCtx = hash(1+(BrkPoint = 7), State);
-          break;
-        }
-
-        if ((Op.ModRM & ModRM_rm)==4 && Op.ModRM<ModRM_mod){
-          State = ReadSIB;
-          BrkCtx = hash(1+(BrkPoint = 8), State);
-          break;
-        }
-
-        ProcessModRM(Op, State);
-        BrkCtx = hash(1+(BrkPoint = 9), State, Op.Code );
-        break;
-      }
-      case Read_OP3_38 : case Read_OP3_3A : {
-        Op.Code = B;
-        ApplyCodeAndSetFlag(Op, Prefix38<<(State-Read_OP3_38));
-        if (State==Read_OP3_38){
-          Op.Flags = Table3_38[Op.Code];
-          Op.Category = TypeOp3_38[Op.Code];
-        }
-        else{
-          Op.Flags = Table3_3A[Op.Code];
-          Op.Category = TypeOp3_3A[Op.Code];
-        }
-        CheckFlags(Op, State);
-        BrkCtx = hash(1+(BrkPoint = 10), State);
-        break;
-      }
-      case ReadSIB : {
-        Op.SIB = B;
-        Op.Data|=((Op.SIB & SIB_scale)<<SIBScaleShift);
-        ProcessModRM(Op, State);
-        BrkCtx = hash(1+(BrkPoint = 11), State, Op.SIB&SIB_scale);
-        break;
-      }
-      case Read8 : case Read16 : case Read32 : {
-        if (++Op.BytesRead>=(2*(State-Read8)<<Op.imm8)){
-          Op.BytesRead = 0;
-          Op.imm8 = false;
-          State = Start;
-        }
-        BrkCtx = hash(1+(BrkPoint = 12), State, Op.Flags&fMODE, Op.BytesRead, ((Op.BytesRead>1)?(buf(Op.BytesRead)<<8):0)|((Op.BytesRead)?B:0) );
-        break;
-      }
-      case Read8_ModRM : {
-        ProcessMode(Op, State);
-        BrkCtx = hash(1+(BrkPoint = 13), State);
-        break;
-      }
-      case Read16_f : {
-        if (++Op.BytesRead==2){
-          Op.BytesRead = 0;
-          ProcessFlags2(Op, State);
-        }
-        BrkCtx = hash(1+(BrkPoint = 14), State);
-        break;
-      }
-      case Read32_ModRM : {
-        Op.Data|=RegDWordDisplacement;
-        if (++Op.BytesRead==4){
-          Op.BytesRead = 0;
-          ProcessMode(Op, State);
-        }
-        BrkCtx = hash(1+(BrkPoint = 15), State);
-        break;
-      }
-    }
-
-    Valid = (TotalOps>2*MinRequired) && ((OpMask&((1<<MinRequired)-1))==((1<<MinRequired)-1));
-    Context = State+16*Op.BytesRead+16*(Op.REX & REX_w);
-    StateBH[Context] = (StateBH[Context]<<8)|B;
-
-    if (Valid || Forced){
-      int mask=0, count0=0;
-      for (int i=0, j=0; i<N1; ++i){
-        if (i) mask=mask*2+(buf(i-1)==0), count0+=mask&1;
-        j=(i<4)?i+1:5+(i-4)*(2+(i>6));
-        cm.set(hash(execxt(j, buf(1)*(j>6)), ((1<<N1)|mask)*(count0*N1/2>=i), (0x08|(blpos&0x07))*(i<4)));
-      }
-
-      cm.set(BrkCtx);
-
-      mask = PrefixMask|(0xF8<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A;
-      cm.set(hash(OpN(Cache, 1)&(mask|RegDWordDisplacement|AddressMode), State+16*Op.BytesRead, Op.Data&mask, Op.REX, Op.Category));
-
-      mask = 0x04|(0xFE<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A|((ModRM_mod|ModRM_reg)<<ModRMShift);
-      cm.set(hash(
-        OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, OpN(Cache, 3)&mask,
-        Context+256*((Op.ModRM & ModRM_mod)==ModRM_mod),
-        Op.Data&((mask|PrefixREX)^(ModRM_mod<<ModRMShift))
-      ));
-
-      mask = 0x04|CodeMask;
-      cm.set(hash(OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, OpN(Cache, 3)&mask, OpN(Cache, 4)&mask, (Op.Data&mask)|(State<<11)|(Op.BytesRead<<15)));
-
-      mask = 0x04|(0xFC<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A;
-      cm.set(hash(State+16*Op.BytesRead, Op.Data&mask, Op.Category*8 + (OpMask&0x07), Op.Flags, ((Op.SIB & SIB_base)==5)*4+((Op.ModRM & ModRM_reg)==ModRM_reg)*2+((Op.ModRM & ModRM_mod)==0)));
-
-      mask = PrefixMask|CodeMask|OperandSizeOverride|MultiByteOpcode|PrefixREX|Prefix38|Prefix3A|HasExtraFlags|HasModRM|((ModRM_mod|ModRM_rm)<<ModRMShift);
-      cm.set(hash(Op.Data&mask, State+16*Op.BytesRead, Op.Flags));
-
-      mask = PrefixMask|CodeMask|OperandSizeOverride|MultiByteOpcode|Prefix38|Prefix3A|HasExtraFlags|HasModRM;
-      cm.set(hash(OpN(Cache, 1)&mask, State, Op.BytesRead*2+((Op.REX&REX_w)>0), Op.Data&((U16)(mask^OperandSizeOverride))));
-
-      mask = 0x04|(0xFE<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A|(ModRM_reg<<ModRMShift);
-      cm.set(hash(OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, State+16*Op.BytesRead, Op.Data&(mask|PrefixMask|CodeMask)));
-
-      cm.set(State+16*Op.BytesRead);
-
-      cm.set(hash(
-        (0x100|B)*(Op.BytesRead>0),
-        State+16*pState+256*Op.BytesRead,
-        ((Op.Flags&fMODE)==fAM)*16 + (Op.REX & REX_w) + (Op.o16)*4 + ((Op.Code & 0xFE)==0xE8)*2 + ((Op.Data & MultiByteOpcode)!=0 && (Op.Code & 0xF0)==0x80)
-      ));
+void exeModel::Train(){
+  FILE *f;
+  int i;
+  char filename[MAX_PATH+1];
+  if ((i=GetModuleFileName(NULL, filename,MAX_PATH)) && i<=MAX_PATH){
+    if ((f = fopen(filename,"rb"))!=NULL){
+      printf("Pre-training x86/x64 model...");
+      i=0;
+      do{
+        Update(buf(1));
+        if (Valid)
+          cm.Train(i);
+        buf[pos++]=i;
+        blpos++;
+      } while ((i=getc(f))!=EOF);
+      printf(" done [%d bytes]\n",pos-1);
+      fclose(f);
+      cm.FinishTraining();
+      pos=blpos=0;
+      memset(&buf[0], 0, buf.size());
     }
   }
+}
+
+void exeModel::Update(U8 B, bool Forced){
+  pState = State;
+  Op.Size++;
+  switch (State){
+    case Start: case Error: {
+      // previous code may have just been a REX prefix
+      bool Skip = false;
+      if (Op.MustCheckREX){
+        Op.MustCheckREX = false;
+        // valid x64 code?
+        if (!IsInvalidX64Op(B) && !IsValidX64Prefix(B)){
+          Op.REX = Op.Code;
+          Op.Code = B;
+          Op.Data = PrefixREX|(Op.Code<<CodeShift)|(Op.Data&PrefixMask);
+          Skip = true;
+        }
+      }
+
+      Op.ModRM = Op.SIB = Op.REX = Op.Flags = Op.BytesRead = 0;
+      if (!Skip){
+        Op.Code = B;
+        // possible REX prefix?
+        Op.MustCheckREX = ((Op.Code&0xF0)==0x40) && (!(Op.Decoding && ((Op.Data&PrefixMask)==1)));
+
+        // check prefixes
+        Op.Prefix = (Op.Code==ES_OVERRIDE || Op.Code==CS_OVERRIDE || Op.Code==SS_OVERRIDE || Op.Code==DS_OVERRIDE) + //invalid in x64
+                    (Op.Code==FS_OVERRIDE)*2 +
+                    (Op.Code==GS_OVERRIDE)*3 +
+                    (Op.Code==AD_OVERRIDE)*4 +
+                    (Op.Code==WAIT_FPU)*5 +
+                    (Op.Code==LOCK)*6 +
+                    (Op.Code==REP_N_STR || Op.Code==REP_STR)*7;
+
+        if (!Op.Decoding){
+          TotalOps+=(Op.Data!=0)-(Cache.Index && Cache.Op[ Cache.Index&(CacheSize-1) ]!=0);
+          OpMask = (OpMask<<1)|(State!=Error);
+          OpCategMask = (OpCategMask<<CategoryShift)|(Op.Category);
+          Op.Size = 0;
+
+          Cache.Op[ Cache.Index&(CacheSize-1) ] = Op.Data;
+          Cache.Index++;
+
+          if (!Op.Prefix)
+            Op.Data = Op.Code<<CodeShift;
+          else{
+            Op.Data = Op.Prefix;
+            Op.Category = TypeOp1[Op.Code];
+            Op.Decoding = true;
+            BrkCtx = hash(1+(BrkPoint = 0), Op.Prefix, OpCategMask&CategoryMask);
+            break;
+          }
+        }
+        else{
+          // we only have enough bits for one prefix, so the
+          // instruction will be encoded with the last one
+          if (!Op.Prefix){
+            Op.Data|=(Op.Code<<CodeShift);
+            Op.Decoding = false;
+          }
+          else{
+            Op.Data = Op.Prefix;
+            Op.Category = TypeOp1[Op.Code];
+            BrkCtx = hash(1+(BrkPoint = 1), Op.Prefix, OpCategMask&CategoryMask);
+            break;
+          }
+        }
+      }
+
+      if ((Op.o16=(Op.Code==OP_OSIZE)))
+        State = Pref_Op_Size;
+      else if (Op.Code==OP_2BYTE)
+        State = Pref_MultiByte_Op;
+      else
+        ReadFlags(Op, State);
+      BrkCtx = hash(1+(BrkPoint = 2), State, Op.Code, (OpCategMask&CategoryMask), OpN(Cache,1)&((ModRM_mod|ModRM_reg|ModRM_rm)<<ModRMShift));
+      break;
+    }
+    case Pref_Op_Size : {
+      Op.Code = B;
+      ApplyCodeAndSetFlag(Op, OperandSizeOverride);
+      ReadFlags(Op, State);
+      BrkCtx = hash(1+(BrkPoint = 3), State);
+      break;
+    }
+    case Pref_MultiByte_Op : {
+      Op.Code = B;
+      Op.Data|=MultiByteOpcode;
+
+      if (Op.Code==0x38)
+        State = Read_OP3_38;
+      else if (Op.Code==0x3A)
+        State = Read_OP3_3A;
+      else{
+        ApplyCodeAndSetFlag(Op);
+        Op.Flags = Table2[Op.Code];
+        Op.Category = TypeOp2[Op.Code];
+        CheckFlags(Op, State);
+      }
+      BrkCtx = hash(1+(BrkPoint = 4), State);
+      break;
+    }
+    case ParseFlags : {
+      ProcessFlags(Op, State);
+      BrkCtx = hash(1+(BrkPoint = 5), State);
+      break;
+    }
+    case ExtraFlags : case ReadModRM : {
+      Op.ModRM = B;
+      Op.Data|=(Op.ModRM<<ModRMShift)|HasModRM;
+      Op.SIB = 0;
+      if (Op.Flags==fMEXTRA){
+        Op.Data|=HasExtraFlags;
+        int i = ((Op.ModRM>>3)&0x07) | ((Op.Code&0x01)<<3) | ((Op.Code&0x08)<<1);
+        Op.Flags = TableX[i];
+        Op.Category = TypeOpX[i];
+        if (Op.Flags==fERR){
+          memset(&Op, 0, sizeof(Instruction));
+          State = Error;
+          BrkCtx = hash(1+(BrkPoint = 6), State);
+          break;
+        }
+        ProcessFlags(Op, State);
+        BrkCtx = hash(1+(BrkPoint = 7), State);
+        break;
+      }
+
+      if ((Op.ModRM & ModRM_rm)==4 && Op.ModRM<ModRM_mod){
+        State = ReadSIB;
+        BrkCtx = hash(1+(BrkPoint = 8), State);
+        break;
+      }
+
+      ProcessModRM(Op, State);
+      BrkCtx = hash(1+(BrkPoint = 9), State, Op.Code );
+      break;
+    }
+    case Read_OP3_38 : case Read_OP3_3A : {
+      Op.Code = B;
+      ApplyCodeAndSetFlag(Op, Prefix38<<(State-Read_OP3_38));
+      if (State==Read_OP3_38){
+        Op.Flags = Table3_38[Op.Code];
+        Op.Category = TypeOp3_38[Op.Code];
+      }
+      else{
+        Op.Flags = Table3_3A[Op.Code];
+        Op.Category = TypeOp3_3A[Op.Code];
+      }
+      CheckFlags(Op, State);
+      BrkCtx = hash(1+(BrkPoint = 10), State);
+      break;
+    }
+    case ReadSIB : {
+      Op.SIB = B;
+      Op.Data|=((Op.SIB & SIB_scale)<<SIBScaleShift);
+      ProcessModRM(Op, State);
+      BrkCtx = hash(1+(BrkPoint = 11), State, Op.SIB&SIB_scale);
+      break;
+    }
+    case Read8 : case Read16 : case Read32 : {
+      if (++Op.BytesRead>=(2*(State-Read8)<<Op.imm8)){
+        Op.BytesRead = 0;
+        Op.imm8 = false;
+        State = Start;
+      }
+      BrkCtx = hash(1+(BrkPoint = 12), State, Op.Flags&fMODE, Op.BytesRead, ((Op.BytesRead>1)?(buf(Op.BytesRead)<<8):0)|((Op.BytesRead)?B:0) );
+      break;
+    }
+    case Read8_ModRM : {
+      ProcessMode(Op, State);
+      BrkCtx = hash(1+(BrkPoint = 13), State);
+      break;
+    }
+    case Read16_f : {
+      if (++Op.BytesRead==2){
+        Op.BytesRead = 0;
+        ProcessFlags2(Op, State);
+      }
+      BrkCtx = hash(1+(BrkPoint = 14), State);
+      break;
+    }
+    case Read32_ModRM : {
+      Op.Data|=RegDWordDisplacement;
+      if (++Op.BytesRead==4){
+        Op.BytesRead = 0;
+        ProcessMode(Op, State);
+      }
+      BrkCtx = hash(1+(BrkPoint = 15), State);
+      break;
+    }
+  }
+  Valid = (TotalOps>2*MinRequired) && ((OpMask&((1<<MinRequired)-1))==((1<<MinRequired)-1));
+  Context = State+16*Op.BytesRead+16*(Op.REX & REX_w);
+  StateBH[Context] = (StateBH[Context]<<8)|B;
+
+  if (Valid || Forced){
+    int mask=0, count0=0;
+    for (int i=0, j=0; i<N1; ++i){
+      if (i) mask=mask*2+(buf(i-1)==0), count0+=mask&1;
+      j=(i<4)?i+1:5+(i-4)*(2+(i>6));
+      cm.set(hash(execxt(j, buf(1)*(j>6)), ((1<<N1)|mask)*(count0*N1/2>=i), (0x08|(blpos&0x07))*(i<4)));
+    }
+
+    cm.set(BrkCtx);
+    mask = PrefixMask|(0xF8<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A;
+    cm.set(hash(OpN(Cache, 1)&(mask|RegDWordDisplacement|AddressMode), State+16*Op.BytesRead, Op.Data&mask, Op.REX, Op.Category));
+
+    mask = 0x04|(0xFE<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A|((ModRM_mod|ModRM_reg)<<ModRMShift);
+    cm.set(hash(
+      OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, OpN(Cache, 3)&mask,
+      Context+256*((Op.ModRM & ModRM_mod)==ModRM_mod),
+      Op.Data&((mask|PrefixREX)^(ModRM_mod<<ModRMShift))
+    ));
+
+    mask = 0x04|CodeMask;
+    cm.set(hash(OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, OpN(Cache, 3)&mask, OpN(Cache, 4)&mask, (Op.Data&mask)|(State<<11)|(Op.BytesRead<<15)));
+
+    mask = 0x04|(0xFC<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A;
+    cm.set(hash(State+16*Op.BytesRead, Op.Data&mask, Op.Category*8 + (OpMask&0x07), Op.Flags, ((Op.SIB & SIB_base)==5)*4+((Op.ModRM & ModRM_reg)==ModRM_reg)*2+((Op.ModRM & ModRM_mod)==0)));
+
+    mask = PrefixMask|CodeMask|OperandSizeOverride|MultiByteOpcode|PrefixREX|Prefix38|Prefix3A|HasExtraFlags|HasModRM|((ModRM_mod|ModRM_rm)<<ModRMShift);
+    cm.set(hash(Op.Data&mask, State+16*Op.BytesRead, Op.Flags));
+
+    mask = PrefixMask|CodeMask|OperandSizeOverride|MultiByteOpcode|Prefix38|Prefix3A|HasExtraFlags|HasModRM;
+    cm.set(hash(OpN(Cache, 1)&mask, State, Op.BytesRead*2+((Op.REX&REX_w)>0), Op.Data&((U16)(mask^OperandSizeOverride))));
+
+    mask = 0x04|(0xFE<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A|(ModRM_reg<<ModRMShift);
+    cm.set(hash(OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, State+16*Op.BytesRead, Op.Data&(mask|PrefixMask|CodeMask)));
+
+    cm.set(State+16*Op.BytesRead);
+
+    cm.set(hash(
+      (0x100|B)*(Op.BytesRead>0),
+      State+16*pState+256*Op.BytesRead,
+      ((Op.Flags&fMODE)==fAM)*16 + (Op.REX & REX_w) + (Op.o16)*4 + ((Op.Code & 0xFE)==0xE8)*2 + ((Op.Data & MultiByteOpcode)!=0 && (Op.Code & 0xF0)==0x80)
+    ));
+  }
+}
+
+bool exeModel::Predict(Mixer& m, bool Forced, ModelStats *Stats){
+  if (!bpos)
+    Update(buf(1), Forced);
 
   if (Valid || Forced)
     cm.mix(m);
@@ -5349,16 +5473,65 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
 
 // This combines all the context models with a Mixer.
 
-int contextModel2() {
-  static ContextMap cm(MEM*32, 9);
-  static RunContextMap rcm7(MEM), rcm9(MEM), rcm10(MEM);
-  static Mixer m(984, 3095+768+(1024+1024*3)*(level>=4), 7+4*(level>=4));
-  static U32 cxt[16];  // order 0-11 contexts
-  static Filetype ft2,filetype=DEFAULT;
-  static int size=0;  // bytes remaining in block
-  static int info=0;  // image width or audio type
-  static ModelStats stats;
+class ContextModel{
+  ContextMap cm;
+  exeModel exeModel1;
+  RunContextMap rcm7, rcm9, rcm10;
+  Mixer m;
+  U32 cxt[16];
+  Filetype ft2, filetype;
+  int size, info;
+  void UpdateContexts(U8 B);
+  void Train();
+public:
+  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), m(984, 3095+768+(1024+1024*3)*(level>=4), 7+4*(level>=4)), ft2(DEFAULT), filetype(DEFAULT), size(0), info(0){
+    memset(&cxt, 0, 16*sizeof(U32));
+    Train();
+  }
+  int Predict(ModelStats *Stats = NULL);
+};
 
+void ContextModel::Train(){
+  FILE *f;
+  int i;
+  char filename[MAX_PATH+12];
+  if ((i=GetModuleFileName(NULL, filename,MAX_PATH)) && i<=MAX_PATH){
+    char *p=strrchr(filename, '\\');
+    if (p!=0){
+      p++;
+      strcpy(p,"english.dic");
+
+      if ((f = fopen(filename,"rb"))!=NULL){
+        printf("Pre-training main model...");
+        i=0;
+        do{
+          if (!i || i==10 || i==13)
+            i = SPACE;
+          UpdateContexts(buf(1));
+          cm.Train(i);
+          buf[pos++]=i;
+        } while ((i=getc(f))!=EOF);
+        printf(" done [%d bytes]\n",pos);
+        fclose(f);
+        cm.FinishTraining();
+        pos=0;
+        memset(&cxt[0], 0, 16*sizeof(U32));
+        memset(&buf[0], 0, buf.size());
+      }
+    }
+  }
+}
+
+void ContextModel::UpdateContexts(U8 B){
+  for (int i=15; i>0; --i)
+    cxt[i]=cxt[i-1]*257+B+1;
+  for (int i=0; i<7; ++i)
+    cm.set(cxt[i]);
+  cm.set(cxt[8]);
+  cm.set(cxt[14]);
+}
+
+int ContextModel::Predict(ModelStats *Stats){
   // Parse filetype and size
   if (bpos==0) {
     --size;
@@ -5393,21 +5566,15 @@ int contextModel2() {
   if (filetype==PNG8GRAY) return im8bitModel(m, info, 1, 1), m.p();
   if (filetype==PNG24) return im24bitModel(m, info, 0, 1), m.p();
   if (filetype==PNG32) return im24bitModel(m, info, 1, 1), m.p();
-  if (filetype==AUDIO) return wavModel(m, info, &stats), m.p();
+  if (filetype==AUDIO) return wavModel(m, info, Stats), m.p();
   if ((filetype==JPEG || filetype==HDR)) if (jpegModel(m)) return m.p();
 
   // Normal model
   if (bpos==0) {
-    int i;
-    for (i=15; i>0; --i)  // update order 0-11 context hashes
-      cxt[i]=cxt[i-1]*257+(c4&255)+1;
-    for (i=0; i<7; ++i)
-      cm.set(cxt[i]);
+    UpdateContexts(buf(1));
     rcm7.set(cxt[7]);
-    cm.set(cxt[8]);
     rcm9.set(cxt[10]);
     rcm10.set(cxt[12]);
-    cm.set(cxt[14]);
   }
   int order=cm.mix(m);
 
@@ -5418,13 +5585,13 @@ int contextModel2() {
   if (level>=4 && filetype!=IMAGE1) {
     sparseModel(m,ismatch,order);
     distanceModel(m);
-    recordModel(m, &stats);
+    recordModel(m, Stats);
     wordModel(m, filetype);
     indirectModel(m);
     dmcModel(m);
     nestModel(m);
-    XMLModel(m, &stats);
-    exeModel(m, filetype==EXE, &stats);
+    XMLModel(m, Stats);
+    exeModel1.Predict(m, filetype==EXE, Stats);
   }
 
   order = order-2;
@@ -5450,7 +5617,6 @@ int contextModel2() {
   return pr;
 }
 
-
 //////////////////////////// Predictor /////////////////////////
 
 // A Predictor estimates the probability that the next bit of
@@ -5460,13 +5626,17 @@ int contextModel2() {
 
 class Predictor {
   int pr;  // next prediction
+  ContextModel ContextModel2;
+  ModelStats stats;
 public:
   Predictor();
   int p() const {assert(pr>=0 && pr<4096); return pr;}
   void update();
 };
 
-Predictor::Predictor(): pr(2048) {}
+Predictor::Predictor(): pr(2048) {
+  memset(&stats, 0, sizeof(ModelStats));
+}
 
 void Predictor::update() {
   static APM1 a(256), a1(0x10000), a2(0x10000), a3(0x10000),
@@ -5489,7 +5659,7 @@ void Predictor::update() {
   bpos=(bpos+1)&7;
 
   // Filter the context model with APMs
-  int pr0=contextModel2();
+  int pr0=ContextModel2.Predict(&stats);
 
   pr=a.p(pr0, c0);
 
