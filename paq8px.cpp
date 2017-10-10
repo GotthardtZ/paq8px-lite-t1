@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on September 17, 2017
+/* paq8px file compressor/archiver.  Released on October 10, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -2519,11 +2519,11 @@ inline U8 Paeth(U8 W, U8 N, U8 NW){
 
 void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
   const int SC=0x20000;
-  const int nMaps = 14;
+  const int nMaps = 20 +1;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm10(512);
-  static ContextMap cm(MEM*4, 13+23);
-  static StationaryMap Map[nMaps] = { 12, 12, 12, 12, 10, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
+  static ContextMap cm(MEM*4, 13+27);
+  static StationaryMap Map[nMaps] = { 12, 12, 12, 12, 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 px = 0; // current PNG filter prediction
@@ -2556,7 +2556,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
       if (x+padding<w)
         color*=(++color)<stride;
       else
-        color=(padding)*(stride+1);
+        color=(padding>0)*(stride+1);
 
       if (isPNG){
         U8 B = (U8)c4;
@@ -2626,15 +2626,19 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(hash(++i, Clip(W*2-WW), LogMeanDiffQt(N,Clip(NW*2-NWW))));
         cm.set(hash( (W+NEE)/2, LogMeanDiffQt(W,(WW+NE)/2) ));
         cm.set(Clamp4(Clip(W*2-WW) + Clip(N*2-NN) - Clip(NW*2-NNWW), W, NW, N, NE));
+        cm.set(hash(++i, W, buf(2) ));
+        cm.set(hash( N, NN&0x1F, NNN&0x1F ));
+        cm.set(hash( W, WW&0x1F, WWW&0x1F ));
+        cm.set(hash(++i, N, column ));     
 
-        cm.set(hash(++i, W));
+        cm.set(hash(++i, W, LogMeanDiffQt(W,WW)));
         cm.set(hash(++i, W, buf(1)));
-        cm.set(hash(++i, W, buf(1), buf(2)));
-        cm.set(hash(++i, N));
+        cm.set(hash(++i, W/4, LogMeanDiffQt(W,buf(1)), LogMeanDiffQt(W,buf(2)) ));
+        cm.set(hash(++i, N, LogMeanDiffQt(N,NN)));
         cm.set(hash(++i, N, buf(1)));
-        cm.set(hash(++i, N, buf(1), buf(2)));
+        cm.set(hash(++i, N/4, LogMeanDiffQt(N,buf(1)), LogMeanDiffQt(N,buf(2)) ));
         cm.set(hash(++i, (W+N)>>3, buf(1)>>4, buf(2)>>4));
-        cm.set(hash(++i, buf(1), buf(2)));
+        cm.set(hash(++i, buf(1)/2, buf(2)/2));
         cm.set(hash(++i, W, buf(1)-buf(stride+1)));
         cm.set(hash(++i, W+buf(1)-buf(stride+1)));
         cm.set(hash(++i, N, buf(1)-buf(w+1)));
@@ -2668,6 +2672,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(hash(++i, Clip(W+N-NW)-px, LogMeanDiffQt(buffer(1),Clip(buffer(stride+1)+buffer(w+1)-buffer(w+stride+1)))));
         cm.set(hash(++i, Clip(W+N-NW)-px, LogMeanDiffQt(buffer(2),Clip(buffer(stride+2)+buffer(w+2)-buffer(w+stride+2))), R2/4));
         cm.set(hash(++i, Clip(W+N-NW)-px, Clip(N+NE-NNE)-Clip(N+NW-NNW)));
+        cm.set(hash(++i, Clip(W+N-NW+buffer(1)-(buffer(stride+1)+buffer(w+1)-buffer(w+stride+1))), px, R1 ));
         cm.set(hash(++i, Clamp4(W+N-NW,W,NW,N,NE)-px, column));
         cm.set(hash(i>>8, Clamp4(W+N-NW,W,NW,N,NE)/8, px));
         cm.set(hash(++i, N-px, Clip(N+buffer(1)-buffer(w+1))-px));
@@ -2709,20 +2714,34 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         Map[3].set( ((U8)(Clip(W+N-NW)-px))|(LogMeanDiffQt(buffer(1),Clip(buffer(stride+1)+buffer(w+1)-buffer(w+stride+1)))<<8) );
         Map[4].set( (min(color,stride-1)<<8)|((U8)( Clip(N+buffer(1)-buffer(w+1))-px )) );
         Map[5].set( Clip((-buffer(4*stride)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buffer(w*3-stride)*4-buf(w*4-stride),N,NE,buffer(w-2*stride),buffer(w-3*stride)))/5)-px );
-        Map[6].set((W+Clamp4(NE*3-NNE*3+buffer(w*3-stride),W,N,NE,NEE))/2-px);
+        Map[6].set( (W+Clamp4(NE*3-NNE*3+buffer(w*3-stride),W,N,NE,NEE))/2-px );
+        Map[7].set( Clip((buffer(w*5)-6*buffer(w*4)+15*NNN-20*NN+15*N+Clamp4(W*4-NWW*6+buffer(w*2+3*stride)*4-buffer(w*3+4*stride),W,NW,N,NN))/6)-px );
+        Map[8].set( Clip((-3*WW+8*W+Clamp4(NEE*3-NNEE*3+buffer(w*3-stride*2),NE,NEE,buffer(w-3*stride),buffer(w-4*stride)))/6)-px );
+        Map[9].set( Clip((buffer(w*3-3*stride)-4*NNEE+6*NE+Clip(W*4-NW*6+NNW*4-buffer(w*3+stride)))/4)-px );
+        Map[10].set( Clip(W+N-NW+buffer(1)-Clip(buffer(stride+1)+buffer(w+1)-buffer(w+stride+1)))-px );
+        Map[11].set( Clip(W+N-NW+buffer(2)-Clip(buffer(stride+2)+buffer(w+2)-buffer(w+stride+2)))-px );       
+        Map[12].set( Clip(N*2-NN + buffer(1) - Clip(buffer(w+1)*2-buffer(w*2+1)))-px );
+        Map[13].set( Clip(W*2-WW + buffer(1) - Clip(buffer(stride+1)*2-buffer(stride*2+1)))-px );
       }
       else{
         Map[3].set( ((U8)Clip(W+N-NW))|(LogMeanDiffQt(buf(1),Clip(buf(stride+1)+buf(w+1)-buf(w+stride+1)))<<8) );
         Map[4].set( (min(color,stride-1)<<8)|Clip(N+buf(1)-buf(w+1)) );
         Map[5].set( Clip((-buf(4*stride)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buf(w*3-stride)*4-buf(w*4-stride),N,NE,buf(w-2*stride),buf(w-3*stride)))/5));
-        Map[6].set((W+Clamp4(NE*3-NNE*3+buf(w*3-stride),W,N,NE,NEE))/2-px);
+        Map[6].set((W+Clamp4(NE*3-NNE*3+buf(w*3-stride),W,N,NE,NEE))/2);
+        Map[7].set( Clip((buf(w*5)-6*buf(w*4)+15*NNN-20*NN+15*N+Clamp4(W*4-NWW*6+buf(w*2+3*stride)*4-buf(w*3+4*stride),W,NW,N,NN))/6) );
+        Map[8].set( Clip((-3*WW+8*W+Clamp4(NEE*3-NNEE*3+buf(w*3-stride*2),NE,NEE,buf(w-3*stride),buf(w-4*stride)))/6) );
+        Map[9].set( Clip((buf(w*3-3*stride)-4*NNEE+6*NE+Clip(W*4-NW*6+NNW*4-buf(w*3+stride)))/4) );
+        Map[10].set( Clip(W+N-NW+buf(1)-Clip(buf(stride+1)+buf(w+1)-buf(w+stride+1))) );
+        Map[11].set( Clip(W+N-NW+buf(2)-Clip(buf(stride+2)+buf(w+2)-buf(w+stride+2))) );
+        Map[12].set( Clip(N*2-NN + buf(1) - Clip(buf(w+1)*2-buf(w*2+1))) );
+        Map[13].set( Clip(W*2-WW + buf(1) - Clip(buf(stride+1)*2-buf(stride*2+1))) );
       }
-      Map[7].set(Clip(W+N-NW)-px);
-      Map[8].set(buf(1+(isPNG && x<2)));
-      Map[9].set((W+NEE)/2-px);
-      Map[10].set(Clip(N*3-NN*3+NNN)-px);
-      Map[11].set(Clip(N+NW-NNW)-px);
-      Map[12].set(Clip(N+NE-NNE)-px);
+      Map[14].set(Clip(W+N-NW)-px);
+      Map[15].set(buf(1+(isPNG && x<2)));
+      Map[16].set((W+NEE)/2-px);
+      Map[17].set(Clip(N*3-NN*3+NNN)-px);
+      Map[18].set(Clip(N+NW-NNW)-px);
+      Map[19].set(Clip(N+NE-NNE)-px);
     }
   }
 
