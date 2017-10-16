@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on October 10, 2017
+/* paq8px file compressor/archiver.  Released on October 15, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -2291,6 +2291,16 @@ inline unsigned ilog2(unsigned x) {
   return BitCount(x >> 1);
 }
 
+inline U8 Clip(int Px){
+  return min(0xFF,max(0,Px));
+}
+inline U8 Clamp4( int Px, U8 n1, U8 n2, U8 n3, U8 n4){
+  return min( max(n1,max(n2,max(n3,n4))), max( min(n1,min(n2,min(n3,n4))), Px ));
+}
+inline U8 LogMeanDiffQt(U8 a, U8 b){
+  return (a!=b)?((a>b)<<3)|ilog2((a+b)/max(2,abs(a-b)*2)+1):0;
+}
+
 #define SPACE 0x20
 
 void recordModel(Mixer& m, ModelStats *Stats = NULL) {
@@ -2301,6 +2311,8 @@ void recordModel(Mixer& m, ModelStats *Stats = NULL) {
   static U8 padding = 0; // detected padding byte
   static int prevTransition = 0, col = 0, mxCtx = 0; // position of the last padding transition
   static ContextMap cm(32768, 3), cn(32768/2, 3), co(32768*2, 3), cp(MEM, 6);
+  static StationaryMap Map8b(8), Map10b(10);
+  static bool MayBeImg24b = false;
 
   // Find record length
   if (!bpos) {
@@ -2319,7 +2331,12 @@ void recordModel(Mixer& m, ModelStats *Stats = NULL) {
     for (int i=0; i < 2; i++) {
       if (rcount[i] > max(0,12-(int)ilog2(rlen[i+1]))){
         if (rlen[0] != rlen[i+1]){
-          if ( (rlen[i+1] > rlen[0]) && (rlen[i+1] % rlen[0] == 0) ){
+          if (MayBeImg24b && rlen[i+1]==3){
+            rcount[0]>>=1;
+            rcount[1]>>=1;
+            continue;
+          }
+          else if ( (rlen[i+1] > rlen[0]) && (rlen[i+1] % rlen[0] == 0) ){
             // maybe we found a multiple of the real record size..?
             // in that case, it is probably an immediate multiple (2x).
             // that is probably more likely the bigger the length, so
@@ -2332,6 +2349,7 @@ void recordModel(Mixer& m, ModelStats *Stats = NULL) {
           }
           rlen[0] = rlen[i+1];
           rcount[i] = 0;
+          MayBeImg24b = (rlen[0]>30 && (rlen[0]%3)==0);
         }
         else
           // we found the same length again, that's positive reinforcement that
@@ -2396,6 +2414,9 @@ void recordModel(Mixer& m, ModelStats *Stats = NULL) {
     int last4 = (buf(rlen[0]*4)<<24)|(buf(rlen[0]*3)<<16)|(buf(rlen[0]*2)<<8)|buf(rlen[0]);
     cp.set( (last4&0xFF)|((last4&0xF000)>>4)|((last4&0xE00000)>>9)|((last4&0xE0000000)>>14)|((col/max(1,rlen[0]/16))<<18) );
     cp.set( (last4&0xF8F8)|(col<<16) );
+    
+    Map8b.set( Clip(c+buf(rlen[0])-buf(rlen[0]+1)) );
+    Map10b.set( MayBeImg24b?Clip(((U8)c4>>16)+c-(c4>>24))|((col%3)<<8):Clip(c*2-d)|0x300);
 
     // update last context positions
     cpos4[c]=cpos3[c];
@@ -2410,6 +2431,8 @@ void recordModel(Mixer& m, ModelStats *Stats = NULL) {
   cn.mix(m);
   co.mix(m);
   cp.mix(m);
+  Map8b.mix(m);
+  Map10b.mix(m);
 
   m.set( (rlen[0]>2)*( (bpos<<7)|mxCtx ), 1024 );
   if (Stats)
@@ -2476,17 +2499,6 @@ void distanceModel(Mixer& m) {
 
 //////////////////////////// im24bitModel /////////////////////////////////
 
-inline U8 Clip(int Px){
-  return min(0xFF,max(0,Px));
-}
-inline U8 Clamp4( int Px, U8 n1, U8 n2, U8 n3, U8 n4){
-  return min( max(n1,max(n2,max(n3,n4))), max( min(n1,min(n2,min(n3,n4))), Px ));
-}
-
-inline U8 LogMeanDiffQt(U8 a, U8 b){
-  return (a!=b)?((a>b)<<3)|ilog2((a+b)/max(2,abs(a-b)*2)+1):0;
-}
-
 // Square buf(i)
 inline int sqrbuf(int i) {
   assert(i>0);
@@ -2519,11 +2531,11 @@ inline U8 Paeth(U8 W, U8 N, U8 NW){
 
 void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
   const int SC=0x20000;
-  const int nMaps = 20 +1;
+  const int nMaps = 22 +1;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm10(512);
   static ContextMap cm(MEM*4, 13+27);
-  static StationaryMap Map[nMaps] = { 12, 12, 12, 12, 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
+  static StationaryMap Map[nMaps] = { 12, 12, 12, 12, 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 px = 0; // current PNG filter prediction
@@ -2629,7 +2641,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(hash(++i, W, buf(2) ));
         cm.set(hash( N, NN&0x1F, NNN&0x1F ));
         cm.set(hash( W, WW&0x1F, WWW&0x1F ));
-        cm.set(hash(++i, N, column ));     
+        cm.set(hash(++i, N, column ));
 
         cm.set(hash(++i, W, LogMeanDiffQt(W,WW)));
         cm.set(hash(++i, W, buf(1)));
@@ -2689,13 +2701,16 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(hash(i>>8, Clip(N+NW-NNW)-px, column));
         cm.set(hash(++i, Clip(NN+W-NNW)-px, LogMeanDiffQt(buffer(1),Clip(buffer(w*2+1)+buffer(stride+1)-buffer(w*2+stride+1)))));
         cm.set(hash(i>>8, Clip(NN+W-NNW)-px, LogMeanDiffQt(N,Clip(NNN+NW-buffer(w*3+stride)))));
-        cm.set(hash(i>>8, Clip(NN+W-NNW)-px, column));        
+        cm.set(hash(i>>8, Clip(NN+W-NNW)-px, column));
+        cm.set(hash(++i, Clip(N+NN-NNN+buffer(1+(!color))-Clip(buffer(w+1+(!color))+buffer(w*2+1+(!color))-buffer(w*3+1+(!color))))-px));
+        cm.set(hash(i>>8, Clip(N+NN-NNN)-px, Clip( 5*N-10*NN+10*NNN-5*buffer(w*4)+buffer(w*5) )-px ));
         cm.set(hash(++i, Clip(N*2-NN)-px, LogMeanDiffQt(N,Clip(NN*2-NNN))));
         cm.set(hash(++i, Clip(W*2-WW)-px, LogMeanDiffQt(W,Clip(WW*2-WWW))));
         cm.set(hash(i>>8, Clip(N*3-NN*3+NNN)-px));
         cm.set(hash(++i, Clip(N*3-NN*3+NNN)-px, LogMeanDiffQt(W,Clip(NW*2-NNW))));
         cm.set(hash(i>>8, Clip(W*3-WW*3+WWW)-px));
         cm.set(hash(++i, Clip(W*3-WW*3+WWW)-px, LogMeanDiffQt(N,Clip(NW*2-NWW))));
+        cm.set(hash(i>>8, Clip( (35*N-35*NNN+21*buffer(w*5)-5*buffer(w*7))/16 )-px ));
         cm.set(hash(++i, (W+Clip(NE*3-NNE*3+buffer(w*3-stride)))/2-px, R2));
         cm.set(hash(++i, (W+Clamp4(NE*3-NNE*3+buffer(w*3-stride),W,N,NE,NEE))/2-px, LogMeanDiffQt(N,(NW+NE)/2)));
         cm.set(hash(++i, (W+NEE)/2-px, R1/2));
@@ -2722,6 +2737,8 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         Map[11].set( Clip(W+N-NW+buffer(2)-Clip(buffer(stride+2)+buffer(w+2)-buffer(w+stride+2)))-px );       
         Map[12].set( Clip(N*2-NN + buffer(1) - Clip(buffer(w+1)*2-buffer(w*2+1)))-px );
         Map[13].set( Clip(W*2-WW + buffer(1) - Clip(buffer(stride+1)*2-buffer(stride*2+1)))-px );
+        Map[14].set( Clip(N+NN-NNN+buffer(1)-Clip(buffer(w+1)+buffer(w*2+1)-buffer(w*3+1)) )-px );
+        Map[15].set( Clip(W+WW-WWW+buffer(1)-Clip(buffer(stride+1)+buffer(stride*2+1)-buffer(stride*3+1)) )-px );
       }
       else{
         Map[3].set( ((U8)Clip(W+N-NW))|(LogMeanDiffQt(buf(1),Clip(buf(stride+1)+buf(w+1)-buf(w+stride+1)))<<8) );
@@ -2735,13 +2752,15 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         Map[11].set( Clip(W+N-NW+buf(2)-Clip(buf(stride+2)+buf(w+2)-buf(w+stride+2))) );
         Map[12].set( Clip(N*2-NN + buf(1) - Clip(buf(w+1)*2-buf(w*2+1))) );
         Map[13].set( Clip(W*2-WW + buf(1) - Clip(buf(stride+1)*2-buf(stride*2+1))) );
+        Map[14].set( Clip(N+NN-NNN));
+        Map[15].set( Clip(W+WW-WWW));
       }
-      Map[14].set(Clip(W+N-NW)-px);
-      Map[15].set(buf(1+(isPNG && x<2)));
-      Map[16].set((W+NEE)/2-px);
-      Map[17].set(Clip(N*3-NN*3+NNN)-px);
-      Map[18].set(Clip(N+NW-NNW)-px);
-      Map[19].set(Clip(N+NE-NNE)-px);
+      Map[16].set(Clip(W+N-NW)-px);
+      Map[17].set(buf(1+(isPNG && x<2)));
+      Map[18].set((W+NEE)/2-px);
+      Map[19].set(Clip(N*3-NN*3+NNN)-px);
+      Map[20].set(Clip(N+NW-NNW)-px);
+      Map[21].set(Clip(N+NE-NNE)-px);     
     }
   }
 
@@ -2782,7 +2801,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
 // Model for 8-bit image data
 void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
   const int nMaps = 15;
-  static ContextMap cm(MEM*4, 43);
+  static ContextMap cm(MEM*4, 43+2);
   static StationaryMap Map[nMaps] = { 12, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
@@ -2886,9 +2905,17 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
         cm.set(hash(++i, N, NNN, px));
         cm.set(hash(++i, W, WWW, px));
         cm.set(hash(++i, WW, NEE, px));
-        cm.set(hash(++i, W, buffer(w-3), px));
-        cm.set(hash(++i, W, buffer(w-4), px));
+        cm.set(hash(++i, WW, NN, px));
+        if (isPNG){
+          cm.set(hash(++i, W, buffer(w-3), px));
+          cm.set(hash(++i, W, buffer(w-4), px));
+        }
+        else{
+          cm.set(hash(++i, W, buf(w-3)));
+          cm.set(hash(++i, W, buf(w-4)));
+        }
         cm.set(hash(++i, W, hash(N,NW)&0x7FF, px));
+        cm.set(hash(++i, N, hash(NN,NNN)&0x7FF, px));
         cm.set(hash(++i, W, hash(NW,N,NE)&0x7FF, px));
         cm.set(hash(++i, N, hash(NE,NN,NNE)&0x7FF, px));
         cm.set(hash(++i, N, hash(NW,NNW,NN)&0x7FF, px));
@@ -5503,7 +5530,7 @@ class ContextModel{
   void UpdateContexts(U8 B);
   void Train();
 public:
-  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), m(984, 3095+768+(1024+1024*3)*(level>=4), 7+4*(level>=4)), ft2(DEFAULT), filetype(DEFAULT), size(0), info(0){
+  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), m(992, 3095+768+(1024+1024*3)*(level>=4), 7+4*(level>=4)), ft2(DEFAULT), filetype(DEFAULT), size(0), info(0){
     memset(&cxt, 0, 16*sizeof(U32));
     Train();
   }
