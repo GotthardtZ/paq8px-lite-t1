@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on October 15, 2017
+/* paq8px file compressor/archiver.  Released on October 21, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -2309,8 +2309,8 @@ void recordModel(Mixer& m, ModelStats *Stats = NULL) {
   static int rlen[3] = {2,3,4}; // run length and 2 candidates
   static int rcount[2] = {0,0}; // candidate counts
   static U8 padding = 0; // detected padding byte
-  static int prevTransition = 0, col = 0, mxCtx = 0; // position of the last padding transition
-  static ContextMap cm(32768, 3), cn(32768/2, 3), co(32768*2, 3), cp(MEM, 6);
+  static int prevTransition = 0, nTransition = 0, col = 0, mxCtx = 0; // position of the last padding transition
+  static ContextMap cm(32768, 3), cn(32768/2, 3), co(32768*2, 3), cp(MEM, 6+1);
   static StationaryMap Map8b(8), Map10b(10);
   static bool MayBeImg24b = false;
 
@@ -2350,6 +2350,7 @@ void recordModel(Mixer& m, ModelStats *Stats = NULL) {
           rlen[0] = rlen[i+1];
           rcount[i] = 0;
           MayBeImg24b = (rlen[0]>30 && (rlen[0]%3)==0);
+          nTransition = 0;
         }
         else
           // we found the same length again, that's positive reinforcement that
@@ -2382,6 +2383,8 @@ void recordModel(Mixer& m, ModelStats *Stats = NULL) {
     co.set(buf(1)<<8|buf(rlen[0]));
 
     col=pos%rlen[0];
+    if (!col)
+      nTransition = 0;
     cp.set(rlen[0]|buf(rlen[0])<<10|col<<18);
     cp.set(rlen[0]|buf(1)<<10|col<<18);
     cp.set(col|rlen[0]<<12);
@@ -2405,11 +2408,17 @@ void recordModel(Mixer& m, ModelStats *Stats = NULL) {
     anyway
     */
 
-    if ((((U16)(c4>>8) == ((SPACE<<8)+SPACE)) && (c != SPACE)) || (!(c4>>8) && c && ((padding != SPACE) || (pos-prevTransition > rlen[0])))){
+    if ((((c4>>8) == SPACE*0x010101) && (c != SPACE)) || (!(c4>>8) && c && ((padding != SPACE) || (pos-prevTransition > rlen[0])))){
       prevTransition = pos;
+      nTransition+=(nTransition<31);
       padding = (U8)d;
     }
-    cp.set( (rlen[0]>8)*hash( min(min(0xFF,rlen[0]),pos-prevTransition), min(0x3FF,col), (w&0xF0F0)|(w==((padding<<8)|padding)) ) );
+    if (rlen[0]>8){
+      cp.set( hash( min(min(0xFF,rlen[0]),pos-prevTransition), min(0x3FF,col), (w&0xF0F0)|(w==((padding<<8)|padding)), nTransition ) );
+      cp.set( hash( w, (buf(rlen[0]+1)==padding && buf(rlen[0])==padding), col/max(1,rlen[0]/32) ) );
+    }
+    else
+      cp.set(0), cp.set(0);
 
     int last4 = (buf(rlen[0]*4)<<24)|(buf(rlen[0]*3)<<16)|(buf(rlen[0]*2)<<8)|buf(rlen[0]);
     cp.set( (last4&0xFF)|((last4&0xF000)>>4)|((last4&0xE00000)>>9)|((last4&0xE0000000)>>14)|((col/max(1,rlen[0]/16))<<18) );
@@ -2435,6 +2444,7 @@ void recordModel(Mixer& m, ModelStats *Stats = NULL) {
   Map10b.mix(m);
 
   m.set( (rlen[0]>2)*( (bpos<<7)|mxCtx ), 1024 );
+  m.set( ((buf(rlen[0])^((U8)(c0<<(8-bpos))))>>4)|(min(0x1F,col/max(1,rlen[0]/32))<<4), 512 );
   if (Stats)
     (*Stats).Record = (min(0xFFFF,rlen[0])<<16)|min(0xFFFF,col);
 }
@@ -5112,8 +5122,8 @@ void dmcModel(Mixer& m) {
       t[top].state=t[next].state;
       t[curr].nx[y]=top;
       ++top;
-      if (top==MEM*2) threshold=512;
-      if (top==MEM*3) threshold=768;
+      if (top==(MEM/2) || top==MEM)
+        threshold+=256;
     }
   }
 
@@ -5153,8 +5163,8 @@ void dmcModel(Mixer& m) {
   const int n1=t[curr].c1;
   const int n0=t[curr].c0;
   const int pr2=(n1+5)*4096/(n0+n1+10);
-  m.add(stretch(pr1));
-  m.add(stretch(pr2));
+  m.add(stretch(pr1)/4);
+  m.add(stretch(pr2)/4);
 }
 
 void nestModel(Mixer& m)
@@ -5530,7 +5540,7 @@ class ContextModel{
   void UpdateContexts(U8 B);
   void Train();
 public:
-  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), m(992, 3095+768+(1024+1024*3)*(level>=4), 7+4*(level>=4)), ft2(DEFAULT), filetype(DEFAULT), size(0), info(0){
+  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), m(1000, 3095+768+(1024+512+1024*3)*(level>=4), 7+5*(level>=4)), ft2(DEFAULT), filetype(DEFAULT), size(0), info(0){
     memset(&cxt, 0, 16*sizeof(U32));
     Train();
   }
