@@ -4059,6 +4059,8 @@ void wavModel(Mixer& m, int info, ModelStats *Stats = NULL) {
   (18/08/2017) v98: Initial release by Márcio Pais
   (19/08/2017) v99: Bug fixes, tables for instruction categorization, other small improvements
   (29/08/2017) v102: Added variable context dependent on parsing break point
+  (17/09/2017) v112: Allow pre-training of the model
+  (22/10/2017) v116: Fixed a bug in function ProcessMode (missing break, thank you Mauro Vezzosi)
 */
 
 // formats
@@ -4648,6 +4650,7 @@ void ProcessMode(Instruction &Op, ExeState &State){
           Op.Data|=(3<<TypeShift);
         }
         Op.BytesRead = 0;
+        break;
       }
       default: State = Start; /*no immediate*/
     }
