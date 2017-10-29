@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on October 21, 2017
+/* paq8px file compressor/archiver.  Released on October 29, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -1761,7 +1761,7 @@ public:
     *cp = (Prediction<<10)|Count;
     B+=(y && B>1);
     cp=&Data[Context+B];
-    Prediction = (((*cp)>>10)+512)>>10;
+    Prediction = (*cp)>>20;
     m.add(stretch(Prediction)/4);
     m.add((Prediction-2048)/4);
     bCount<<=1; B<<=1;
@@ -1825,7 +1825,7 @@ class ContextMap {
     U8* get(U16 chk);  // Find element (0-6) matching checksum.
       // If not found, insert or replace lowest priority (not last).
   };
-  Array<E> t;  // bit histories for bits 0-1, 2-4, 5-7
+  Array<E,64> t;  // bit histories for bits 0-1, 2-4, 5-7
     // For 0-1, also contains a run count in bh[][4] and value in bh[][5]
     // and pending update count in bh[7]
   Array<U8*> cp;   // C pointers to current bit history
@@ -1953,7 +1953,11 @@ int ContextMap::mix1(Mixer& m, int cc, int bp, int c1, int y1) {
   for (int i=0; i<cn; ++i) {
     if (cp[i]) {
       assert(cp[i]>=&t[0].bh[0][0] && cp[i]<=&t[t.size()-1].bh[6][6]);
+      #ifdef X64
+      assert(((unsigned long long)(cp[i])&63)>=15);
+      #else
       assert((long(cp[i])&63)>=15);
+      #endif
       int ns=nex(*cp[i], y1);
       if (ns>=204 && rnd() << ((452-ns)>>3)) ns-=4;  // probabilistic increment
       *cp[i]=ns;
@@ -2096,12 +2100,11 @@ int matchModel(Mixer& m) {
 static U32 frstchar=0, spafdo=0, spaces=0, spacecount=0, words=0, wordcount=0,wordlen=0,wordlen1=0;
 void wordModel(Mixer& m, Filetype filetype) {
   static U32 word0=0, word1=0, word2=0, word3=0, word4=0, word5=0;  // hashes
-  static U32 wrdhsh=0;
   static U32 xword0=0,xword1=0,xword2=0,cword0=0,ccword=0;
   static U32 number0=0, number1=0;  // hashes
   static U32 text0=0;  // hash stream of letters
-  static U32 lastLetter=0, firstLetter=0, lastUpper=0, lastDigit=0, wordGap=0;
-  static ContextMap cm(MEM*16, 44 +1+1+1);
+  static U32 wrdhsh=0, lastLetter=0, firstLetter=0, lastUpper=0, lastDigit=0, wordGap=0;
+  static ContextMap cm(MEM*16, 47);
   static int nl1=-3, nl=-2, w=0;  // previous, current newline position
   static U32 mask=0, mask2=0;
   static Array<int> wpos(0x10000);  // last position of word
@@ -2310,7 +2313,7 @@ void recordModel(Mixer& m, ModelStats *Stats = NULL) {
   static int rcount[2] = {0,0}; // candidate counts
   static U8 padding = 0; // detected padding byte
   static int prevTransition = 0, nTransition = 0, col = 0, mxCtx = 0; // position of the last padding transition
-  static ContextMap cm(32768, 3), cn(32768/2, 3), co(32768*2, 3), cp(MEM, 6+1);
+  static ContextMap cm(32768, 3), cn(32768/2, 3), co(32768*2, 3), cp(MEM, 7);
   static StationaryMap Map8b(8), Map10b(10);
   static bool MayBeImg24b = false;
 
@@ -2541,11 +2544,11 @@ inline U8 Paeth(U8 W, U8 N, U8 NW){
 
 void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
   const int SC=0x20000;
-  const int nMaps = 22 +1;
+  const int nMaps = 30;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm10(512);
-  static ContextMap cm(MEM*4, 13+27);
-  static StationaryMap Map[nMaps] = { 12, 12, 12, 12, 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
+  static ContextMap cm(MEM*4, 44);
+  static StationaryMap Map[nMaps] = { 12, 12, 12, 12, 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 px = 0; // current PNG filter prediction
@@ -2652,6 +2655,10 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(hash( N, NN&0x1F, NNN&0x1F ));
         cm.set(hash( W, WW&0x1F, WWW&0x1F ));
         cm.set(hash(++i, N, column ));
+        cm.set(hash(++i, Clip(W+NEE-NE), LogMeanDiffQt(W,Clip(WW+NE-N))));
+        cm.set(hash( NN, buf(w*4)&0x1F, buf(w*6)&0x1F, column ));
+        cm.set(hash( WW, buf(stride*4)&0x1F, buf(stride*6)&0x1F, column ));
+        cm.set(hash( NNN, buf(w*6)&0x1F, buf(w*9)&0x1F, column ));
 
         cm.set(hash(++i, W, LogMeanDiffQt(W,WW)));
         cm.set(hash(++i, W, buf(1)));
@@ -2709,9 +2716,8 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(hash(i>>8, Clip(N+NE-NNE)-px, column));
         cm.set(hash(++i, Clip(NW+N-NNW)-px, Clip(NW+buffer(1)-buffer(w+stride+1))-px));
         cm.set(hash(i>>8, Clip(N+NW-NNW)-px, column));
-        cm.set(hash(++i, Clip(NN+W-NNW)-px, LogMeanDiffQt(buffer(1),Clip(buffer(w*2+1)+buffer(stride+1)-buffer(w*2+stride+1)))));
         cm.set(hash(i>>8, Clip(NN+W-NNW)-px, LogMeanDiffQt(N,Clip(NNN+NW-buffer(w*3+stride)))));
-        cm.set(hash(i>>8, Clip(NN+W-NNW)-px, column));
+        cm.set(hash(i>>8, Clip(W+NEE-NE)-px, LogMeanDiffQt(W,Clip(WW+NE-N))));
         cm.set(hash(++i, Clip(N+NN-NNN+buffer(1+(!color))-Clip(buffer(w+1+(!color))+buffer(w*2+1+(!color))-buffer(w*3+1+(!color))))-px));
         cm.set(hash(i>>8, Clip(N+NN-NNN)-px, Clip( 5*N-10*NN+10*NNN-5*buffer(w*4)+buffer(w*5) )-px ));
         cm.set(hash(++i, Clip(N*2-NN)-px, LogMeanDiffQt(N,Clip(NN*2-NNN))));
@@ -2749,6 +2755,13 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         Map[13].set( Clip(W*2-WW + buffer(1) - Clip(buffer(stride+1)*2-buffer(stride*2+1)))-px );
         Map[14].set( Clip(N+NN-NNN+buffer(1)-Clip(buffer(w+1)+buffer(w*2+1)-buffer(w*3+1)) )-px );
         Map[15].set( Clip(W+WW-WWW+buffer(1)-Clip(buffer(stride+1)+buffer(stride*2+1)-buffer(stride*3+1)) )-px );
+        Map[16].set(Clip(W+NEE-NE+buffer(1)-Clip(buffer(stride+1)+buffer(w-stride*2+1)-buffer(w-stride+1)))-px);
+        Map[17].set(Clip(NN+W-NNW+buffer(1)-Clip(buffer(w*2+1)+buffer(stride+1)-buffer(w*2+stride+1)))-px);
+        Map[18].set(Clip(NN+NW-buffer(w*3+stride)+buffer(1)-Clip(buffer(w*2+1)+buffer(w+stride+1)-buffer(w*3+stride+1)))-px);
+        Map[19].set(Clip(NN+NE-buffer(w*3-stride)+buffer(1)-Clip(buffer(w*2+1)+buffer(w-stride+1)-buffer(w*3-stride+1)))-px);
+        Map[20].set(Clip(NN+buffer(w*4)-buffer(w*6)+buffer(1)-Clip(buffer(w*2+1)+buffer(w*4+1)-buffer(w*6+1)))-px);
+        Map[21].set(Clip(WW+buffer(stride*4)-buffer(stride*6)+buffer(1)-Clip(buffer(stride*2+1)+buffer(stride*4+1)-buffer(stride*6+1)))-px);
+        Map[22].set(Clip(WW+NEE-N+buffer(1)-Clip(buffer(stride*2+1)+buffer(w-stride*2+1)-buffer(w+1)))-px);
       }
       else{
         Map[3].set( ((U8)Clip(W+N-NW))|(LogMeanDiffQt(buf(1),Clip(buf(stride+1)+buf(w+1)-buf(w+stride+1)))<<8) );
@@ -2764,13 +2777,20 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         Map[13].set( Clip(W*2-WW + buf(1) - Clip(buf(stride+1)*2-buf(stride*2+1))) );
         Map[14].set( Clip(N+NN-NNN));
         Map[15].set( Clip(W+WW-WWW));
+        Map[16].set(Clip(W+NEE-NE));
+        Map[17].set(Clip(NN+W-NNW));
+        Map[18].set(Clip(NN+NW-buf(w*3+stride)));
+        Map[19].set(Clip(NN+NE-buf(w*3-stride)));
+        Map[20].set(Clip(NN+buf(w*4)-buf(w*6)));
+        Map[21].set(Clip(WW+buf(stride*4)-buf(stride*6)));
+        Map[22].set(Clip(WW+NEE-N+buf(1)-Clip(buf(stride*2+1)+buf(w-stride*2+1)-buf(w+1))));
       }
-      Map[16].set(Clip(W+N-NW)-px);
-      Map[17].set(buf(1+(isPNG && x<2)));
-      Map[18].set((W+NEE)/2-px);
-      Map[19].set(Clip(N*3-NN*3+NNN)-px);
-      Map[20].set(Clip(N+NW-NNW)-px);
-      Map[21].set(Clip(N+NE-NNE)-px);     
+      Map[23].set(Clip(W+N-NW)-px);
+      Map[24].set(buf(1+(isPNG && x<2)));
+      Map[25].set((W+NEE)/2-px);
+      Map[26].set(Clip(N*3-NN*3+NNN)-px);
+      Map[27].set(Clip(N+NW-NNW)-px);
+      Map[28].set(Clip(N+NE-NNE)-px);
     }
   }
 
@@ -4972,7 +4992,7 @@ void exeModel::Update(U8 B, bool Forced){
   if (Valid || Forced){
     int mask=0, count0=0;
     for (int i=0, j=0; i<N1; ++i){
-      if (i) mask=mask*2+(buf(i-1)==0), count0+=mask&1;
+      if (i>1) mask=mask*2+(buf(i-1)==0), count0+=mask&1;
       j=(i<4)?i+1:5+(i-4)*(2+(i>6));
       cm.set(hash(execxt(j, buf(1)*(j>6)), ((1<<N1)|mask)*(count0*N1/2>=i), (0x08|(blpos&0x07))*(i<4)));
     }
