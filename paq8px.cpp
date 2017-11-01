@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on October 29, 2017
+/* paq8px file compressor/archiver.  Released on November 1, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -894,8 +894,7 @@ public:
     return b[i&(b.size()-1)];
   }
   int operator()(int i) const {
-    assert(i>0);
-    return b[(pos-i)&(b.size()-1)];
+    return (i>0)?b[(pos-i)&(b.size()-1)]:0;
   }
   int size() const {
     return b.size();
@@ -2111,7 +2110,7 @@ void wordModel(Mixer& m, Filetype filetype) {
 
   // Update word hashes
   if (bpos==0) {
-    int c=c4&255,pC=(U8)c4>>8,f=0;
+    int c=c4&255,pC=(U8)(c4>>8),f=0;
     if (spaces&0x80000000) --spacecount;
     if (words&0x80000000) --wordcount;
     spaces=spaces*2;
@@ -2162,7 +2161,7 @@ void wordModel(Mixer& m, Filetype filetype) {
         wordlen1=wordlen;
          wpos[w]=blpos;
         if (c==':'|| c=='=') cword0=word0;
-        if (c==']'&& (frstchar!=':' || frstchar!='*')) xword0=word0;
+        if (c==']'&& (frstchar==':' || frstchar=='*')) xword0=word0;
         ccword=0;
         word0=wordlen=0;
         if((c=='.'||c=='!'||c=='?' ||c=='}' ||c==')') && buf(2)!=10 && filetype!=EXE) f=1;
@@ -2314,63 +2313,69 @@ void recordModel(Mixer& m, ModelStats *Stats = NULL) {
   static U8 padding = 0; // detected padding byte
   static int prevTransition = 0, nTransition = 0, col = 0, mxCtx = 0; // position of the last padding transition
   static ContextMap cm(32768, 3), cn(32768/2, 3), co(32768*2, 3), cp(MEM, 7);
-  static StationaryMap Map8b(8), Map10b(10);
+  static StationaryMap Map0(10), Map1(10);
   static bool MayBeImg24b = false;
 
   // Find record length
   if (!bpos) {
     int w=c4&0xffff, c=w&255, d=w>>8;
-    int r=pos-cpos1[c];
-    if (r>1 && r==cpos1[c]-cpos2[c]
-        && r==cpos2[c]-cpos3[c] && (r>32 || r==cpos3[c]-cpos4[c])
-        && (r>10 || ((c==buf(r*5+1)) && c==buf(r*6+1)))) {
-      if (r==rlen[1]) ++rcount[0];
-      else if (r==rlen[2]) ++rcount[1];
-      else if (rcount[0]>rcount[1]) rlen[2]=r, rcount[1]=1;
-      else rlen[1]=r, rcount[0]=1;
+    if (Stats && (*Stats).Record && ((*Stats).Record>>16)>2 &&
+          ((*Stats).Record>>16) != (unsigned int)rlen[0]) {
+      rlen[0] = (*Stats).Record>>16;
+      rcount[0]=rcount[1]=0;
     }
+    else{
+      int r=pos-cpos1[c];
+      if (r>1 && r==cpos1[c]-cpos2[c]
+          && r==cpos2[c]-cpos3[c] && (r>32 || r==cpos3[c]-cpos4[c])
+          && (r>10 || ((c==buf(r*5+1)) && c==buf(r*6+1)))) {
+        if (r==rlen[1]) ++rcount[0];
+        else if (r==rlen[2]) ++rcount[1];
+        else if (rcount[0]>rcount[1]) rlen[2]=r, rcount[1]=1;
+        else rlen[1]=r, rcount[0]=1;
+      }
 
-    // check candidate lengths
-    for (int i=0; i < 2; i++) {
-      if (rcount[i] > max(0,12-(int)ilog2(rlen[i+1]))){
-        if (rlen[0] != rlen[i+1]){
-          if (MayBeImg24b && rlen[i+1]==3){
-            rcount[0]>>=1;
-            rcount[1]>>=1;
-            continue;
-          }
-          else if ( (rlen[i+1] > rlen[0]) && (rlen[i+1] % rlen[0] == 0) ){
-            // maybe we found a multiple of the real record size..?
-            // in that case, it is probably an immediate multiple (2x).
-            // that is probably more likely the bigger the length, so
-            // check for small lengths too
-            if ((rlen[0] > 32) && (rlen[i+1] == rlen[0]*2)){
+      // check candidate lengths
+      for (int i=0; i < 2; i++) {
+        if (rcount[i] > max(0,12-(int)ilog2(rlen[i+1]))){
+          if (rlen[0] != rlen[i+1]){
+            if (MayBeImg24b && rlen[i+1]==3){
               rcount[0]>>=1;
               rcount[1]>>=1;
               continue;
             }
+            else if ( (rlen[i+1] > rlen[0]) && (rlen[i+1] % rlen[0] == 0) ){
+              // maybe we found a multiple of the real record size..?
+              // in that case, it is probably an immediate multiple (2x).
+              // that is probably more likely the bigger the length, so
+              // check for small lengths too
+              if ((rlen[0] > 32) && (rlen[i+1] == rlen[0]*2)){
+                rcount[0]>>=1;
+                rcount[1]>>=1;
+                continue;
+              }
+            }
+            rlen[0] = rlen[i+1];
+            rcount[i] = 0;
+            MayBeImg24b = (rlen[0]>30 && (rlen[0]%3)==0);
+            nTransition = 0;
           }
-          rlen[0] = rlen[i+1];
-          rcount[i] = 0;
-          MayBeImg24b = (rlen[0]>30 && (rlen[0]%3)==0);
-          nTransition = 0;
-        }
-        else
-          // we found the same length again, that's positive reinforcement that
-          // this really is the correct record size, so give it a little boost
-          rcount[i]>>=2;
+          else
+            // we found the same length again, that's positive reinforcement that
+            // this really is the correct record size, so give it a little boost
+            rcount[i]>>=2;
 
-        // if the other candidate record length is orders of
-        // magnitude larger, it will probably never have enough time
-        // to increase its counter before it's reset again. and if
-        // this length is not a multiple of the other, than it might
-        // really be worthwhile to investigate it, so we won't set its
-        // counter to 0
-        if (rlen[i+1]<<4 > rlen[1+(i^1)])
-          rcount[i^1] = 0;
+          // if the other candidate record length is orders of
+          // magnitude larger, it will probably never have enough time
+          // to increase its counter before it's reset again. and if
+          // this length is not a multiple of the other, than it might
+          // really be worthwhile to investigate it, so we won't set its
+          // counter to 0
+          if (rlen[i+1]<<4 > rlen[1+(i^1)])
+            rcount[i^1] = 0;
+        }
       }
     }
-
     // Set 2 dimensional contexts
     assert(rlen[0]>0);
     cm.set(c<<8| (min(255, pos-cpos1[c])/4));
@@ -2426,10 +2431,14 @@ void recordModel(Mixer& m, ModelStats *Stats = NULL) {
     int last4 = (buf(rlen[0]*4)<<24)|(buf(rlen[0]*3)<<16)|(buf(rlen[0]*2)<<8)|buf(rlen[0]);
     cp.set( (last4&0xFF)|((last4&0xF000)>>4)|((last4&0xE00000)>>9)|((last4&0xE0000000)>>14)|((col/max(1,rlen[0]/16))<<18) );
     cp.set( (last4&0xF8F8)|(col<<16) );
-    
-    Map8b.set( Clip(c+buf(rlen[0])-buf(rlen[0]+1)) );
-    Map10b.set( MayBeImg24b?Clip(((U8)c4>>16)+c-(c4>>24))|((col%3)<<8):Clip(c*2-d)|0x300);
 
+    int i=0x300;
+    if (MayBeImg24b)
+        i = (col%3)<<8, Map0.set(Clip(((U8)(c4>>16))+c-(c4>>24))|i);
+    else
+      Map0.set(Clip(c*2-d)|i);
+    Map1.set(Clip(c+buf(rlen[0])-buf(rlen[0]+1))|i);
+      
     // update last context positions
     cpos4[c]=cpos3[c];
     cpos3[c]=cpos2[c];
@@ -2443,8 +2452,8 @@ void recordModel(Mixer& m, ModelStats *Stats = NULL) {
   cn.mix(m);
   co.mix(m);
   cp.mix(m);
-  Map8b.mix(m);
-  Map10b.mix(m);
+  Map0.mix(m);
+  Map1.mix(m);
 
   m.set( (rlen[0]>2)*( (bpos<<7)|mxCtx ), 1024 );
   m.set( ((buf(rlen[0])^((U8)(c0<<(8-bpos))))>>4)|(min(0x1F,col/max(1,rlen[0]/32))<<4), 512 );
@@ -2554,7 +2563,8 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
   static U8 px = 0; // current PNG filter prediction
   static int color = -1;
   static int stride = 3;
-  static int ctx, padding, lastPos=0, lastWasPNG=0, filter=0, filterOn=0, columns=0, column=0, x=0, w=0, line=0, R1=0, R2=0;
+  static int ctx, padding, lastPos=0, lastWasPNG=0, filter=0, filterOn=0, x=0, w=0, line=0, R1=0, R2=0;
+  static int columns[2] = {1,1}, column[2];
 
   if (!bpos) {
     if ((color < 0) || (pos-lastPos != 1)){
@@ -2562,7 +2572,8 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
       w = info&0xFFFFFF;
       padding = w%stride;
       x = color = line = filterOn = 0;
-      columns = max(1,w/max(1,ilog2(w)*3));
+      columns[0] = max(1,w/max(1,ilog2(w)*3));
+      columns[1] = max(1,columns[0]/max(1,ilog2(columns[0])));
       if (lastPos && lastWasPNG!=isPNG){
         for (int i=0;i<nMaps;i++)
           Map[i].Reset();
@@ -2619,7 +2630,8 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
 
     if (x || !isPNG){
       int i=color<<5;
-      column=(x-isPNG)/columns;
+      column[0]=(x-isPNG)/columns[0];
+      column[1]=(x-isPNG)/columns[1];
 
       if (!isPNG){
         WWW=buf(3*stride), WW=buf(2*stride), W=buf(stride), NW=buf(w+stride), N=buf(w), NE=buf(w-stride), NEE=buf(w-2*stride), NNWW=buf((w+stride)*2), NNW=buf(w*2+stride), NN=buf(w*2), NNE=buf(w*2-stride), NNEE=buf((w-stride)*2), NNN=buf(w*3);
@@ -2646,7 +2658,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(Clamp4(W*3-WW*3+WWW,W,N,NE,NEE)/2);
         cm.set(hash(++i, LogMeanDiffQt(W,buf(stride+1)), Clamp4((buf(1)*W)/max(1,buf(stride+1)),W,N,NE,NEE)));
         cm.set(hash(++i, Clamp4(N+buf(2)-buf(w+2),W,NW,N,NE)));
-        cm.set(hash(++i, Clip(W+N-NW), column));
+        cm.set(hash(++i, Clip(W+N-NW), column[0]));
         cm.set(hash(++i, Clip(N*2-NN), LogMeanDiffQt(W,Clip(NW*2-NNW))));
         cm.set(hash(++i, Clip(W*2-WW), LogMeanDiffQt(N,Clip(NW*2-NWW))));
         cm.set(hash( (W+NEE)/2, LogMeanDiffQt(W,(WW+NE)/2) ));
@@ -2654,12 +2666,12 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(hash(++i, W, buf(2) ));
         cm.set(hash( N, NN&0x1F, NNN&0x1F ));
         cm.set(hash( W, WW&0x1F, WWW&0x1F ));
-        cm.set(hash(++i, N, column ));
+        cm.set(hash(++i, N, column[0] ));
         cm.set(hash(++i, Clip(W+NEE-NE), LogMeanDiffQt(W,Clip(WW+NE-N))));
-        cm.set(hash( NN, buf(w*4)&0x1F, buf(w*6)&0x1F, column ));
-        cm.set(hash( WW, buf(stride*4)&0x1F, buf(stride*6)&0x1F, column ));
-        cm.set(hash( NNN, buf(w*6)&0x1F, buf(w*9)&0x1F, column ));
-
+        cm.set(hash( NN, buf(w*4)&0x1F, buf(w*6)&0x1F, column[1] ));
+        cm.set(hash( WW, buf(stride*4)&0x1F, buf(stride*6)&0x1F, column[1] ));
+        cm.set(hash( NNN, buf(w*6)&0x1F, buf(w*9)&0x1F, column[1] ));
+        
         cm.set(hash(++i, W, LogMeanDiffQt(W,WW)));
         cm.set(hash(++i, W, buf(1)));
         cm.set(hash(++i, W/4, LogMeanDiffQt(W,buf(1)), LogMeanDiffQt(W,buf(2)) ));
@@ -2702,7 +2714,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(hash(++i, Clip(W+N-NW)-px, LogMeanDiffQt(buffer(2),Clip(buffer(stride+2)+buffer(w+2)-buffer(w+stride+2))), R2/4));
         cm.set(hash(++i, Clip(W+N-NW)-px, Clip(N+NE-NNE)-Clip(N+NW-NNW)));
         cm.set(hash(++i, Clip(W+N-NW+buffer(1)-(buffer(stride+1)+buffer(w+1)-buffer(w+stride+1))), px, R1 ));
-        cm.set(hash(++i, Clamp4(W+N-NW,W,NW,N,NE)-px, column));
+        cm.set(hash(++i, Clamp4(W+N-NW,W,NW,N,NE)-px, column[0]));
         cm.set(hash(i>>8, Clamp4(W+N-NW,W,NW,N,NE)/8, px));
         cm.set(hash(++i, N-px, Clip(N+buffer(1)-buffer(w+1))-px));
         cm.set(hash(++i, Clip(W+buffer(1)-buffer(stride+1))-px, R1));
@@ -2710,12 +2722,12 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(hash(++i, Clip(N+buffer(1)-buffer(w+1))-px, Clip(N+buffer(2)-buffer(w+2))-px));
         cm.set(hash(++i, Clip(W+buffer(1)-buffer(stride+1))-px, Clip(W+buffer(2)-buffer(stride+2))-px));
         cm.set(hash(++i, Clip(NW+buffer(1)-buffer(w+stride+1))-px));
-        cm.set(hash(++i, Clip(NW+buffer(1)-buffer(w+stride+1))-px, column));
-        cm.set(hash(++i, Clip(NE+buffer(1)-buffer(w-stride+1))-px, column));
+        cm.set(hash(++i, Clip(NW+buffer(1)-buffer(w+stride+1))-px, column[0]));
+        cm.set(hash(++i, Clip(NE+buffer(1)-buffer(w-stride+1))-px, column[0]));
         cm.set(hash(++i, Clip(NE+N-NNE)-px, Clip(NE+buffer(1)-buffer(w-stride+1))-px));
-        cm.set(hash(i>>8, Clip(N+NE-NNE)-px, column));
+        cm.set(hash(i>>8, Clip(N+NE-NNE)-px, column[0]));
         cm.set(hash(++i, Clip(NW+N-NNW)-px, Clip(NW+buffer(1)-buffer(w+stride+1))-px));
-        cm.set(hash(i>>8, Clip(N+NW-NNW)-px, column));
+        cm.set(hash(i>>8, Clip(N+NW-NNW)-px, column[0]));
         cm.set(hash(i>>8, Clip(NN+W-NNW)-px, LogMeanDiffQt(N,Clip(NNN+NW-buffer(w*3+stride)))));
         cm.set(hash(i>>8, Clip(W+NEE-NE)-px, LogMeanDiffQt(W,Clip(WW+NE-N))));
         cm.set(hash(++i, Clip(N+NN-NNN+buffer(1+(!color))-Clip(buffer(w+1+(!color))+buffer(w*2+1+(!color))-buffer(w*3+1+(!color))))-px));
@@ -2814,7 +2826,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
     static int col=0;
     if (++col>=stride*8) col=0;
     m.set(5, 6);
-    m.set(min(63,column)+((ctx>>3)&0xC0), 256);
+    m.set(min(63,column[0])+((ctx>>3)&0xC0), 256);
     m.set(ctx, 2048);
     m.set(col+(isPNG?(ctx&7)+1:(c0==((0x100|((N+W)/2))>>(8-bpos))))*32, 8*32);
     m.set(((isPNG?buffer(1):0)>>4)*stride+(x%stride) + min(5,(filter+1)*filterOn)*64, 6*64);
@@ -2830,18 +2842,20 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
 
 // Model for 8-bit image data
 void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
-  const int nMaps = 15;
-  static ContextMap cm(MEM*4, 43+2);
-  static StationaryMap Map[nMaps] = { 12, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
+  const int nMaps = 20;
+  static ContextMap cm(MEM*4, 48);
+  static StationaryMap Map[nMaps] = { 12, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 px = 0, res = 0; // current PNG filter prediction, expected residual
-  static int ctx, lastPos=0, lastWasPNG=0, col=0, line=0, x=0, columns=0, column=0, filter=0, filterOn=0;
+  static int ctx, lastPos=0, lastWasPNG=0, col=0, line=0, x=0, filter=0, filterOn=0;
+  static int columns[2] = {1,1}, column[2];
   // Select nearby pixels as context
   if (!bpos) {
     if (pos!=lastPos+1){
       x = line = filterOn = px= 0;
-      columns = max(1,w/max(1,ilog2(w)*2));
+      columns[0] = max(1,w/max(1,ilog2(w)*2));
+      columns[1] = max(1,columns[0]/max(1,ilog2(columns[0])));
       if (gray){
         if (lastPos && lastWasPNG!=isPNG){
           for (int i=0;i<nMaps;i++)
@@ -2895,7 +2909,8 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
     }  
     if (x || !isPNG){
       int i=((filter+1)*filterOn)<<6;
-      column=(x-isPNG)/columns;
+      column[0]=(x-isPNG)/columns[0];
+      column[1]=(x-isPNG)/columns[1];
       if (isPNG)
         WWW=buffer(3), WW=buffer(2), W=buffer(1), NWW=buffer(w+2), NW=buffer(w+1), N=buffer(w), NE=buffer(w-1), NEE=buffer(w-2), NNWW=buffer(w*2+2), NNW=buffer(w*2+1), NN=buffer(w*2), NNE=buffer(w*2-1), NNEE=buffer(w*2-2), NNN=buffer(w*3);
       else
@@ -2903,13 +2918,13 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
 
       if (!gray){
         cm.set(hash(++i, W, px));
-        cm.set(hash(++i, W, px, column));
+        cm.set(hash(++i, W, px, column[0]));
         cm.set(hash(++i, N, px));
-        cm.set(hash(++i, N, px, column));
+        cm.set(hash(++i, N, px, column[0]));
         cm.set(hash(++i, NW, px));
-        cm.set(hash(++i, NW, px, column));
+        cm.set(hash(++i, NW, px, column[0]));
         cm.set(hash(++i, NE, px));
-        cm.set(hash(++i, NE, px, column));
+        cm.set(hash(++i, NE, px, column[0]));
         cm.set(hash(++i, NWW, px));
         cm.set(hash(++i, NEE, px));
         cm.set(hash(++i, WW, px));
@@ -2946,15 +2961,20 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
         }
         cm.set(hash(++i, W, hash(N,NW)&0x7FF, px));
         cm.set(hash(++i, N, hash(NN,NNN)&0x7FF, px));
+        cm.set(hash(++i, W, hash(NE,NEE)&0x7FF, px));
         cm.set(hash(++i, W, hash(NW,N,NE)&0x7FF, px));
         cm.set(hash(++i, N, hash(NE,NN,NNE)&0x7FF, px));
         cm.set(hash(++i, N, hash(NW,NNW,NN)&0x7FF, px));
         cm.set(hash(++i, W, hash(WW,NWW,NW)&0x7FF, px));
         cm.set(hash(++i, W, hash(NW,N)&0xFF, hash(WW,NWW)&0xFF, px));
-        cm.set(hash(++i, px, column));
+        cm.set(hash(++i, px, column[0]));
         cm.set(hash(++i, px));
 
-        ctx = min(0x1F,(x-1)/min(0x20,columns));
+        cm.set(hash(++i, N, px, column[1] ));
+        cm.set(hash(++i, W, px, column[1] ));
+        
+
+        ctx = min(0x1F,(x-1)/min(0x20,columns[0]));
         res = W;
       }
       else{
@@ -2969,12 +2989,12 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
         cm.set(hash(++i, NW, NNWW, px ));
         cm.set(hash(++i, W, NEE, px));
         cm.set(hash(++i, (Clamp4(W+N-NW,W,NW,N,NE)-px)/2, LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
-        cm.set(hash(++i, (W-px)/4, (NE-px)/4, column));
+        cm.set(hash(++i, (W-px)/4, (NE-px)/4, column[0]));
         cm.set(hash(++i, (Clip(W*2-WW)-px)/4, (Clip(N*2-NN)-px)/4));
-        cm.set(hash(++i, (Clamp4(N+NE-NNE,W,N,NE,NEE)-px)/4, column));
-        cm.set(hash(++i, (Clamp4(N+NW-NNW,W,NW,N,NE)-px)/4, column));
-        cm.set(hash(++i, (W+NEE)/4, px, column));
-        cm.set(hash(++i, Clip(W+N-NW)-px, column));
+        cm.set(hash(++i, (Clamp4(N+NE-NNE,W,N,NE,NEE)-px)/4, column[0]));
+        cm.set(hash(++i, (Clamp4(N+NW-NNW,W,NW,N,NE)-px)/4, column[0]));
+        cm.set(hash(++i, (W+NEE)/4, px, column[0]));
+        cm.set(hash(++i, Clip(W+N-NW)-px, column[0]));
         cm.set(hash(++i, Clamp4(N*3-NN*3+NNN,W,N,NN,NE), px, LogMeanDiffQt(W,Clip(NW*2-NNW))));
         cm.set(hash(++i, Clamp4(W*3-WW*3+WWW,W,N,NE,NEE), px, LogMeanDiffQt(N,Clip(NW*2-NWW))));
         cm.set(hash(++i, (W+Clamp4(NE*3-NNE*3+(isPNG?buffer(w*3-1):buf(w*3-1)),W,N,NE,NEE))/2, px, LogMeanDiffQt(N,(NW+NE)/2)));
@@ -3003,16 +3023,23 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
         if (isPNG){
           Map[12].set((W+Clip(NE*3-NNE*3+buffer(w*3-1)))/2-px);
           Map[13].set((W+Clip(NEE*3-buffer(w*2-3)*3+buffer(w*3-4)))/2-px);
+          Map[14].set(Clip(NN+buffer(w*4)-buffer(w*6))-px);
+          Map[15].set(Clip(WW+buffer(4)-buffer(6))-px);
         }
         else{
           Map[12].set((W+Clip(NE*3-NNE*3+buf(w*3-1)))/2);
           Map[13].set((W+Clip(NEE*3-buf(w*2-3)*3+buf(w*3-4)))/2);
+          Map[14].set(Clip(NN+buf(w*4)-buf(w*6)));
+          Map[15].set(Clip(WW+buf(4)-buf(6)));
         }
+        Map[16].set(Clip(N+NN-NNN)-px);
+        Map[17].set(Clip(W+WW-WWW)-px);
+        Map[18].set(Clip(W+NEE-NE)-px);
 
         if (isPNG)
           ctx = ((abs(W-N)>8)<<10)|((W>N)<<9)|((abs(N-NW)>8)<<8)|((N>NW)<<7)|((abs(N-NE)>8)<<6)|((N>NE)<<5)|((W>WW)<<4)|((N>NN)<<3)|min(5,(filter+1)*filterOn);
         else
-          ctx = min(0x1F,x/max(1,w/min(32,columns)))|( ( ((abs(W-N)*16>W+N)<<1)|(abs(N-NW)>8) )<<5 )|((W+N)&0x180);
+          ctx = min(0x1F,x/max(1,w/min(32,columns[0])))|( ( ((abs(W-N)*16>W+N)<<1)|(abs(N-NW)>8) )<<5 )|((W+N)&0x180);
 
         res = Clamp4(W+N-NW,W,NW,N,NE)-px;
       }
@@ -3033,7 +3060,7 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
     m.set(c0, 256);
     m.set( ((abs((int)(W-N))>4)<<9)|((abs((int)(N-NE))>4)<<8)|((abs((int)(W-NW))>4)<<7)|((W>N)<<6)|((N>NE)<<5)|((W>NW)<<4)|((W>WW)<<3)|((N>NN)<<2)|((NW>NNWW)<<1)|(NE>NNEE), 1024 );
     if (gray)
-      m.set(min(63,column), 64);
+      m.set(min(63,column[0]), 64);
   }
   else{
     m.add( -2048+((filter>>(7-bpos))&1)*4096 );
