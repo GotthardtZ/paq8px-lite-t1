@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on November 1, 2017
+/* paq8px file compressor/archiver.  Released on November 4, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -2284,6 +2284,9 @@ inline unsigned BitCount(unsigned v){
   return v;
 }
 
+#if __GNUC__
+#define ilog2(X) ((unsigned) (8*sizeof (unsigned long) - __builtin_clz((X)) - 1))
+#else
 inline unsigned ilog2(unsigned x) {
   x = x | (x >> 1);
   x = x | (x >> 2);
@@ -2292,6 +2295,7 @@ inline unsigned ilog2(unsigned x) {
   x = x | (x >>16);
   return BitCount(x >> 1);
 }
+#endif
 
 inline U8 Clip(int Px){
   return min(0xFF,max(0,Px));
@@ -2556,7 +2560,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
   const int nMaps = 30;
   static SmallStationaryContextMap scm1(SC), scm2(SC),
     scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm10(512);
-  static ContextMap cm(MEM*4, 44);
+  static ContextMap cm(MEM*4, 45);
   static StationaryMap Map[nMaps] = { 12, 12, 12, 12, 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
@@ -2671,6 +2675,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(hash( NN, buf(w*4)&0x1F, buf(w*6)&0x1F, column[1] ));
         cm.set(hash( WW, buf(stride*4)&0x1F, buf(stride*6)&0x1F, column[1] ));
         cm.set(hash( NNN, buf(w*6)&0x1F, buf(w*9)&0x1F, column[1] ));
+        cm.set(hash(++i, column[1]));
         
         cm.set(hash(++i, W, LogMeanDiffQt(W,WW)));
         cm.set(hash(++i, W, buf(1)));
@@ -2827,6 +2832,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
     if (++col>=stride*8) col=0;
     m.set(5, 6);
     m.set(min(63,column[0])+((ctx>>3)&0xC0), 256);
+    m.set(min(127,column[1])+((ctx>>2)&0x180), 512);
     m.set(ctx, 2048);
     m.set(col+(isPNG?(ctx&7)+1:(c0==((0x100|((N+W)/2))>>(8-bpos))))*32, 8*32);
     m.set(((isPNG?buffer(1):0)>>4)*stride+(x%stride) + min(5,(filter+1)*filterOn)*64, 6*64);
@@ -3059,8 +3065,8 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
     m.set(((isPNG?px:buf(w)+buf(1))>>4) + min(5,(filter+1)*filterOn)*32, 6*32);
     m.set(c0, 256);
     m.set( ((abs((int)(W-N))>4)<<9)|((abs((int)(N-NE))>4)<<8)|((abs((int)(W-NW))>4)<<7)|((W>N)<<6)|((N>NE)<<5)|((W>NW)<<4)|((W>WW)<<3)|((N>NN)<<2)|((NW>NNWW)<<1)|(NE>NNEE), 1024 );
-    if (gray)
-      m.set(min(63,column[0]), 64);
+    m.set(min(63,column[0]), 64);
+    m.set(min(127,column[1]), 128);
   }
   else{
     m.add( -2048+((filter>>(7-bpos))&1)*4096 );
@@ -5590,7 +5596,7 @@ class ContextModel{
   void UpdateContexts(U8 B);
   void Train();
 public:
-  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), m(1000, 3095+768+(1024+512+1024*3)*(level>=4), 7+5*(level>=4)), ft2(DEFAULT), filetype(DEFAULT), size(0), info(0){
+  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), m(1000, 4096+(1024+512+1024*3)*(level>=4), 7+5*(level>=4)), ft2(DEFAULT), filetype(DEFAULT), size(0), info(0){
     memset(&cxt, 0, 16*sizeof(U32));
     Train();
   }
@@ -6867,6 +6873,39 @@ int decode_exe(Encoder& en, int size, FILE *out, FMode mode, int &diffFound) {
   return size;
 }
 
+class zLibMTF{
+  struct MTFItem{
+    int Next, Previous;
+  };
+  alignas(16) MTFItem List[81];
+  int Root, Index;
+public:
+  zLibMTF(): Root(0), Index(0) {
+    for (int i=0;i<81;i++){
+      List[i].Next = i+1;
+      List[i].Previous = i-1;
+    }
+    List[80].Next = -1;
+  }
+  inline int First(){
+    return Index=Root;
+  }
+  inline int Next(){
+    return (Index>=0)?Index=List[Index].Next:Index;
+  }
+  inline void MoveToFront(const int i){
+    if ((Index=i)==Root) return;
+    
+    List[ List[Index].Previous ].Next = List[Index].Next;
+    List[ List[Index].Next ].Previous = List[Index].Previous;
+    List[Root].Previous = Index;
+    List[Index].Next = Root;
+    List[Root=Index].Previous = -1;
+  }
+};
+
+zLibMTF MTF;
+
 int encode_zlib(FILE* in, FILE* out, int len, int &hdrsize) {
   const int BLOCK=1<<16, LIMIT=128;
   U8 zin[BLOCK*2],zout[BLOCK],zrec[BLOCK*2], diffByte[81*LIMIT];
@@ -6880,6 +6919,7 @@ int encode_zlib(FILE* in, FILE* out, int len, int &hdrsize) {
   int memlevel,clevel,window=zh==-1?0:MAX_WBITS+10+zh/4,ctype=zh%4;
   int minclevel=window==0?1:ctype==3?7:ctype==2?6:ctype==1?2:1;
   int maxclevel=window==0?9:ctype==3?9:ctype==2?6:ctype==1?5:1;
+  int index=-1, found=0;
 
   // Step 2 - check recompressiblitiy, determine parameters and save differences
   z_stream main_strm, rec_strm[81];
@@ -6888,12 +6928,17 @@ int encode_zlib(FILE* in, FILE* out, int len, int &hdrsize) {
   main_strm.next_in=Z_NULL; main_strm.avail_in=0;
   if (zlib_inflateInit(&main_strm,zh)!=Z_OK) return false;
   for (int i=0; i<81; i++) {
-    memlevel=(i%9)+1;
     clevel=(i/9)+1;
+    // Early skip if invalid parameter
+    if (clevel<minclevel || clevel>maxclevel){
+      diffCount[i]=LIMIT;
+      continue;
+    }
+    memlevel=(i%9)+1;
     rec_strm[i].zalloc=Z_NULL; rec_strm[i].zfree=Z_NULL; rec_strm[i].opaque=Z_NULL;
     rec_strm[i].next_in=Z_NULL; rec_strm[i].avail_in=0;
     int ret=deflateInit2(&rec_strm[i], clevel, Z_DEFLATED, window-MAX_WBITS, memlevel, Z_DEFAULT_STRATEGY);
-    diffCount[i]=(clevel>=minclevel && clevel<=maxclevel && ret==Z_OK)?0:LIMIT;
+    diffCount[i]=(ret==Z_OK)?0:LIMIT;
     recpos[i]=BLOCK*2;
     diffPos[i*LIMIT]=-1;
     diffByte[i*LIMIT]=0;
@@ -6915,7 +6960,7 @@ int encode_zlib(FILE* in, FILE* out, int len, int &hdrsize) {
       main_ret=inflate(&main_strm, Z_FINISH);
 
       // Recompress/deflate block with all possible parameters
-      for (int j=0; j<81; j++) {
+      for (int j=MTF.First(); j>=0; j=MTF.Next()){
         if (diffCount[j]>=LIMIT) continue;
         rec_strm[j].next_in=&zout[0];  rec_strm[j].avail_in=BLOCK-main_strm.avail_out;
         rec_strm[j].next_out=&zrec[recpos[j]]; rec_strm[j].avail_out=BLOCK*2-recpos[j];
@@ -6934,23 +6979,28 @@ int encode_zlib(FILE* in, FILE* out, int len, int &hdrsize) {
             }
           }
         }
+        // Early break on perfect match
+        if (main_ret==Z_STREAM_END && !diffCount[j]){
+          index=j;
+          found=1;
+          break;
+        }
         recpos[j]=2*BLOCK-rec_strm[j].avail_out;
       }
     } while (main_strm.avail_out==0 && main_ret==Z_BUF_ERROR);
     if (main_ret!=Z_BUF_ERROR && main_ret!=Z_STREAM_END) break;
   }
-  int minCount=LIMIT, index;
+  int minCount=(found)?0:LIMIT;
   for (int i=80; i>=0; i--) {
-    deflateEnd(&rec_strm[i]);
-    if (diffCount[i]<minCount) {
-      minCount=diffCount[i];
-      memlevel=(i%9)+1;
-      clevel=(i/9)+1;
-      index=i;
-    }
+    clevel=(i/9)+1;
+    if (clevel>=minclevel && clevel<=maxclevel)
+      deflateEnd(&rec_strm[i]);
+    if (!found && diffCount[i]<minCount)
+      minCount=diffCount[index=i];
   }
   inflateEnd(&main_strm);
   if (minCount==LIMIT) return false;
+  MTF.MoveToFront(index);
 
   // Step 3 - write parameters, differences and precompressed (inflated) data
   fputc(diffCount[index], out);
