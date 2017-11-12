@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on November 4, 2017
+/* paq8px file compressor/archiver.  Released on November 12, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -2438,7 +2438,7 @@ void recordModel(Mixer& m, ModelStats *Stats = NULL) {
 
     int i=0x300;
     if (MayBeImg24b)
-        i = (col%3)<<8, Map0.set(Clip(((U8)(c4>>16))+c-(c4>>24))|i);
+      i = (col%3)<<8, Map0.set(Clip(((U8)(c4>>16))+c-(c4>>24))|i);
     else
       Map0.set(Clip(c*2-d)|i);
     Map1.set(Clip(c+buf(rlen[0])-buf(rlen[0]+1))|i);
@@ -6130,8 +6130,8 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
   char pgm_buf[32];
   int cdi=0,cda=0,cdm=0;  // For CD sectors detection
   U32 cdf=0;
-  unsigned char zbuf[32], zin[1<<16], zout[1<<16]; // For ZLIB stream detection
-  int zbufpos=0,zzippos=-1;
+  unsigned char zbuf[256+32], zin[1<<16], zout[1<<16]; // For ZLIB stream detection
+  int zbufpos=0,zzippos=-1, histogram[256]={0};
   int pdfim=0,pdfimw=0,pdfimh=0,pdfimb=0,pdfgray=0,pdfimp=0;
   int b64s=0,b64i=0,b64line=0,b64nl=0; // For base64 detection
   int gif=0,gifa=0,gifi=0,gifw=0,gifc=0,gifb=0,gifplt=0,gifgray=0; // For GIF detection
@@ -6181,20 +6181,42 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
     }
 
     // ZLIB stream detection
-    zbuf[zbufpos]=c;
-    zbufpos=(zbufpos+1)%32;
-    int zh=parse_zlib_header(((int)zbuf[zbufpos])*256+(int)zbuf[(zbufpos+1)%32]);
-    if ((i>=31 && zh!=-1) || zzippos==i) {
-      int streamLength=0, ret=0;
+    histogram[c]++;
+    if (i>=256)
+      histogram[zbuf[zbufpos]]--;
+    zbuf[zbufpos] = c;
+    if (zbufpos<32)
+      zbuf[zbufpos+256] = c;
+    zbufpos=(zbufpos+1)&0xFF;
+
+    int zh=parse_zlib_header(((int)zbuf[(zbufpos-32)&0xFF])*256+(int)zbuf[(zbufpos-32+1)&0xFF]);
+    bool valid = (i>=31 && zh!=-1);
+    if (!valid && i>=255){
+      U8 BTYPE = (zbuf[zbufpos]&7)>>1;
+      if ((valid=(BTYPE==1 || BTYPE==2))){
+        int maximum=0, used=0, offset=zbufpos;
+        for (int i=0;i<4;i++,offset+=64){
+          for (int j=0;j<64;j++){
+            int freq = histogram[zbuf[(offset+j)&0xFF]];
+            used+=(freq>0);
+            maximum+=(freq>maximum);
+          }
+          if (maximum>=((12+i)<<i) || used*(6-i)<(i+1)*64){
+            valid = false;
+            break;
+          }
+        }
+      }
+    }
+    if (valid || zzippos==i) {
+      int streamLength=0, ret=0, brute=(zh==-1 && zzippos!=i);
 
       // Quick check possible stream by decompressing first 32 bytes
       z_stream strm;
       strm.zalloc=Z_NULL; strm.zfree=Z_NULL; strm.opaque=Z_NULL;
       strm.next_in=Z_NULL; strm.avail_in=0;
       if (zlib_inflateInit(&strm,zh)==Z_OK) {
-        unsigned char tmp[32];
-        for (int j=0; j<32; j++) tmp[j]=zbuf[(zbufpos+j)%32];
-        strm.next_in=tmp; strm.avail_in=32;
+        strm.next_in=&zbuf[(zbufpos-(brute?0:32))&0xFF]; strm.avail_in=32;
         strm.next_out=zout; strm.avail_out=1<<16;
         ret=inflate(&strm, Z_FINISH);
         ret=(inflateEnd(&strm)==Z_OK && (ret==Z_STREAM_END || ret==Z_BUF_ERROR) && strm.total_in>=16);
@@ -6205,7 +6227,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
         strm.zalloc=Z_NULL; strm.zfree=Z_NULL; strm.opaque=Z_NULL;
         strm.next_in=Z_NULL; strm.avail_in=0; strm.total_in=strm.total_out=0;
         if (zlib_inflateInit(&strm,zh)==Z_OK) {
-          for (int j=i-31; j<n; j+=1<<16) {
+          for (int j=i-(brute?255:31); j<n; j+=1<<16) {
             unsigned int blsize=min(n-j,1<<16);
             fseek(in, start+j, SEEK_SET);
             if (fread(zin, 1, blsize, in)!=blsize) break;
@@ -6221,7 +6243,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
         }
         fseek(in, savedpos, SEEK_SET);
       }
-      if (streamLength>0) {
+      if (streamLength>brute<<7) {
         info=0;
         if (pdfimw>0 && pdfimw<0x1000000 && pdfimh>0) {
           if (pdfimb==8 && (int)strm.total_out==pdfimw*pdfimh) info=((pdfgray?IMAGE8GRAY:IMAGE8)<<24)|pdfimw;
@@ -6235,13 +6257,13 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
           else if (pngbps==8 && pngtype==6 && (int)strm.total_out==(pngw*4+1)*pngh) info=(PNG32<<24)|(pngw*4), png=0;
           else if (pngbps==8 && (!pngtype || pngtype==3) && (int)strm.total_out==(pngw+1)*pngh) info=(((!pngtype || pnggray)?PNG8GRAY:PNG8)<<24)|(pngw), png=0;
         }
-        return fseek(in, start+i-31, SEEK_SET),detd=streamLength,ZLIB;
+        return fseek(in, start+i-(brute?255:31), SEEK_SET),detd=streamLength,ZLIB;
       }
     }
-    if (zh==-1 && zbuf[zbufpos]=='P' && zbuf[(zbufpos+1)%32]=='K' && zbuf[(zbufpos+2)%32]=='\x3'
-      && zbuf[(zbufpos+3)%32]=='\x4' && zbuf[(zbufpos+8)%32]=='\x8' && zbuf[(zbufpos+9)%32]=='\0') {
-        int nlen=(int)zbuf[(zbufpos+26)%32]+((int)zbuf[(zbufpos+27)%32])*256
-                +(int)zbuf[(zbufpos+28)%32]+((int)zbuf[(zbufpos+29)%32])*256;
+    if (zh==-1 && zbuf[(zbufpos-32)&0xFF]=='P' && zbuf[(zbufpos-32+1)&0xFF]=='K' && zbuf[(zbufpos-32+2)&0xFF]=='\x3'
+      && zbuf[(zbufpos-32+3)&0xFF]=='\x4' && zbuf[(zbufpos-32+8)&0xFF]=='\x8' && zbuf[(zbufpos-32+9)&0xFF]=='\0') {
+        int nlen=(int)zbuf[(zbufpos-32+26)&0xFF]+((int)zbuf[(zbufpos-32+27)&0xFF])*256
+                +(int)zbuf[(zbufpos-32+28)&0xFF]+((int)zbuf[(zbufpos-32+29)&0xFF])*256;
         if (nlen<256 && i+30+nlen<n) zzippos=i+30+nlen;
     }
     if (i-pdfimp>1024) pdfim=pdfimw=pdfimh=pdfimb=pdfgray=0;
@@ -6439,7 +6461,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
             bmpy=bmpx;
 
           // if DIB and not 24bpp, we must calculate the data offset based on BPP or num. of entries in color palette
-          if (hdrless && (imgbpp<=24))
+          if (hdrless && (imgbpp<24))
             bmpof+=((buf0)?bswap(buf0)*4:4<<imgbpp);
           bmpof+=(bmp-1)*(bmp<1);
 
