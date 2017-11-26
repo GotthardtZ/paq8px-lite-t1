@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on November 12, 2017
+/* paq8px file compressor/archiver.  Released on November 26, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -924,6 +924,7 @@ inline bool hasTransform(Filetype ft) { return ft==IMAGE24 || ft==IMAGE32 || ft=
 int level=DEFAULT_OPTION;  // Compression level 0 to 8
 #define MEM (0x10000<<level)
 int y=0;  // Last bit, 0 or 1, set by encoder
+bool brute = false, trainEXE = false, trainTXT = false;
 
 struct ModelStats{
   U32 XML, x86_64, Record;
@@ -1755,7 +1756,7 @@ public:
   void mix(Mixer& m) {
     U32 Count = min(0x3FF, ((*cp)&0x3FF)+1);
     int Prediction = (*cp)>>10, Error = (y<<22)-Prediction;
-    Error = ((Error/8)*dt[Count])/512;
+    Error = ((Error/8)*dt[Count])/1024;
     Prediction = min(0x3FFFFF,max(0,Prediction+Error));
     *cp = (Prediction<<10)|Count;
     B+=(y && B>1);
@@ -4799,7 +4800,7 @@ public:
     memset(&Cache, 0, sizeof(OpCache));
     memset(&Op, 0, sizeof(Instruction));
     memset(&StateBH, 0, sizeof(StateBH));
-    Train();
+    if (trainEXE) Train();
   }
   bool Predict(Mixer& m, bool Forced = false, ModelStats *Stats = NULL);
 };
@@ -5598,7 +5599,7 @@ class ContextModel{
 public:
   ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), m(1000, 4096+(1024+512+1024*3)*(level>=4), 7+5*(level>=4)), ft2(DEFAULT), filetype(DEFAULT), size(0), info(0){
     memset(&cxt, 0, 16*sizeof(U32));
-    Train();
+    if (trainTXT) Train();
   }
   int Predict(ModelStats *Stats = NULL);
 };
@@ -6191,7 +6192,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
 
     int zh=parse_zlib_header(((int)zbuf[(zbufpos-32)&0xFF])*256+(int)zbuf[(zbufpos-32+1)&0xFF]);
     bool valid = (i>=31 && zh!=-1);
-    if (!valid && i>=255){
+    if (!valid && brute && i>=255){
       U8 BTYPE = (zbuf[zbufpos]&7)>>1;
       if ((valid=(BTYPE==1 || BTYPE==2))){
         int maximum=0, used=0, offset=zbufpos;
@@ -6275,7 +6276,7 @@ Filetype detect(FILE* in, int n, Filetype type, int &info) {
     if (pdfim && (buf1&0xffff)==0x2f57 && buf0==0x69647468) pdfim=2,pdfimw=0; // /Width
     if (pdfim && (buf1&0xffffff)==0x2f4865 && buf0==0x69676874) pdfim=3,pdfimh=0; // /Height
     if (pdfim && buf3==0x42697473 && buf2==0x50657243 && buf1==0x6f6d706f
-       && buf0==0x6e656e74 && zbuf[(zbufpos+15)%32]=='/') pdfim=4,pdfimb=0; // /BitsPerComponent
+       && buf0==0x6e656e74 && zbuf[(zbufpos-32+15)&0xFF]=='/') pdfim=4,pdfimb=0; // /BitsPerComponent
     if (pdfim && (buf2&0xFFFFFF)==0x2F4465 && buf1==0x76696365 && buf0==0x47726179) pdfgray=1; // /DeviceGray
 
     // CD sectors detection (mode 1 and mode 2 form 1+2 - 2352 bytes)
@@ -7765,15 +7766,27 @@ int main(int argc, char** argv) {
     // Get option
     bool doExtract=false;  // -d option
     bool doList=false;  // -l option
-    if (argc>1 && argv[1][0]=='-' && argv[1][1] && !argv[1][2]) {
-      if (argv[1][1]>='0' && argv[1][1]<='8')
+    int l=0;
+    if (argc>1 && argv[1][0]=='-' && argv[1][1] && (!argv[1][2] || (argv[1][2]=='[' && (l=strlen(argv[1]))>3 && argv[1][l-1]==']'))) {
+      if (argv[1][1]>='0' && argv[1][1]<='8'){
         level=argv[1][1]-'0';
-      else if (argv[1][1]=='d')
+        l-=2;
+        while (l>2){
+          switch (argv[1][l]&0xDF){
+            case 'B': brute = true; break;
+            case 'E': trainEXE = true; break;
+            case 'T': trainTXT = true; break;
+            default: printf("Invalid switch: %c\n",argv[1][l]); quit();
+          }
+          l--;
+        }
+      }
+      else if ((argv[1][1]&0xDF)=='D' && !argv[1][2])
         doExtract=true;
-      else if (argv[1][1]=='l')
+      else if ((argv[1][1]&0xDF)=='L' && !argv[1][2])
         doList=true;
       else
-        quit("Valid options are -0 through -8, -d, -l\n");
+        quit("Valid options are -0[switches] through -8[switches], -d, -l\n");
       --argc;
       ++argv;
       pause=false;
@@ -7791,11 +7804,13 @@ int main(int argc, char** argv) {
         "Or from a command window: "
 #endif
         "To compress:\n"
-        "  " PROGNAME " -level file               (compresses to file." PROGNAME ")\n"
-        "  " PROGNAME " -level archive files...   (creates archive." PROGNAME ")\n"
+        "  " PROGNAME " -level[switches] file               (compresses to file." PROGNAME ")\n"
+        "  " PROGNAME " -level[switches] archive files...   (creates archive." PROGNAME ")\n"
         "  " PROGNAME " file                      (level -%d, pause when done)\n"
         "level: -0 = store, -1 -2 -3 = faster (uses 35, 48, 59 MB)\n"
         "-4 -5 -6 -7 -8 = smaller (uses 133, 233, 435, 837, 1643 MB)\n"
+        "Optional switches:\nb = Brute-force detection of DEFLATE streams\ne = Pre-train x86/x64 model\nt = Pre-train main model with dictionary file (english.dic)\n"
+        "Examples:\n" PROGNAME " -8 file\n" PROGNAME " -8[bet] file\n"
 #if defined(WINDOWS) || defined (UNIX)
         "You may also compress directories.\n"
 #endif
@@ -7864,7 +7879,7 @@ int main(int argc, char** argv) {
       if (files<1) quit("Nothing to compress\n");
       archive=fopen(archiveName.c_str(), "wb+");
       if (!archive) perror(archiveName.c_str()), quit();
-      fprintf(archive, PROGNAME "%c%d", 0, level);
+      fprintf(archive, PROGNAME "%c%c", 0, level|(trainEXE<<4)|(trainTXT<<5) );
       printf("Creating archive %s with %d file(s)...\n",
         archiveName.c_str(), files);
     }
@@ -7885,7 +7900,8 @@ int main(int argc, char** argv) {
       header[i]=0;
       if (strncmp(header.c_str(), PROGNAME "\0", strlen(PROGNAME)+1))
         printf("%s: not a %s file\n", archiveName.c_str(), PROGNAME), quit();
-      level=header[strlen(PROGNAME)+1]-'0';
+      level=header[strlen(PROGNAME)+1];
+      trainEXE = level&0x10; trainTXT = level&0x20; level&=0xF;
       if (level<0||level>8) level=DEFAULT_OPTION;
     }
 
