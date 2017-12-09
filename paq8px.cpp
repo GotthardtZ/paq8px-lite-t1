@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on December 05, 2017
+/* paq8px file compressor/archiver.  Released on December 08, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -594,20 +594,18 @@ Modified im8bitModel (8-bit) (from paq8pxd)
 Added gif recompression
 */
 
-#define PROGNAME "paq8px"  // Please change this if you change the program.
-
-
 //////////////////////// Build /////////////////////////////////////////////
 
 //Change the following values on a new build if applicable
 
 #define PROGNAME     "paq8px"  // Change this if you make a branch
-#define PROGVERSION  "121_fixed1"
+#define PROGVERSION  "121_fixed2"
 #define PROGYEAR     "2017"
 
-#define NDEBUG  // Remove (comment out) this line for debugging (turns on Array bound checks and asserts)
 #define DEFAULT_LEVEL 5
 
+#define NDEBUG  // Remove (comment out) this line for debugging (turns on Array bound checks and asserts)
+#include <assert.h>
 
 //////////////////////// Target OS /////////////////////////////////////////
 
@@ -623,10 +621,7 @@ Added gif recompression
 #error Unknown target system, some functions (like creating folders) may not word
 #endif
 
-
 //////////////////////// Includes /////////////////////////////////////////
-
-#include <assert.h>
 
 #ifdef UNIX
 #include <sys/types.h>
@@ -659,7 +654,6 @@ Added gif recompression
 #endif
 #endif
 
-
 //////////////////////// Cross platform definitions /////////////////////////////////////////
 
 #ifdef _MSC_VER  
@@ -676,7 +670,6 @@ Added gif recompression
 #endif
 #endif
 
-
 //////////////////////// Type definitions /////////////////////////////////////////
 
 // shortcuts for 8, 16, 32 bit integer types
@@ -685,7 +678,6 @@ typedef unsigned short     U16;
 typedef unsigned int       U32;
 typedef unsigned long long U64;
 typedef signed char        int8_t;
-
 
 //////////////////////// Helper functions /////////////////////////////////////////
 
@@ -752,7 +744,7 @@ public:
 
 //////////////////////////// Array ////////////////////////////
 
-// Array<T,Align> a(n,alignment); allocates memory for n elements of T.
+// Array<T,Align> a(n); allocates memory for n elements of T.
 // The base address is aligned if the "alignment" parameter is given.
 // Constructors for T are not called, the allocated memory is initialized to 0s.
 // It's the caller's responsibility to populate the array with elements.
@@ -766,7 +758,10 @@ public:
 
 static void chkindex(U32 index, U32 upper_bound)
 {
-  if (index>=upper_bound) fprintf(stderr, "%d out of bounds %d\n", index, upper_bound), quit();
+  if (index>=upper_bound) {
+    fprintf(stderr, "%d out of bounds %d\n", index, upper_bound);
+    quit();
+  }
 }
 
 template <class T, const int Align=16> class Array {
@@ -789,7 +784,7 @@ public:
   }
   const T& operator[](U32 i) const {
     #ifndef NDEBUG
-    chkindex(i, used_size);
+    chkindex(i,used_size);
     #endif
     return data[i];
   }
@@ -960,7 +955,7 @@ int bpos=0; // bits in c0 (0 to 7)
 Buf buf;  // Rotating input queue set by Predictor
 int blpos=0; // Relative position in block
 
-#define CacheSize (1<<5)
+#define CacheSize 32
 
 #if (CacheSize&(CacheSize-1)) || (CacheSize<8)
   #error Cache size must be a power of 2 bigger than 4
@@ -1604,21 +1599,29 @@ inline  U8* BH<B>::operator[](U32 i) {
 
 //////////////////////////// HashTable /////////////////////////
 
-// A HashTable maps a 32-bit index to an array of B bytes.
-// The first byte is a checksum using the upper 8 bits of the
-// index.  The second byte is a priority (0 = empty) for hash
-// replacement.  The index need not be a hash.
+// A HashTable is an array of n items representing n contexts.
+// Each item is a storage area of B bytes. In every slot the first 
+// byte is a checksum using the upper 8 bits of the context 
+// selector. The second byte is a priority (0 = empty) for hash
+// replacement. Priorities must be set by the caller (0: lowest, 
+// 255: highest). Items with lower priorities will be replaced in 
+// case of a collision. Only 2 additional items are probed for the 
+// given checksum.
+// The caller can store any information about the given context
+// in bytes [2..B-1].
+// Checksums must not be modified by the caller.
+// The index need not be a hash.
 
-// HashTable<B> h(n) - create using n bytes  n and B must be
-//     powers of 2 with n >= B*4, and B >= 2.
-// h[i] returns array [1..B-1] of bytes indexed by i, creating and
-//     replacing another element if needed.  Element 0 is the
-//     checksum and should not be modified.
+// HashTable<B> h(n) - creates a hashtable with n slots where
+//     n and B must be powers of 2 with n >= B*4, and B >= 2.
+// h[i] returns a pointer to the storage area starting from 
+//     position 1 (e.g. without the checksum)
 
 template <int B>
 class HashTable {
-  Array<U8,64> t;  // table: 1 element = B bytes: checksum priority data data
-  const int N;  // size in bytes
+private:
+  Array<U8,64> t;  // storage area for n items (1 item = B bytes): 0:checksum 1:priority 2:data 3:data  ... B-1:data
+  const int N;     // number of items in table
 public:
   HashTable(int n): t(n), N(n) {
     assert(B>=2 && (B&B-1)==0);
@@ -1628,21 +1631,23 @@ public:
 };
 
 template <int B>
-inline U8* HashTable<B>::operator[](U32 i) {
+inline U8* HashTable<B>::operator[](U32 i) { //i: context selector
   i*=123456791;
   i=i<<16|i>>16;
   i*=234567891;
-  int chk=i>>24;
-  i=i*B&(N-B);
+  int chk=i>>24; //8-bit checksum
+  i=(i*B)&(N-B); //force bounds
+  //search for the checksum in t
   U8 *p = &t[0];
-  if (p[i]==chk) return p+i;
-  if (p[i^B]==chk) return p+(i^B);
-  if (p[i^B*2]==chk) return p+(i^B*2);
-  if (p[i+1]>p[(i+1)^B] || p[i+1]>p[(i+1)^B*2]) i^=B;
-  if (p[i+1]>p[(i+1)^B^B*2]) i^=B^B*2;
+  if (p[i]==chk) return p+i+1;
+  if (p[i^B]==chk) return p+(i^B)+1;
+  if (p[i^(B*2)]==chk) return p+(i^(B*2))+1;
+  //not found, let's overwrite the lowest priority element
+  if (p[i+1]>p[(i+1)^B] || p[i+1]>p[(i+1)^(B*2)]) i^=B;
+  if (p[i+1]>p[(i+1)^B^(B*2)]) i^=B^(B*2);
   memset(p+i, 0, B);
   p[i]=chk;
-  return p+i;
+  return p+i+1;
 }
 
 /////////////////////////// ContextMap /////////////////////////
@@ -1668,7 +1673,7 @@ inline U8* HashTable<B>::operator[](U32 i) {
 // - RunContextMap.  The bit history is a count of 0-255 consecutive
 //     zeros or ones.  Uses 4 bytes per whole byte context.  C=1.
 //     The context should be a hash.
-// - SmallStationaryContextMap.  0 <= cx < M/512.
+// - SmallStationaryContextMap.  0 <= cx*256 < M.
 //     The state is a 16-bit probability that is adjusted after each
 //     prediction.  C=1.
 // - ContextMap.  For large contexts, C >= 1.  Context need not be hashed.
@@ -1713,25 +1718,33 @@ public:
   }
 };
 
-// Context is looked up directly.  m=size is power of 2 in bytes.
-// Context should be < m/512.  High bits are discarded.
+// Context is looked up directly.
+// m: Count of (bit) contexts. m must be a power of 2.
+// c0 (the partial byte) and some of the lower bits of cx are used for context selection.
+// For example with m=65536 (=2^16) c0 (8 bits) and the lowest 8 bits of cx are used thus giving the total of 16 bits.
 class SmallStationaryContextMap {
-  Array<U16> t;
-  int cxt;
-  U16 *cp;
+private:
+  Array<U16> t; // 0..65535 representing p = 0.0 .. 1.0
+  U32 cxt;      // selected bit context
+  U16 *cp;      // pointer to last context (to update in next pass)
+  const int mask;
 public:
-  SmallStationaryContextMap(int m): t(m/2), cxt(0) {
-    assert((m/2&m/2-1)==0); // power of 2?
+  SmallStationaryContextMap(int m): t(m), cxt(0), mask(m-1) {
+    assert((m&mask)==0); // power of 2?
     for (U32 i=0; i<t.size(); ++i)
-      t[i]=32768;
+      t[i]=32768; // p=0.5
     cp=&t[0];
   }
   void set(U32 cx) {
-    cxt=cx*256&(t.size()-256);
+    cxt=cx;
   }
   void mix(Mixer& m, int rate=7) {
+    //adapt (update prediction from previous pass)
     *cp += ((y<<16)-(*cp)+(1<<(rate-1))) >> rate;
-    cp=&t[cxt+c0];
+    //predict
+    U32 idx=(cxt*256+c0)&mask;  //c0: the partial byte
+    assert(idx<t.size());
+    cp=&t[idx];
     m.add(stretch((*cp)>>4));
   }
 };
@@ -1971,7 +1984,7 @@ int ContextMap::mix1(Mixer& m, int cc, int bp, int c1, int y1) {
     if (cp[i]) {
       assert(cp[i]>=&t[0].bh[0][0] && cp[i]<=&t[t.size()-1].bh[6][6]);
       #ifdef X64
-      assert(((unsigned long long)(cp[i])&63)>=15);
+      assert(((U64)(cp[i])&63)>=15);
       #else
       assert((long(cp[i])&63)>=15);
       #endif
@@ -2061,9 +2074,9 @@ int matchModel(Mixer& m) {
   static int len=0;  // length of match, or 0 if no match
   static int result=0;
 
-  static SmallStationaryContextMap scm1(0x20000);
+  static SmallStationaryContextMap scm1(0x10000);
 
-  if (!bpos) {
+  if (bpos==0) {
     h=(h*997*8+buf(1)+1)&(t.size()-1);  // update context hash
     if (len) ++len, ++ptr;
     else {  // find match
@@ -2293,24 +2306,38 @@ void wordModel(Mixer& m, Filetype filetype) {
 // Model 2-D data with fixed record length.  Also order 1-2 models
 // that include the distance to the last match.
 
-inline unsigned BitCount(unsigned v){
-  v -= ((v>>1)&0x55555555);
-  v = ((v>>2)&0x33333333) + (v&0x33333333);
-  v = ((v>>4)+v)&0x0f0f0f0f;
-  v = ((v>>8)+v)&0x00ff00ff;
-  v = ((v>>16)+v)&0x0000ffff;
+// ilog2
+// returns floor(log2(x)), e.g. 30->4  31->4  32->5,  33->5
+#ifdef _MSC_VER
+#include <intrin.h>
+inline U32 ilog2(U32 x) {
+  DWORD tmp=0;
+  if(x==tmp)return tmp; //0
+  _BitScanReverse(&tmp,x);
+  return tmp;
+}
+#elif __GNUC__
+inline U32 ilog2(U32 x) {
+  return x == 0 ? 0 : 31 - __builtin_clz(x);
+}
+#else
+inline U32 BitCount(U32 v) {
+  v -= ((v >> 1) & 0x55555555);
+  v = ((v >> 2) & 0x33333333) + (v & 0x33333333);
+  v = ((v >> 4) + v) & 0x0f0f0f0f;
+  v = ((v >> 8) + v) & 0x00ff00ff;
+  v = ((v >> 16) + v) & 0x0000ffff;
   return v;
 }
 
-#if __GNUC__
-#define ilog2(X) ((unsigned) (8*sizeof (unsigned long) - __builtin_clz((X)) - 1))
-#else
-inline unsigned ilog2(unsigned x) {
-  x = x | (x >> 1);
-  x = x | (x >> 2);
-  x = x | (x >> 4);
-  x = x | (x >> 8);
-  x = x | (x >>16);
+inline U32 ilog2(U32 x) {
+  //copy the leading "1" bit to its left (0x03000000 -> 0x03ffffff)
+  x |= (x >> 1);
+  x |= (x >> 2);
+  x |= (x >> 4);
+  x |= (x >> 8);
+  x |= (x >>16);
+  //how many trailing bits do we have (except the first)? 
   return BitCount(x >> 1);
 }
 #endif
@@ -2339,7 +2366,7 @@ void recordModel(Mixer& m, ModelStats *Stats = NULL) {
   static bool MayBeImg24b = false;
 
   // Find record length
-  if (!bpos) {
+  if (bpos==0) {
     int w=c4&0xffff, c=w&255, d=w>>8;
     if (Stats && (*Stats).Record && ((*Stats).Record>>16)>2 &&
           ((*Stats).Record>>16) != (U32)rlen[0]) {
@@ -2574,26 +2601,27 @@ inline U8 Paeth(U8 W, U8 N, U8 NW){
 // Model for filtered (PNG) or unfiltered 24/32-bit image data
 
 void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
-  static const int SC=0x20000;
-  static const int nMaps = 30;
-  static SmallStationaryContextMap scm1(SC), scm2(SC),
-    scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm10(512);
+  static const int SC=0x10000;
+  static const int nMaps = 29;
+  static SmallStationaryContextMap scm1(SC), scm2(SC), scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2);
   static ContextMap cm(MEM*4, 45);
-  static StationaryMap Map[nMaps] = { 12, 12, 12, 12, 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
+  static StationaryMap Map[nMaps] = { 12, 12, 12, 12, 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8};
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 px = 0; // current PNG filter prediction
   static int color = -1;
   static int stride = 3;
-  static int ctx, padding, lastPos=0, lastWasPNG=0, filter=0, filterOn=0, x=0, w=0, line=0, R1=0, R2=0;
+  static int ctx, padding, lastPos=0, lastWasPNG=0, filter=0, x=0, w=0, line=0, R1=0, R2=0;
+  static bool filterOn = false;
   static int columns[2] = {1,1}, column[2];
 
-  if (!bpos) {
+  if (bpos==0) {
     if ((color < 0) || (pos-lastPos != 1)){
       stride = 3+alpha;
       w = info&0xFFFFFF;
       padding = w%stride;
-      x = color = line = filterOn = 0;
+      x = color = line = 0;
+      filterOn = false;
       columns[0] = max(1,w/max(1,ilog2(w)*3));
       columns[1] = max(1,columns[0]/max(1,ilog2(columns[0])));
       if (lastPos && lastWasPNG!=isPNG){
@@ -2603,13 +2631,13 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
       lastWasPNG = isPNG;
     }
     else{
-      x*=(++x)<w+isPNG;
-      line+=(!x);
+      x++;
+      if(x>=w+isPNG){x=0;line++;}
     }
     lastPos = pos;
 
     if (x==1 && isPNG)
-      filter = (U8)c4;
+      filter = c4 & 0xFF;
     else{
       if (x+padding<w)
         color*=(++color)<stride;
@@ -2617,7 +2645,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         color=(padding>0)*(stride+1);
 
       if (isPNG){
-        U8 B = (U8)c4;
+        U8 B = c4 & 0xFF;
         switch (filter){
           case 1: {
             buffer.Add((U8)( B + buffer(stride)*(x>stride+1 || !x) ) );
@@ -2646,7 +2674,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
             filterOn = false;
             px = 0;
         }
-        px*=filterOn;
+        if(!filterOn)px=0;
       }
     }
 
@@ -2771,7 +2799,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(hash(++i, buf(1+(x<2)), px));
         cm.set(~0x5ca1ab1e);
 
-        ctx = (min(color,stride-1)<<9)|((abs(W-N)>8)<<8)|((W>N)<<7)|((W>NW)<<6)|((abs(N-NW)>8)<<5)|((N>NW)<<4)|((N>NE)<<3)|min(5,(filter+1)*filterOn);
+        ctx = (min(color,stride-1)<<9)|((abs(W-N)>8)<<8)|((W>N)<<7)|((W>NW)<<6)|((abs(N-NW)>8)<<5)|((N>NW)<<4)|((N>NE)<<3)|min(5, filterOn?filter+1:0);
       }
 
       Map[0].set( ((U8)(Clip(W+N-NW)-px))|(LogMeanDiffQt(Clip(N+NE-NNE),Clip(N+NW-NNW))<<8) );
@@ -2845,7 +2873,6 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
       scm7.mix(m);
       scm8.mix(m);
       scm9.mix(m);
-      scm10.mix(m);
     }
     static int col=0;
     if (++col>=stride*8) col=0;
@@ -2854,7 +2881,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
     m.set(min(127,column[1])+((ctx>>2)&0x180), 512);
     m.set(ctx, 2048);
     m.set(col+(isPNG?(ctx&7)+1:(c0==((0x100|((N+W)/2))>>(8-bpos))))*32, 8*32);
-    m.set(((isPNG?buffer(1):0)>>4)*stride+(x%stride) + min(5,(filter+1)*filterOn)*64, 6*64);
+    m.set(((isPNG?buffer(1):0)>>4)*stride+(x%stride) + min(5,filterOn?filter+1:0)*64, 6*64);
     m.set(c0+256*(isPNG && abs(R1-128)>8), 256*2);
   }
   else{
@@ -2873,12 +2900,14 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 px = 0, res = 0; // current PNG filter prediction, expected residual
-  static int ctx, lastPos=0, lastWasPNG=0, col=0, line=0, x=0, filter=0, filterOn=0;
+  static int ctx, lastPos=0, lastWasPNG=0, col=0, line=0, x=0, filter=0;
+  static bool filterOn = false;
   static int columns[2] = {1,1}, column[2];
   // Select nearby pixels as context
-  if (!bpos) {
+  if (bpos==0) {
     if (pos!=lastPos+1){
-      x = line = filterOn = px= 0;
+      x = line = px= 0;
+      filterOn = false;
       columns[0] = max(1,w/max(1,ilog2(w)*2));
       columns[1] = max(1,columns[0]/max(1,ilog2(columns[0])));
       if (gray){
@@ -2890,8 +2919,8 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
       }
     }
     else{
-      x*=(++x)<w+isPNG;
-      line+=(!x);
+      x++;
+      if(x>=w+isPNG){x=0;line++;}
     }
     lastPos = pos;
 
@@ -2929,11 +2958,11 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
             filterOn = false;
             px = 0;
         }
-        px*=filterOn;
+        if(!filterOn)px=0;
       }
     }  
     if (x || !isPNG){
-      int i=((filter+1)*filterOn)<<6;
+      int i= filterOn ? (filter+1)<<6 : 0;
       column[0]=(x-isPNG)/columns[0];
       column[1]=(x-isPNG)/columns[1];
       if (isPNG)
@@ -3062,7 +3091,7 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
         Map[18].set(Clip(W+NEE-NE)-px);
 
         if (isPNG)
-          ctx = ((abs(W-N)>8)<<10)|((W>N)<<9)|((abs(N-NW)>8)<<8)|((N>NW)<<7)|((abs(N-NE)>8)<<6)|((N>NE)<<5)|((W>WW)<<4)|((N>NN)<<3)|min(5,(filter+1)*filterOn);
+          ctx = ((abs(W-N)>8)<<10)|((W>N)<<9)|((abs(N-NW)>8)<<8)|((N>NW)<<7)|((abs(N-NE)>8)<<6)|((N>NE)<<5)|((W>WW)<<4)|((N>NN)<<3)|min(5,filterOn?filter+1:0);
         else
           ctx = min(0x1F,x/max(1,w/min(32,columns[0])))|( ( ((abs(W-N)*16>W+N)<<1)|(abs(N-NW)>8) )<<5 )|((W+N)&0x180);
 
@@ -3080,8 +3109,8 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
     }
     col=(col+1)&7;
     m.set(5+ctx, 2048+5);
-    m.set(col*2+(isPNG && c0==((0x100|res)>>(8-bpos))) + min(5,(filter+1)*filterOn)*16, 6*16);
-    m.set(((isPNG?px:buf(w)+buf(1))>>4) + min(5,(filter+1)*filterOn)*32, 6*32);
+    m.set(col*2+(isPNG && c0==((0x100|res)>>(8-bpos))) + min(5, filterOn?filter+1:0)*16, 6*16);
+    m.set(((isPNG?px:buf(w)+buf(1))>>4) + min(5, filterOn?filter+1:0)*32, 6*32);
     m.set(c0, 256);
     m.set( ((abs((int)(W-N))>4)<<9)|((abs((int)(N-NE))>4)<<8)|((abs((int)(W-NW))>4)<<7)|((W>N)<<6)|((N>NE)<<5)|((W>NW)<<4)|((W>WW)<<3)|((N>NN)<<2)|((NW>NNWW)<<1)|(NE>NNEE), 1024 );
     m.set(min(63,column[0]), 64);
@@ -3103,42 +3132,43 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
 void im4bitModel(Mixer& m, int w) {
   static HashTable<16> t(MEM/2);
   const int S=11; // number of contexts
-  static U8* cp[S];
+  static U8* cp[S]; // context pointers
   static StateMap sm[S];
   static U8 WW=0, W=0, NWW=0, NW=0, N=0, NE=0, NEE=0, NNWW = 0, NNW=0, NN=0, NNE=0, NNEE=0;
   static int col=0, line=0, run=0, prevColor=0, px=0;
   int i;
   if (!cp[0]){
     for (i=0;i<S;i++)
-      cp[i]=t[263*i]+1;
+      cp[i]=t[263*i]; //set the initial context to an arbitrary slot in the hashtable
   }
   for (i=0;i<S;i++)
-    *cp[i]=nex(*cp[i],y);
+    *cp[i]=nex(*cp[i],y); //update hashtable item priorities using predicted counts
 
-  if (!bpos || bpos==4){
-      WW=W, NWW=NW, NW=N, N=NE, NE=NEE, NNWW=NWW, NNW=NN, NN=NNE, NNE=NNEE;
-      if (!bpos)
-        W=c4&0xF, NEE=buf(w-1)>>4, NNEE=buf(w*2-1)>>4;
+  if (bpos==0 || bpos==4){
+      WW=W; NWW=NW; NW=N; N=NE; NE=NEE; NNWW=NWW; NNW=NN; NN=NNE; NNE=NNEE;
+      if (bpos==0)
+        {W=c4&0xF; NEE=buf(w-1)>>4; NNEE=buf(w*2-1)>>4;}
       else
-        W=c0&0xF, NEE=buf(w-1)&0xF, NNEE=buf(w*2-1)&0xF;
-      run=(W!=WW || !col)?(prevColor=WW,0):min(0xFFF,run+1);
-      px=1, i=0;
+        {W=c0&0xF; NEE=buf(w-1)&0xF; NNEE=buf(w*2-1)&0xF;}
+      run=(W!=WW || col==0)?(prevColor=WW,0):min(0xFFF,run+1);
+      px=1; //partial pixel (4 bits) with a leading "1"
+      i=0;
 
-      cp[i++]=t[hash(W,NW,N)]+1;
-      cp[i++]=t[hash(N, min(0xFFF, col/8))]+1;
-      cp[i++]=t[hash(W,NW,N,NN,NE)]+1;
-      cp[i++]=t[hash(W, N, NE+NNE*16, NEE+NNEE*16)]+1;
-      cp[i++]=t[hash(W, N, NW+NNW*16, NWW+NNWW*16)]+1;
-      cp[i++]=t[hash(W, ilog2(run+1), prevColor, col/max(1,w/2) )]+1;
-      cp[i++]=t[hash(NE, min(0x3FF, (col+line)/max(1,w*8)))]+1;
-      cp[i++]=t[hash(NW, (col-line)/max(1,w*8))]+1;
-      cp[i++]=t[hash(WW*16+W,NN*16+N,NNWW*16+NW)]+1;
-      cp[i++]=t[N+NN*16]+1;
-      cp[i++]=t[-1]+1;
+      cp[i++]=t[hash(W,NW,N)];
+      cp[i++]=t[hash(N, min(0xFFF, col/8))];
+      cp[i++]=t[hash(W,NW,N,NN,NE)];
+      cp[i++]=t[hash(W, N, NE+NNE*16, NEE+NNEE*16)];
+      cp[i++]=t[hash(W, N, NW+NNW*16, NWW+NNWW*16)];
+      cp[i++]=t[hash(W, ilog2(run+1), prevColor, col/max(1,w/2) )];
+      cp[i++]=t[hash(NE, min(0x3FF, (col+line)/max(1,w*8)))];
+      cp[i++]=t[hash(NW, (col-line)/max(1,w*8))];
+      cp[i++]=t[hash(WW*16+W,NN*16+N,NNWW*16+NW)];
+      cp[i++]=t[N+NN*16];
+      cp[i++]=t[-1];
       assert(i==S);
 
-      col*=(++col)<w*2;
-      line+=(!col);
+      col++;
+      if(col==w*2){col=0;line++;}
   }
   else{
     px+=px+y;
@@ -3395,15 +3425,15 @@ int jpegModel(Mixer& m) {
   }
 
   // Be sure to quit on a byte boundary
-  if (!bpos) images[idx].next_jpeg=images[idx].jpeg>1;
-  if (bpos && !images[idx].jpeg) return images[idx].next_jpeg;
-  if (!bpos && images[idx].app>0){
+  if (bpos==0) images[idx].next_jpeg=images[idx].jpeg>1;
+  if (bpos!=0 && !images[idx].jpeg) return images[idx].next_jpeg;
+  if (bpos==0 && images[idx].app>0){
     --images[idx].app;
     if (idx<MaxEmbeddedLevel && buf(4)==FF && buf(3)==SOI && buf(2)==FF && ((buf(1)&0xFE)==0xC0 || buf(1)==0xC4 || (buf(1)>=0xDB && buf(1)<=0xFE)) )
       memset(&images[++idx], 0, sizeof(JPEGImage));
   }
   if (images[idx].app>0) return images[idx].next_jpeg;
-  if (!bpos) {
+  if (bpos==0) {
 
     // Parse.  Baseline DCT-Huffman JPEG syntax is:
     // SOI APPx... misc... SOF0 DHT... SOS data EOI
@@ -3642,7 +3672,7 @@ int jpegModel(Mixer& m) {
 
   // Decode Huffman
   {
-    if (mcusize && buf(1+(!bpos))!=FF) {  // skip stuffed byte
+    if (mcusize && buf(1+(bpos==0))!=FF) {  // skip stuffed byte
       jassert(huffbits<=32);
       huffcode+=huffcode+y;
       ++huffbits;
@@ -3823,7 +3853,7 @@ int jpegModel(Mixer& m) {
 
   // Estimate next bit probability
   if (!images[idx].jpeg || !images[idx].data) return images[idx].next_jpeg;
-  if (buf(1+(!bpos))==FF) {
+  if (buf(1+(bpos==0))==FF) {
     m.add(128);
     m.set(0, 9);
     m.set(0, 1025);
@@ -3972,89 +4002,110 @@ inline int X2(int i) {
   }
 }
 
+#define pr_(i,chn)(pr[2*(i)+chn])
+#define F_(k,l,chn)(F[2*(49*(k)+l)+chn])
+#define L_(i,k)(L[49*(i)+k])
+
 void wavModel(Mixer& m, int info, ModelStats *Stats = NULL) {
-  static int pr[3][2], n[2], counter[2];
-  static double F[49][49][2],L[49][49];
-  int j,k,l,i=0;
-  long double sum;
-  const double a=0.996,a2=1/a;
-  const int SC=0x20000;
+  static int col=0;
+  static Array<int> pr{3*2}; // [3][2]
+  static Array<int> n{2};
+  static Array<int> counter{2};
+  static Array<double> F{49*49*2}; //[49][49][2]
+  static Array<double> L{49*49}; //[49][49]
+  static const double a=0.996,a2=1.0/a;
+  static const int SC=0x10000;
   static SmallStationaryContextMap scm1(SC), scm2(SC), scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC);
-  static ContextMap cm(MEM*4, 10+1);
+  static ContextMap cm(MEM*4, 11);
   static int bits, channels, w, ch;
   static int z1, z2, z3, z4, z5, z6, z7;
 
-  if (!bpos && !blpos) {
+  int j, k, l, i = 0;
+  long double sum;
+
+  if (bpos==0 && blpos==0) {
     bits=((info%4)/2)*8+8;
     channels=info%2+1;
     w=channels*(bits>>3);
     wmode=info;
-    if (channels==1) S=48,D=0; else S=36,D=12;
-    for (int j=0; j<channels; j++) {
-      for (k=0; k<=S+D; k++) for (l=0; l<=S+D; l++) F[k][l][j]=0, L[k][l]=0;
-      F[1][0][j]=1;
-      n[j]=counter[j]=pr[2][j]=pr[1][j]=pr[0][j]=0;
-      z1=z2=z3=z4=z5=z6=z7=0;
+    z1=z2=z3=z4=z5=z6=z7=0;
+    if (channels==1) {S=48;D=0;} else {S=36;D=12;}
+    for (k=0; k<=S+D; k++) 
+      for (l=0; l<=S+D; l++) {
+        L_(k,l)=0.0;
+        for (int chn=0; chn<channels; chn++)
+          F_(k,l,chn)=0.0;
+      }
+    for (int chn=0; chn<channels; chn++) {
+      F_(1,0,chn)=1.0;
+      n[chn]=counter[chn]=pr_(2,chn)=pr_(1,chn)=pr_(0,chn)=0;
     }
   }
   // Select previous samples and predicted sample as context
-  if (!bpos && blpos>=w) {
+  if (bpos==0 && blpos>=w) {
     ch=blpos%w;
     const int msb=ch%(bits>>3);
     const int chn=ch/(bits>>3);
-    if (!msb) {
-      z1=X1(1), z2=X1(2), z3=X1(3), z4=X1(4), z5=X1(5);
+    if (msb==0) {
+      z1=X1(1);z2=X1(2);z3=X1(3);z4=X1(4);z5=X1(5);
       k=X1(1);
-      for (l=0; l<=min(S,counter[chn]-1); l++) { F[0][l][chn]*=a; F[0][l][chn]+=X1(l+1)*k; }
-      for (l=1; l<=min(D,counter[chn]); l++) { F[0][l+S][chn]*=a; F[0][l+S][chn]+=X2(l+1)*k; }
+      const int mS=min(S,counter[chn]-1);
+      const int mD=min(D,counter[chn]);
+      for (l=0; l<=mS; l++) { F_(0,l,chn)*=a; F_(0,l,chn)+=X1(l+1)*k; }
+      for (l=1; l<=mD; l++) { F_(0,l+S,chn)*=a; F_(0,l+S,chn)+=X2(l+1)*k; }
       if (channels==2) {
         k=X2(2);
-        for (l=1; l<=min(D,counter[chn]); l++) { F[S+1][l+S][chn]*=a; F[S+1][l+S][chn]+=X2(l+1)*k; }
-        for (l=1; l<=min(S,counter[chn]-1); l++) { F[l][S+1][chn]*=a; F[l][S+1][chn]+=X1(l+1)*k; }
-        z6=X2(1)+X1(1)-X2(2), z7=X2(1);
-      } else z6=2*X1(1)-X1(2), z7=X1(1);
-      if (++n[chn]==(256>>level)) {
-        if (channels==1) for (k=1; k<=S+D; k++) for (l=k; l<=S+D; l++) F[k][l][chn]=(F[k-1][l-1][chn]-X1(k)*X1(l))*a2;
-        else for (k=1; k<=S+D; k++) if (k!=S+1) for (l=k; l<=S+D; l++) if (l!=S+1) F[k][l][chn]=(F[k-1][l-1][chn]-(k-1<=S?X1(k):X2(k-S))*(l-1<=S?X1(l):X2(l-S)))*a2;
+        for (l=1; l<=mD; l++) { F_(S+1,l+S,chn)*=a; F_(S+1,l+S,chn)+=X2(l+1)*k; }
+        for (l=1; l<=mS; l++) { F_(l,S+1,chn)*=a; F_(l,S+1,chn)+=X1(l+1)*k; }
+        z6=X2(1)+X1(1)-X2(2);
+        z7=X2(1);
+      } else {
+        z6=2*X1(1)-X1(2); 
+        z7=X1(1);
+      }
+      n[chn]++;
+      if (n[chn]==(256>>level)) {
+        if (channels==1) for (k=1; k<=S+D; k++) for (l=k; l<=S+D; l++) F_(k,l,chn)=(F_(k-1,l-1,chn)-X1(k)*X1(l))*a2;
+        else for (k=1; k<=S+D; k++) if (k!=S+1) for (l=k; l<=S+D; l++) if (l!=S+1) F_(k,l,chn)=(F_(k-1,l-1,chn)-(k-1<=S?X1(k):X2(k-S))*(l-1<=S?X1(l):X2(l-S)))*a2;
         for (i=1; i<=S+D; i++) {
-           sum=F[i][i][chn];
-           for (k=1; k<i; k++) sum-=L[i][k]*L[i][k];
+           sum=F_(i,i,chn);
+           for (k=1; k<i; k++) sum-=L_(i,k)*L_(i,k);
            sum=floor(sum+0.5);
-           sum=1/sum;
-           if (sum>0) {
-             L[i][i]=sqrt(sum);
+           sum=1.0/sum;
+           if (sum>0.0) {
+             L_(i,i)=sqrt(sum);
              for (j=(i+1); j<=S+D; j++) {
-               sum=F[i][j][chn];
-               for (k=1; k<i; k++) sum-=L[j][k]*L[i][k];
+               sum=F_(i,j,chn);
+               for (k=1; k<i; k++) sum-=L_(j,k)*L_(i,k);
                sum=floor(sum+0.5);
-               L[j][i]=sum*L[i][i];
+               L_(j,i)=sum*L_(i,i);
              }
            } else break;
         }
         if (i>S+D && counter[chn]>S+1) {
           for (k=1; k<=S+D; k++) {
-            F[k][0][chn]=F[0][k][chn];
-            for (j=1; j<k; j++) F[k][0][chn]-=L[k][j]*F[j][0][chn];
-            F[k][0][chn]*=L[k][k];
+            F_(k,0,chn)=F_(0,k,chn);
+            for (j=1; j<k; j++) F_(k,0,chn)-=L_(k,j)*F_(j,0,chn);
+            F_(k,0,chn)*=L_(k,k);
           }
           for (k=S+D; k>0; k--) {
-            for (j=k+1; j<=S+D; j++) F[k][0][chn]-=L[j][k]*F[j][0][chn];
-            F[k][0][chn]*=L[k][k];
+            for (j=k+1; j<=S+D; j++) F_(k,0,chn)-=L_(j,k)*F_(j,0,chn);
+            F_(k,0,chn)*=L_(k,k);
           }
         }
         n[chn]=0;
       }
-      sum=0;
-      for (l=1; l<=S+D; l++) sum+=F[l][0][chn]*(l<=S?X1(l):X2(l-S));
-      pr[2][chn]=pr[1][chn];
-      pr[1][chn]=pr[0][chn];
-      pr[0][chn]=int(floor(sum));
+      sum=0.0;
+      for (l=1; l<=S+D; l++) sum+=F_(l,0,chn)*(l<=S?X1(l):X2(l-S));
+      pr_(2,chn)=pr_(1,chn);
+      pr_(1,chn)=pr_(0,chn);
+      pr_(0,chn)=int(floor(sum));
       counter[chn]++;
     }
-    const int y1=pr[0][chn], y2=pr[1][chn], y3=pr[2][chn];
+    const int y1=pr_(0,chn), y2=pr_(1,chn), y3=pr_(2,chn);
     int x1=buf(1), x2=buf(2), x3=buf(3);
-    if (wmode==4 || wmode==5) x1^=128, x2^=128;
-    if (bits==8) x1-=128, x2-=128;
+    if (wmode==4 || wmode==5) {x1^=128; x2^=128;}
+    if (bits==8) {x1-=128; x2-=128;}
     const int t=((bits==8) || ((!msb)^(wmode<6)));
     i=ch<<4;
     if ((msb)^(wmode<6)) {
@@ -4071,7 +4122,7 @@ void wavModel(Mixer& m, int info, ModelStats *Stats = NULL) {
       cm.set(hash(++i, z1&0xff));
       cm.set(hash(++i, (z1*2-z2)&0xff));
       cm.set(hash(++i, z6&0xff));
-      cm.set(hash( ++i, y1&0xFF, ((z1-y2+z2-y3)/(bits>>3))&0xFF ));
+      cm.set(hash(++i, y1&0xFF, ((z1-y2+z2-y3)/(bits>>3))&0xFF ));
     } else {
       cm.set(hash(++i, (y1-x1+z1-y2)>>8));
       cm.set(hash(++i, (y1-x1)>>8));
@@ -4083,7 +4134,7 @@ void wavModel(Mixer& m, int info, ModelStats *Stats = NULL) {
       cm.set(hash(++i, z1>>8));
       cm.set(hash(++i, (z1*2-z2)>>8));
       cm.set(hash(++i, y1>>8));
-      cm.set(hash( ++i, (y1-x1)>>6 ));
+      cm.set(hash(++i, (y1-x1)>>6 ));
     }
     scm1.set(t*ch);
     scm2.set(t*((z1-x1+y1)>>9)&0xff);
@@ -4108,10 +4159,9 @@ void wavModel(Mixer& m, int info, ModelStats *Stats = NULL) {
       (*Stats).Record = (w<<16)|((*Stats).Record&0xFFFF);
     recordModel(m, Stats);
   }
-  static int col=0;
-  if (++col>=w*8) col=0;
-  //m.set(3, 8);
-  m.set( ch+4*ilog2(col&(bits-1)), 4*8 );
+  col++;
+  if(col==w*8)col=0;
+  m.set(ch+4*ilog2(col&(bits-1)), 4*8);
   m.set(col%bits<8, 2);
   m.set(col%bits, bits);
   m.set(col, w*8);
@@ -5086,7 +5136,7 @@ void exeModel::Update(U8 B, bool Forced){
 }
 
 bool exeModel::Predict(Mixer& m, bool Forced, ModelStats *Stats){
-  if (!bpos)
+  if (bpos==0)
     Update(buf(1), Forced);
 
   if (Valid || Forced)
@@ -5123,7 +5173,7 @@ void indirectModel(Mixer& m) {
   static U16 t3[0x8000];
   static U16 t4[0x8000];
 
-  if (!bpos) {
+  if (bpos==0) {
     U32 d=c4&0xffff, c=d&255, d2=(buf(1)&31)+32*(buf(2)&31)+1024*(buf(3)&31);
     U32 d3=(buf(1)>>3&31)+32*(buf(3)>>3&31)+1024*(buf(4)>>3&31);
     U32& r1=t1[d>>8];
@@ -5737,7 +5787,7 @@ int ContextModel::Predict(ModelStats *Stats){
   m.set(c3, 256);
   m.set(ismatch, 256);
 
-  if (bpos)
+  if (bpos!=0)
   {
     c=c0<<(8-bpos); if (bpos==1)c+=c3/2;
     c=(min(bpos,5))*256+c1/32+8*(c2/32)+(c&192);
