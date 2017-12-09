@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on December 08, 2017
+/* paq8px file compressor/archiver.  Released on December 09, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -2312,13 +2312,13 @@ void wordModel(Mixer& m, Filetype filetype) {
 #include <intrin.h>
 inline U32 ilog2(U32 x) {
   DWORD tmp=0;
-  if(x==tmp)return tmp; //0
-  _BitScanReverse(&tmp,x);
+  if(x!=0)_BitScanReverse(&tmp,x);
   return tmp;
 }
 #elif __GNUC__
 inline U32 ilog2(U32 x) {
-  return x == 0 ? 0 : 31 - __builtin_clz(x);
+  if(x!=0)x=31-__builtin_clz(x);
+  return x;
 }
 #else
 inline U32 BitCount(U32 v) {
@@ -2342,14 +2342,22 @@ inline U32 ilog2(U32 x) {
 }
 #endif
 
-inline U8 Clip(int Px){
-  return min(0xFF,max(0,Px));
+inline U8 Clip(int const Px){
+  if(Px>255)return 255;
+  if(Px<0)return 0;
+  return Px;
 }
-inline U8 Clamp4( int Px, U8 n1, U8 n2, U8 n3, U8 n4){
-  return min( max(n1,max(n2,max(n3,n4))), max( min(n1,min(n2,min(n3,n4))), Px ));
+inline U8 Clamp4(const int Px, const U8 n1, const U8 n2, const U8 n3, const U8 n4){
+  int maximum=n1;if(maximum<n2)maximum=n2;if(maximum<n3)maximum=n3;if(maximum<n4)maximum=n4;
+  int minimum=n1;if(minimum>n2)minimum=n2;if(minimum>n3)minimum=n3;if(minimum>n4)minimum=n4;
+  if(Px<minimum)return minimum;
+  if(Px>maximum)return maximum;
+  return Px;
 }
-inline U8 LogMeanDiffQt(U8 a, U8 b){
-  return (a!=b)?((a>b)<<3)|ilog2((a+b)/max(2,abs(a-b)*2)+1):0;
+inline U8 LogMeanDiffQt(const U8 a, const U8 b){
+  if(a==b)return 0;
+  U8 sign=a>b?8:0;
+  return sign | ilog2((a+b)/max(2,abs(a-b)*2)+1);
 }
 
 #define SPACE 0x20
@@ -2602,10 +2610,10 @@ inline U8 Paeth(U8 W, U8 N, U8 NW){
 
 void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
   static const int SC=0x10000;
-  static const int nMaps = 29;
-  static SmallStationaryContextMap scm1(SC), scm2(SC), scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2);
+  static const int nMaps = 30;
+  static SmallStationaryContextMap scm1(SC), scm2(SC), scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm_fixed(256);
   static ContextMap cm(MEM*4, 45);
-  static StationaryMap Map[nMaps] = { 12, 12, 12, 12, 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8};
+  static StationaryMap Map[nMaps] = { 12, 12, 12, 12, 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0};
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 px = 0; // current PNG filter prediction
@@ -2746,6 +2754,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         scm7.set(NE+buf(1)-buf(w-stride+1));
         scm8.set(N+NE-NNE);
         scm9.set(mean>>1|(logvar<<1&0x180));
+        //scm_fixed.set(0); //unnecessary: context is set to 0 (by default)
 
         ctx = (min(color,stride-1)<<9)|((abs(W-N)>8)<<8)|((W>N)<<7)|((W>NW)<<6)|((abs(N-NW)>8)<<5)|((N>NW)<<4)|((abs(N-NE)>8)<<3)|((N>NE)<<2)|((W>WW)<<1)|(N>NN);
       }
@@ -2873,6 +2882,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
       scm7.mix(m);
       scm8.mix(m);
       scm9.mix(m);
+      scm_fixed.mix(m);
     }
     static int col=0;
     if (++col>=stride*8) col=0;
