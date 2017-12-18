@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on December 09, 2017
+/* paq8px file compressor/archiver.  Released on December 18, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -599,7 +599,7 @@ Added gif recompression
 //Change the following values on a new build if applicable
 
 #define PROGNAME     "paq8px"  // Change this if you make a branch
-#define PROGVERSION  "121_fixed2"
+#define PROGVERSION  "122"
 #define PROGYEAR     "2017"
 
 #define DEFAULT_LEVEL 5
@@ -618,7 +618,7 @@ Added gif recompression
 #endif
 
 #if !defined(WINDOWS ) && !defined(UNIX)
-#error Unknown target system, some functions (like creating folders) may not word
+#error Unknown target system, some functions (like creating folders) may not work
 #endif
 
 //////////////////////// Includes /////////////////////////////////////////
@@ -1346,8 +1346,9 @@ public:
 
   // Adjust weights to minimize coding cost of last prediction
   void update() {
+    int target=y<<12;
     for (int i=0; i<ncxt; ++i) {
-      int err=((y<<12)-pr[i])*7;
+      int err=(target-pr[i])*7;
       assert(err>=-32768 && err<32768);
       train(&tx[0], &wx[cxt[i]*N], nx, err);
     }
@@ -1357,7 +1358,8 @@ public:
   // Input x (call up to N times)
   void add(int x) {
     assert(nx<N);
-    tx[nx++]=x;
+    assert(x==short(x));
+    tx[nx++]=(short)x;
   }
 
   // Set a context (call S times, sum of ranges <= M)
@@ -1376,14 +1378,17 @@ public:
     if (mp) {  // combine outputs
       mp->update();
       for (int i=0; i<ncxt; ++i) {
-        pr[i]=squash(dot_product(&tx[0], &wx[cxt[i]*N], nx)>>5);
-        mp->add(stretch(pr[i]));
+        int dp=dot_product(&tx[0], &wx[cxt[i]*N], nx)>>5;
+        if(dp<-2047)dp=-2047;if(dp>2047)dp=2047;
+        mp->add(dp);
+        pr[i]=squash(dp);
       }
       mp->set(0, 1);
       return mp->p();
     }
     else {  // S=1 context
-      return pr[0]=squash(dot_product(&tx[0], &wx[0], nx)>>8);
+      int dp=dot_product(&tx[0], &wx[0], nx)>>8;
+      return pr[0]=squash(dp);
     }
   }
   ~Mixer();
@@ -1400,13 +1405,11 @@ Mixer::Mixer(int n, int m, int s, int w):
   assert(n>0 && N>0 && (N&7)==0 && M>0);
   int i;
   for (i=0; i<S; ++i)
-    pr[i]=2048;
+    pr[i]=2048; //initial p=0.5
   for (i=0; i<N*M; ++i)
     wx[i]=w;
   if (S>1) mp=new Mixer(S, 1, 1);
 }
-
-
 
 
 //////////////////////////// APM1 //////////////////////////////
@@ -1428,10 +1431,12 @@ public:
   APM1(int n);
   int p(int pr=2048, int cxt=0, int rate=7) {
     assert(pr>=0 && pr<4096 && cxt>=0 && cxt<N && rate>0 && rate<32);
-    pr=stretch(pr);
+    //adapt (update prediction from previous pass)
     int g=(y<<16)+(y<<rate)-y-y;
     t[index] += (g-t[index]) >> rate;
     t[index+1] += (g-t[index+1]) >> rate;
+    //predict
+    pr = stretch(pr);
     const int w=pr&127;  // interpolation weight (33 points)
     index=((pr+2048)>>7)+cxt*33;
     return (t[index]*(128-w)+t[index+1]*w) >> 11;
@@ -1465,10 +1470,13 @@ protected:
   inline void update(int limit) {
     assert(cxt>=0 && cxt<N);
     U32 *p=&t[cxt], p0=p[0];
-    int n=p0&1023, pr=p0>>10;  // count, prediction
+    int n=p0&1023;  //count
+    int pr=p0>>10;  //prediction
     if (n<limit) ++p0;
     else p0=(p0&0xfffffc00)|limit;
-    p0+=(((y<<22)-pr)>>3)*dt[n]&0xfffffc00;
+    int target=y<<22;
+    int delta=((target-pr)>>3)*dt[n];
+    p0+=delta&0xfffffc00; //the larger the count (n) the less it should adapt
     p[0]=p0;
   }
 
@@ -1489,7 +1497,7 @@ public:
 
 StateMap::StateMap(int n): N(n), cxt(0), t(n) {
   for (int i=0; i<N; ++i)
-    t[i]=1u<<31;
+    t[i]=(1u<<31)+0;  //initial p=0.5, initial count=0
 }
 
 // An APM maps a probability and a context to a new probability.  Methods:
@@ -1506,17 +1514,18 @@ class APM: public StateMap {
 public:
   APM(int n);
   int p(int pr, int cx, int limit=255) {
-   // assert(y>>1==0);
     assert(pr>=0 && pr<4096);
     assert(cx>=0 && cx<N/24);
     assert(limit>0 && limit<1024);
+    //adapt (update prediction from previous pass)
     update(limit);
+    //predict
     pr=(stretch(pr)+2048)*23;
-    int wt=pr&0xfff;  // interpolation weight of next element
+    int wt=pr&0xfff;  // interpolation weight (0..4095)
     cx=cx*24+(pr>>12);
     assert(cx>=0 && cx<N-1);
     cxt=cx+(wt>>11);
-    pr=((t[cx]>>13)*(0x1000-wt)+(t[cx+1]>>13)*wt)>>19;
+    pr=((t[cx]>>13)*(4096-wt)+(t[cx+1]>>13)*wt)>>19;
     return pr;
   }
 };
@@ -1524,7 +1533,7 @@ public:
 APM::APM(int n): StateMap(n*24) {
   for (int i=0; i<N; ++i) {
     int p=((i%24*2+1)*4096)/48-2048;
-    t[i]=(U32(squash(p))<<20)+6;
+    t[i]=(U32(squash(p))<<20)+6; //initial count: 6
   }
 }
 
@@ -1624,8 +1633,8 @@ private:
   const int N;     // number of items in table
 public:
   HashTable(int n): t(n), N(n) {
-    assert(B>=2 && (B&B-1)==0);
-    assert(N>=B*4 && (N&N-1)==0);
+    assert(B>=2 && (B&(B-1))==0);
+    assert(N>=B*4 && (N&(N-1))==0);
   }
   U8* operator[](U32 i);
 };
@@ -1706,14 +1715,14 @@ public:
     else if (cp[0]<255) ++cp[0];
     cp=t[cx]+1;
   }
-  int p() {  // predict next bit
+  int stretched_p() {  // predict next bit
     if ((cp[1]+256)>>(8-bpos)==c0)
       return ((cp[1]>>(7-bpos)&1)*2-1)*ilog(cp[0]+1)*8;
     else
-      return 0;
+      return 0; //p=0.5
   }
   int mix(Mixer& m) {  // return run length
-    m.add(p());
+    m.add(stretched_p());
     return cp[0]!=0;
   }
 };
@@ -1732,7 +1741,7 @@ public:
   SmallStationaryContextMap(int m): t(m), cxt(0), mask(m-1) {
     assert((m&mask)==0); // power of 2?
     for (U32 i=0; i<t.size(); ++i)
-      t[i]=32768; // p=0.5
+      t[i]=32768; // initial p=0.5
     cp=&t[0];
   }
   void set(U32 cx) {
@@ -1745,7 +1754,9 @@ public:
     U32 idx=(cxt*256+c0)&mask;  //c0: the partial byte
     assert(idx<t.size());
     cp=&t[idx];
-    m.add(stretch((*cp)>>4));
+    int p=(*cp)>>4;
+    int stretched_p=stretch(p);
+    m.add(stretched_p);
   }
 };
 
@@ -1891,7 +1902,7 @@ inline U8* ContextMap::E::get(U16 ch) {
 // Construct using m bytes of memory for c contexts
 ContextMap::ContextMap(int m, int c): C(c), t(m>>6), cp(c), cp0(c),
     cxt(c), runp(c), cn(0) {
-  assert(m>=64 && (m&m-1)==0);  // power of 2?
+  assert(m>=64 && (m&(m-1))==0);  // power of 2?
   assert(sizeof(E)==64);
   sm=new StateMap[C];
   for (int i=0; i<C; ++i) {
@@ -3864,14 +3875,14 @@ int jpegModel(Mixer& m) {
   // Estimate next bit probability
   if (!images[idx].jpeg || !images[idx].data) return images[idx].next_jpeg;
   if (buf(1+(bpos==0))==FF) {
-    m.add(128);
+    m.add(128); //network bias
     m.set(0, 9);
     m.set(0, 1025);
     m.set(buf(1), 1024);
     return true;
   }
   if (rstlen>0 && rstlen==column+row*width-rstpos && mcupos==0 && (int)huffcode==(1<<huffbits)-1) {
-    m.add(4095);
+    m.add(2047); //network bias
     m.set(0, 9);
     m.set(0, 1025);
     m.set(buf(1), 1024);
@@ -3948,23 +3959,23 @@ int jpegModel(Mixer& m) {
   int p;
  switch(hbcount)
   {
-   case 0: for (int i=0; i<N; ++i){ cp[i]=t[cxt[i]]+1, m1.add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>2);} break;
-   case 1: { int hc=1+(huffcode&1)*3; for (int i=0; i<N; ++i){ cp[i]+=hc, m1.add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>2); }} break;
-   default: { int hc=1+(huffcode&1); for (int i=0; i<N; ++i){ cp[i]+=hc, m1.add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>2); }} break;
+   case 0: for (int i=0; i<N; ++i){ cp[i]=t[cxt[i]]+1, m1.add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>1);} break;
+   case 1: { int hc=1+(huffcode&1)*3; for (int i=0; i<N; ++i){ cp[i]+=hc, m1.add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>1); }} break;
+   default: { int hc=1+(huffcode&1); for (int i=0; i<N; ++i){ cp[i]+=hc, m1.add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>1); }} break;
   }
 
   m1.set(firstcol, 2);
   m1.set(coef+256*min(3,huffbits), 1024);
   m1.set((hc&0x1FE)*2+min(3,ilog2(zu+zv)), 1024);
   int pr=m1.p();
-  m.add(stretch(pr)>>2);
-  m.add((pr>>4)-(255-((pr>>4))));
+  m.add(stretch(pr)>>1);
+  m.add((pr>>2)-511);
   pr=a1.p(pr, (hc&511)|(((adv_pred[1]/16)&63)<<9), 1023);
-  m.add(stretch(pr)>>2);
-  m.add((pr>>4)-(255-((pr>>4))));
+  m.add(stretch(pr)>>1);
+  m.add((pr>>2)-511);
   pr=a2.p(pr, (hc&511)|(coef<<9), 1023);
-  m.add(stretch(pr)>>2);
-  m.add((pr>>4)-(255-((pr>>4))));
+  m.add(stretch(pr)>>1);
+  m.add((pr>>2)-511);
   m.set(1 + (zu+zv<5)+(huffbits>8)*2+firstcol*4, 9);
   m.set(1 + (hc&0xFF) + 256*min(3,(zu+zv)/3), 1025);
   m.set(coef+256*min(3,huffbits/2), 1024);
@@ -5265,22 +5276,24 @@ void dmcModel(Mixer& m) {
   // Initialize to a bytewise order 1 model at startup or when flushing memory
   if (top==t.size() && bpos==1) top=0;
   if (top==0) {
-    assert(t.size()>=65536);
-    for (int i=0; i<256; ++i) {
+    assert(t.size()>=65280);
+    for (int i=0; i<255; ++i) {
       for (int j=0; j<256; ++j) {
         if (i<127) {
-          t[j*256+i].nx[0]=j*256+i*2+1;
-          t[j*256+i].nx[1]=j*256+i*2+2;
+          t[j*255+i].nx[0]=j*255+i*2+1;
+          t[j*255+i].nx[1]=j*255+i*2+2;
         }
         else {
-          t[j*256+i].nx[0]=(i-127)*256;
-          t[j*256+i].nx[1]=(i+1)*256;
+          t[j*255+i].nx[0]=(i-127)*255;
+          t[j*255+i].nx[1]=(i+1)*255;
         }
-        t[j*256+i].c0=128;
-        t[j*256+i].c1=128;
+        t[j*255+i].c0=128;
+        t[j*255+i].c1=128;
+        //reset of the states: (sometimes it's better to reset and sometimes it's better to keep the previous values)
+        //t[j*255+i].state=0x00; 
       }
     }
-    top=65536;
+    top=65280;
     curr=0;
     threshold=256;
   }
@@ -5900,8 +5913,8 @@ private:
   // Compress bit y or return decompressed bit
   int code(int i=0) {
     int p=predictor.p();
-    assert(p>=0 && p<4096);
-    p+=p<2048;
+    if(p==0)p++;
+    assert(p>0 && p<4096);
     U32 xmid=x1 + ((x2-x1)>>12)*p + (((x2-x1)&0xfff)*p>>12);
     assert(xmid>=x1 && xmid<x2);
     if (mode==DECOMPRESS) y=x<=xmid; else y=i;
