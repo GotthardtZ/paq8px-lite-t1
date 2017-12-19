@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on December 18, 2017
+/* paq8px file compressor/archiver.  Released on December 19, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -2406,16 +2406,25 @@ inline U8 LogMeanDiffQt(const U8 a, const U8 b){
 
 #define SPACE 0x20
 
-void recordModel(Mixer& m, ModelStats *Stats = NULL) {
+struct dBASE {
+  U8 Version;
+  U32 nRecords;
+  U16 RecordLength, HeaderLength;
+  int Start, End;
+};
+
+void recordModel(Mixer& m, Filetype filetype, ModelStats *Stats = NULL) {
   static int cpos1[256] , cpos2[256], cpos3[256], cpos4[256];
   static int wpos1[0x10000]; // buf(1..2) -> last position
   static int rlen[3] = {2,3,4}; // run length and 2 candidates
   static int rcount[2] = {0,0}; // candidate counts
   static U8 padding = 0; // detected padding byte
-  static int prevTransition = 0, nTransition = 0, col = 0, mxCtx = 0; // position of the last padding transition
+  static int prevTransition = 0, nTransition = 0; // position of the last padding transition
+  static int col = 0, mxCtx = 0;
   static ContextMap cm(32768, 3), cn(32768/2, 3), co(32768*2, 3), cp(MEM, 7);
   static StationaryMap Map0(10), Map1(10);
   static bool MayBeImg24b = false;
+  static dBASE dbase;
 
   // Find record length
   if (bpos==0) {
@@ -2426,6 +2435,33 @@ void recordModel(Mixer& m, ModelStats *Stats = NULL) {
       rcount[0]=rcount[1]=0;
     }
     else{
+      // detect dBASE tables
+      if (blpos==0 || (dbase.Version>0 && blpos>=dbase.End))
+        dbase.Version = 0;
+      else if (dbase.Version==0 && filetype==DEFAULT && blpos>=31){
+        U8 b = buf(32);
+        if ( ((b&7)==3 || (b&7)==4 || (b>>4)==3) &&
+             ((b=buf(30))>0 && b<13) &&
+             ((b=buf(29))>0 && b<32) &&
+             ((dbase.nRecords = buf(28)|(buf(27)<<8)|(buf(26)<<16)|(buf(25)<<24)) > 0 && dbase.nRecords<0xFFFFF) &&
+             ((dbase.HeaderLength = buf(24)|(buf(23)<<8)) > 32 && ( ((dbase.HeaderLength-32-1)%32)==0 || (dbase.HeaderLength>255+8 && (((dbase.HeaderLength-=255+8)-32-1)%32)==0) )) &&
+             ((dbase.RecordLength = buf(22)|(buf(21)<<8)) > 8) &&
+             (buf(20)==0 && buf(19)==0 && buf(17)<=1 && buf(16)<=1)
+        ){
+          dbase.Version = (((b=buf(32))>>4)==3)?3:b&7;
+          dbase.Start = blpos - 32 + dbase.HeaderLength;
+          dbase.End = dbase.Start + dbase.nRecords * dbase.RecordLength;
+          if (dbase.Version==3){
+            rlen[0] = 32;
+            rcount[0]=rcount[1]=0;
+          }
+        }
+      }
+      else if (dbase.Version>0 && blpos==dbase.Start){
+        rlen[0] = dbase.RecordLength;
+        rcount[0]=rcount[1]=0;
+      }
+      
       int r=pos-cpos1[c];
       if (r>1 && r==cpos1[c]-cpos2[c]
           && r==cpos2[c]-cpos3[c] && (r>32 || r==cpos3[c]-cpos4[c])
@@ -2961,9 +2997,9 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
 
 // Model for 8-bit image data
 void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
-  static const int nMaps = 20;
+  static const int nMaps = 33;
   static ContextMap cm(MEM*4, 48);
-  static StationaryMap Map[nMaps] = { 12, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
+  static StationaryMap Map[nMaps] = { 12, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 px = 0, res = 0; // current PNG filter prediction, expected residual
@@ -3146,16 +3182,39 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
           Map[13].set((W+Clip(NEE*3-buffer(w*2-3)*3+buffer(w*3-4)))/2-px);
           Map[14].set(Clip(NN+buffer(w*4)-buffer(w*6))-px);
           Map[15].set(Clip(WW+buffer(4)-buffer(6))-px);
+          Map[16].set(Clip((buffer(w*5)-6*buffer(w*4)+15*NNN-20*NN+15*N+Clamp4(W*2-NWW,W,NW,N,NN))/6)-px);
+          Map[17].set(Clip((-3*WW+8*W+Clamp4(NEE*3-NNEE*3+buffer(w*3-2),NE,NEE,buffer(w-3),buffer(w-4)))/6)-px);
+          Map[18].set(Clip(NN+NW-buffer(w*3+1))-px);
+          Map[19].set(Clip(NN+NE-buffer(w*3-1))-px);
+          Map[20].set(Clip((W*2+NW)-(WW+2*NWW)+buffer(w+3))-px);
+          Map[21].set(Clip(((NW+NWW)/2)*3-buffer(w*2+3)*3+(buffer(w*3+4)+buffer(w*3+5))/2)-px);
+          Map[22].set(Clip(NEE+NE-buffer(w*2-3))-px);
+          Map[23].set(Clip(NWW+WW-buffer(w+4))-px);
+          Map[24].set(Clip(((W+NW)*3-NWW*6+buffer(w+3)+buffer(w*2+3))/2)-px);
+          Map[25].set(Clip((NE*2+NNE)-(NNEE+buffer(w*3-2)*2)+buffer(w*4-3))-px);
         }
         else{
           Map[12].set((W+Clip(NE*3-NNE*3+buf(w*3-1)))/2);
           Map[13].set((W+Clip(NEE*3-buf(w*2-3)*3+buf(w*3-4)))/2);
           Map[14].set(Clip(NN+buf(w*4)-buf(w*6)));
           Map[15].set(Clip(WW+buf(4)-buf(6)));
+          Map[16].set(Clip((buf(w*5)-6*buf(w*4)+15*NNN-20*NN+15*N+Clamp4(W*2-NWW,W,NW,N,NN))/6));
+          Map[17].set(Clip((-3*WW+8*W+Clamp4(NEE*3-NNEE*3+buf(w*3-2),NE,NEE,buf(w-3),buf(w-4)))/6));
+          Map[18].set(Clip(NN+NW-buf(w*3+1)));
+          Map[19].set(Clip(NN+NE-buf(w*3-1)));
+          Map[20].set(Clip((W*2+NW)-(WW+2*NWW)+buf(w+3)));
+          Map[21].set(Clip(((NW+NWW)/2)*3-buf(w*2+3)*3+(buf(w*3+4)+buf(w*3+5))/2));
+          Map[22].set(Clip(NEE+NE-buf(w*2-3)));
+          Map[23].set(Clip(NWW+WW-buf(w+4)));
+          Map[24].set(Clip(((W+NW)*3-NWW*6+buf(w+3)+buf(w*2+3))/2));
+          Map[25].set(Clip((NE*2+NNE)-(NNEE+buf(w*3-2)*2)+buf(w*4-3)));
         }
-        Map[16].set(Clip(N+NN-NNN)-px);
-        Map[17].set(Clip(W+WW-WWW)-px);
-        Map[18].set(Clip(W+NEE-NE)-px);
+        Map[26].set(Clip(N+NN-NNN)-px);
+        Map[27].set(Clip(W+WW-WWW)-px);
+        Map[28].set(Clip(W+NEE-NE)-px);
+        Map[29].set(Clip(WW+NEE-N)-px);
+        Map[30].set((Clip(W*2-NW)+Clip(W*2-NWW)+N+NE)/4-px);
+        Map[31].set(Clamp4(N*2-NN,W,N,NE,NEE)-px);
 
         if (isPNG)
           ctx = ((abs(W-N)>8)<<10)|((W>N)<<9)|((abs(N-NW)>8)<<8)|((N>NW)<<7)|((abs(N-NE)>8)<<6)|((N>NE)<<5)|((W>WW)<<4)|((N>NN)<<3)|min(5,filterOn?filter+1:0);
@@ -4224,7 +4283,7 @@ void wavModel(Mixer& m, int info, ModelStats *Stats = NULL) {
   if (level>=4){
     if (Stats)
       (*Stats).Record = (w<<16)|((*Stats).Record&0xFFFF);
-    recordModel(m, Stats);
+    recordModel(m, AUDIO, Stats);
   }
   col++;
   if(col==w*8)col=0;
@@ -5835,7 +5894,7 @@ int ContextModel::Predict(ModelStats *Stats){
   if (level>=4 && filetype!=IMAGE1) {
     sparseModel(m,ismatch,order);
     distanceModel(m);
-    recordModel(m, Stats);
+    recordModel(m, filetype, Stats);
     wordModel(m, filetype);
     indirectModel(m);
     dmcModel(m);
