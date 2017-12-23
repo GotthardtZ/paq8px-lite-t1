@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on December 19, 2017
+/* paq8px file compressor/archiver.  Released on December 23, 2017
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -941,7 +941,7 @@ inline bool hasTransform(Filetype ft) { return ft==IMAGE24 || ft==IMAGE32 || ft=
 int level=DEFAULT_LEVEL;  // Compression level 0 to 8
 #define MEM (U64(65536)<<level)
 int y=0;  // Last bit, 0 or 1, set by encoder
-bool brute = false, trainEXE = false, trainTXT = false, adaptive = false;
+bool brute = false, trainEXE = false, trainTXT = false, adaptive = false, skipRGB = false;
 
 struct ModelStats{
   U32 XML, x86_64, Record;
@@ -2440,7 +2440,7 @@ void recordModel(Mixer& m, Filetype filetype, ModelStats *Stats = NULL) {
         dbase.Version = 0;
       else if (dbase.Version==0 && filetype==DEFAULT && blpos>=31){
         U8 b = buf(32);
-        if ( ((b&7)==3 || (b&7)==4 || (b>>4)==3) &&
+        if ( ((b&7)==3 || (b&7)==4 || (b>>4)==3 || b==0xF5) &&
              ((b=buf(30))>0 && b<13) &&
              ((b=buf(29))>0 && b<32) &&
              ((dbase.nRecords = buf(28)|(buf(27)<<8)|(buf(26)<<16)|(buf(25)<<24)) > 0 && dbase.nRecords<0xFFFFF) &&
@@ -2690,10 +2690,10 @@ inline U8 Paeth(U8 W, U8 N, U8 NW){
 
 void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
   static const int SC=0x10000;
-  static const int nMaps = 32;
+  static const int nMaps = 34;
   static SmallStationaryContextMap scm1(SC), scm2(SC), scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm_fixed(256);
   static ContextMap cm(MEM*4, 45);
-  static StationaryMap Map[nMaps] = {12, 12, 12, 12, 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0};
+  static StationaryMap Map[nMaps] = {12, 12, 12, 12, 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0};
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 WWp1, Wp1, p1, NWp1, Np1, NEp1, NNp1;
@@ -2924,6 +2924,8 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         Map[21].set( Clip(WW+buffer(stride*4)-buffer(stride*6)+p1-Clip(WWp1+buffer(stride*4+1)-buffer(stride*6+1)))-px );
         Map[22].set( Clip(WW+NEE-N+p1-Clip(WWp1+buffer(w-stride*2+1)-Np1))-px );
         Map[23].set( Clip(((N+3*NW)/4)*3-((NNW+NNWW)/2)*3+(buffer(w*3+2*stride)*3+buffer(w*3+3*stride))/4)-px );
+        Map[24].set(buffer(w*6)-px);
+        Map[25].set((buffer(w-4*stride)+buffer(w-6*stride))/2-px);
       }
       else{
         Map[3].set( ((U8)Clip(W+N-NW))|(LogMeanDiffQt(p1,Clip(Wp1+Np1-NWp1))<<8) );
@@ -2947,14 +2949,16 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         Map[21].set( Clip(WW+buf(stride*4)-buf(stride*6)) );
         Map[22].set( Clip(WW+NEE-N+p1-Clip(WWp1+buf(w-stride*2+1)-Np1)) );
         Map[23].set( Clip(((N+3*NW)/4)*3-((NNW+NNWW)/2)*3+(buf(w*3+2*stride)*3+buf(w*3+3*stride))/4) );
+        Map[24].set(buf(w*6));
+        Map[25].set((buf(w-4*stride)+buf(w-6*stride))/2);
       }
-      Map[24].set( Clip(W+N-NW)-px );
-      Map[25].set( buf(1+(isPNG && x<2)) );
-      Map[26].set( (W+NEE)/2-px );
-      Map[27].set( Clip(N*3-NN*3+NNN)-px );
-      Map[28].set( Clip(N+NW-NNW)-px );
-      Map[29].set( Clip(N+NE-NNE)-px );
-      Map[30].set( (Clip(W*2-NW) + Clip(W*2-NWW) + N + NE)/4-px );
+      Map[26].set( Clip(W+N-NW)-px );
+      Map[27].set( buf(1+(isPNG && x<2)) );
+      Map[28].set( (W+NEE)/2-px );
+      Map[29].set( Clip(N*3-NN*3+NNN)-px );
+      Map[30].set( Clip(N+NW-NNW)-px );
+      Map[31].set( Clip(N+NE-NNE)-px );
+      Map[32].set( (Clip(W*2-NW) + Clip(W*2-NWW) + N + NE)/4-px );
     }
   }
 
@@ -2997,9 +3001,9 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
 
 // Model for 8-bit image data
 void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
-  static const int nMaps = 33;
+  static const int nMaps = 43;
   static ContextMap cm(MEM*4, 48);
-  static StationaryMap Map[nMaps] = { 12, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
+  static StationaryMap Map[nMaps] = { 12, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 px = 0, res = 0; // current PNG filter prediction, expected residual
@@ -3192,6 +3196,12 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
           Map[23].set(Clip(NWW+WW-buffer(w+4))-px);
           Map[24].set(Clip(((W+NW)*3-NWW*6+buffer(w+3)+buffer(w*2+3))/2)-px);
           Map[25].set(Clip((NE*2+NNE)-(NNEE+buffer(w*3-2)*2)+buffer(w*4-3))-px);
+          Map[26].set(buffer(w*6)-px);
+          Map[27].set((buffer(w-4)+buffer(w-6))/2-px);
+          Map[28].set((buffer(4)+buffer(6))/2-px);
+          Map[29].set((W+N+buffer(w-5)+buffer(w-7))/4-px);
+          Map[30].set(Clip(buffer(w-3)+W-NEE)-px);
+          Map[31].set(Clip(4*NNN-3*buffer(w*4))-px);
         }
         else{
           Map[12].set((W+Clip(NE*3-NNE*3+buf(w*3-1)))/2);
@@ -3208,13 +3218,23 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
           Map[23].set(Clip(NWW+WW-buf(w+4)));
           Map[24].set(Clip(((W+NW)*3-NWW*6+buf(w+3)+buf(w*2+3))/2));
           Map[25].set(Clip((NE*2+NNE)-(NNEE+buf(w*3-2)*2)+buf(w*4-3)));
+          Map[26].set(buf(w*6));
+          Map[27].set((buf(w-4)+buf(w-6))/2);
+          Map[28].set((buf(4)+buf(6))/2);
+          Map[29].set((W+N+buf(w-5)+buf(w-7))/4);
+          Map[30].set(Clip(buf(w-3)+W-NEE));
+          Map[31].set(Clip(4*NNN-3*buf(w*4)));
         }
-        Map[26].set(Clip(N+NN-NNN)-px);
-        Map[27].set(Clip(W+WW-WWW)-px);
-        Map[28].set(Clip(W+NEE-NE)-px);
-        Map[29].set(Clip(WW+NEE-N)-px);
-        Map[30].set((Clip(W*2-NW)+Clip(W*2-NWW)+N+NE)/4-px);
-        Map[31].set(Clamp4(N*2-NN,W,N,NE,NEE)-px);
+        Map[32].set(Clip(N+NN-NNN)-px);
+        Map[33].set(Clip(W+WW-WWW)-px);
+        Map[34].set(Clip(W+NEE-NE)-px);
+        Map[35].set(Clip(WW+NEE-N)-px);
+        Map[36].set((Clip(W*2-NW)+Clip(W*2-NWW)+N+NE)/4-px);
+        Map[37].set(Clamp4(N*2-NN,W,N,NE,NEE)-px);
+        Map[38].set((N+NNN)/2-px);
+        Map[39].set(Clip(NN+W-NNW)-px);
+        Map[40].set(Clip(NWW+N-NNWW)-px);
+        Map[41].set(Clip((4*WWW-15*WW+20*W+NEE)/10)-px);
 
         if (isPNG)
           ctx = ((abs(W-N)>8)<<10)|((W>N)<<9)|((abs(N-NW)>8)<<8)|((N>NW)<<7)|((abs(N-NE)>8)<<6)|((N>NE)<<5)|((W>WW)<<4)|((N>NN)<<3)|min(5,filterOn?filter+1:0);
@@ -6444,7 +6464,7 @@ Filetype detect(FILE* in, U64 blocksize, Filetype type, int &info) {
         }
         fseeko(in, savedpos, SEEK_SET);
       }
-      if (streamLength>brute<<7) {
+      if (streamLength>(brute<<7)) {
         info=0;
         if (pdfimw>0 && pdfimw<0x1000000 && pdfimh>0) {
           if (pdfimb==8 && (int)strm.total_out==pdfimw*pdfimh) info=((pdfgray?IMAGE8GRAY:IMAGE8)<<24)|pdfimw;
@@ -6944,8 +6964,8 @@ void encode_bmp(FILE* in, FILE* out, U64 len, int width) {
     for (int j=0; j<width/3; j++) {
       b=fgetc(in), g=fgetc(in), r=fgetc(in);
       fputc(g, out);
-      fputc(g-r, out);
-      fputc(g-b, out);
+      fputc((skipRGB)?r:g-r, out);
+      fputc((skipRGB)?b:g-b, out);
     }
     for (int j=0; j<width%3; j++) fputc(fgetc(in), out);
   }
@@ -6958,15 +6978,15 @@ U64 decode_bmp(Encoder& en, U64 size, int width, FILE *out, FMode mode, U64 &dif
     for (int j=0; j<width/3; j++) {
       b=en.decompress(), g=en.decompress(), r=en.decompress();
       if (mode==FDECOMPRESS) {
-        fputc(b-r, out);
+        fputc((skipRGB)?r:b-r, out);
         fputc(b, out);
-        fputc(b-g, out);
+        fputc((skipRGB)?g:b-g, out);
         if (!j && !(i&0xf)) en.print_status();
       }
       else if (mode==FCOMPARE) {
-        if (((b-r)&255)!=getc(out) && !diffFound) diffFound=p+1;
+        if ((((skipRGB)?r:b-r)&255)!=getc(out) && !diffFound) diffFound=p+1;
         if (b!=getc(out) && !diffFound) diffFound=p+2;
-        if (((b-g)&255)!=getc(out) && !diffFound) diffFound=p+3;
+        if ((((skipRGB)?g:b-g)&255)!=getc(out) && !diffFound) diffFound=p+3;
         p+=3;
       }
     }
@@ -6989,8 +7009,8 @@ void encode_im32(FILE* in, FILE* out, U64 len, int width) {
     for (int j=0; j<width/4; j++) {
       b=fgetc(in), g=fgetc(in), r=fgetc(in); a=fgetc(in);
       fputc(g, out);
-      fputc(g-r, out);
-      fputc(g-b, out);
+      fputc((skipRGB)?r:g-r, out);
+      fputc((skipRGB)?b:g-b, out);
       fputc(a, out);
     }
     for (int j=0; j<width%4; j++) fputc(fgetc(in), out);
@@ -7006,13 +7026,13 @@ U64 decode_im32(Encoder& en, U64 size, int width, FILE *out, FMode mode, U64 &di
     for (int j=0; j<width/4; j++) {
       b=en.decompress(), g=en.decompress(), r=en.decompress(), a=en.decompress();
       if (mode==FDECOMPRESS) {
-        fputc(b-r, out); fputc(b, out); fputc(b-g, out); fputc(a, out);
+        fputc((skipRGB)?r:b-r, out); fputc(b, out); fputc((skipRGB)?g:b-g, out); fputc(a, out);
         if (!j && !(i&0xf)) en.print_status();
       }
       else if (mode==FCOMPARE) {
-        if (((b-r)&255)!=getc(out) && !diffFound) diffFound=p+1;
+        if ((((skipRGB)?r:b-r)&255)!=getc(out) && !diffFound) diffFound=p+1;
         if (b!=getc(out) && !diffFound) diffFound=p+2;
-        if (((b-g)&255)!=getc(out) && !diffFound) diffFound=p+3;
+        if ((((skipRGB)?g:b-g)&255)!=getc(out) && !diffFound) diffFound=p+3;
         if (((a)&255)!=getc(out) && !diffFound) diffFound=p+4;
         p+=4;
       }
@@ -7146,7 +7166,7 @@ int encode_zlib(FILE* in, FILE* out, U64 len, int &hdrsize) {
   int memlevel,clevel,window=zh==-1?0:MAX_WBITS+10+zh/4,ctype=zh%4;
   int minclevel=window==0?1:ctype==3?7:ctype==2?6:ctype==1?2:1;
   int maxclevel=window==0?9:ctype==3?9:ctype==2?6:ctype==1?5:1;
-  int index=-1, found=0;
+  int index=-1, found=0, nTrials=0;
 
   // Step 2 - check recompressiblitiy, determine parameters and save differences
   z_stream main_strm, rec_strm[81];
@@ -7172,11 +7192,17 @@ int encode_zlib(FILE* in, FILE* out, U64 len, int &hdrsize) {
   }
   for (U64 i=0; i<len; i+=BLOCK) {
     U32 blsize=min(U32(len-i),BLOCK);
+    nTrials=0;
     for (int j=0; j<81; j++) {
       if (diffCount[j]>=LIMIT) continue;
-      memmove(&zrec[0], &zrec[BLOCK], BLOCK);
-      recpos[j]-=BLOCK;
+      nTrials++;
+      if (recpos[j]>=BLOCK)
+        recpos[j]-=BLOCK;
     }
+    // early break if nothing left to test
+    if (nTrials==0)
+      break;
+    memmove(&zrec[0], &zrec[BLOCK], BLOCK);
     memmove(&zin[0], &zin[BLOCK], BLOCK);
     fread(&zin[BLOCK], 1, blsize, in); // Read block from input file
 
@@ -7185,10 +7211,11 @@ int encode_zlib(FILE* in, FILE* out, U64 len, int &hdrsize) {
     do {
       main_strm.next_out=&zout[0]; main_strm.avail_out=BLOCK;
       main_ret=inflate(&main_strm, Z_FINISH);
-
+      nTrials = 0;
       // Recompress/deflate block with all possible parameters
       for (int j=MTF.GetFirst(); j>=0; j=MTF.GetNext()){
         if (diffCount[j]>=LIMIT) continue;
+        nTrials++;
         rec_strm[j].next_in=&zout[0];  rec_strm[j].avail_in=BLOCK-main_strm.avail_out;
         rec_strm[j].next_out=&zrec[recpos[j]]; rec_strm[j].avail_out=BLOCK*2-recpos[j];
         int ret=deflate(&rec_strm[j], main_strm.total_in == len ? Z_FINISH : Z_NO_FLUSH);
@@ -7215,8 +7242,8 @@ int encode_zlib(FILE* in, FILE* out, U64 len, int &hdrsize) {
         }
         recpos[j]=2*BLOCK-rec_strm[j].avail_out;
       }
-    } while (main_strm.avail_out==0 && main_ret==Z_BUF_ERROR);
-    if (main_ret!=Z_BUF_ERROR && main_ret!=Z_STREAM_END) break;
+    } while (main_strm.avail_out==0 && main_ret==Z_BUF_ERROR && nTrials>0);
+    if ((main_ret!=Z_BUF_ERROR && main_ret!=Z_STREAM_END) || nTrials==0) break;
   }
   int minCount=(found)?0:LIMIT;
   for (int i=80; i>=0; i--) {
@@ -8008,6 +8035,7 @@ int main(int argc, char** argv) {
             case 'E': trainEXE = true; break;
             case 'T': trainTXT = true; break;
             case 'A': adaptive = true; break;
+            case 'S': skipRGB = true; break;
             default: printf("Invalid switch: %c\n",argv[1][l]); quit();
           }
           l--;
@@ -8040,7 +8068,9 @@ int main(int argc, char** argv) {
         "  " PROGNAME " file                      (level -%d, pause when done)\n"
         "level: -0 = store, -1 -2 -3 = faster (uses 35, 48, 59 MB)\n"
         "-4 -5 -6 -7 -8 = smaller (uses 133, 233, 435, 837, 1643 MB)\n"
-        "Optional switches:\nb = Brute-force detection of DEFLATE streams\ne = Pre-train x86/x64 model\nt = Pre-train main model with dictionary file (english.dic)\na = Adaptive learning rate\n"
+        "Optional switches:\nb = Brute-force detection of DEFLATE streams\n"
+        "e = Pre-train x86/x64 model\nt = Pre-train main model with dictionary file (english.dic)\n"
+        "a = Adaptive learning rate\ns = Skip the color transform, just reorder the RGB channels\n"
         "Examples:\n" PROGNAME " -8 file\n" PROGNAME " -8[bet] file\n"
 #if defined(WINDOWS) || defined (UNIX)
         "You may also compress directories.\n"
@@ -8110,7 +8140,7 @@ int main(int argc, char** argv) {
       if (files<1) quit("Nothing to compress\n");
       archive=fopen(archiveName.c_str(), "wb+");
       if (!archive) perror(archiveName.c_str()), quit();
-      fprintf(archive, PROGNAME "%c%c", 0, level|(trainEXE<<4)|(trainTXT<<5)|(adaptive<<6) );
+      fprintf(archive, PROGNAME "%c%c", 0, level|(trainEXE<<4)|(trainTXT<<5)|(adaptive<<6)|(skipRGB<<7) );
       printf("Creating archive %s with %d file(s)...\n",
         archiveName.c_str(), files);
     }
@@ -8132,7 +8162,7 @@ int main(int argc, char** argv) {
       if (strncmp(header.c_str(), PROGNAME "\0", strlen(PROGNAME)+1))
         printf("%s: not a %s file\n", archiveName.c_str(), PROGNAME), quit();
       level=header[(int)strlen(PROGNAME)+1];
-      trainEXE = (level&0x10)!=0; trainTXT = (level&0x20)!=0; adaptive = (level&0x40)!=0; level&=0xF;
+      trainEXE = (level&0x10)!=0; trainTXT = (level&0x20)!=0; adaptive = (level&0x40)!=0; skipRGB = (level&0x80)!=0; level&=0xF;
       if (level<0||level>8) level=DEFAULT_LEVEL;
     }
 
