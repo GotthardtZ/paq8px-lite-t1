@@ -599,7 +599,7 @@ Added gif recompression
 //Change the following values on a new build if applicable
 
 #define PROGNAME     "paq8px"  // Change this if you make a branch
-#define PROGVERSION  "129_fix2"
+#define PROGVERSION  "130"
 #define PROGYEAR     "2018"
 
 #define DEFAULT_LEVEL 5
@@ -2371,6 +2371,244 @@ public:
     return result;
   }
 };
+
+class ContextMap2 {
+  const int C;  // max number of contexts
+  class E {  // hash element, 64 bytes
+    U16 chk[7];  // byte context checksums
+    U8 last;     // last 2 accesses (0-6) in low, high nibble
+  public:
+    U8 bh[7][7]; // byte context, 3-bit context -> bit history state
+                 // bh[][0] = 1st bit, bh[][1,2] = 2nd bit, bh[][3..6] = 3rd bit
+                 // bh[][0] is also a replacement priority, 0 = empty
+    U8* get(U16 chk);  // Find element (0-6) matching checksum.
+                       // If not found, insert or replace lowest priority (not last).
+  };
+  Array<E,64> t;  // bit histories for bits 0-1, 2-4, 5-7
+                  // For 0-1, also contains a run count in bh[][4] and value in bh[][5]
+                  // and pending update count in bh[7]
+  Array<U8*> cp;   // C pointers to current bit history
+  Array<U8*> cp0;  // First element of 7 element array containing cp[i]
+  Array<U32> cxt;  // C whole byte contexts (hashes)
+  Array<U8*> ByteHistory; // C [0..3] = count, value, unused, unused
+                   //StateMap *sm;    // C maps of state -> p
+  Array<bool> HasHistory;
+  StateMap **Maps6b, **Maps8b, **Maps12b;
+  int cn;          // Next context to set by set()
+  U8 bit, lastByte;
+public:
+  ContextMap2(int m, int c=1);  // m = memory in bytes, a power of 2, C = c
+  ~ContextMap2();
+  void Train(U8 B);
+  void set(U32 cx, int next=-1);   // set next whole byte context to cx; if "next" is 0 then set order does not matter
+  int mix(Mixer& m);
+};
+
+// Find or create hash element matching checksum ch
+inline U8* ContextMap2::E::get(U16 ch) {
+  if (chk[last&15]==ch) return &bh[last&15][0];
+  int b=0xffff, bi=0;
+  for (int i=0; i<7; ++i) {
+    if (chk[i]==ch) return last=last<<4|i, (U8*)&bh[i][0];
+    int pri=bh[i][0];
+    if (pri<b && (last&15)!=i && last>>4!=i) b=pri, bi=i;
+  }
+  return last=0xf0|bi, chk[bi]=ch, (U8*)memset(&bh[bi][0], 0, 7);
+}
+
+// Construct using m bytes of memory for c contexts
+ContextMap2::ContextMap2(int m, int c): C(c), t(m>>6), cp(c), cp0(c),
+cxt(c), ByteHistory(c), HasHistory(c), cn(0) {
+  assert(m>=64 && (m&(m-1))==0);  // power of 2?
+  assert(sizeof(E)==64);
+  Maps6b = new StateMap*[C];
+  Maps8b = new StateMap*[C];
+  Maps12b = new StateMap*[C];
+  for (int i=0; i<C; ++i) {
+    Maps6b[i] = new StateMap((1<<6)+8);
+    Maps8b[i] = new StateMap(1<<8);
+    Maps12b[i] = new StateMap((1<<12)+(1<<9));
+    cp0[i]=cp[i]=&t[0].bh[0][0];
+    ByteHistory[i]=cp[i]+3;
+  }
+  bit=lastByte=0;
+}
+
+ContextMap2::~ContextMap2() {
+  for (U32 i=0; i<C; i++) {
+    delete Maps6b[i];
+    delete Maps8b[i];
+    delete Maps12b[i];
+  }
+  delete[] Maps6b;
+  delete[] Maps8b;
+  delete[] Maps12b;
+}
+
+// Set the i'th context to cx
+inline void ContextMap2::set(U32 cx, int next) {
+  int i=cn++;
+  i&=next;
+  assert(i>=0 && i<C);
+  cx=cx*987654323+i;  // permute (don't hash) cx to spread the distribution
+  cx=cx<<16|cx>>16;
+  cxt[i]=cx*123456791+i;
+}
+
+void ContextMap2::Train(U8 B){
+  U8 bits = 1;
+  U64 tmask=t.size()-1;
+  for (int k=0;k<8;k++){
+    for (int i=0; i<cn; ++i){
+      if (cp[i])
+        *cp[i]=nex(*cp[i], bit);
+
+      // Update context pointers
+      if (k>1 && ByteHistory[i][0]==0)
+        cp[i]=0;
+      else
+      {
+        U16 chksum=cxt[i]>>16;
+        switch(k)
+        {
+          case 1: case 3: case 6: cp[i]=cp0[i]+1+(bits&1); break;
+          case 4: case 7: cp[i]=cp0[i]+3+(bits&3); break;
+          case 2: case 5: cp0[i]=cp[i]=t[(cxt[i]+bits)&tmask].get(chksum); break;
+          default:
+          {
+            cp0[i]=cp[i]=t[(cxt[i]+bits)&tmask].get(chksum);
+            // Update pending bit histories for bits 2-7
+            if (cp0[i][3]==2) {
+              const int c=cp0[i][4]+256;
+              U8 *p=t[(cxt[i]+(c>>6))&tmask].get(chksum);
+              p[0]=1+((c>>5)&1);
+              p[1+((c>>5)&1)]=1+((c>>4)&1);
+              p[3+((c>>4)&3)]=1+((c>>3)&1);
+              p=t[(cxt[i]+(c>>3))&tmask].get(chksum);
+              p[0]=1+((c>>2)&1);
+              p[1+((c>>2)&1)]=1+((c>>1)&1);
+              p[3+((c>>1)&3)]=1+(c&1);
+              cp0[i][6]=0;
+            }
+            // Update run count of previous context
+            ByteHistory[i][3] = ByteHistory[i][2];
+            ByteHistory[i][2] = ByteHistory[i][1];
+            if (ByteHistory[i][0]==0)  // new context
+              ByteHistory[i][0]=2, ByteHistory[i][1]=lastByte;
+            else if (ByteHistory[i][1]!=lastByte)  // different byte in context
+              ByteHistory[i][0]=1, ByteHistory[i][1]=lastByte;
+            else if (ByteHistory[i][0]<254)  // same byte in context
+              ByteHistory[i][0]+=2;
+            else if (ByteHistory[i][0]==255)
+              ByteHistory[i][0]=128;
+            ByteHistory[i]=cp0[i]+3;
+          } break;
+        }
+      }
+    }
+    bit = (B>>(7-k))&1;
+    bits+=bits + bit;
+  }
+  cn=0;
+  lastByte=B;
+}
+
+// Update the model with bit y, and predict next bit to mixer m.
+int ContextMap2::mix(Mixer& m) {
+  // Update model with y
+  U8 c1=buf(1);
+  int result=0;
+  U64 tmask=t.size()-1; 
+  for (int i=0; i<cn; ++i) {
+    if (cp[i]) {
+      assert(cp[i]>=&t[0].bh[0][0] && cp[i]<=&t[t.size()-1].bh[6][6]);
+      assert((uintptr_t(cp[i])&63)>=15);
+      *cp[i]=nex(*cp[i], y);
+    }
+
+    // Update context pointers
+    if (bpos>1 && ByteHistory[i][0]==0)
+      cp[i]=0;
+    else
+    {
+      U16 chksum=cxt[i]>>16;     
+      switch(bpos)
+      {
+        case 1: case 3: case 6: cp[i]=cp0[i]+1+(c0&1); break;
+        case 4: case 7: cp[i]=cp0[i]+3+(c0&3); break;
+        case 2: case 5: cp0[i]=cp[i]=t[(cxt[i]+c0)&tmask].get(chksum); break;
+        default:
+        {
+          cp0[i]=cp[i]=t[(cxt[i]+c0)&tmask].get(chksum);
+          // Update pending bit histories for bits 2-7
+          if (cp0[i][3]==2) {
+            const int c=cp0[i][4]+256;
+            U8 *p=t[(cxt[i]+(c>>6))&tmask].get(chksum);
+            p[0]=1+((c>>5)&1);
+            p[1+((c>>5)&1)]=1+((c>>4)&1);
+            p[3+((c>>4)&3)]=1+((c>>3)&1);
+            p=t[(cxt[i]+(c>>3))&tmask].get(chksum);
+            p[0]=1+((c>>2)&1);
+            p[1+((c>>2)&1)]=1+((c>>1)&1);
+            p[3+((c>>1)&3)]=1+(c&1);
+            cp0[i][6]=0;
+          }
+          ByteHistory[i][3] = ByteHistory[i][2];
+          ByteHistory[i][2] = ByteHistory[i][1];
+          // Update byte history of previous context
+          if (ByteHistory[i][0]==0)  // new context
+            ByteHistory[i][0]=2, ByteHistory[i][1]=c1;
+          else if (ByteHistory[i][1]!=c1)  // different byte in context
+            ByteHistory[i][0]=1, ByteHistory[i][1]=c1;
+          else if (ByteHistory[i][0]<254)  // same byte in context
+            ByteHistory[i][0]+=2;
+          else if (ByteHistory[i][0]==255)
+            ByteHistory[i][0]=128;
+          ByteHistory[i]=cp0[i]+3;
+          HasHistory[i]=*cp0[i]>15;
+        } break;
+      }
+    }
+
+    // predict from last byte in context
+    if ((ByteHistory[i][1]+256)>>(8-bpos)==c0) {
+      int rc=ByteHistory[i][0];  // count*2, +1 if 2 different bytes seen
+      int sign=(ByteHistory[i][1]>>(7-bpos)&1)*2-1;  // predicted bit + for 1, - for 0
+      int c=ilog(rc+1)<<(2+(~rc&1));
+      m.add(sign*c);
+    }
+    else if (bpos>0 && (ByteHistory[i][0]&1)>0) {
+      if ((ByteHistory[i][2]+256)>>(8-bpos)==c0)
+        m.add((((ByteHistory[i][2]>>(7-bpos))&1)*2-1)*128);
+      else if (HasHistory[i] && (ByteHistory[i][3]+256)>>(8-bpos)==c0)
+        m.add((((ByteHistory[i][3]>>(7-bpos))&1)*2-1)*128);
+      else
+        m.add(0);
+    }
+    else
+      m.add(0); //p=0.5
+
+    // predict from bit context
+    int s = 0;
+    if (cp[i]) s = *cp[i];
+    mix2(m,s,*Maps8b[i]);
+  
+    if (s>0) result++;
+
+    int n0=-~nex(s, 2), n1=-~nex(s, 3), k = (n1*64)/(n1+n0);
+    if (HasHistory[i]) {
+      s  = (ByteHistory[i][1]>>(7-bpos))&1;
+      s |= ((ByteHistory[i][2]>>(7-bpos))&1)*2;
+      s |= ((ByteHistory[i][3]>>(7-bpos))&1)*4;
+    }
+    else
+      s = 8;
+    m.add(stretch(Maps12b[i]->p((s<<9)|(bpos<<6)|k))>>2);
+    m.add(stretch(Maps6b[i]->p((s<<3)|bpos))>>2);
+  }
+  if (bpos==7) cn=0;
+  return result;
+}
 
 // Context map for large contexts.  Most modeling uses this type of context
 // map.  It includes a built in RunContextMap to predict the last byte seen
@@ -7038,7 +7276,7 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
 // This combines all the context models with a Mixer.
 
 class ContextModel{
-  ContextMapB64 cm;
+  ContextMap2 cm;
   exeModel exeModel1;
   RunContextMap rcm7, rcm9, rcm10;
   Mixer m;
@@ -7048,7 +7286,7 @@ class ContextModel{
   void UpdateContexts(U8 B);
   void Train();
 public:
-  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), m(1000, 4096+(1024+512+1024*3)*(level>=4), 7+5*(level>=4)), ft2(DEFAULT), filetype(DEFAULT), blocksize(0), blockinfo(0){
+  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), m(1016, 4096+(1024+512+1024*3)*(level>=4), 7+5*(level>=4)), ft2(DEFAULT), filetype(DEFAULT), blocksize(0), blockinfo(0){
     memset(&cxt[0], 0, sizeof(cxt));
     if (trainTXT) Train();
   }
