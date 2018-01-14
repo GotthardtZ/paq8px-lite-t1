@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on January 13, 2018
+/* paq8px file compressor/archiver.  Released on January 14, 2018
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -43,7 +43,7 @@ The compressed output file is named by adding ".paq8px" extension to
 the first named file (file1.paq8px).  Each file that exists will be
 added to the archive and its name will be stored without a path.
 The option -N specifies a compression level ranging from -0
-(fastest) to -8 (smallest).  The default is -5.  If there is
+(fastest) to -9 (smallest).  The default is -5.  If there is
 no option and only one file, then the program will pause when
 finished until you press the ENTER key (to support drag and drop).
 If file1.paq8px exists then it is overwritten.
@@ -599,7 +599,7 @@ Added gif recompression
 //Change the following values on a new build if applicable
 
 #define PROGNAME     "paq8px"  // Change this if you make a branch
-#define PROGVERSION  "129_fix1"
+#define PROGVERSION  "129_fix2"
 #define PROGYEAR     "2018"
 
 #define DEFAULT_LEVEL 5
@@ -628,7 +628,9 @@ Added gif recompression
 #include <dirent.h>
 #include <errno.h>
 #else
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #endif
 
@@ -749,7 +751,7 @@ public:
 // Constructors for T are not called, the allocated memory is initialized to 0s.
 // It's the caller's responsibility to populate the array with elements.
 // Parameters are checked and indexing is bounds checked if assertions are on.
-// Copy and assignment are not supported.
+// Use of copy and assignment constructors are not supported.
 //
 // a.size(): returns the number of T elements currently in the array.
 // a.resize(newsize): grows or shrinks the array.
@@ -759,7 +761,7 @@ public:
 static void chkindex(U64 index, U64 upper_bound)
 {
   if (index>=upper_bound) {
-    fprintf(stderr, "%d out of bounds %d\n", index, upper_bound);
+    fprintf(stderr, "%I64u out of bounds %I64u\n", index, upper_bound);
     quit();
   }
 }
@@ -1102,11 +1104,10 @@ public:
   }
   void setpos(U64 newpos) { 
     if(content_in_ram) {
-      filepos = newpos; 
-      assert(filepos<=filesize);// attempt to seek past end of file
-      if(filepos>filesize)filepos=filesize;
+      if(newpos>filesize)ram_to_disk(); //panic: we don't support seeking past end of file - let's switch to disk
+      else {filepos = newpos; return;}
     }  
-    else (*file_on_disk).setpos(newpos);
+    (*file_on_disk).setpos(newpos);
   }
   void setend() { 
     if(content_in_ram) filepos = filesize;
@@ -1190,7 +1191,7 @@ inline bool hasRecursion(Filetype ft) { return ft==CD || ft==ZLIB || ft==BASE64 
 inline bool hasInfo(Filetype ft) { return ft==IMAGE1 || ft==IMAGE4 || ft==IMAGE8 || ft==IMAGE8GRAY || ft==IMAGE24 || ft==IMAGE32 || ft==AUDIO || ft==PNG8 || ft==PNG8GRAY || ft==PNG24 || ft==PNG32; }
 inline bool hasTransform(Filetype ft) { return ft==IMAGE24 || ft==IMAGE32 || ft==EXE || ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF; }
 
-int level=DEFAULT_LEVEL;  // Compression level 0 to 8
+int level=DEFAULT_LEVEL;  // Compression level 0 to 9
 #define MEM (U64(65536)<<level)
 int y=0;  // Last bit, 0 or 1, set by encoder
 bool brute = false, trainEXE = false, trainTXT = false, adaptive = false, skipRGB = false;
@@ -1694,7 +1695,7 @@ public:
       mp->update();
       for (int i=0; i<ncxt; ++i) {
         int dp=dot_product(&tx[0], &wx[cxt[i]*N], nx)>>5;
-        if(dp<-2047)dp=-2047;if(dp>2047)dp=2047;
+        if(dp<-2047)dp=-2047;else if(dp>2047)dp=2047;
         mp->add(dp);
         pr[i]=squash(dp);
       }
@@ -2260,12 +2261,12 @@ private:
   Array<U32*> ByteHistory;
   Array<U8*> BitState;
   Array<bool> HasHistory;
-  int index;
+  U32 index;
   U8 lastByte, bits, lastBit, bitPos;
   inline void Update() {
     switch (bitPos) {
       case 0: {
-        for (int i=0; i<index; i++) {
+        for (U32 i=0; i<index; i++) {
           *BitState[i] = nex(*BitState[i], lastBit);
           *ByteHistory[i] = ((*ByteHistory[i])<<8)|lastByte;
           BitState[i] = Table.Find(Contexts[i], i, true);
@@ -2275,7 +2276,7 @@ private:
         break;
       }
       case 2: case 5: {
-        for (int i=0; i<index; i++) {
+        for (U32 i=0; i<index; i++) {
           *BitState[i] = nex(*BitState[i], lastBit);
           BitState[i] = Table.Find(Contexts[i]+bits*1337, i, false);
         }
@@ -2283,7 +2284,7 @@ private:
       }
       default: {
         int k = (lastBit+1)<<((bitPos%3)-(bitPos<2));
-        for (int i=0; i<index; i++) {
+        for (U32 i=0; i<index; i++) {
           *BitState[i] = nex(*BitState[i], lastBit);
           BitState[i]+=k;
         }
@@ -2340,7 +2341,7 @@ public:
     bits = (bitPos>0)?bits*2+lastBit:1;
     Update();
 
-    for (int i=0; i<index; i++) {
+    for (U32 i=0; i<index; i++) {
       int state = *BitState[i];
       result+=(state>0);
       int p1 = Maps8b[i]->p(state);
@@ -5394,7 +5395,6 @@ inline int X2(int i) {
 void wavModel(Mixer& m, int info, ModelStats *Stats = NULL) {
   static int col=0;
   static Array<int> pr{3*2}; // [3][2]
-  static Array<int> n{2};
   static Array<int> counter{2};
   static Array<double> F{49*49*2}; //[49][49][2]
   static Array<double> L{49*49}; //[49][49]
@@ -5423,7 +5423,7 @@ void wavModel(Mixer& m, int info, ModelStats *Stats = NULL) {
       }
     for (int chn=0; chn<channels; chn++) {
       F_(1,0,chn)=1.0;
-      n[chn]=counter[chn]=pr_(2,chn)=pr_(1,chn)=pr_(0,chn)=0;
+      counter[chn]=pr_(2,chn)=pr_(1,chn)=pr_(0,chn)=0;
     }
   }
   // Select previous samples and predicted sample as context
@@ -5448,37 +5448,34 @@ void wavModel(Mixer& m, int info, ModelStats *Stats = NULL) {
         z6=2*X1(1)-X1(2); 
         z7=X1(1);
       }
-      n[chn]++;
-      if (n[chn]==(256>>level)) {
-        if (channels==1) for (k=1; k<=S+D; k++) for (l=k; l<=S+D; l++) F_(k,l,chn)=(F_(k-1,l-1,chn)-X1(k)*X1(l))*a2;
-        else for (k=1; k<=S+D; k++) if (k!=S+1) for (l=k; l<=S+D; l++) if (l!=S+1) F_(k,l,chn)=(F_(k-1,l-1,chn)-(k-1<=S?X1(k):X2(k-S))*(l-1<=S?X1(l):X2(l-S)))*a2;
-        for (i=1; i<=S+D; i++) {
-           sum=F_(i,i,chn);
-           for (k=1; k<i; k++) sum-=L_(i,k)*L_(i,k);
-           sum=floor(sum+0.5);
-           sum=1.0/sum;
-           if (sum>0.0) {
-             L_(i,i)=sqrt(sum);
-             for (j=(i+1); j<=S+D; j++) {
-               sum=F_(i,j,chn);
-               for (k=1; k<i; k++) sum-=L_(j,k)*L_(i,k);
-               sum=floor(sum+0.5);
-               L_(j,i)=sum*L_(i,i);
-             }
-           } else break;
+
+      if (channels==1) for (k=1; k<=S+D; k++) for (l=k; l<=S+D; l++) F_(k,l,chn)=(F_(k-1,l-1,chn)-X1(k)*X1(l))*a2;
+      else for (k=1; k<=S+D; k++) if (k!=S+1) for (l=k; l<=S+D; l++) if (l!=S+1) F_(k,l,chn)=(F_(k-1,l-1,chn)-(k-1<=S?X1(k):X2(k-S))*(l-1<=S?X1(l):X2(l-S)))*a2;
+      for (i=1; i<=S+D; i++) {
+          sum=F_(i,i,chn);
+          for (k=1; k<i; k++) sum-=L_(i,k)*L_(i,k);
+          sum=floor(sum+0.5);
+          sum=1.0/sum;
+          if (sum>0.0) {
+            L_(i,i)=sqrt(sum);
+            for (j=(i+1); j<=S+D; j++) {
+              sum=F_(i,j,chn);
+              for (k=1; k<i; k++) sum-=L_(j,k)*L_(i,k);
+              sum=floor(sum+0.5);
+              L_(j,i)=sum*L_(i,i);
+            }
+          } else break;
+      }
+      if (i>S+D && counter[chn]>S+1) {
+        for (k=1; k<=S+D; k++) {
+          F_(k,0,chn)=F_(0,k,chn);
+          for (j=1; j<k; j++) F_(k,0,chn)-=L_(k,j)*F_(j,0,chn);
+          F_(k,0,chn)*=L_(k,k);
         }
-        if (i>S+D && counter[chn]>S+1) {
-          for (k=1; k<=S+D; k++) {
-            F_(k,0,chn)=F_(0,k,chn);
-            for (j=1; j<k; j++) F_(k,0,chn)-=L_(k,j)*F_(j,0,chn);
-            F_(k,0,chn)*=L_(k,k);
-          }
-          for (k=S+D; k>0; k--) {
-            for (j=k+1; j<=S+D; j++) F_(k,0,chn)-=L_(j,k)*F_(j,0,chn);
-            F_(k,0,chn)*=L_(k,k);
-          }
+        for (k=S+D; k>0; k--) {
+          for (j=k+1; j<=S+D; j++) F_(k,0,chn)-=L_(j,k)*F_(j,0,chn);
+          F_(k,0,chn)*=L_(k,k);
         }
-        n[chn]=0;
       }
       sum=0.0;
       for (l=1; l<=S+D; l++) sum+=F_(l,0,chn)*(l<=S?X1(l):X2(l-S));
@@ -7175,9 +7172,9 @@ int ContextModel::Predict(ModelStats *Stats){
   if (bpos!=0)
   {
     c=c0<<(8-bpos); if (bpos==1)c|=c3>>1;
-    c=min(bpos,5)<<8 | c1>>5 | (c2>>5)<<3 | c&192;
+    c=min(bpos,5)<<8 | c1>>5 | (c2>>5)<<3 | (c&192);
   }
-  else c=c3>>7 | (c4>>31)<<1 | (c2>>6)<<2 | c1&240;
+  else c=c3>>7 | (c4>>31)<<1 | (c2>>6)<<2 | (c1&240);
   m.set(c, 1536);
   int pr=m.p();
   return pr;
@@ -7598,8 +7595,8 @@ Filetype detect(File *in, U64 blocksize, Filetype type, int &info) {
   // For image detection
   static int deth=0,detd=0;  // detected header/data size in bytes
   static Filetype dett;  // detected block type
-  if (deth) return in->setpos(start+deth),deth=0,dett;
-  else if (detd) return in->setpos(start+detd),detd=0,DEFAULT;
+  if (deth) {in->setpos(start+deth);deth=0;return dett;}
+  else if (detd) {in->setpos(start+detd);detd=0;return DEFAULT;}
 
   for (int i=0; i<n; ++i) {
     int c=in->getc();
@@ -9220,7 +9217,7 @@ int main(int argc, char** argv) {
     bool doList=false;  // -l option
     int l=0;
     if (argc>1 && argv[1][0]=='-' && argv[1][1] && (!argv[1][2] || (argv[1][2]=='[' && (l=(int)strlen(argv[1]))>3 && argv[1][l-1]==']'))) {
-      if (argv[1][1]>='0' && argv[1][1]<='8'){
+      if (argv[1][1]>='0' && argv[1][1]<='9'){
         level=argv[1][1]-'0';
         l-=2;
         while (l>2){
@@ -9240,7 +9237,7 @@ int main(int argc, char** argv) {
       else if ((argv[1][1]&0xDF)=='L' && !argv[1][2])
         doList=true;
       else
-        quit("Valid options are -0[switches] through -8[switches], -d, -l\n");
+        quit("Valid options are -0[switches] through -9[switches], -d, -l\n");
       --argc;
       ++argv;
       pause=false;
@@ -9260,8 +9257,8 @@ int main(int argc, char** argv) {
         "To compress:\n"
         "  " PROGNAME " -level[switches] file               (compresses to file." PROGNAME ")\n"
         "  " PROGNAME " file                      (level -%d, pause when done)\n"
-        "level: -0 = store, -1 -2 -3 = faster (uses 35, 48, 59 MB)\n"
-        "-4 -5 -6 -7 -8 = smaller (uses 133, 233, 435, 837, 1643 MB)\n"
+        "level: -0 = store, -1 -2 -3 = faster (uses 39, 45, 57 MB)\n"
+        "-4 -5 -6 -7 -8 -9 = smaller (uses 147, 250, 457, 870, 1696, 3348 MB)\n"
         "Optional switches:\nb = Brute-force detection of DEFLATE streams\n"
         "e = Pre-train x86/x64 model\nt = Pre-train main model with dictionary file (english.dic)\n"
         "a = Adaptive learning rate\ns = Skip the color transform, just reorder the RGB channels\n"
@@ -9357,11 +9354,11 @@ int main(int argc, char** argv) {
         printf("%s: not a %s file\n", archiveName.c_str(), PROGNAME), quit();
       level=header[(int)strlen(PROGNAME)+1];
       trainEXE = (level&0x10)!=0; trainTXT = (level&0x20)!=0; adaptive = (level&0x40)!=0; skipRGB = (level&0x80)!=0; level&=0xF;
-      if (level<0||level>8) level=DEFAULT_LEVEL;
+      if (level<0||level>9) level=DEFAULT_LEVEL;
     }
 
     // Set globals according to option
-    assert(level>=0 && level<=8);
+    assert(level>=0 && level<=9);
     buf.setsize(MEM*8);
     Encoder en(mode, archive);
 
