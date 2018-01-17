@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on January 14, 2018
+/* paq8px file compressor/archiver.  Released on January 17, 2018
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -599,7 +599,7 @@ Added gif recompression
 //Change the following values on a new build if applicable
 
 #define PROGNAME     "paq8px"  // Change this if you make a branch
-#define PROGVERSION  "130"
+#define PROGVERSION  "130_fix1"
 #define PROGYEAR     "2018"
 
 #define DEFAULT_LEVEL 5
@@ -636,11 +636,8 @@ Added gif recompression
 
 #include <sys/stat.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <time.h>
 #include <math.h>
-#include <ctype.h>
 
 #include <zlib.h>
 
@@ -877,7 +874,7 @@ public:
 
 
 //////////////////// IO functions and classes ///////////////////
-// These classes are responsible for all the file/folder
+// These functions/classes are responsible for all the file/folder
 // operations.
 
 /////////////////////////// Folders /////////////////////////////
@@ -934,6 +931,7 @@ void makedirectories(const char* filename) {
 // To avoid this issue with tmpfile() we simply use fopen() instead.
 // We create the temporary file in the directory where the executable is launched from. 
 // Luckily the MS C runtime library provides two (MS specific) fopen() flags: "T"emporary and "D"elete.
+
 FILE* maketmpfile(void) {
 #if defined(WINDOWS)  
   char szTempFileName[MAX_PATH];
@@ -947,6 +945,7 @@ FILE* maketmpfile(void) {
 
 //This is the base class.
 //This is an abstract class for all the required file operations.
+
 class File {
 public:
   virtual ~File() = default;
@@ -967,7 +966,8 @@ public:
 };
 
 // This class is responsible for files on disk
-// It simply passes function calls to the operating system
+// It simply passes function calls to stdio
+
 class FileDisk :public File {
 protected:
   FILE *file;
@@ -1006,6 +1006,7 @@ public:
 // Initially it uses RAM for temporary file content.
 // In case of the content size in RAM grows too large, it is written to disk, 
 // the RAM is freed and all subsequent file operations will use the file on disk.
+
 class FileTmp :public File {
 private:
   //file content in ram
@@ -1046,8 +1047,8 @@ private:
 public:
   FileTmp() {content_in_ram=new Array<U8,1>(0); filepos=0; filesize=0; file_on_disk = 0;}
   ~FileTmp() {close();}
-  bool open(const char *filename) { assert(true); return false; } //this method is forbidden for temporary files
-  void create(const char *filename) { assert(true); } //this method is forbidden for temporary files
+  bool open(const char *filename) { assert(false); return false; } //this method is forbidden for temporary files
+  void create(const char *filename) { assert(false); } //this method is forbidden for temporary files
   void close() {
     forget_content_in_ram();
     forget_file_on_disk();
@@ -7703,17 +7704,20 @@ U32 edc_compute(const U8  *src, int size) {
   return edc;
 }
 
-int expand_cd_sector(U8 *data, int a, int test) {
+int expand_cd_sector(U8 *data, int address, int test) {
   U8 d2[2352];
   eccedc_init();
+  //sync pattern: 00 FF FF FF FF FF FF FF FF FF FF 00
   d2[0]=d2[11]=0;
-  for (int i=1; i<11; i++) d2[i]=255;
+  for (int i=1; i<11; i++) d2[i]=255; 
+  //determine Mode and Form
   int mode=(data[15]!=1?2:1);
   int form=(data[15]==3?2:1);
-  if (a==-1) for (int i=12; i<15; i++) d2[i]=data[i]; else {
-    int c1=(a&15)+((a>>4)&15)*10;
-    int c2=((a>>8)&15)+((a>>12)&15)*10;
-    int c3=((a>>16)&15)+((a>>20)&15)*10;
+  //address (Minutes, Seconds, Sectors)
+  if (address==-1) for (int i=12; i<15; i++) d2[i]=data[i]; else {
+    int c1=(address&15)+((address>>4)&15)*10;
+    int c2=((address>>8)&15)+((address>>12)&15)*10;
+    int c3=((address>>16)&15)+((address>>20)&15)*10;
     c1=(c1+1)%75;
     if (c1==0) {
       c2=(c2+1)%60;
@@ -7724,15 +7728,15 @@ int expand_cd_sector(U8 *data, int a, int test) {
     d2[14]=(c1%10)+16*(c1/10);
   }
   d2[15]=mode;
-  if (mode==2) for (int i=16; i<24; i++) d2[i]=data[i-4*(i>=20)];
+  if (mode==2) for (int i=16; i<24; i++) d2[i]=data[i-4*(i>=20)]; //8 byte subheader
   if (form==1) {
     if (mode==2) {
       d2[1]=d2[12],d2[2]=d2[13],d2[3]=d2[14];
       d2[12]=d2[13]=d2[14]=d2[15]=0;
     } else {
-      for(int i=2068; i<2076; i++) d2[i]=0;
+      for(int i=2068; i<2076; i++) d2[i]=0; //Mode1: reserved 8 (zero) bytes 
     }
-    for (int i=16+8*(mode==2); i<2064+8*(mode==2); i++) d2[i]=data[i];
+    for (int i=16+8*(mode==2); i<2064+8*(mode==2); i++) d2[i]=data[i]; //data bytes
     U32 edc=edc_compute(d2+16*(mode==2), 2064-8*(mode==2));
     for (int i=0; i<4; i++) d2[2064+8*(mode==2)+i]=(edc>>(8*i))&0xff;
     ecc_compute(d2+12, 86, 24,  2, 86, d2+2076);
@@ -7744,9 +7748,9 @@ int expand_cd_sector(U8 *data, int a, int test) {
   }
   for (int i=0; i<2352; i++) if (d2[i]!=data[i] && test) form=2;
   if (form==2) {
-    for (int i=24; i<2348; i++) d2[i]=data[i];
+    for (int i=24; i<2348; i++) d2[i]=data[i]; //data bytes
     U32 edc=edc_compute(d2+16, 2332);
-    for (int i=0; i<4; i++) d2[2348+i]=(edc>>(8*i))&0xff;
+    for (int i=0; i<4; i++) d2[2348+i]=(edc>>(8*i))&0xff; //EDC
   }
   for (int i=0; i<2352; i++) if (d2[i]!=data[i] && test) return 0; else data[i]=d2[i];
   return mode+form-1;
@@ -8380,15 +8384,15 @@ void encode_cd(File *in, File *out, U64 size, int info) {
   out->putc((blockresidual>>8)&255);
   out->putc(blockresidual &255);
   for (U64 offset=0; offset<size; offset+=BLOCK) {
-    if (offset+BLOCK > size) {
+    if (offset+BLOCK > size) { //residual
       in->blockread(&blk[0], size-offset);
       out->blockwrite(&blk[0], size-offset);
-    } else {
+    } else { //normal sector
       in->blockread(&blk[0], BLOCK);
-      if (info==3) blk[15]=3;
-      if (offset==0) out->blockwrite(&blk[12], 4+4*(blk[15]!=1));
-      out->blockwrite(&blk[16+8*(blk[15]!=1)], 2048+276*(info==3));
-      if (offset+BLOCK*2 > size && blk[15]!=1) out->blockwrite(&blk[16], 4);
+      if (info==3) blk[15]=3; //indicate Mode2
+      if (offset==0) out->blockwrite(&blk[12], 4+4*(blk[15]!=1)); //4-byte address + 4 bytes from the 8-byte subheader goes only to the first sector
+      out->blockwrite(&blk[16+8*(blk[15]!=1)], 2048+276*(info==3)); //user data goes to all sectors
+      if (offset+BLOCK*2 > size && blk[15]!=1) out->blockwrite(&blk[16], 4); //in Mode2 4 bytes from the 8-byte subheader goes after the last sector
     }
   }
 }
@@ -8397,37 +8401,39 @@ U64 decode_cd(File *in, U64 size, File *out, FMode mode, U64 &diffFound) {
   //TODO: Large file support
   const int BLOCK=2352;
   U8 blk[BLOCK];
-  U64 i=0, i2=0;
-  int a=-1, bsize=0;
+  U64 i=0; //*in position
+  U64 nextblockpos=0;
+  int address=-1;
+  int datasize=0;
   U64 residual=(in->getc() << 8) + in->getc();
   size -=2;
   while (i<size) {
-    if (size-i== residual) {
+    if (size-i == residual) { //residual data after last sector
       in->blockread(blk, residual);
-      out->blockwrite(blk, residual);
-      i+= residual;
-      i2+= residual;
-    } else if (i==0) {
-      in->blockread(blk+12, 4);
-      if (blk[15]!=1) in->blockread(blk+16, 4);
-      bsize=2048+(blk[15]==3)*276;
-      i+=4*(blk[15]!=1)+4;
-    } else {
-      a=(blk[12]<<16)+(blk[13]<<8)+blk[14];
+      if (mode==FDECOMPRESS) out->blockwrite(blk, residual);
+      else if (mode==FCOMPARE) for (int j=0; j<residual; ++j) if (blk[j]!= out->getc() && !diffFound) diffFound=nextblockpos+j+1;
+      return nextblockpos+residual;
+    } else if (i==0) { //first sector
+      in->blockread(blk+12, 4); //header (4 bytes) consisting of address (Minutes, Seconds, Sectors) and mode (1 = Mode1, 2 = Mode2/Form1, 3 = Mode2/Form2)
+      if (blk[15]!=1) in->blockread(blk+16, 4);  //Mode2: 4 bytes from the read 8-byte subheader 
+      datasize=2048+(blk[15]==3)*276; //user data bytes: Mode1 and Mode2/Form1: 2048 (ECC is present) or Mode2/Form2: 2048+276=2324 bytes (ECC is not present)
+      i+=4+4*(blk[15]!=1); //4 byte header + ( Mode2: 4 bytes from the 8-byte subheader )
+    } else { //normal sector
+      address=(blk[12]<<16)+(blk[13]<<8)+blk[14]; //3-byte address (Minutes, Seconds, Sectors) 
     }
-    in->blockread(blk+16+(blk[15]!=1)*8, bsize);
-    i+=bsize;
-    if (bsize>2048) blk[15]=3;
-    if (blk[15]!=1 && size-residual-i==4) {
+    in->blockread(blk+16+(blk[15]!=1)*8, datasize);  //read data bytes, but skip 8-byte subheader in Mode 2 (which we processed alread above)
+    i+=datasize;
+    if (datasize>2048) blk[15]=3; //indicate Mode2/Form2
+    if (blk[15]!=1 && size-residual-i==4) { //Mode 2: we are at the last sector - grab the 4 subheader bytes
       in->blockread(blk+16, 4);
       i+=4;
     }
-    expand_cd_sector(blk, a, 0);
+    expand_cd_sector(blk, address, 0);
     if (mode==FDECOMPRESS) out->blockwrite(blk, BLOCK);
-    else if (mode==FCOMPARE) for (int j=0; j<BLOCK; ++j) if (blk[j]!= out->getc() && !diffFound) diffFound=i2+j+1;
-    i2+=BLOCK;
+    else if (mode==FCOMPARE) for (int j=0; j<BLOCK; ++j) if (blk[j]!= out->getc() && !diffFound) diffFound=nextblockpos+j+1;
+    nextblockpos+=BLOCK;
   }
-  return i2;
+  return nextblockpos;
 }
 
 
@@ -9142,7 +9148,7 @@ U64 decode_func(Filetype type, Encoder &en, File *tmp, U64 len, int info, File *
   else if (type==ZLIB) return decode_zlib(tmp, len, out, mode, diffFound);
   else if (type==BASE64) return decode_base64(tmp, out, mode, diffFound);
   else if (type==GIF) return decode_gif(tmp, len, out, mode, diffFound);
-  else { assert(true); return 0; }
+  else { assert(false); return 0; }
 }
 
 U64 encode_func(Filetype type, File *in, File *tmp, U64 len, int info, int &hdrsize) {
@@ -9153,7 +9159,7 @@ U64 encode_func(Filetype type, File *in, File *tmp, U64 len, int info, int &hdrs
   else if (type==ZLIB) return encode_zlib(in, tmp, len, hdrsize)?0:1;
   else if (type==BASE64) encode_base64(in, tmp, len);
   else if (type==GIF) return encode_gif(in, tmp, len, hdrsize)?0:1;
-  else assert(true);
+  else assert(false);
   return 0;
 }
 
@@ -9163,7 +9169,7 @@ void transform_encode_block(Filetype type, File *in, U64 len, Encoder &en, int i
     int hdrsize=0;
     U64 diffFound=encode_func(type, in, &tmp, len, info, hdrsize);
     const U64 tmpsize=tmp.curpos();
-    tmp.setpos(tmpsize); //switch to  to read mode
+    tmp.setpos(tmpsize); //switch to read mode
     if (!diffFound) {
       tmp.setpos(0);
       en.setFile(&tmp);
@@ -9236,7 +9242,7 @@ void compressRecursive(File *in, const U64 blocksize, Encoder &en, char *blstr, 
       if (type==AUDIO) printf(" (%s)", audiotypes[info%4]);
       else if (type==IMAGE1 || type==IMAGE4 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32 || (type==ZLIB && (info>>24)>=PNG8)) printf(" (width: %d)", (type==ZLIB)?(info&0xFFFFFF):info);
       else if (hasRecursion(type) && (info>>24) > 0) printf(" (%s)",typenames[info>>24]);
-      else if (type==CD) printf(" (m%d/f%d)", info==1?1:2, info!=3?1:2);
+      else if (type==CD) printf(" (mode%d/form%d)", info==1?1:2, info!=3?1:2); 
       printf("\n");
       transform_encode_block(type, in, len, en, info, blstr, recursion_level, p1, p2, begin);
       p1=p2;
