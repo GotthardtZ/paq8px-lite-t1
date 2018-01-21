@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on January 18, 2018
+/* paq8px file compressor/archiver.  Released on January 21, 2018
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -599,7 +599,7 @@ Added gif recompression
 //Change the following values on a new build if applicable
 
 #define PROGNAME     "paq8px"  // Change this if you make a branch
-#define PROGVERSION  "130_fix2"
+#define PROGVERSION  "131"
 #define PROGYEAR     "2018"
 
 #define DEFAULT_LEVEL 5
@@ -1979,110 +1979,6 @@ inline U8* HashTable<B>::operator[](U32 i) { //i: context selector
   return p+i+1;
 }
 
-/*
-HashTable with buckets of 64-bytes, 7 available slots per bucket, 7 bytes per slot.
-Each slot is verified by an 8 bit checksum, 5 bit type (usually the context order)
-and 1 bit flag (usually to request the first slot for a context at a byte-boundary)
-
-Collisions are handled by a replacement policy that scores each slot based on their
-overall usage (as implied by the 1st state byte) and their placement in an MTF list
-stating recency usage.
-*/
-
-class HashTableB64 {
-private:
-  const int LRU_BIAS = 4; // higher values favor the replacement of the least recently used slot instead of least overall used slot.
-  const int LRU_SEARCH_COUNT = 3; //number of MTF tail elements to consider when looking for a replacement slot
-  Array<U8,64> Table;
-  const U64 Mask; // bucket access mask
-  U32 bMTF; // bucket MTF list
-  U64 *bInfo; // bucket info, uses 64 bits
-  U8 *p;
-  bool bFull; // bucket is full?
-  inline U32 MTFItem(const U32 i){ return (bMTF>>(18-i*3))&7; }
-  inline U32 ChooseReplacement(const U64 Bucket) {
-    assert(bFull);
-    int worst = 0xFFFF;
-    U32 i = 0;
-    for (int j=6; j>=(7-LRU_SEARCH_COUNT); j--) {
-      U32 k = MTFItem(j)-1;
-      assert(k<7);
-      int score = p[Bucket+15+k*7]-j*LRU_BIAS;
-      if (score<worst) {
-        i = k;
-        worst = score;
-      }
-    }
-    return i;
-  }
-  inline void MoveToFront(const U32 i) {
-    assert(i>0 && i<=7);
-    U32 k=0, j=0;
-    if (bFull) {
-      for (; k<7 && (j = MTFItem(k))!=i; k++) assert(j>0);
-      if (k>0) {
-        bMTF = ((bMTF&(0xFFFFFFFFu<<(21-k*3)))>>3)|(bMTF&((1<<(18-k*3))-1))|(j<<18);
-        (*bInfo) = ((*bInfo)&0xFFFFFFFFE00000FFu)|(bMTF<<8);
-      }
-    }
-    else {
-      for (; k<7 && (j = MTFItem(k))!=i && j>0; k++) {}
-      if (j==0) {
-        bMTF = (bMTF>>3)|((k+1)<<18);
-        (*bInfo) = ((*bInfo)&0xFFFFFFFFE00000FFu)|(bMTF<<8)|(k==6);
-      }
-      else if (k>0) {
-        bMTF = ((bMTF&(0xFFFFFFFFu<<(21-k*3)))>>3)|(bMTF&((1<<(18-k*3))-1))|(j<<18);
-        (*bInfo) = ((*bInfo)&0xFFFFFFFFE00000FFu)|(bMTF<<8);
-      }
-    }
-  }
-public:
-  HashTableB64(U64 Size): Table(Size), Mask(Size-64) {
-    assert((Size&(Size-1))==0);
-    assert((Size>>10)>0);
-    p = &Table[0];
-  }
-  inline U8* Find(U64 ctx, U32 type, const bool flag) {
-    ctx*=123456791;
-    ctx = (ctx<<32)|(ctx>>32);
-    ctx*=234567891;
-    type = min(0x1F, type);
-    U8 chk = ctx>>56; // 8-bit checksum
-    ctx = (ctx*64)&Mask;
-    bInfo = (U64*)&p[ctx];
-    bFull = (*bInfo)&1;
-    U32 bFlags = ((*bInfo)>>1)&0x7F; // bucket flags, 7 bits, 1 bit per slot
-    bMTF = ((*bInfo)>>8)&0x1FFFFFu;
-    assert(bFull || (bMTF&7)==0);
-    U32 k = 0;
-    if (bFull) {
-      for (; k<7; k++) {
-        if (p[ctx+8+k]==chk && ((bFlags>>k)&1)==flag && (((*bInfo)>>(59-k*5))&0x1F)==type) {
-          MoveToFront(k+1);
-          return p+ctx+15+k*7;
-        }
-      }
-      k = ChooseReplacement(ctx);
-    }
-    else {
-      for (; k<7 && MTFItem(k)!=0; k++) {
-        if (p[ctx+8+k]==chk && ((bFlags>>k)&1)==flag && (((*bInfo)>>(59-k*5))&0x1F)==type) {
-          MoveToFront(k+1);
-          return p+ctx+15+k*7;
-        }
-      }
-    }
-    assert(k<7);
-    MoveToFront(k+1);
-    p[ctx+8+k] = chk;
-    bFlags = (bFlags&(0x7F-(1<<k)))|(flag<<k);
-    (*bInfo) = ((*bInfo)&(0xFFFFFFFFFFFFFF01u-(0x1Full<<(59-k*5))))|(bFlags<<1)|(((U64)type)<<(59-k*5));
-    memset(&p[ctx+15+k*7], 0, 7);
-    return p+ctx+15+k*7;
-  }
-};
-
 /////////////////////////// ContextMap /////////////////////////
 //
 // A ContextMap maps contexts to a bit histories and makes predictions
@@ -2237,379 +2133,6 @@ public:
     }
   }
 };
-
-/*
-Context map for large contexts (64bits).
-Maps to a bit history state and 4 MRU byte history.
-
-Bit and byte histories are stored in a hash table with 64 byte buckets. 
-The buckets are indexed by a context ending after 0, 2 or 5 bits of the
-current byte. Thus, each byte modeled results in 3 main memory accesses
-per context, with all other accesses to cache.
-
-On a byte boundary (bit 0), only 3 of the 7 bit history states are used.
-The remaining 4 bytes are then used to store the last bytes seen in this
-context. This byte history is then combined with the bit history states
-to provide additional states that are then mapped to predictions.
-*/
-
-class ContextMapB64 {
-private:
-  const U32 C;
-  HashTableB64 Table;
-  StateMap **Maps7b, **Maps8b, **Maps12b;
-  Array<U64> Contexts;
-  Array<U32*> ByteHistory;
-  Array<U8*> BitState;
-  Array<bool> HasHistory;
-  U32 index;
-  U8 lastByte, bits, lastBit, bitPos;
-  inline void Update() {
-    switch (bitPos) {
-      case 0: {
-        for (U32 i=0; i<index; i++) {
-          *BitState[i] = nex(*BitState[i], lastBit);
-          *ByteHistory[i] = ((*ByteHistory[i])<<8)|lastByte;
-          BitState[i] = Table.Find(Contexts[i], i, true);
-          ByteHistory[i] = (U32*)(BitState[i]+3);
-          HasHistory[i] = *BitState[i]>0;
-        }
-        break;
-      }
-      case 2: case 5: {
-        for (U32 i=0; i<index; i++) {
-          *BitState[i] = nex(*BitState[i], lastBit);
-          BitState[i] = Table.Find(Contexts[i]+bits*1337, i, false);
-        }
-        break;
-      }
-      default: {
-        int k = (lastBit+1)<<((bitPos%3)-(bitPos<2));
-        for (U32 i=0; i<index; i++) {
-          *BitState[i] = nex(*BitState[i], lastBit);
-          BitState[i]+=k;
-        }
-      }
-    }
-  }
-public:
-  ContextMapB64(const U64 Size, const U32 Count) : C(Count), Table(Size), Contexts(Count), ByteHistory(Count), BitState(Count), HasHistory(Count){
-    Maps7b = new StateMap*[C];
-    Maps8b = new StateMap*[C];
-    Maps12b = new StateMap*[C];
-    for (U32 i=0; i<C; i++) {
-      Maps7b[i] = new StateMap((1<<7)+8);
-      Maps8b[i] = new StateMap(1<<8);
-      Maps12b[i] = new StateMap((1<<12)+(1<<9));
-      BitState[i] = Table.Find(0, i, true);
-      ByteHistory[i] = (U32*)(BitState[i]+3);
-    }
-    index = 0;
-    lastByte = lastBit = 0;
-    bits = bitPos = 1;
-  }
-  ~ContextMapB64() {
-    for (U32 i=0; i<C; i++) {
-      delete Maps7b[i];
-      delete Maps8b[i];
-      delete Maps12b[i];
-    }
-    delete[] Maps7b;
-    delete[] Maps8b;
-    delete[] Maps12b;
-  }
-  inline void set(U64 ctx) {
-    ctx = ctx*987654323+index;
-    ctx = ctx<<32|ctx>>32;
-    Contexts[index] = ctx*123456791+index;
-    index++;
-    assert(index>0 && index<=C);
-  }
-  void Train(U8 B){
-    for (bitPos=0; bitPos<8; bitPos++){
-      Update();
-      lastBit = (B>>(7-bitPos))&1;
-      bits += bits+lastBit;
-    }
-    index = 0;
-    bits = bitPos = 1;
-    lastByte = B;
-  }
-  int mix(Mixer& m) {
-    int result = 0;
-    lastByte+=lastByte+lastBit;
-    lastBit = y;
-    bits = (bitPos>0)?bits*2+lastBit:1;
-    Update();
-
-    for (U32 i=0; i<index; i++) {
-      int state = *BitState[i];
-      result+=(state>0);
-      int p1 = Maps8b[i]->p(state);
-      int n0=nex(state, 2), n1=nex(state, 3), k=-~n1;
-      k = (k*64)/(k-~n0);
-      n0=-!n0, n1=-!n1;
-      if (HasHistory[i]) {
-        state  = ((*ByteHistory[i])>>(31-bitPos))&1;
-        state |= ((*ByteHistory[i])>>(22-bitPos))&2;
-        state |= ((*ByteHistory[i])>>(13-bitPos))&4;
-        state |=(((*ByteHistory[i])>>( 7-bitPos))&1)*8;
-      }
-      else
-        state = 0x10;
-      int st = stretch(p1)>>2;
-      m.add(st);
-      m.add((p1-2047)>>3);
-      p1>>=4;
-      int p0 = 255-p1;
-      m.add((st*(n1-n0))/2);
-      m.add((p1&n0)-(p0&n1));
-      m.add(stretch(Maps12b[i]->p(((state>>1)<<9)|(bitPos<<6)|k))>>2);
-      m.add(stretch(Maps7b[i]->p((state<<3)|bitPos))>>2);
-    }
-    if (bitPos==7) index = 0;
-    bitPos = (bitPos+1)&7;
-    return result;
-  }
-};
-
-class ContextMap2 {
-  const int C;  // max number of contexts
-  class E {  // hash element, 64 bytes
-    U16 chk[7];  // byte context checksums
-    U8 last;     // last 2 accesses (0-6) in low, high nibble
-  public:
-    U8 bh[7][7]; // byte context, 3-bit context -> bit history state
-                 // bh[][0] = 1st bit, bh[][1,2] = 2nd bit, bh[][3..6] = 3rd bit
-                 // bh[][0] is also a replacement priority, 0 = empty
-    U8* get(U16 chk);  // Find element (0-6) matching checksum.
-                       // If not found, insert or replace lowest priority (not last).
-  };
-  Array<E,64> t;  // bit histories for bits 0-1, 2-4, 5-7
-                  // For 0-1, also contains a run count in bh[][4] and value in bh[][5]
-                  // and pending update count in bh[7]
-  Array<U8*> cp;   // C pointers to current bit history
-  Array<U8*> cp0;  // First element of 7 element array containing cp[i]
-  Array<U32> cxt;  // C whole byte contexts (hashes)
-  Array<U8*> ByteHistory; // C [0..3] = count, value, unused, unused
-                   //StateMap *sm;    // C maps of state -> p
-  Array<bool> HasHistory;
-  StateMap **Maps6b, **Maps8b, **Maps12b;
-  int cn;          // Next context to set by set()
-  U8 bit, lastByte;
-public:
-  ContextMap2(int m, int c=1);  // m = memory in bytes, a power of 2, C = c
-  ~ContextMap2();
-  void Train(U8 B);
-  void set(U32 cx, int next=-1);   // set next whole byte context to cx; if "next" is 0 then set order does not matter
-  int mix(Mixer& m);
-};
-
-// Find or create hash element matching checksum ch
-inline U8* ContextMap2::E::get(U16 ch) {
-  if (chk[last&15]==ch) return &bh[last&15][0];
-  int b=0xffff, bi=0;
-  for (int i=0; i<7; ++i) {
-    if (chk[i]==ch) return last=last<<4|i, (U8*)&bh[i][0];
-    int pri=bh[i][0];
-    if (pri<b && (last&15)!=i && last>>4!=i) b=pri, bi=i;
-  }
-  return last=0xf0|bi, chk[bi]=ch, (U8*)memset(&bh[bi][0], 0, 7);
-}
-
-// Construct using m bytes of memory for c contexts
-ContextMap2::ContextMap2(int m, int c): C(c), t(m>>6), cp(c), cp0(c),
-cxt(c), ByteHistory(c), HasHistory(c), cn(0) {
-  assert(m>=64 && (m&(m-1))==0);  // power of 2?
-  assert(sizeof(E)==64);
-  Maps6b = new StateMap*[C];
-  Maps8b = new StateMap*[C];
-  Maps12b = new StateMap*[C];
-  for (int i=0; i<C; ++i) {
-    Maps6b[i] = new StateMap((1<<6)+8);
-    Maps8b[i] = new StateMap(1<<8);
-    Maps12b[i] = new StateMap((1<<12)+(1<<9));
-    cp0[i]=cp[i]=&t[0].bh[0][0];
-    ByteHistory[i]=cp[i]+3;
-  }
-  bit=lastByte=0;
-}
-
-ContextMap2::~ContextMap2() {
-  for (U32 i=0; i<C; i++) {
-    delete Maps6b[i];
-    delete Maps8b[i];
-    delete Maps12b[i];
-  }
-  delete[] Maps6b;
-  delete[] Maps8b;
-  delete[] Maps12b;
-}
-
-// Set the i'th context to cx
-inline void ContextMap2::set(U32 cx, int next) {
-  int i=cn++;
-  i&=next;
-  assert(i>=0 && i<C);
-  cx=cx*987654323+i;  // permute (don't hash) cx to spread the distribution
-  cx=cx<<16|cx>>16;
-  cxt[i]=cx*123456791+i;
-}
-
-void ContextMap2::Train(U8 B){
-  U8 bits = 1;
-  U64 tmask=t.size()-1;
-  for (int k=0;k<8;k++){
-    for (int i=0; i<cn; ++i){
-      if (cp[i])
-        *cp[i]=nex(*cp[i], bit);
-
-      // Update context pointers
-      if (k>1 && ByteHistory[i][0]==0)
-        cp[i]=0;
-      else
-      {
-        U16 chksum=cxt[i]>>16;
-        switch(k)
-        {
-          case 1: case 3: case 6: cp[i]=cp0[i]+1+(bits&1); break;
-          case 4: case 7: cp[i]=cp0[i]+3+(bits&3); break;
-          case 2: case 5: cp0[i]=cp[i]=t[(cxt[i]+bits)&tmask].get(chksum); break;
-          default:
-          {
-            cp0[i]=cp[i]=t[(cxt[i]+bits)&tmask].get(chksum);
-            // Update pending bit histories for bits 2-7
-            if (cp0[i][3]==2) {
-              const int c=cp0[i][4]+256;
-              U8 *p=t[(cxt[i]+(c>>6))&tmask].get(chksum);
-              p[0]=1+((c>>5)&1);
-              p[1+((c>>5)&1)]=1+((c>>4)&1);
-              p[3+((c>>4)&3)]=1+((c>>3)&1);
-              p=t[(cxt[i]+(c>>3))&tmask].get(chksum);
-              p[0]=1+((c>>2)&1);
-              p[1+((c>>2)&1)]=1+((c>>1)&1);
-              p[3+((c>>1)&3)]=1+(c&1);
-              cp0[i][6]=0;
-            }
-            // Update run count of previous context
-            ByteHistory[i][3] = ByteHistory[i][2];
-            ByteHistory[i][2] = ByteHistory[i][1];
-            if (ByteHistory[i][0]==0)  // new context
-              ByteHistory[i][0]=2, ByteHistory[i][1]=lastByte;
-            else if (ByteHistory[i][1]!=lastByte)  // different byte in context
-              ByteHistory[i][0]=1, ByteHistory[i][1]=lastByte;
-            else if (ByteHistory[i][0]<254)  // same byte in context
-              ByteHistory[i][0]+=2;
-            else if (ByteHistory[i][0]==255)
-              ByteHistory[i][0]=128;
-            ByteHistory[i]=cp0[i]+3;
-          } break;
-        }
-      }
-    }
-    bit = (B>>(7-k))&1;
-    bits+=bits + bit;
-  }
-  cn=0;
-  lastByte=B;
-}
-
-// Update the model with bit y, and predict next bit to mixer m.
-int ContextMap2::mix(Mixer& m) {
-  // Update model with y
-  U8 c1=buf(1);
-  int result=0;
-  U64 tmask=t.size()-1; 
-  for (int i=0; i<cn; ++i) {
-    if (cp[i]) {
-      assert(cp[i]>=&t[0].bh[0][0] && cp[i]<=&t[t.size()-1].bh[6][6]);
-      assert((uintptr_t(cp[i])&63)>=15);
-      *cp[i]=nex(*cp[i], y);
-    }
-
-    // Update context pointers
-    if (bpos>1 && ByteHistory[i][0]==0)
-      cp[i]=0;
-    else
-    {
-      U16 chksum=cxt[i]>>16;     
-      switch(bpos)
-      {
-        case 1: case 3: case 6: cp[i]=cp0[i]+1+(c0&1); break;
-        case 4: case 7: cp[i]=cp0[i]+3+(c0&3); break;
-        case 2: case 5: cp0[i]=cp[i]=t[(cxt[i]+c0)&tmask].get(chksum); break;
-        default:
-        {
-          cp0[i]=cp[i]=t[(cxt[i]+c0)&tmask].get(chksum);
-          // Update pending bit histories for bits 2-7
-          if (cp0[i][3]==2) {
-            const int c=cp0[i][4]+256;
-            U8 *p=t[(cxt[i]+(c>>6))&tmask].get(chksum);
-            p[0]=1+((c>>5)&1);
-            p[1+((c>>5)&1)]=1+((c>>4)&1);
-            p[3+((c>>4)&3)]=1+((c>>3)&1);
-            p=t[(cxt[i]+(c>>3))&tmask].get(chksum);
-            p[0]=1+((c>>2)&1);
-            p[1+((c>>2)&1)]=1+((c>>1)&1);
-            p[3+((c>>1)&3)]=1+(c&1);
-            cp0[i][6]=0;
-          }
-          ByteHistory[i][3] = ByteHistory[i][2];
-          ByteHistory[i][2] = ByteHistory[i][1];
-          // Update byte history of previous context
-          if (ByteHistory[i][0]==0)  // new context
-            ByteHistory[i][0]=2, ByteHistory[i][1]=c1;
-          else if (ByteHistory[i][1]!=c1)  // different byte in context
-            ByteHistory[i][0]=1, ByteHistory[i][1]=c1;
-          else if (ByteHistory[i][0]<254)  // same byte in context
-            ByteHistory[i][0]+=2;
-          else if (ByteHistory[i][0]==255)
-            ByteHistory[i][0]=128;
-          ByteHistory[i]=cp0[i]+3;
-          HasHistory[i]=*cp0[i]>15;
-        } break;
-      }
-    }
-
-    // predict from last byte in context
-    if ((ByteHistory[i][1]+256)>>(8-bpos)==c0) {
-      int rc=ByteHistory[i][0];  // count*2, +1 if 2 different bytes seen
-      int sign=(ByteHistory[i][1]>>(7-bpos)&1)*2-1;  // predicted bit + for 1, - for 0
-      int c=ilog(rc+1)<<(2+(~rc&1));
-      m.add(sign*c);
-    }
-    else if (bpos>0 && (ByteHistory[i][0]&1)>0) {
-      if ((ByteHistory[i][2]+256)>>(8-bpos)==c0)
-        m.add((((ByteHistory[i][2]>>(7-bpos))&1)*2-1)*128);
-      else if (HasHistory[i] && (ByteHistory[i][3]+256)>>(8-bpos)==c0)
-        m.add((((ByteHistory[i][3]>>(7-bpos))&1)*2-1)*128);
-      else
-        m.add(0);
-    }
-    else
-      m.add(0); //p=0.5
-
-    // predict from bit context
-    int s = 0;
-    if (cp[i]) s = *cp[i];
-    mix2(m,s,*Maps8b[i]);
-  
-    if (s>0) result++;
-
-    int n0=-~nex(s, 2), n1=-~nex(s, 3), k = (n1*64)/(n1+n0);
-    if (HasHistory[i]) {
-      s  = (ByteHistory[i][1]>>(7-bpos))&1;
-      s |= ((ByteHistory[i][2]>>(7-bpos))&1)*2;
-      s |= ((ByteHistory[i][3]>>(7-bpos))&1)*4;
-    }
-    else
-      s = 8;
-    m.add(stretch(Maps12b[i]->p((s<<9)|(bpos<<6)|k))>>2);
-    m.add(stretch(Maps6b[i]->p((s<<3)|bpos))>>2);
-  }
-  if (bpos==7) cn=0;
-  return result;
-}
 
 // Context map for large contexts.  Most modeling uses this type of context
 // map.  It includes a built in RunContextMap to predict the last byte seen
@@ -2854,6 +2377,219 @@ int ContextMap::mix(Mixer& m) {
   if (bpos==7) cn=0;
   return result;
 }
+
+/*
+Context map for large contexts (32bits).
+Maps to a bit history state, a 3 MRU byte history, and 1 byte RunStats.
+
+Bit and byte histories are stored in a hash table with 64 byte buckets. 
+The buckets are indexed by a context ending after 0, 2 or 5 bits of the
+current byte. Thus, each byte modeled results in 3 main memory accesses
+per context, with all other accesses to cache.
+
+On a byte boundary (bit 0), only 3 of the 7 bit history states are used.
+Of the remaining 4 bytes, 3 are then used to store the last bytes seen
+in this context, 7 bits to store the length of consecutive occurences of
+the previously seen byte, and 1 bit to signal if more than 1 byte as been
+seen in this context. The byte history is then combined with the bit history
+states to provide additional states that are then mapped to predictions.
+*/
+
+class ContextMap2 {
+  const U32 C; // max number of contexts
+  class Bucket { // hash bucket, 64 bytes
+    U16 Checksums[7]; // byte context checksums
+    U8 MRU; // last 2 accesses (0-6) in low, high nibble
+  public:
+    U8 BitState[7][7]; // byte context, 3-bit context -> bit history state
+                       // BitState[][0] = 1st bit, BitState[][1,2] = 2nd bit, BitState[][3..6] = 3rd bit
+                       // BitState[][0] is also a replacement priority, 0 = empty
+    inline U8* Find(U16 Checksum) { // Find or create hash element matching checksum. 
+                                    // If not found, insert or replace lowest priority (skipping 2 most recent).
+      if (Checksums[MRU&15]==Checksum)
+        return &BitState[MRU&15][0];
+      int worst=0xFFFF, index=0;
+      for (int i=0; i<7; ++i) {
+        if (Checksums[i]==Checksum)
+          return MRU=MRU<<4|i, (U8*)&BitState[i][0];
+        if (BitState[i][0]<worst && (MRU&15)!=i && MRU>>4!=i) {
+          worst = BitState[i][0];
+          index=i;
+        }
+      }
+      MRU = 0xF0|index;
+      Checksums[index] = Checksum;
+      return (U8*)memset(&BitState[index][0], 0, 7);
+    }
+  };
+  Array<Bucket, 64> Table; // bit histories for bits 0-1, 2-4, 5-7
+                           // For 0-1, also contains run stats in BitState[][3] and byte history in BitState[][4..6]
+  Array<U8*> BitState; // C pointers to current bit history states
+  Array<U8*> BitState0; // First element of 7 element array containing BitState[i]
+  Array<U8*> ByteHistory; // C pointers to run stats plus byte history, 4 bytes, [RunStats,1..3]
+  Array<U32> Contexts; // C whole byte contexts (hashes)
+  Array<bool> HasHistory; // True if context has a full valid byte history (i.e., seen at least 3 times)
+  StateMap **Maps6b, **Maps8b, **Maps12b;
+  U32 index; // Next context to set by set()
+  U32 bits;
+  U8 lastByte, lastBit, bitPos;
+  inline void Update() {
+    U64 mask = Table.size()-1;
+    for (U32 i=0; i<index; i++) {
+      if (BitState[i])
+        *BitState[i] = nex(*BitState[i], lastBit);
+
+      if (bitPos>1 && ByteHistory[i][0]==0)
+        BitState[i] = nullptr;
+      else {
+        U16 chksum = Contexts[i]>>16;
+        switch (bitPos) {
+          case 0: {
+            BitState[i] = BitState0[i] = Table[(Contexts[i]+bits)&mask].Find(chksum);
+            // Update pending bit histories for bits 2-7
+            if (BitState0[i][3]==2) {
+              const int c = BitState0[i][4]+256;
+              U8 *p = Table[(Contexts[i]+(c>>6))&mask].Find(chksum);
+              p[0] = 1+((c>>5)&1);
+              p[1+((c>>5)&1)] = 1+((c>>4)&1);
+              p[3+((c>>4)&3)] = 1+((c>>3)&1);
+              p = Table[(Contexts[i]+(c>>3))&mask].Find(chksum);
+              p[0] = 1+((c>>2)&1);
+              p[1+((c>>2)&1)] = 1+((c>>1)&1);
+              p[3+((c>>1)&3)] = 1+(c&1);
+              BitState0[i][6] = 0;
+            }
+            // Update byte history of previous context
+            ByteHistory[i][3] = ByteHistory[i][2];
+            ByteHistory[i][2] = ByteHistory[i][1];
+            if (ByteHistory[i][0]==0)  // new context
+              ByteHistory[i][0]=2, ByteHistory[i][1]=lastByte;
+            else if (ByteHistory[i][1]!=lastByte)  // different byte in context
+              ByteHistory[i][0]=1, ByteHistory[i][1]=lastByte;
+            else if (ByteHistory[i][0]<254)  // same byte in context
+              ByteHistory[i][0]+=2;
+            else if (ByteHistory[i][0]==255) // more than one byte seen, but long run of current byte, reset to single byte seen
+              ByteHistory[i][0] = 128;
+
+            ByteHistory[i] = BitState0[i]+3;
+            HasHistory[i] = *BitState0[i]>15;
+            break;
+          }
+          case 2: case 5: {
+            BitState[i] = BitState0[i] = Table[(Contexts[i]+bits)&mask].Find(chksum);
+            break;
+          }
+          case 1: case 3: case 6: BitState[i] = BitState0[i]+1+lastBit; break;
+          case 4: case 7: BitState[i] = BitState0[i]+3+(bits&3); break;
+        }
+      }
+    }
+  }
+public:
+  // Construct using Size bytes of memory for Count contexts
+  ContextMap2(const U64 Size, const U32 Count) : C(Count), Table(Size>>6), BitState(Count), BitState0(Count), ByteHistory(Count), Contexts(Count), HasHistory(Count){
+    assert(Size>=64 && (Size&(Size-1))==0);  // power of 2?
+    assert(sizeof(Bucket)==64);
+    Maps6b = new StateMap*[C];
+    Maps8b = new StateMap*[C];
+    Maps12b = new StateMap*[C];
+    for (U32 i=0; i<C; i++) {
+      Maps6b[i] = new StateMap((1<<6)+8);
+      Maps8b[i] = new StateMap(1<<8);
+      Maps12b[i] = new StateMap((1<<12)+(1<<9));
+      BitState[i] = BitState0[i] = &Table[i].BitState[0][0];
+      ByteHistory[i] = BitState[i]+3;
+    }
+    index = 0;
+    lastByte = lastBit = 0;
+    bits = 1;  bitPos = 0;
+  }
+  ~ContextMap2() {
+    for (U32 i=0; i<C; i++) {
+      delete Maps6b[i];
+      delete Maps8b[i];
+      delete Maps12b[i];
+    }
+    delete[] Maps6b;
+    delete[] Maps8b;
+    delete[] Maps12b;
+  }
+  inline void set(U32 ctx) { // set next whole byte context to ctx
+    ctx = ctx*987654323+index; // permute (don't hash) ctx to spread the distribution
+    ctx = ctx<<16|ctx>>16;
+    Contexts[index] = ctx*123456791+index;
+    index++;
+    assert(index>0 && index<=C);
+  }
+  void Train(const U8 B){
+    for (bitPos=0; bitPos<8; bitPos++){
+      Update();
+      lastBit = (B>>(7-bitPos))&1;
+      bits += bits+lastBit;
+    }
+    index = 0;
+    bits = 1; bitPos = 0;
+    lastByte = B;
+  }
+  int mix(Mixer& m) {
+    int result = 0;
+    lastBit = y;
+    bitPos = bpos;
+    bits+=bits+lastBit;
+    lastByte = bits&0xFF;
+    if (bitPos==0)
+      bits = 1;
+    Update();
+
+    for (U32 i=0; i<index; i++) {
+      // predict from bit context
+      int state = (BitState[i])?*BitState[i]:0;
+      result+=(state>0);
+      int p1 = Maps8b[i]->p(state);
+      int n0=nex(state, 2), n1=nex(state, 3), k=-~n1;
+      k = (k*64)/(k-~n0);
+      n0=-!n0, n1=-!n1;
+      // predict from last byte in context
+      if (((ByteHistory[i][1]+256)>>(8-bitPos))==bits){
+        int RunStats = ByteHistory[i][0]; // count*2, +1 if 2 different bytes seen
+        int sign=(ByteHistory[i][1]>>(7-bitPos)&1)*2-1;  // predicted bit + for 1, - for 0
+        int value = ilog(RunStats+1)<<(3-(RunStats&1));
+        m.add(sign*value);
+      }
+      else if (bitPos>0 && (ByteHistory[i][0]&1)>0) {
+        if ((ByteHistory[i][2]+256)>>(8-bitPos)==bits)
+          m.add((((ByteHistory[i][2]>>(7-bitPos))&1)*2-1)*128);
+        else if (HasHistory[i] && (ByteHistory[i][3]+256)>>(8-bitPos)==bits)
+          m.add((((ByteHistory[i][3]>>(7-bitPos))&1)*2-1)*128);
+        else
+          m.add(0);
+      }
+      else
+        m.add(0);
+
+      if (HasHistory[i]) {
+        state  = (ByteHistory[i][1]>>(7-bitPos))&1;
+        state |= ((ByteHistory[i][2]>>(7-bitPos))&1)*2;
+        state |= ((ByteHistory[i][3]>>(7-bitPos))&1)*4;
+      }
+      else
+        state = 8;
+
+      int st = stretch(p1)>>2;
+      m.add(st);
+      m.add((p1-2047)>>3);
+      p1>>=4;
+      int p0 = 255-p1;
+      m.add((st*(n1-n0)));
+      m.add((p1&n0)-(p0&n1));
+      m.add((p1&n1)-(p0&n0));
+      m.add(stretch(Maps12b[i]->p((state<<9)|(bitPos<<6)|k))>>2);
+      m.add(stretch(Maps6b[i]->p((state<<3)|bitPos))>>2);
+    }
+    if (bitPos==7) index = 0;
+    return result;
+  }
+};
 
 //////////////////////////// Stemming routines /////////////////////////
 /*
@@ -4463,9 +4199,9 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
 
 // Model for 8-bit image data
 void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
-  static const int nMaps = 56;
+  static const int nMaps = 57;
   static ContextMap cm(MEM*4, 49);
-  static StationaryMap Map[nMaps] = { 12, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
+  static StationaryMap Map[nMaps] = { 12, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
   static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
   static Array<short> jumps(0x8000);
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
@@ -4714,6 +4450,7 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
         Map[52].set(Clip((-buffer(5)+4*buffer(4)-5*WWW+5*W+Clip(NE*2-NNE))/4)-px);
         Map[53].set(Clip((WWW-4*WW+6*W+Clip(NE*3-NNE*3+buffer(w*3-1)))/4)-px);
         Map[54].set(Clip((-NNEE+3*NE+Clip(W*4-NW*6+NNW*4-buffer(w*3+1)))/3)-px);
+        Map[55].set(((W+N)*3-NW*2)/4-px);
 
         if (isPNG)
           ctx = ((abs(W-N)>8)<<10)|((W>N)<<9)|((abs(N-NW)>8)<<8)|((N>NW)<<7)|((abs(N-NE)>8)<<6)|((N>NE)<<5)|((W>WW)<<4)|((N>NN)<<3)|min(5,filterOn?filter+1:0);
@@ -6474,7 +6211,7 @@ U32 execxt(int i, int x=0) {
 
 class exeModel{
   static const int N1=8, N2=10;
-  ContextMap cm;
+  ContextMap2 cm;
   OpCache Cache;
   U32 StateBH[256];
   ExeState pState, State;
@@ -6760,7 +6497,7 @@ bool exeModel::Predict(Mixer& m, bool Forced, ModelStats *Stats){
   if (Valid || Forced)
     cm.mix(m);
   else{
-      for (int i=0; i<N1+N2; ++i)
+      for (int i=0; i<(N1+N2)*8; ++i)
         m.add(0);
   }
   U8 s = ((StateBH[Context]>>(28-bpos))&0x08) |
@@ -7283,36 +7020,43 @@ class ContextModel{
   Filetype ft2, filetype;
   int blocksize, blockinfo;
   void UpdateContexts(U8 B);
-  void Train();
+  void Train(const char* Dictionary, int Iterations = 1);
 public:
-  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), m(1016, 4096+(1024+512+1024*3)*(level>=4), 7+5*(level>=4)), ft2(DEFAULT), filetype(DEFAULT), blocksize(0), blockinfo(0){
+  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), m(1056, 4096+(1024+512+1024*3)*(level>=4), 7+5*(level>=4)), ft2(DEFAULT), filetype(DEFAULT), blocksize(0), blockinfo(0){
     memset(&cxt[0], 0, sizeof(cxt));
-    if (trainTXT) Train();
+    if (trainTXT) {
+      Train("english.dic", 3); 
+      Train("english.exp");
+    }
   }
   int Predict(ModelStats *Stats = NULL);
 };
 
-void ContextModel::Train(){
+void ContextModel::Train(const char* Dictionary, int Iterations){
   FileDisk f;
   int i;
   char filename[MAX_PATH+12];
-  if ((i=GetModuleFileName(NULL, filename,MAX_PATH)) && i<=MAX_PATH){
+  if ((i=GetModuleFileName(NULL, filename, MAX_PATH)) && i<=MAX_PATH){
     char *p=strrchr(filename, '\\');
     if (p!=0){
       p++;
-      strcpy(p,"english.dic");
+      strcpy(p, Dictionary);
 
-      if ((f.open(filename,true))){
+      if ((f.open(filename, true))){
         printf("Pre-training main model...");
-        i=0;
-        do{
-          if (!i || i==10 || i==13)
-            i = SPACE;
-          UpdateContexts(buf(1));
-          cm.Train(i);
-          buf[pos++]=i;
-        } while ((i=f.getc())!=EOF);
-        printf(" done [%d bytes]\n",pos);
+        while (Iterations-->0) {
+          f.setpos(0);
+          i=pos=0;
+          do {
+            if (!i||i==10||i==13)
+              i = SPACE;
+            UpdateContexts(buf(1));
+            cm.Train(i);
+            buf[pos++]=i;
+          } while ((i=f.getc())!=EOF);
+          
+        }
+        printf(" done [%s, %d bytes]\n", Dictionary, pos);
         f.close();
         pos=0;
         memset(&cxt[0], 0, sizeof(cxt));
