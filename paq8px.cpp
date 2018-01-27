@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on January 25, 2018
+/* paq8px file compressor/archiver.  Released on January 27, 2018
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -599,7 +599,7 @@ Added gif recompression
 //Change the following values on a new build if applicable
 
 #define PROGNAME     "paq8px"  // Change this if you make a branch
-#define PROGVERSION  "132"
+#define PROGVERSION  "132_fix1"
 #define PROGYEAR     "2018"
 
 #define DEFAULT_LEVEL 5
@@ -623,29 +623,32 @@ Added gif recompression
 
 //////////////////////// Includes /////////////////////////////////////////
 
-#include <cinttypes> //PRIu64 
+// Determining the proper printf() format specifier for 64 bit unsigned integers:
+// - on Windows MSVC and MinGW-w64 use the MSVCRT runtime where it is "%I64u"
+// - on Linux it is "%llu"
+// The correct value is provided by the PRIu64 macro which is defined here:
+#include <cinttypes> 
 
+// Platform specific includes
 #ifdef UNIX
-#include <sys/types.h>
-#include <dirent.h> //opendir, readdir
-#include <errno.h>
-#include <string.h>
-#include <cctype> //isalpha, isdigit
-
+#include <dirent.h> //opendir(), readdir(), dirent()
+#include <string.h> //strlen(), strcpy(), strcat(), strerror(), memset(), memcpy(), memmove()
 #else
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <time.h> //clock_t, CLOCKS_PER_SEC
 #endif
 
-#include <sys/stat.h>
-#include <stdio.h>
-#include <time.h>
-#include <math.h>
-#include <stdexcept>
+#include <sys/stat.h> //stat(), mkdir(), stat()
+#include <math.h> //floor(), sqrt()
+#include <stdexcept> //std::exception
 
 #include <zlib.h>
+
+
+//////////////////////// Cross platform definitions /////////////////////////////////////////
 
 #if defined(__x86_64) || defined(_M_X64)
 #define X64
@@ -658,8 +661,6 @@ Added gif recompression
 #define __SSE2__
 #endif
 #endif
-
-//////////////////////// Cross platform definitions /////////////////////////////////////////
 
 #ifdef _MSC_VER  
 #define fseeko(a,b,c) _fseeki64(a,b,c)
@@ -690,9 +691,14 @@ typedef signed char        int8_t;
 inline int min(int a, int b) {return a<b?a:b;}
 inline int max(int a, int b) {return a<b?b:a;}
 
+// A basic exception class to let catch() in main() know 
+// that the exception was thrown intentionally.
+class IntentionalException : public std::exception {};
+
 // Error handler: print message if any, and exit
 void quit(const char* const message=0) {
-  throw std::runtime_error(message);
+  if(message)printf("%s\n",message);
+  throw IntentionalException();
 }
 
 // strings are equal ignoring case?
@@ -1033,21 +1039,25 @@ private:
   void forget_file_on_disk()
   {
     if (file_on_disk) {
-      (*file_on_disk).close(); 
+      file_on_disk->close(); 
       delete file_on_disk;
       file_on_disk = 0;
     }
   }
   //switch: ram->disk
+  #ifdef NDEBUG 
   const U32 MAX_RAM_FOR_TMP_CONTENT = 64 * 1024 * 1024; //64 MB (per file)
+  #else
+  const U32 MAX_RAM_FOR_TMP_CONTENT = 64; // to trigger switching to disk earlier - for testing
+  #endif
   void ram_to_disk()
   {
     assert(file_on_disk==0);
     file_on_disk = new FileDisk();
-    (*file_on_disk).createtmp();
+    file_on_disk->createtmp();
     if(filesize>0)
-      (*file_on_disk).blockwrite(&((*content_in_ram)[0]), filesize);
-    (*file_on_disk).setpos(filepos);
+      file_on_disk->blockwrite(&((*content_in_ram)[0]), filesize);
+    file_on_disk->setpos(filepos);
     forget_content_in_ram();
   }
 public:
@@ -1070,19 +1080,19 @@ public:
         return c; 
       }
     }
-    else return (*file_on_disk).getchar();
+    else return file_on_disk->getchar();
   }
   void putchar(U8 c) {
     if(content_in_ram) {
       if (filepos < MAX_RAM_FOR_TMP_CONTENT) {
-        if (filepos == filesize) { (*content_in_ram).push_back(c); filesize++; }
+        if (filepos == filesize) { content_in_ram->push_back(c); filesize++; }
         else (*content_in_ram)[(U32)filepos] = c;
         filepos++;
         return;
       }
       else ram_to_disk();
     }
-    (*file_on_disk).putchar(c);
+    file_on_disk->putchar(c);
   }
   U64 blockread(U8 *ptr, U64 count) {
     if(content_in_ram)
@@ -1093,39 +1103,92 @@ public:
       filepos += count;
       return count;
     }
-    else return (*file_on_disk).blockread(ptr,count);
+    else return file_on_disk->blockread(ptr,count);
   }
   void blockwrite(U8 *ptr, U64 count) {
     if(content_in_ram) {
       if (filepos+count <= MAX_RAM_FOR_TMP_CONTENT) 
       { 
-        (*content_in_ram).resize((U32)(filepos + count));
+        content_in_ram->resize((U32)(filepos + count));
         if(count>0)memcpy(&((*content_in_ram)[(U32)filepos]), ptr, count);
         filesize += count;
         filepos += count;
+        return;
       }
       else ram_to_disk();
     }
-    else (*file_on_disk).blockwrite(ptr,count);
+    file_on_disk->blockwrite(ptr,count);
   }
   void setpos(U64 newpos) { 
     if(content_in_ram) {
       if(newpos>filesize)ram_to_disk(); //panic: we don't support seeking past end of file (but stdio does) - let's switch to disk
       else {filepos = newpos; return;}
     }  
-    (*file_on_disk).setpos(newpos);
+    file_on_disk->setpos(newpos);
   }
   void setend() { 
     if(content_in_ram) filepos = filesize;
-    else (*file_on_disk).setend();
+    else file_on_disk->setend();
   }
   U64 curpos() { 
     if(content_in_ram) return filepos;
-    else return (*file_on_disk).curpos();
+    else return file_on_disk->curpos();
   }
   bool eof() { 
     if(content_in_ram)return filepos >= filesize;
-    else return (*file_on_disk).eof();
+    else return file_on_disk->eof();
+  }
+};
+
+// Helper class: open a file from the executable's folder
+//
+
+static char mypatherror[]="Can't determine my path.";
+class OpenFromMyFolder {
+private:
+public:
+  //this static method will open the executable itself
+  static void myself(FileDisk *f) {
+  #ifdef WINDOWS
+    int i;
+    Array<char> myfilename(MAX_PATH+1);
+    if((i=GetModuleFileName(NULL, &myfilename[0], MAX_PATH)) && i<=MAX_PATH)
+  #endif
+  #ifdef UNIX
+    Array<char> myfilename(PATH_MAX+1);
+    if(readlink("/proc/self/exe", &myfilename[0], PATH_MAX)!=-1)
+  #endif
+      f->open(&myfilename[0],true);
+    else
+    {
+      strerror(errno);
+      quit(mypatherror);
+    }
+  }
+
+  //this static method will open a file from the executable's folder
+  static void anotherfile(FileDisk *f, const char* filename) {
+    int flength=(int)strlen(filename)+1;
+    #ifdef WINDOWS
+      int i;
+      Array<char> myfilename(MAX_PATH+flength);
+      if((i=GetModuleFileName(NULL, &myfilename[0], MAX_PATH)) && i<=MAX_PATH) {
+        char *endofpath=strrchr(&myfilename[0], '\\');
+    #endif
+    #ifdef UNIX
+      char myfilename[PATH_MAX+flength];
+      if(readlink("/proc/self/exe", myfilename, PATH_MAX)!=-1) {
+        char *endofpath=strrchr(&myfilename[0], '/');
+    #endif
+        if (endofpath==0)quit(mypatherror);
+        endofpath++;
+        strcpy(endofpath, filename); //append filename to my path
+        f->open(&myfilename[0],true);
+      }
+      else {
+        strerror(errno);
+        quit(mypatherror);
+      }
   }
 };
 
@@ -6237,33 +6300,20 @@ public:
 
 void exeModel::Train(){
   FileDisk f;
-  int i;
-#ifdef WINDOWS
-  char filename[MAX_PATH+1];
-  if ((i=GetModuleFileName(NULL, filename,MAX_PATH)) && i<=MAX_PATH){
-#else
-#ifdef UNIX
-  char filename[]="/proc/self/exe";
-  if(true) {
-#else
-#error Unknown target system
-#endif
-#endif
-    f.open(filename,true);
-    printf("Pre-training x86/x64 model...");
-    i=0;
-    do{
-      Update(buf(1));
-      if (Valid)
-        cm.Train(i);
-      buf[pos++]=i;
-      blpos++;
-    } while ((i=f.getchar())!=EOF);
-    printf(" done [%d bytes]\n",pos-1);
-    f.close();
-    pos=blpos=0;
-    memset(&buf[0], 0, buf.size());
-  }
+  printf("Pre-training x86/x64 model...");
+  OpenFromMyFolder::myself(&f);
+  int i=0;
+  do{
+    Update(buf(1));
+    if (Valid)
+      cm.Train(i);
+    buf[pos++]=i;
+    blpos++;
+  } while ((i=f.getchar())!=EOF);
+  printf(" done [%d bytes]\n",pos-1);
+  f.close();
+  pos=blpos=0;
+  memset(&buf[0], 0, buf.size());
 }
 
 void exeModel::Update(U8 B, bool Forced){
@@ -7048,47 +7098,25 @@ public:
 
 void ContextModel::Train(const char* Dictionary, int Iterations){
   FileDisk f;
+  printf("Pre-training main model...");
+  OpenFromMyFolder::anotherfile(&f, Dictionary);
   int i;
-#ifdef WINDOWS
-  char filename[MAX_PATH+12];
-  if ((i=GetModuleFileName(NULL, filename, MAX_PATH)) && i<=MAX_PATH){
-    char *p=strrchr(filename, '\\');
-#else
-#ifdef UNIX
-  char filename[PATH_MAX];
-  ssize_t count = readlink("/proc/self/exe", filename, PATH_MAX);
-  if(count!=-1){
-    char *p=strrchr(filename, '/');
-#else
-#error Unknown target system
-#endif
-#endif
-    if (p!=0){
-      p++;
-      strcpy(p, Dictionary);
-
-      if ((f.open(filename, true))){
-        printf("Pre-training main model...");
-        while (Iterations-->0) {
-          f.setpos(0);
-          i=pos=0;
-          do {
-            if (!i||i==10||i==13)
-              i = SPACE;
-            UpdateContexts(buf(1));
-            cm.Train(i);
-            buf[pos++]=i;
-          } while ((i=f.getchar())!=EOF);
-          
-        }
-        printf(" done [%s, %d bytes]\n", Dictionary, pos);
-        f.close();
-        pos=0;
-        memset(&cxt[0], 0, sizeof(cxt));
-        memset(&buf[0], 0, buf.size());
-      }
-    }
+  while (Iterations-->0) {
+    f.setpos(0);
+    i=pos=0;
+    do {
+      if (!i||i==10||i==13)
+        i = SPACE;
+      UpdateContexts(buf(1));
+      cm.Train(i);
+      buf[pos++]=i;
+    } while ((i=f.getchar())!=EOF);
   }
+  printf(" done [%s, %d bytes]\n", Dictionary, pos);
+  f.close();
+  pos=0;
+  memset(&cxt[0], 0, sizeof(cxt));
+  memset(&buf[0], 0, buf.size());
 }
 
 void ContextModel::UpdateContexts(U8 B){
@@ -9478,10 +9506,10 @@ int main(int argc, char** argv) {
     delete archive;
     if (!doList) programChecker.print();
   }
-  catch(std::exception const& e)
-  {
-    printf("%s\n", e.what());
-  }
+  // we catch only the intentional exceptions from quit() to exit gracefully
+  // any other exception should result in a crash and must be investigated
+  catch(IntentionalException const& e) {} 
+
   if (pause) {
     printf("\nClose this window or press ENTER to continue...\n");
     getchar();
