@@ -599,7 +599,7 @@ Added gif recompression
 //Change the following values on a new build if applicable
 
 #define PROGNAME     "paq8px"  // Change this if you make a branch
-#define PROGVERSION  "133"
+#define PROGVERSION  "134"
 #define PROGYEAR     "2018"
 
 #define DEFAULT_LEVEL 5
@@ -613,8 +613,8 @@ Added gif recompression
 #define WINDOWS  //to compile for Windows
 #endif
 
-#if defined(unix) || defined(__unix__) || defined(__unix)
-#define UNIX //to compile for Unix, Linux, Solairs, MacOS / Darwin, etc)
+#if defined(unix) || defined(__unix__) || defined(__unix) || defined(__APPLE__)
+#define UNIX //to compile for Unix, Linux, Solaris, MacOS / Darwin, etc)
 #endif
 
 #if !defined(WINDOWS ) && !defined(UNIX)
@@ -627,12 +627,14 @@ Added gif recompression
 // - on Windows MSVC and MinGW-w64 use the MSVCRT runtime where it is "%I64u"
 // - on Linux it is "%llu"
 // The correct value is provided by the PRIu64 macro which is defined here:
-#include <cinttypes> 
+#include <cinttypes>
 
 // Platform specific includes
 #ifdef UNIX
 #include <dirent.h> //opendir(), readdir(), dirent()
 #include <string.h> //strlen(), strcpy(), strcat(), strerror(), memset(), memcpy(), memmove()
+#include <limits.h> // PATH_MAX
+#include <errno.h> // errno
 #else
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -716,6 +718,42 @@ int equals(const char* a, const char* b) {
   return *a==*b;
 }
 
+/*
+Useful for debugging. Example:
+Compressing... 40 out of upper bound 40
+0   paq8px                              0x000000010f0ef39e _ZL8chkindexyy + 109
+1   paq8px                              0x000000010f12d2de _ZN5ArrayIsLi32EEixEy + 38
+2   paq8px                              0x000000010f0f2096 _ZN5Mixer1pEv + 76
+3   paq8px                              0x000000010f114853 _Z9jpegModelR5Mixer + 36590
+4   paq8px                              0x000000010f11d3d1 _ZN12ContextModel7PredictEP10ModelStats + 1555
+5   paq8px                              0x000000010f11dde8 _ZN9Predictor6updateEv + 1018
+6   paq8px                              0x000000010f11e309 _ZN7Encoder4codeEi + 381
+7   paq8px                              0x000000010f11e51f _ZN7Encoder8compressEi + 169
+8   paq8px                              0x000000010f129ec7 _Z19direct_encode_block8FiletypeP4FileyR7Encoderi + 347
+9   paq8px                              0x000000010f12a504 _Z22transform_encode_block8FiletypeP4FileyR7EncoderiPciffy + 901
+10  paq8px                              0x000000010f12a97e _Z17compressRecursiveP4FileyR7EncoderPciff + 1112
+11  paq8px                              0x000000010f12aadf _Z8compressPKcyR7Encoder + 304
+12  paq8px                              0x000000010f12c4dd main + 4238
+13  libdyld.dylib                       0x00007fff8945f5ad start + 1
+ */
+#ifndef NDEBUG
+#if defined(UNIX)
+#include <execinfo.h>
+#define BACKTRACE() {\
+void* callstack[128]; \
+int frames = backtrace(callstack, 128); \
+char** strs = backtrace_symbols(callstack, frames); \
+for(int i = 0; i < frames; ++i) { \
+  printf("%s\n", strs[i]); \
+} \
+free(strs); \
+}
+#else
+// TODO: How to implement this on Windows?
+#define BACKTRACE() {}
+#endif
+#endif
+
 //////////////////////// Program Checker /////////////////////
 
 // Track time and memory used
@@ -771,6 +809,7 @@ static void chkindex(U64 index, U64 upper_bound)
 {
   if (index>=upper_bound) {
     fprintf(stderr, "%" PRIu64 " out of upper bound %" PRIu64 "\n", index, upper_bound);
+    BACKTRACE();
     quit();
   }
 }
@@ -1634,32 +1673,71 @@ Stretch::Stretch(): t(4096) {
 // m.p() returns the output prediction that the next bit is 1 as a
 //   12 bit number (0 to 4095).
 
-#if defined(__SSE2__)
-#include <emmintrin.h>
+#if defined(__AVX2__)
+#include <immintrin.h>
 
 static inline int dot_product (const short* const t, const short* const w, int n) {
-  __m128i sum = _mm_setzero_si128 ();
-  while ((n -= 8) >= 0) {
-    __m128i tmp = _mm_madd_epi16 (*(__m128i *) &t[n], *(__m128i *) &w[n]);
-    tmp = _mm_srai_epi32 (tmp, 8);
-    sum = _mm_add_epi32 (sum, tmp);
+  __m256i sum = _mm256_setzero_si256();
+
+  while( ( n -= 16 ) >= 0 ) {
+    __m256i tmp = _mm256_madd_epi16( *( __m256i* ) &t[n], *( __m256i* ) &w[n] );
+    tmp = _mm256_srai_epi32( tmp, 8 );
+    sum = _mm256_add_epi32( sum, tmp );
   }
-  sum = _mm_add_epi32 (sum, _mm_srli_si128 (sum, 8));
-  sum = _mm_add_epi32 (sum, _mm_srli_si128 (sum, 4));
-  return _mm_cvtsi128_si32 (sum);
+
+  __m128i lo = _mm256_extractf128_si256( sum, 0 );
+  __m128i hi = _mm256_extractf128_si256( sum, 1 );
+
+  __m128i newsum = _mm_hadd_epi32( lo, hi );
+  newsum = _mm_add_epi32( newsum, _mm_srli_si128( newsum, 8 ) );
+  newsum = _mm_add_epi32( newsum, _mm_srli_si128( newsum, 4 ) );
+  return _mm_cvtsi128_si32( newsum );
 }
 
 static inline void train (const short* const t, short* const w, int n, const int e) {
-  const __m128i one = _mm_set1_epi16 (1);
-  const __m128i err = _mm_set1_epi16 (short(e));
-  while ((n -= 8) >= 0) {
-    __m128i tmp = _mm_adds_epi16 (*(__m128i *) &t[n], *(__m128i *) &t[n]);
-    tmp = _mm_mulhi_epi16 (tmp, err);
-    tmp = _mm_adds_epi16 (tmp, one);
-    tmp = _mm_srai_epi16 (tmp, 1);
-    tmp = _mm_adds_epi16 (tmp, *(__m128i *) &w[n]);
-    *(__m128i *) &w[n] = tmp;
+  const __m256i one = _mm256_set1_epi16( 1 );
+  const __m256i err = _mm256_set1_epi16( short( e ) );
+
+  while( ( n -= 16 ) >= 0 ) {
+    __m256i tmp = _mm256_adds_epi16( *( __m256i* ) &t[n], *( __m256i* ) &t[n] );
+    tmp = _mm256_mulhi_epi16( tmp, err );
+    tmp = _mm256_adds_epi16( tmp, one );
+    tmp = _mm256_srai_epi16( tmp, 1 );
+    tmp = _mm256_adds_epi16( tmp, *( __m256i* ) &w[n] );
+    *( __m256i* ) &w[n] = tmp;
   }
+}
+#else
+#if defined(__SSE2__)
+
+#include <emmintrin.h>
+
+static inline int dot_product( const short* const t, const short* const w, int n ) {
+    __m128i sum = _mm_setzero_si128();
+
+    while( ( n -= 8 ) >= 0 ) {
+        __m128i tmp = _mm_madd_epi16( *( __m128i* ) &t[n], *( __m128i* ) &w[n] );
+        tmp = _mm_srai_epi32( tmp, 8 );
+        sum = _mm_add_epi32( sum, tmp );
+    }
+
+    sum = _mm_add_epi32( sum, _mm_srli_si128( sum, 8 ) );
+    sum = _mm_add_epi32( sum, _mm_srli_si128( sum, 4 ) );
+    return _mm_cvtsi128_si32( sum );
+}
+
+static inline void train( const short* const t, short* const w, int n, const int e ) {
+    const __m128i one = _mm_set1_epi16( 1 );
+    const __m128i err = _mm_set1_epi16( short( e ) );
+
+    while( ( n -= 8 ) >= 0 ) {
+        __m128i tmp = _mm_adds_epi16( *( __m128i* ) &t[n], *( __m128i* ) &t[n] );
+        tmp = _mm_mulhi_epi16( tmp, err );
+        tmp = _mm_adds_epi16( tmp, one );
+        tmp = _mm_srai_epi16( tmp, 1 );
+        tmp = _mm_adds_epi16( tmp, *( __m128i* ) &w[n] );
+        *( __m128i* ) &w[n] = tmp;
+    }
 }
 #else
 
@@ -1684,6 +1762,7 @@ static inline void train (const short* const t, short* const w, int n, const int
   }
 }
 #endif
+#endif
 
 struct ErrorInfo {
   U32 Data[2], Sum, Mask, Collected;
@@ -1698,8 +1777,8 @@ inline U32 SQR(U32 x)
 
 class Mixer {
   const int N, M, S;   // max inputs, max contexts, max context sets
-  Array<short> tx; // N inputs from add()
-  Array<short> wx; // N*M weights
+  Array<short, 32> tx; // N inputs from add()
+  Array<short, 32> wx; // N*M weights
   Array<int> cxt;  // S contexts
   Array<ErrorInfo> info; // stats for the adaptive learning rates
   Array<int> rates; // learning rates
@@ -1759,7 +1838,7 @@ public:
 
   // predict next bit
   int p() {
-    while (nx&7) tx[nx++]=0;  // pad
+    while (nx&15) tx[nx++]=0;  // pad
     if (mp) {  // combine outputs
       mp->update();
       for (int i=0; i<ncxt; ++i) {
@@ -1785,9 +1864,9 @@ Mixer::~Mixer() {
 
 
 Mixer::Mixer(int n, int m, int s, int w):
-    N((n+7)&-8), M(m), S(s), tx(N), wx(N*M), cxt(S), info(S), rates(S), 
+    N((n+15)&-16), M(m), S(s), tx(N), wx(N*M), cxt(S), info(S), rates(S),
     ncxt(0), base(0), nx(0), pr(S), mp(0) {
-  assert(n>0 && N>0 && (N&7)==0 && M>0);
+  assert(n>0 && N>0 && (N&15)==0 && M>0);
   int i;
   for (i=0; i<S; ++i){
     pr[i]=2048; //initial p=0.5
@@ -7535,7 +7614,7 @@ class ContextModel{
   void UpdateContexts(U8 B);
   void Train(const char* Dictionary, int Iterations = 1);
 public:
-  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), m(1056, 4096+(1024+512+1024*3)*(level>=4), 7+5*(level>=4)), ft2(DEFAULT), filetype(DEFAULT), blocksize(0), blockinfo(0){
+  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), m(1056, 4096+(1024+512+1024*3)*(level>=4), 15+5*(level>=4)), ft2(DEFAULT), filetype(DEFAULT), blocksize(0), blockinfo(0){
     memset(&cxt[0], 0, sizeof(cxt));
     if (trainTXT) {
       Train("english.dic", 3);
@@ -8071,7 +8150,7 @@ Filetype detect(File *in, U64 blocksize, Filetype type, int &info) {
   char pgm_buf[32];
   int cdi=0,cda=0,cdm=0;  // For CD sectors detection
   U32 cdf=0;
-  unsigned char zbuf[256+32], zin[1<<16], zout[1<<16]; // For ZLIB stream detection
+  unsigned char zbuf[256+32] = {0}, zin[1<<16] = {0}, zout[1<<16] = {0}; // For ZLIB stream detection
   int zbufpos=0,zzippos=-1, histogram[256]={0};
   int pdfim=0,pdfimw=0,pdfimh=0,pdfimb=0,pdfgray=0,pdfimp=0;
   int b64s=0,b64i=0,b64line=0,b64nl=0; // For base64 detection
@@ -9466,10 +9545,10 @@ void compressRecursive(File *in, const U64 blocksize, Encoder &en, char *blstr, 
     "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif", "png-8b", "png-8b-grayscale", "png-24b", "png-32b"};
   static const char* audiotypes[4]={"8b-mono", "8b-stereo", "16b-mono","16b-stereo"};
   Filetype type=DEFAULT;
-  int blnum=0, info;  // image width or audio type
+  int blnum=0, info=0;  // image width or audio type
   U64 begin=in->curpos();
   U64 block_end=begin+blocksize;
-  char b2[32];
+  char b2[32] = {0};
   strcpy(b2, blstr);
   if (b2[0]) strcat(b2, "-");
   if (recursion_level==5) {
