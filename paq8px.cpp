@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on January 27, 2018
+/* paq8px file compressor/archiver.  Released on February 04, 2018
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -599,7 +599,7 @@ Added gif recompression
 //Change the following values on a new build if applicable
 
 #define PROGNAME     "paq8px"  // Change this if you make a branch
-#define PROGVERSION  "134"
+#define PROGVERSION  "135"
 #define PROGYEAR     "2018"
 
 #define DEFAULT_LEVEL 5
@@ -718,40 +718,22 @@ int equals(const char* a, const char* b) {
   return *a==*b;
 }
 
-/*
-Useful for debugging. Example:
-Compressing... 40 out of upper bound 40
-0   paq8px                              0x000000010f0ef39e _ZL8chkindexyy + 109
-1   paq8px                              0x000000010f12d2de _ZN5ArrayIsLi32EEixEy + 38
-2   paq8px                              0x000000010f0f2096 _ZN5Mixer1pEv + 76
-3   paq8px                              0x000000010f114853 _Z9jpegModelR5Mixer + 36590
-4   paq8px                              0x000000010f11d3d1 _ZN12ContextModel7PredictEP10ModelStats + 1555
-5   paq8px                              0x000000010f11dde8 _ZN9Predictor6updateEv + 1018
-6   paq8px                              0x000000010f11e309 _ZN7Encoder4codeEi + 381
-7   paq8px                              0x000000010f11e51f _ZN7Encoder8compressEi + 169
-8   paq8px                              0x000000010f129ec7 _Z19direct_encode_block8FiletypeP4FileyR7Encoderi + 347
-9   paq8px                              0x000000010f12a504 _Z22transform_encode_block8FiletypeP4FileyR7EncoderiPciffy + 901
-10  paq8px                              0x000000010f12a97e _Z17compressRecursiveP4FileyR7EncoderPciff + 1112
-11  paq8px                              0x000000010f12aadf _Z8compressPKcyR7Encoder + 304
-12  paq8px                              0x000000010f12c4dd main + 4238
-13  libdyld.dylib                       0x00007fff8945f5ad start + 1
- */
 #ifndef NDEBUG
-#if defined(UNIX)
-#include <execinfo.h>
-#define BACKTRACE() {\
-void* callstack[128]; \
-int frames = backtrace(callstack, 128); \
-char** strs = backtrace_symbols(callstack, frames); \
-for(int i = 0; i < frames; ++i) { \
-  printf("%s\n", strs[i]); \
-} \
-free(strs); \
-}
-#else
-// TODO: How to implement this on Windows?
-#define BACKTRACE() {}
-#endif
+  #if defined(UNIX)
+    #include <execinfo.h>
+    #define BACKTRACE() {\
+      void* callstack[128]; \
+      int frames = backtrace(callstack, 128); \
+      char** strs = backtrace_symbols(callstack, frames); \
+      for(int i = 0; i < frames; ++i) { \
+        printf("%s\n", strs[i]); \
+      } \
+      free(strs); \
+    }
+  #else
+    // TODO: How to implement this on Windows?
+    #define BACKTRACE() {}
+  #endif
 #endif
 
 //////////////////////// Program Checker /////////////////////
@@ -1673,71 +1655,72 @@ Stretch::Stretch(): t(4096) {
 // m.p() returns the output prediction that the next bit is 1 as a
 //   12 bit number (0 to 4095).
 
+#define MIX_SIMD_WIDTH 8
 #if defined(__AVX2__)
 #include <immintrin.h>
+#undef MIX_SIMD_WIDTH
+#define MIX_SIMD_WIDTH 16
 
-static inline int dot_product (const short* const t, const short* const w, int n) {
+static inline int dot_product(const short* const t, const short* const w, int n) {
   __m256i sum = _mm256_setzero_si256();
 
-  while( ( n -= 16 ) >= 0 ) {
-    __m256i tmp = _mm256_madd_epi16( *( __m256i* ) &t[n], *( __m256i* ) &w[n] );
-    tmp = _mm256_srai_epi32( tmp, 8 );
-    sum = _mm256_add_epi32( sum, tmp );
+  while ((n-=16)>=0) {
+    __m256i tmp = _mm256_madd_epi16(*( __m256i* ) &t[n], *( __m256i* ) &w[n]);
+    tmp = _mm256_srai_epi32(tmp, 8);
+    sum = _mm256_add_epi32(sum, tmp);
   }
 
-  __m128i lo = _mm256_extractf128_si256( sum, 0 );
-  __m128i hi = _mm256_extractf128_si256( sum, 1 );
+  __m128i lo = _mm256_extractf128_si256(sum, 0);
+  __m128i hi = _mm256_extractf128_si256(sum, 1);
 
-  __m128i newsum = _mm_hadd_epi32( lo, hi );
-  newsum = _mm_add_epi32( newsum, _mm_srli_si128( newsum, 8 ) );
-  newsum = _mm_add_epi32( newsum, _mm_srli_si128( newsum, 4 ) );
-  return _mm_cvtsi128_si32( newsum );
+  __m128i newsum = _mm_hadd_epi32(lo, hi);
+  newsum = _mm_add_epi32(newsum, _mm_srli_si128(newsum, 8));
+  newsum = _mm_add_epi32(newsum, _mm_srli_si128(newsum, 4));
+  return _mm_cvtsi128_si32(newsum);
 }
 
-static inline void train (const short* const t, short* const w, int n, const int e) {
-  const __m256i one = _mm256_set1_epi16( 1 );
-  const __m256i err = _mm256_set1_epi16( short( e ) );
+static inline void train(const short* const t, short* const w, int n, const int e) {
+  const __m256i one = _mm256_set1_epi16(1);
+  const __m256i err = _mm256_set1_epi16(short(e));
 
-  while( ( n -= 16 ) >= 0 ) {
-    __m256i tmp = _mm256_adds_epi16( *( __m256i* ) &t[n], *( __m256i* ) &t[n] );
-    tmp = _mm256_mulhi_epi16( tmp, err );
-    tmp = _mm256_adds_epi16( tmp, one );
-    tmp = _mm256_srai_epi16( tmp, 1 );
-    tmp = _mm256_adds_epi16( tmp, *( __m256i* ) &w[n] );
+  while ((n-=16)>=0) {
+    __m256i tmp = _mm256_adds_epi16(*( __m256i* ) &t[n], *( __m256i* ) &t[n]);
+    tmp = _mm256_mulhi_epi16(tmp, err);
+    tmp = _mm256_adds_epi16(tmp, one);
+    tmp = _mm256_srai_epi16(tmp, 1);
+    tmp = _mm256_adds_epi16(tmp, *( __m256i* ) &w[n]);
     *( __m256i* ) &w[n] = tmp;
   }
 }
-#else
-#if defined(__SSE2__)
-
+#elif defined(__SSE2__)
 #include <emmintrin.h>
 
-static inline int dot_product( const short* const t, const short* const w, int n ) {
-    __m128i sum = _mm_setzero_si128();
+static inline int dot_product(const short* const t, const short* const w, int n) {
+  __m128i sum = _mm_setzero_si128();
 
-    while( ( n -= 8 ) >= 0 ) {
-        __m128i tmp = _mm_madd_epi16( *( __m128i* ) &t[n], *( __m128i* ) &w[n] );
-        tmp = _mm_srai_epi32( tmp, 8 );
-        sum = _mm_add_epi32( sum, tmp );
-    }
+  while ((n-=8)>=0) {
+    __m128i tmp = _mm_madd_epi16(*(__m128i *) &t[n], *(__m128i *) &w[n]);
+    tmp = _mm_srai_epi32(tmp, 8);
+    sum = _mm_add_epi32(sum, tmp);
+  }
 
-    sum = _mm_add_epi32( sum, _mm_srli_si128( sum, 8 ) );
-    sum = _mm_add_epi32( sum, _mm_srli_si128( sum, 4 ) );
-    return _mm_cvtsi128_si32( sum );
+  sum = _mm_add_epi32(sum, _mm_srli_si128 (sum, 8));
+  sum = _mm_add_epi32(sum, _mm_srli_si128 (sum, 4));
+  return _mm_cvtsi128_si32(sum);
 }
 
-static inline void train( const short* const t, short* const w, int n, const int e ) {
-    const __m128i one = _mm_set1_epi16( 1 );
-    const __m128i err = _mm_set1_epi16( short( e ) );
+static inline void train(const short* const t, short* const w, int n, const int e) {
+  const __m128i one = _mm_set1_epi16(1);
+  const __m128i err = _mm_set1_epi16(short(e));
 
-    while( ( n -= 8 ) >= 0 ) {
-        __m128i tmp = _mm_adds_epi16( *( __m128i* ) &t[n], *( __m128i* ) &t[n] );
-        tmp = _mm_mulhi_epi16( tmp, err );
-        tmp = _mm_adds_epi16( tmp, one );
-        tmp = _mm_srai_epi16( tmp, 1 );
-        tmp = _mm_adds_epi16( tmp, *( __m128i* ) &w[n] );
-        *( __m128i* ) &w[n] = tmp;
-    }
+  while ((n-=8)>=0) {
+    __m128i tmp = _mm_adds_epi16(*(__m128i *) &t[n], *(__m128i *) &t[n]);
+    tmp = _mm_mulhi_epi16(tmp, err);
+    tmp = _mm_adds_epi16(tmp, one);
+    tmp = _mm_srai_epi16(tmp, 1);
+    tmp = _mm_adds_epi16(tmp, *(__m128i *) &w[n]);
+    *(__m128i *) &w[n] = tmp;
+  }
 }
 #else
 
@@ -1762,7 +1745,7 @@ static inline void train (const short* const t, short* const w, int n, const int
   }
 }
 #endif
-#endif
+#define MIX_SIMD_MASK (MIX_SIMD_WIDTH-1)
 
 struct ErrorInfo {
   U32 Data[2], Sum, Mask, Collected;
@@ -1777,8 +1760,8 @@ inline U32 SQR(U32 x)
 
 class Mixer {
   const int N, M, S;   // max inputs, max contexts, max context sets
-  Array<short, 32> tx; // N inputs from add()
-  Array<short, 32> wx; // N*M weights
+  Array<short, MIX_SIMD_WIDTH*2> tx; // N inputs from add()
+  Array<short, MIX_SIMD_WIDTH*2> wx; // N*M weights
   Array<int> cxt;  // S contexts
   Array<ErrorInfo> info; // stats for the adaptive learning rates
   Array<int> rates; // learning rates
@@ -1838,7 +1821,7 @@ public:
 
   // predict next bit
   int p() {
-    while (nx&15) tx[nx++]=0;  // pad
+    while (nx&MIX_SIMD_MASK) tx[nx++]=0;  // pad
     if (mp) {  // combine outputs
       mp->update();
       for (int i=0; i<ncxt; ++i) {
@@ -1864,9 +1847,9 @@ Mixer::~Mixer() {
 
 
 Mixer::Mixer(int n, int m, int s, int w):
-    N((n+15)&-16), M(m), S(s), tx(N), wx(N*M), cxt(S), info(S), rates(S),
+    N((n+MIX_SIMD_MASK)&-MIX_SIMD_WIDTH), M(m), S(s), tx(N), wx(N*M), cxt(S), info(S), rates(S), 
     ncxt(0), base(0), nx(0), pr(S), mp(0) {
-  assert(n>0 && N>0 && (N&15)==0 && M>0);
+  assert(n>0 && N>0 && (N&MIX_SIMD_MASK)==0 && M>0);
   int i;
   for (i=0; i<S; ++i){
     pr[i]=2048; //initial p=0.5
@@ -2738,42 +2721,70 @@ public:
   }
 };
 
-//////////////////////////// Stemming routines /////////////////////////
+//////////////////////////// Text modelling /////////////////////////
+
+inline bool CharInArray(const char c, const char a[], const int len) {
+  if (a==nullptr)
+    return false;
+  int i=0;
+  for (; i<len && c!=a[i]; i++);
+  return i<len;
+}
 
 #define MAX_WORD_SIZE 64
+#define TAB 0x09
+#define NEW_LINE 0x0A
+#define CARRIAGE_RETURN 0x0D
+#define SPACE 0x20
+
 class Word {
 public:
   U8 Letters[MAX_WORD_SIZE];
   U8 Start, End;
-  U32 Hash, Type, Language;
-  Word(): Start(0), End(0), Hash(0), Type(0){
+  U32 Hash[4], Type, Language;
+  Word() : Start(0), End(0), Hash{0,0,0,0}, Type(0) {
     memset(&Letters[0], 0, sizeof(U8)*MAX_WORD_SIZE);
   }
-  bool operator==(const char *s) const{
+  bool operator==(const char *s) const {
     size_t len=strlen(s);
     return ((size_t)(End-Start+(Letters[Start]!=0))==len && memcmp(&Letters[Start], s, len)==0);
   }
-  bool operator!=(const char *s) const{
+  bool operator!=(const char *s) const {
     return !operator==(s);
   }
-  void operator+=(const char c){
+  void operator+=(const char c) {
     if (End<MAX_WORD_SIZE-1){
       End+=(Letters[End]>0);
       Letters[End]=tolower(c);
     }
   }
-  U8 operator[](U8 i) const{
+  U8 operator[](U8 i) const {
     return (End-Start>=i)?Letters[Start+i]:0;
   }
-  U8 operator()(U8 i) const{
+  U8 operator()(U8 i) const {
     return (End-Start>=i)?Letters[End-i]:0;
   }
-  U32 Length() const{
+  U32 Length() const {
     if (Letters[Start]!=0)
       return End-Start+1;
     return 0;
   }
-  bool ChangeSuffix(const char *OldSuffix, const char *NewSuffix){
+  void GetHashes() {
+    Hash[0] = 0xc01dflu, Hash[1] = ~Hash[0];
+    for (int i=Start; i<=End; i++) {
+      U8 l = Letters[i];
+      Hash[0]^=hash(Hash[0], l, i);
+      Hash[1]^=hash(Hash[1], 
+        ((l&0x80)==0)?l&0x5F:
+        ((l&0xC0)==0x80)?l&0x3F:
+        ((l&0xE0)==0xC0)?l&0x1F:
+        ((l&0xF0)==0xE0)?l&0xF:l&0x7
+      );
+    }
+    Hash[2] = (~Hash[0])^Hash[1];
+    Hash[3] = (~Hash[1])^Hash[0];
+  }
+  bool ChangeSuffix(const char *OldSuffix, const char *NewSuffix) {
     size_t len=strlen(OldSuffix);
     if (Length()>len && memcmp(&Letters[End-len+1], OldSuffix, len)==0){
       size_t n=strlen(NewSuffix);
@@ -2787,66 +2798,95 @@ public:
     }
     return false;
   }
-  bool EndsWith(const char *Suffix) const{
+  bool MatchesAny(const char* a[], const int count) {
+    int i=0;
+    size_t len = (size_t)Length();
+    for (; i<count && (len!=strlen(a[i]) || memcmp(&Letters[Start], a[i], len)!=0); i++);
+    return i<count;
+  }
+  bool EndsWith(const char *Suffix) const {
     size_t len=strlen(Suffix);
     return (Length()>len && memcmp(&Letters[End-len+1], Suffix, len)==0);
   }
-  bool StartsWith(const char *Prefix) const{
+  bool StartsWith(const char *Prefix) const {
     size_t len=strlen(Prefix);
     return (Length()>len && memcmp(&Letters[Start], Prefix, len)==0);
   }
 };
 
-inline bool CharInArray(const char c, const char a[], const int len){
-  if (a==nullptr)
-    return false;
-  int i=0;
-  for (; i<len && c!=a[i]; i++);
-  return i<len;
-}
+class Segment {
+public:
+  Word FirstWord; // useful following questions
+  U32 WordCount;
+};
 
+class Sentence : public Segment {
+public:
+  enum Types { // possible sentence types, excluding Imperative
+    Declarative,
+    Interrogative,
+    Exclamative,
+    Count
+  };
+  Types Type;
+  U32 SegmentCount;
+};
+
+class Paragraph {
+public:
+  U32 SentenceCount, TypeCount[Sentence::Types::Count], TypeMask;
+};
 
 class Language {
 public:
-  virtual int Id() = 0;
   enum {
-    Unknown = 0,
-    English = 1,
-    French  = 2
+    Unknown,
+    English,
+    French,
+    Count
   };
+  virtual bool IsAbbreviation(Word *W) = 0;
 };
 
-class English: Language {
+class English: public Language {
+private:
+  static const int NUM_ABBREV = 6;
+  const char *Abbreviations[NUM_ABBREV]={ "mr","mrs","ms","dr","st","jr" };
 public:
   enum Flags {
     Verb                   = (1<<0),
     Noun                   = (1<<1),
     Adjective              = (1<<2),
     Plural                 = (1<<3),
-    Negation               = (1<<4),
-    PastTense              = (1<<5)|Verb,
-    PresentParticiple      = (1<<6)|Verb,
-    AdjectiveSuperlative   = (1<<7)|Adjective,
-    AdjectiveWithout       = (1<<8)|Adjective,
-    AdjectiveFull          = (1<<9)|Adjective,
-    AdverbOfManner         = (1<<10),
-    SuffixNESS             = (1<<11),
-    SuffixITY              = (1<<12)|Noun,
-    SuffixCapable          = (1<<13),
-    SuffixNCE              = (1<<14),
-    SuffixNT               = (1<<15),
-    SuffixION              = (1<<16),
-    SuffixAL               = (1<<17)|Adjective,
-    SuffixIC               = (1<<18)|Adjective,
-    SuffixIVE              = (1<<19),
-    SuffixOUS              = (1<<20)|Adjective,
-    PrefixOver             = (1<<21),
-    PrefixUnder            = (1<<22)
+    Male                   = (1<<4),
+    Female                 = (1<<5),
+    Negation               = (1<<6),
+    PastTense              = (1<<7)|Verb,
+    PresentParticiple      = (1<<8)|Verb,
+    AdjectiveSuperlative   = (1<<9)|Adjective,
+    AdjectiveWithout       = (1<<10)|Adjective,
+    AdjectiveFull          = (1<<11)|Adjective,
+    AdverbOfManner         = (1<<12),
+    SuffixNESS             = (1<<13),
+    SuffixITY              = (1<<14)|Noun,
+    SuffixCapable          = (1<<15),
+    SuffixNCE              = (1<<16),
+    SuffixNT               = (1<<17),
+    SuffixION              = (1<<18),
+    SuffixAL               = (1<<19)|Adjective,
+    SuffixIC               = (1<<20)|Adjective,
+    SuffixIVE              = (1<<21),
+    SuffixOUS              = (1<<22)|Adjective,
+    PrefixOver             = (1<<23),
+    PrefixUnder            = (1<<24)
   };
-  inline int Id() { return Language::English; };
+  bool IsAbbreviation(Word *W) { return W->MatchesAny(Abbreviations, NUM_ABBREV); };
 };
 
-class French: Language {
+class French: public Language {
+private:
+  static const int NUM_ABBREV = 2;
+  const char *Abbreviations[NUM_ABBREV]={ "m","mm" };
 public:
   enum Flags {
     Verb                   = (1<<0),
@@ -2854,15 +2894,16 @@ public:
     Adjective              = (1<<2),
     Plural                 = (1<<3)
   };
-  inline int Id() { return Language::French; };
+  bool IsAbbreviation(Word *W) { return W->MatchesAny(Abbreviations, NUM_ABBREV); };
 };
 
-template <class T> class Stemmer{
-  static_assert(std::is_base_of<Language, T>::value, "Template class does not inherit from Language");
+//////////////////////////// Stemming routines /////////////////////////
+
+class Stemmer {
 public:
-  virtual bool Stem(Word *W) = 0;
+  virtual bool IsVowel(const char c) = 0;
   virtual void Hash(Word *W) = 0;
-  static inline int Language() { T lang; return lang.Id(); };
+  virtual bool Stem(Word *W) = 0;
 };
 
 /*
@@ -2873,9 +2914,10 @@ public:
   (02/01/2018) v128: Small changes to allow for compilation with MSVC
   Fix buffer overflow (thank you Jan Ondrus)
   (28/01/2018) v133: Refactoring, added processing of "non/non-" prefixes
+  (04/02/2018) v135: Refactoring, added processing of gender-specific words and common words
 */
 
-class EnglishStemmer: public Stemmer<English> {
+class EnglishStemmer: public Stemmer {
 private:
   static const int NUM_VOWELS = 6;
   const char Vowels[NUM_VOWELS]={'a','e','i','o','u','y'};
@@ -2885,6 +2927,12 @@ private:
   const char LiEndings[NUM_LI_ENDINGS]={'c','d','e','g','h','k','m','n','r','t'};
   static const int NUM_NON_SHORT_CONSONANTS = 3;
   const char NonShortConsonants[NUM_NON_SHORT_CONSONANTS]={'w','x','Y'};
+  static const int NUM_MALE_WORDS = 9;
+  const char *MaleWords[NUM_MALE_WORDS]={"he","him","his","himself","man","men","boy","husband","actor"};
+  static const int NUM_FEMALE_WORDS = 8;
+  const char *FemaleWords[NUM_FEMALE_WORDS]={"she","her","herself","woman","women","girl","wife","actress"};
+  static const int NUM_COMMON_WORDS = 12;
+  const char *CommonWords[NUM_COMMON_WORDS]={"the","be","to","of","and","in","that","you","have","with","from","but"};
   static const int NUM_SUFFIXES_STEP0 = 3;
   const char *SuffixesStep0[NUM_SUFFIXES_STEP0]={"'s'","'s","'"};
   static const int NUM_SUFFIXES_STEP1b = 6;
@@ -3020,10 +3068,7 @@ private:
   };
   static const int NUM_EXCEPTIONS2 = 8;
   const char *Exceptions2[NUM_EXCEPTIONS2]={"inning","outing","canning","herring","earring","proceed","exceed","succeed"};
-  const U32 TypesExceptions2[NUM_EXCEPTIONS2]={English::Noun,English::Noun,English::Noun,English::Noun,English::Noun,English::Verb,English::Verb,English::Verb};
-  inline bool IsVowel(const char c){
-    return CharInArray(c, Vowels, NUM_VOWELS);
-  }
+  const U32 TypesExceptions2[NUM_EXCEPTIONS2]={English::Noun,English::Noun,English::Noun,English::Noun,English::Noun,English::Verb,English::Verb,English::Verb}; 
   inline bool IsConsonant(const char c){
     return !IsVowel(c);
   }
@@ -3470,13 +3515,24 @@ private:
     return false;
   }
 public:
-  inline void Hash(Word *W){
-    (*W).Hash=0xb0a710ad;
-    for (int i=(*W).Start; i<=(*W).End; i++)
-      (*W).Hash=(*W).Hash*263*32+(*W).Letters[i];
+  inline bool IsVowel(const char c) final {
+    return CharInArray(c, Vowels, NUM_VOWELS);
+  }
+  inline void Hash(Word *W) final {
+    (*W).Hash[2] = (*W).Hash[3] = 0xb0a710ad;
+    for (int i=(*W).Start; i<=(*W).End; i++) {
+      U8 l = (*W).Letters[i];
+      (*W).Hash[2]=(*W).Hash[2]*263*32 + l;
+      if (IsVowel(l))
+        (*W).Hash[3]=(*W).Hash[3]*997*8 + (l/4-22);
+      else if (l>='b' && l<='z')
+        (*W).Hash[3]=(*W).Hash[3]*271*32 + (l-97);
+      else
+        (*W).Hash[3]=(*W).Hash[3]*11*32 + l;
+    }
   }
   bool Stem(Word *W){
-    if ((*W).Length()<3){
+    if ((*W).Length()<2){
       Hash(W);
       return false;
     }
@@ -3492,7 +3548,7 @@ public:
         }
         Hash(W);
         (*W).Type|=TypesExceptions1[i];
-        (*W).Language = Language();
+        (*W).Language = Language::English;
         return (i<11);
       }
     }
@@ -3506,7 +3562,7 @@ public:
       if ((*W)==Exceptions2[i]){
         Hash(W);
         (*W).Type|=TypesExceptions2[i];
-        (*W).Language = Language();
+        (*W).Language = Language::English;
         return res;
       }
     }
@@ -3521,24 +3577,35 @@ public:
       if ((*W).Letters[i]=='Y')
         (*W).Letters[i]='y';
     }
+    if (!(*W).Type || (*W).Type==English::Plural) {
+      if ((*W).MatchesAny(MaleWords, NUM_MALE_WORDS))
+        res = true, (*W).Type|=English::Male;
+      else if ((*W).MatchesAny(FemaleWords, NUM_FEMALE_WORDS))
+        res = true, (*W).Type|=English::Female;
+    }
+    if (!res)
+      res=(*W).MatchesAny(CommonWords, NUM_COMMON_WORDS);
     Hash(W);
     if (res)
-      (*W).Language = Language();
+      (*W).Language = Language::English;
     return res;
   }
 };
 
 /*
-  French suffix stemmer, based on the Porter2 stemmer.
+  French suffix stemmer, based on the Porter stemmer.
 
   Changelog:
   (28/01/2018) v133: Initial release by Márcio Pais
+  (04/02/2018) v135: Added processing of common words
 */
 
-class FrenchStemmer: public Stemmer<French> {
+class FrenchStemmer: public Stemmer {
 private:
   static const int NUM_VOWELS = 17;
   const char Vowels[NUM_VOWELS]={'a','e','i','o','u','y','\xE2','\xE0','\xEB','\xE9','\xEA','\xE8','\xEF','\xEE','\xF4','\xFB','\xF9'};
+  static const int NUM_COMMON_WORDS = 10;
+  const char *CommonWords[NUM_COMMON_WORDS]={"de","la","le","et","en","un","une","du","que","pas"};
   static const int NUM_EXCEPTIONS = 3;
   const char *(Exceptions[NUM_EXCEPTIONS])[2]={
     {"monument", "monument"},
@@ -3592,9 +3659,6 @@ private:
   const char *SuffixesStep4[NUM_SUFFIXES_STEP4]={"i\xE8re","I\xE8re","ion","ier","Ier","e","\xEB"};
   static const int NUM_SUFFIXES_STEP5 = 5;
   const char *SuffixesStep5[NUM_SUFFIXES_STEP5]={"enn","onn","ett","ell","eill"};
-  inline bool IsVowel(const char c){
-    return CharInArray(c, Vowels, NUM_VOWELS);
-  }
   inline bool IsConsonant(const char c){
     return !IsVowel(c);
   }
@@ -3871,10 +3935,21 @@ private:
     return false;
   }
 public:
-  inline void Hash(Word *W){
-    (*W).Hash=~0xeff1cace;
-    for (int i=(*W).Start; i<=(*W).End; i++)
-      (*W).Hash=(*W).Hash*251*32+(*W).Letters[i];
+  inline bool IsVowel(const char c) final {
+    return CharInArray(c, Vowels, NUM_VOWELS);
+  }
+  inline void Hash(Word *W) final {
+    (*W).Hash[2] = (*W).Hash[3] = ~0xeff1cace;
+    for (int i=(*W).Start; i<=(*W).End; i++) {
+      U8 l = (*W).Letters[i];
+      (*W).Hash[2]=(*W).Hash[2]*251*32 + l;
+      if (IsVowel(l))
+        (*W).Hash[3]=(*W).Hash[3]*997*16 + l;
+      else if (l>='b' && l<='z')
+        (*W).Hash[3]=(*W).Hash[3]*271*32 + (l-97);
+      else
+        (*W).Hash[3]=(*W).Hash[3]*11*32 + l;
+    }
   }
   bool Stem(Word *W) {
     if ((*W).Length()<2){
@@ -3889,7 +3964,7 @@ public:
           (*W).End=(*W).Start+U8(len-1);
           Hash(W);
           (*W).Type|=TypesExceptions[i];
-          (*W).Language = Language();
+          (*W).Language = Language::French;
           return true;
         }
       }
@@ -3912,8 +3987,10 @@ public:
     res|=Step6(W);
     for (int i=(*W).Start; i<=(*W).End; i++)
       (*W).Letters[i] = tolower((*W).Letters[i]);
+    if (!res)
+      res=(*W).MatchesAny(CommonWords, NUM_COMMON_WORDS);
     if (res)
-      (*W).Language = Language();
+      (*W).Language = Language::French;
     return res;
   }
 };
@@ -3922,6 +3999,279 @@ public:
 
 // All of the models below take a Mixer as a parameter and write
 // predictions to it.
+
+template <class T, const U32 Size> class Cache {
+  static_assert(Size>1 && (Size&(Size-1))==0, "Cache size must be a power of 2 bigger than 1");
+private:
+  Array<T> Data;
+  U32 Index;
+public:
+  explicit Cache() : Data(Size) { Index=0; }
+  T& operator()(U32 i) {
+    return Data[(Index-i)&(Size-1)];
+  }
+  void operator++(int){
+    Index++;
+  }
+  void operator--(int) {
+    Index--;
+  }
+};
+
+class TextModel {
+private:
+  const U32 MIN_RECOGNIZED_WORDS = 4;
+  ContextMap Map;
+  Array<Stemmer*> Stemmers;
+  Array<Language*> Languages;
+  Cache<Word, 8> Words[Language::Count];
+  Cache<Segment, 4> Segments;
+  Cache<Sentence, 4> Sentences;
+  Cache<Paragraph, 2> Paragraphs;
+  U32 langCount[Language::Count-1];
+  U64 langMask[Language::Count-1];
+  int langId, pLangId;
+  Word *cWord, *pWord; // current word, previous word
+  Segment *cSegment; // current segment
+  Sentence *cSentence; // current sentence
+  Paragraph *cParagraph; // current paragraph
+  struct {
+    U64 numbers[2];
+    U32 lastUpper;    // distance to last uppercase letter
+    U32 maskUpper;    // binary mask of uppercase letters seen (in the last 32 bytes)
+    U32 lastLetter;   // distance to last letter
+    U32 lastDigit;    // distance to last digit
+    U32 lastPunct;    // distance to last punctuation character
+    U32 lastNewLine;  // distance to last new line character
+    U32 prevNewLine;  // distance to penultimate new line character
+    U32 wordGap;      // distance between the last words
+    U32 spaces;       // binary mask of whitespace characters seen (in the last 32 bytes)
+    U32 spaceCount;   // count of whitespace characters seen (in the last 32 bytes)
+    U32 numMask;      // binary mask of the results of the arithmetic comparisons between the numbers seen
+    U32 commas;       // number of commas seen in this line (not this segment/sentence)
+    U32 quoteLength;  // length (in words) of current quote
+    U32 masks[3],
+        wordLength[2];
+    int UTF8Remaining;// remaining bytes for current UTF8-encoded Unicode code point (-1 if invalid byte found)
+    U8 firstLetter;   // first letter of current word
+    U8 firstChar;     // first character of current line
+  } Info;
+  void Update(Buf& buffer, ModelStats *Stats = nullptr);
+  void SetContexts(Buf& buffer, ModelStats *Stats = nullptr);
+public:
+  TextModel(const U32 Size) : Map(Size, 1), Stemmers(Language::Count-1), Languages(Language::Count-1), langId(Language::Unknown), pLangId(langId) {
+    Stemmers[Language::English-1] = new EnglishStemmer();
+    Stemmers[Language::French-1] = new FrenchStemmer();
+    Languages[Language::English-1] = new English();
+    Languages[Language::French-1] = new French();
+    cWord = &Words[langId](0);
+    pWord = &Words[langId](1);
+    cSegment = &Segments(0);
+    cSentence = &Sentences(0);
+    cParagraph = &Paragraphs(0);
+    memset(&Info, 0, sizeof(Info));
+    memset(&langCount[0], 0, sizeof(langCount));
+    memset(&langMask[0], 0, sizeof(langMask));
+  }
+  void Predict(Mixer& mixer, Buf& buffer, ModelStats *Stats = nullptr) {
+    if (bpos==0) {
+      Update(buffer, Stats);
+      SetContexts(buffer, Stats);
+    }
+    Map.mix(mixer);
+  }
+};
+
+void TextModel::Update(Buf& buffer, ModelStats *Stats) {
+  Info.lastUpper  = min(0xFF, Info.lastUpper+1), Info.maskUpper<<=1;
+  Info.lastLetter = min(0x1F, Info.lastLetter+1);
+  Info.lastDigit  = min(0xFF, Info.lastDigit+1);
+  Info.lastPunct  = min(0x3F, Info.lastPunct+1);
+  Info.lastNewLine++, Info.prevNewLine++;
+  Info.spaceCount-=(Info.spaces>>31), Info.spaces<<=1;
+  Info.masks[0]<<=2, Info.masks[1]<<=2, Info.masks[2]<<=4;
+
+  U8 c = buffer(1), pC=tolower(c);
+  if (c!=pC) {
+    c = pC;
+    Info.lastUpper = 0, Info.maskUpper|=1;
+  }
+  pC = buffer(2);
+
+  if ((c>='a' && c<='z') || c=='\'' || c=='-' || c>0x7F) {    
+    if (Info.wordLength[0]==0) {
+      // check for syllabification with "+"
+      if (pC==NEW_LINE && ((Info.lastLetter==3 && buffer(3)=='+') || (Info.lastLetter==4 && buffer(3)==CARRIAGE_RETURN && buffer(4)=='+'))) {
+        Info.wordLength[0] = Info.wordLength[1];
+        for (int i=Language::Unknown; i<Language::Count; i++)
+          Words[i]--;
+        cWord = pWord, pWord = &Words[pLangId](1);
+        memset(cWord, 0, sizeof(Word));
+        for (U32 i=0; i<Info.wordLength[0]; i++)
+          (*cWord)+=buffer(Info.wordLength[0]-i+Info.lastLetter);
+        Info.wordLength[1] = (*pWord).Length();
+        cSegment->WordCount--;
+        cSentence->WordCount--;
+      }
+      else {
+        Info.wordGap = Info.lastLetter;
+        Info.firstLetter = c;
+      }
+    }
+    Info.lastLetter = 0;
+    Info.wordLength[0]++;
+    Info.masks[0]+=(langId!=Language::Unknown)?1+Stemmers[langId-1]->IsVowel(c):1, Info.masks[1]++;
+    if (c=='\'') {
+      Info.masks[2]+=12;
+      if (Info.wordLength[0]==1) {
+        if (Info.quoteLength==0 && pC==SPACE)
+          Info.quoteLength = 1;
+        else if (Info.quoteLength>0 && Info.lastPunct==1)
+          Info.quoteLength = 0;
+      }
+    }
+    (*cWord)+=c;
+    cWord->GetHashes();
+  }
+  else {
+    if (cWord->Length()>0) {
+      if (langId!=Language::Unknown)
+        memcpy(&Words[Language::Unknown](0), cWord, sizeof(Word));
+
+      for (int i=Language::Count-1; i>Language::Unknown; i--) {
+        langCount[i-1]-=(langMask[i-1]>>63), langMask[i-1]<<=1;
+        if (i!=langId)
+          memcpy(&Words[i](0), cWord, sizeof(Word));
+        if (Stemmers[i-1]->Stem(&Words[i](0)))
+          langCount[i-1]++, langMask[i-1]|=1;
+      }      
+      langId = Language::Unknown;
+      U32 best = MIN_RECOGNIZED_WORDS;
+      for (int i=Language::Count-1; i>Language::Unknown; i--) {
+        if (langCount[i-1]>=best) {
+          best = langCount[i-1] + (i==pLangId); //bias to prefer the previously detected language
+          langId = i;
+        }
+        Words[i]++;
+      }
+      Words[Language::Unknown]++;
+    #ifndef NDEBUG
+      if (langId!=pLangId) {
+        switch (langId) {
+          case Language::Unknown: { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b[Language: Unknown, blpos: %d]\n",blpos); break; };
+          case Language::English: { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b[Language: English, blpos: %d]\n",blpos); break; };
+          case Language::French : { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b[Language: French, blpos: %d]\n",blpos);  break; };
+        }
+      }
+    #endif
+      pLangId = langId;
+      pWord = &Words[langId](1), cWord = &Words[langId](0);
+      memset(cWord, 0, sizeof(Word));
+      cSegment->WordCount++;
+      if (cSentence->WordCount==0)
+        memcpy(&cSentence->FirstWord, pWord, sizeof(Word));
+      cSentence->WordCount++;
+      Info.wordLength[1] = Info.wordLength[0], Info.wordLength[0] = 0;
+      Info.quoteLength+=(Info.quoteLength>0);
+      if (Info.quoteLength>0x1F)
+        Info.quoteLength = 0;
+    }
+    bool skip = false;
+    switch (c) {
+      case '.': {
+        if (langId!=Language::Unknown && Info.lastUpper==Info.wordLength[1] && Languages[langId-1]->IsAbbreviation(pWord))
+          break;
+      }
+      case '?': case '!': {
+        cSentence->Type = (c=='.')?Sentence::Types::Declarative:(c=='?')?Sentence::Types::Interrogative:Sentence::Types::Exclamative;
+        cSentence->SegmentCount++;
+        cParagraph->SentenceCount++;
+        cParagraph->TypeCount[cSentence->Type]++;
+        cParagraph->TypeMask<<=2, cParagraph->TypeMask|=cSentence->Type;
+        Sentences++;
+        cSentence = &Sentences(0);
+        memset(cSentence, 0, sizeof(Sentence));
+        skip = true;
+      }
+      case ',': case ';': case ':': {
+        Info.commas+=(c==',');
+        if (!skip)
+          cSentence->SegmentCount++;
+        Info.lastPunct = 0;
+        Info.masks[0]+=3, Info.masks[1]+=2, Info.masks[2]+=15;
+        Segments++;
+        cSegment = &Segments(0);
+        memset(cSegment, 0, sizeof(Segment));
+        break;
+      }
+      case NEW_LINE: {
+        Info.prevNewLine = Info.lastNewLine, Info.lastNewLine = 0;
+        Info.commas = 0;
+        if (Info.prevNewLine==1 || (Info.prevNewLine==2 && pC==CARRIAGE_RETURN)) {
+          Paragraphs++;
+          cParagraph = &Paragraphs(0);
+          memset(cParagraph, 0, sizeof(Paragraph));
+        }
+      }
+      case TAB: case CARRIAGE_RETURN: case SPACE: {
+        Info.spaceCount++, Info.spaces|=1;
+        Info.masks[1]+=3;
+        break;
+      }
+      case '(' : Info.masks[2]+=1; break;
+      case '[' : Info.masks[2]+=2; break;
+      case '{' : Info.masks[2]+=3; break;
+      case '<' : Info.masks[2]+=4; break;
+      case 0xAB: Info.masks[2]+=5; break;
+      case ')' : Info.masks[2]+=6; break;
+      case ']' : Info.masks[2]+=7; break;
+      case '}' : Info.masks[2]+=8; break;
+      case '>' : Info.masks[2]+=9; break;
+      case 0xBB: Info.masks[2]+=10; break;
+      case '"': {
+        Info.masks[2]+=11;
+        Info.quoteLength = (Info.quoteLength==0); //start/stop counting
+        break;
+      }
+      case '/' : case '-': case '+': case '*': case '=': case '%': Info.masks[2]+=13; break;
+      case '\\': case '|': case '_': case '@': case '&': case '^': Info.masks[2]+=14; break;
+    }
+    if (c>='0' && c<='9') {
+      Info.numbers[0] = Info.numbers[0]*10 + (c&0xF);
+      Info.lastDigit = 0;
+    }
+    else if (Info.numbers[0]>0) {
+      Info.numMask<<=2, Info.numMask|=1+(Info.numbers[0]>=Info.numbers[1])+(Info.numbers[0]>Info.numbers[1]);
+      Info.numbers[1] = Info.numbers[0], Info.numbers[0] = 0;
+    }
+  }
+  if (Info.lastNewLine==1)
+    Info.firstChar = (langId!=Language::Unknown)?c:min(c,96);
+  
+  int leadingBitsSet = 0;
+  while (((c>>(7-leadingBitsSet))&1)!=0) leadingBitsSet++;
+
+  if (Info.UTF8Remaining>0 && leadingBitsSet==1)
+    Info.UTF8Remaining--;
+  else
+    Info.UTF8Remaining = (leadingBitsSet!=1)?(c!=0xC0 && c!=0xC1 && c<0xF5)?(leadingBitsSet-(leadingBitsSet>0)):-1:0;
+}
+
+void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
+  U8 m2 = Info.masks[2]&0xF, column = min(0xFF, Info.lastNewLine);
+  Map.set(
+    (column&0xF8)|(Info.masks[1]&3)|((ilog2(Info.prevNewLine-Info.lastNewLine)>5)<<2)|
+    (min(3, Info.lastLetter)<<8)|
+    (Info.firstChar<<10)|
+    ((Info.commas>4)<<18)|
+    ((m2>=1 && m2<=5)<<19)|
+    ((m2>=6 && m2<=10)<<20)|
+    ((m2==11 || m2==12)<<21)|
+    ((Info.lastUpper<column)<<22)|
+    ((Info.lastDigit<column)<<23)|
+    ((column<Info.prevNewLine-Info.lastNewLine)<<24)
+  );
+}
 
 //////////////////////////// matchModel ///////////////////////////
 
@@ -4036,7 +4386,7 @@ void wordModel(Mixer& m, Filetype filetype) {
             pWord=&StemWords[(StemIndex-1)&3];
             memset(cWord, 0, sizeof(Word));
             for (U32 i=0;i<=wordlen;i++)
-              (*cWord)+=buf(wordlen-i+1+2*(i!=wordlen));
+              (*cWord)+=buf(wordlen-i+1+(lastLetter-1)*(i!=wordlen));
           }
         }
         else{
@@ -4179,7 +4529,7 @@ void wordModel(Mixer& m, Filetype filetype) {
     ));
     cm.set(hash(col,wordlen1,above&0x5F,c4&0x5F));
     cm.set(hash( mask2&0x3F, wrdhsh&0xFFF, (0x100|firstLetter)*(wordlen<6),(wordGap>4)*2+(wordlen1>5)) );
-    cm.set(hash((*pWord).Hash, h));
+    cm.set(hash((*pWord).Hash[2], h));
   }
   cm.mix(m);
 }
@@ -4207,8 +4557,6 @@ inline U8 LogMeanDiffQt(const U8 a, const U8 b){
   return sign | ilog2((a+b)/max(2,abs(a-b)*2)+1);
 }
 
-#define SPACE 0x20
-
 struct dBASE {
   U8 Version;
   U32 nRecords;
@@ -4216,7 +4564,7 @@ struct dBASE {
   int Start, End;
 };
 
-void recordModel(Mixer& m, Filetype filetype, ModelStats *Stats = NULL) {
+void recordModel(Mixer& m, Filetype filetype, ModelStats *Stats = nullptr) {
   static int cpos1[256] , cpos2[256], cpos3[256], cpos4[256];
   static int wpos1[0x10000]; // buf(1..2) -> last position
   static int rlen[3] = {2,3,4}; // run length and 2 candidates
@@ -5963,7 +6311,7 @@ inline int X2(int i) {
 #define F_(k,l,chn)(F[2*(49*(k)+l)+chn])
 #define L_(i,k)(L[49*(i)+k])
 
-void wavModel(Mixer& m, int info, ModelStats *Stats = NULL) {
+void wavModel(Mixer& m, int info, ModelStats *Stats = nullptr) {
   static int col=0;
   static Array<int> pr{3*2}; // [3][2]
   static Array<int> counter{2};
@@ -6165,7 +6513,7 @@ enum InstructionFormat {
 };
 
 // 1 byte opcodes
-const static U8 Table1[256] = {
+static const U8 Table1[256] = {
   // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
   fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 0
   fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 1
@@ -6189,7 +6537,7 @@ const static U8 Table1[256] = {
 };
 
 // 2 byte opcodes
-const static U8 Table2[256] = {
+static const U8 Table2[256] = {
   // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
   fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fNM|fNI,fERR   ,fNM|fNI,fNM|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 0
   fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 1
@@ -6213,7 +6561,7 @@ const static U8 Table2[256] = {
 };
 
 // 3 byte opcodes 0F38XX
-const static U8 Table3_38[256] = {
+static const U8 Table3_38[256] = {
   // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
   fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   , // 0
   fMR|fNI,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fERR   ,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fERR   , // 1
@@ -6234,7 +6582,7 @@ const static U8 Table3_38[256] = {
 };
 
 // 3 byte opcodes 0F3AXX
-const static U8 Table3_3A[256] = {
+static const U8 Table3_3A[256] = {
   // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
   fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI, // 0
   fERR   ,fERR   ,fERR   ,fERR   ,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 1
@@ -6255,7 +6603,7 @@ const static U8 Table3_3A[256] = {
 };
 
 // escape opcodes using ModRM byte to get more variants
-const static U8 TableX[32] = {
+static const U8 TableX[32] = {
   // 0       1       2       3       4       5       6       7
   fMR|fBI,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // escapes for 0xf6
   fMR|fDI,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // escapes for 0xf7
@@ -6263,8 +6611,8 @@ const static U8 TableX[32] = {
   fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fMR|fNI,fERR   ,fMR|fNI,fERR   , // escapes for 0xff
 };
 
-const static U8 InvalidX64Ops[19] = {0x06, 0x07, 0x16, 0x17, 0x1E, 0x1F, 0x27, 0x2F, 0x37, 0x3F, 0x60, 0x61, 0x62, 0x82, 0x9A, 0xD4, 0xD5, 0xD6, 0xEA,};
-const static U8 X64Prefixes[8] = {0x26, 0x2E, 0x36, 0x3E, 0x9B, 0xF0, 0xF2, 0xF3,};
+static const U8 InvalidX64Ops[19] = {0x06, 0x07, 0x16, 0x17, 0x1E, 0x1F, 0x27, 0x2F, 0x37, 0x3F, 0x60, 0x61, 0x62, 0x82, 0x9A, 0xD4, 0xD5, 0xD6, 0xEA,};
+static const U8 X64Prefixes[8] = {0x26, 0x2E, 0x36, 0x3E, 0x9B, 0xF0, 0xF2, 0xF3,};
 
 enum InstructionCategory {
   OP_INVALID              =  0,
@@ -6301,7 +6649,7 @@ enum InstructionCategory {
   OP_SSE_DATAMOV          = 31,
 };
 
-const static U8 TypeOp1[256] = {
+static const U8 TypeOp1[256] = {
   OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //03
   OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_STACK         , //07
   OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , //0B
@@ -6368,7 +6716,7 @@ const static U8 TypeOp1[256] = {
   OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , OP_GEN_ARITH_BINARY  , OP_GEN_BRANCH        , //FF
 };
 
-const static U8 TypeOp2[256] = {
+static const U8 TypeOp2[256] = {
   OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //03
   OP_INVALID           , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //07
   OP_SYSTEM            , OP_SYSTEM            , OP_INVALID           , OP_GEN_CONTROL       , //0B
@@ -6435,7 +6783,7 @@ const static U8 TypeOp2[256] = {
   OP_MMX               , OP_MMX               , OP_MMX               , OP_INVALID           , //FF
 };
 
-const static U8 TypeOp3_38[256] = {
+static const U8 TypeOp3_38[256] = {
   OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //03
   OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //07
   OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //0B
@@ -6502,7 +6850,7 @@ const static U8 TypeOp3_38[256] = {
   OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FF
 };
 
-const static U8 TypeOp3_3A[256] = {
+static const U8 TypeOp3_3A[256] = {
   OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //03
   OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //07
   OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //0B
@@ -6569,7 +6917,7 @@ const static U8 TypeOp3_3A[256] = {
   OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FF
 };
 
-const static U8 TypeOpX[32] = {
+static const U8 TypeOpX[32] = {
   // escapes for F6
   OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_ARITH_BINARY  ,
   OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  ,
@@ -6671,141 +7019,8 @@ struct Instruction {
 
 #define MinRequired          8 // minimum required consecutive valid instructions to be considered as code
 
-inline bool IsInvalidX64Op(U8 Op){
-  for (int i=0; i<19; i++){
-    if (Op == InvalidX64Ops[i])
-      return true;
-  }
-  return false;
-}
-
-inline bool IsValidX64Prefix(U8 Prefix){
-  for (int i=0; i<8; i++){
-    if (Prefix == X64Prefixes[i])
-      return true;
-  }
-  return ((Prefix>=0x40 && Prefix<=0x4F) || (Prefix>=0x64 && Prefix<=0x67));
-}
-
-void ProcessMode(Instruction &Op, ExeState &State){
-  if ((Op.Flags&fMODE)==fAM){
-    Op.Data|=AddressMode;
-    Op.BytesRead = 0;
-    switch (Op.Flags&fTYPE){
-      case fDR : Op.Data|=(2<<TypeShift);
-      case fDA : Op.Data|=(1<<TypeShift);
-      case fAD : {
-        State = Read32;
-        break;
-      }
-      case fBR : {
-        Op.Data|=(2<<TypeShift);
-        State = Read8;
-      }
-    }
-  }
-  else{
-    switch (Op.Flags&fTYPE){
-      case fBI : State = Read8; break;
-      case fWI : {
-        State = Read16;
-        Op.Data|=(1<<TypeShift);
-        Op.BytesRead = 0;
-        break;
-      }
-      case fDI : {
-        // x64 Move with 8byte immediate? [REX.W is set, opcodes 0xB8+r]
-        Op.imm8=((Op.REX & REX_w)>0 && (Op.Code&0xF8)==0xB8);
-        if (!Op.o16 || Op.imm8){
-          State = Read32;
-          Op.Data|=(2<<TypeShift);
-        }
-        else{
-          State = Read16;
-          Op.Data|=(3<<TypeShift);
-        }
-        Op.BytesRead = 0;
-        break;
-      }
-      default: State = Start; /*no immediate*/
-    }
-  }
-}
-
-void ProcessFlags2(Instruction &Op, ExeState &State){
-  //if arriving from state ExtraFlags, we've already read the ModRM byte
-  if ((Op.Flags&fMODE)==fMR && State!=ExtraFlags){
-    State = ReadModRM;
-    return;
-  }
-  ProcessMode(Op, State);
-}
-
-void ProcessFlags(Instruction &Op, ExeState &State){
-  if (Op.Code==OP_CALLF || Op.Code==OP_JMPF || Op.Code==OP_ENTER){
-    Op.BytesRead = 0;
-    State = Read16_f;
-    return; //must exit, ENTER has ModRM too
-  }
-  ProcessFlags2(Op, State);
-}
-
-void CheckFlags(Instruction &Op, ExeState &State){
-  //must peek at ModRM byte to read the REG part, so we can know the opcode
-  if (Op.Flags==fMEXTRA)
-    State = ExtraFlags;
-  else if (Op.Flags==fERR){
-    memset(&Op, 0, sizeof(Instruction));
-    State = Error;
-  }
-  else
-    ProcessFlags(Op, State);
-}
-
-void ReadFlags(Instruction &Op, ExeState &State){
-  Op.Flags = Table1[Op.Code];
-  Op.Category = TypeOp1[Op.Code];
-  CheckFlags(Op, State);
-}
-
-void ProcessModRM(Instruction &Op, ExeState &State){
-  if ((Op.ModRM & ModRM_mod)==0x40)
-    State = Read8_ModRM; //register+byte displacement
-  else if ((Op.ModRM & ModRM_mod)==0x80 || (Op.ModRM & (ModRM_mod|ModRM_rm))==0x05 || (Op.ModRM<0x40 && (Op.SIB & SIB_base)==0x05) ){
-    State = Read32_ModRM; //register+dword displacement
-    Op.BytesRead = 0;
-  }
-  else
-    ProcessMode(Op, State);
-}
-
-void ApplyCodeAndSetFlag(Instruction &Op, U32 Flag = 0){
-  Op.Data&=ClearCodeMask; \
-  Op.Data|=(Op.Code<<CodeShift)|Flag;
-}
-
-inline U32 OpN(OpCache &Cache, U32 n){
-  return Cache.Op[ (Cache.Index-n)&(CacheSize-1) ];
-}
-
-inline U32 OpNCateg(U32 &Mask, U32 n){
-  return ((Mask>>(CategoryShift*(n-1)))&CategoryMask);
-}
-
-inline int pref(int i) { return (buf(i)==0x0f)+2*(buf(i)==0x66)+3*(buf(i)==0x67); }
-
-// Get context at buf(i) relevant to parsing 32-bit x86 code
-U32 execxt(int i, int x=0) {
-  int prefix=0, opcode=0, modrm=0, sib=0;
-  if (i) prefix+=4*pref(i--);
-  if (i) prefix+=pref(i--);
-  if (i) opcode+=buf(i--);
-  if (i) modrm+=buf(i--)&(ModRM_mod|ModRM_rm);
-  if (i&&((modrm&ModRM_rm)==4)&&(modrm<ModRM_mod)) sib=buf(i)&SIB_scale;
-  return prefix|opcode<<4|modrm<<12|x<<20|sib<<(28-6);
-}
-
-class exeModel{
+class exeModel {
+private:
   static const int N1=8, N2=10;
   ContextMap2 cm;
   OpCache Cache;
@@ -6814,24 +7029,145 @@ class exeModel{
   Instruction Op;
   U32 TotalOps, OpMask, OpCategMask, Context, BrkPoint, BrkCtx;
   bool Valid;
+  inline bool IsInvalidX64Op(U8 Op) {
+    for (int i=0; i<19; i++) {
+      if (Op == InvalidX64Ops[i])
+        return true;
+    }
+    return false;
+  }
+  inline bool IsValidX64Prefix(U8 Prefix) {
+    for (int i=0; i<8; i++) {
+      if (Prefix == X64Prefixes[i])
+        return true;
+    }
+    return ((Prefix>=0x40 && Prefix<=0x4F) || (Prefix>=0x64 && Prefix<=0x67));
+  }
+  void ProcessMode(Instruction &Op, ExeState &State) {
+    if ((Op.Flags&fMODE)==fAM) {
+      Op.Data|=AddressMode;
+      Op.BytesRead = 0;
+      switch (Op.Flags&fTYPE) {
+        case fDR : Op.Data|=(2<<TypeShift);
+        case fDA : Op.Data|=(1<<TypeShift);
+        case fAD : {
+          State = Read32;
+          break;
+        }
+        case fBR : {
+          Op.Data|=(2<<TypeShift);
+          State = Read8;
+        }
+      }
+    }
+    else{
+      switch (Op.Flags&fTYPE) {
+        case fBI : State = Read8; break;
+        case fWI : {
+          State = Read16;
+          Op.Data|=(1<<TypeShift);
+          Op.BytesRead = 0;
+          break;
+        }
+        case fDI : {
+          // x64 Move with 8byte immediate? [REX.W is set, opcodes 0xB8+r]
+          Op.imm8=((Op.REX & REX_w)>0 && (Op.Code&0xF8)==0xB8);
+          if (!Op.o16 || Op.imm8){
+            State = Read32;
+            Op.Data|=(2<<TypeShift);
+          }
+          else{
+            State = Read16;
+            Op.Data|=(3<<TypeShift);
+          }
+          Op.BytesRead = 0;
+          break;
+        }
+        default: State = Start; /*no immediate*/
+      }
+    }
+  }
+  void ProcessFlags2(Instruction &Op, ExeState &State) {
+    //if arriving from state ExtraFlags, we've already read the ModRM byte
+    if ((Op.Flags&fMODE)==fMR && State!=ExtraFlags) {
+      State = ReadModRM;
+      return;
+    }
+    ProcessMode(Op, State);
+  }
+  void ProcessFlags(Instruction &Op, ExeState &State) {
+    if (Op.Code==OP_CALLF || Op.Code==OP_JMPF || Op.Code==OP_ENTER) {
+      Op.BytesRead = 0;
+      State = Read16_f;
+      return; //must exit, ENTER has ModRM too
+    }
+    ProcessFlags2(Op, State);
+  }
+  void CheckFlags(Instruction &Op, ExeState &State) {
+    //must peek at ModRM byte to read the REG part, so we can know the opcode
+    if (Op.Flags==fMEXTRA)
+      State = ExtraFlags;
+    else if (Op.Flags==fERR) {
+      memset(&Op, 0, sizeof(Instruction));
+      State = Error;
+    }
+    else
+      ProcessFlags(Op, State);
+  }
+  void ReadFlags(Instruction &Op, ExeState &State) {
+    Op.Flags = Table1[Op.Code];
+    Op.Category = TypeOp1[Op.Code];
+    CheckFlags(Op, State);
+  }
+  void ProcessModRM(Instruction &Op, ExeState &State) {
+    if ((Op.ModRM & ModRM_mod)==0x40)
+      State = Read8_ModRM; //register+byte displacement
+    else if ((Op.ModRM & ModRM_mod)==0x80 || (Op.ModRM & (ModRM_mod|ModRM_rm))==0x05 || (Op.ModRM<0x40 && (Op.SIB & SIB_base)==0x05) ){
+      State = Read32_ModRM; //register+dword displacement
+      Op.BytesRead = 0;
+    }
+    else
+      ProcessMode(Op, State);
+  }
+  void ApplyCodeAndSetFlag(Instruction &Op, U32 Flag = 0) {
+    Op.Data&=ClearCodeMask; \
+      Op.Data|=(Op.Code<<CodeShift)|Flag;
+  }
+  inline U32 OpN(OpCache &Cache, U32 n) {
+    return Cache.Op[ (Cache.Index-n)&(CacheSize-1) ];
+  }
+  inline U32 OpNCateg(U32 &Mask, U32 n) {
+    return ((Mask>>(CategoryShift*(n-1)))&CategoryMask);
+  }
+  inline int pref(int i) { return (buf(i)==0x0f)+2*(buf(i)==0x66)+3*(buf(i)==0x67); }
+  // Get context at buf(i) relevant to parsing 32-bit x86 code
+  U32 execxt(int i, int x=0) {
+    int prefix=0, opcode=0, modrm=0, sib=0;
+    if (i) prefix+=4*pref(i--);
+    if (i) prefix+=pref(i--);
+    if (i) opcode+=buf(i--);
+    if (i) modrm+=buf(i--)&(ModRM_mod|ModRM_rm);
+    if (i&&((modrm&ModRM_rm)==4)&&(modrm<ModRM_mod)) sib=buf(i)&SIB_scale;
+    return prefix|opcode<<4|modrm<<12|x<<20|sib<<(28-6);
+  }
   void Update(U8 B, bool Forced = false);
   void Train();
 public:
-  exeModel() : cm(MEM*2, N1+N2), pState (Start), State( Start), TotalOps(0), OpMask(0), OpCategMask(0), Context(0), BrkPoint(0), BrkCtx(0), Valid(false){
+  exeModel() : cm(MEM*2, N1+N2), pState (Start), State( Start), TotalOps(0), OpMask(0), OpCategMask(0), Context(0), BrkPoint(0), BrkCtx(0), Valid(false) {
     memset(&Cache, 0, sizeof(OpCache));
     memset(&Op, 0, sizeof(Instruction));
     memset(&StateBH, 0, sizeof(StateBH));
     if (trainEXE) Train();
   }
-  bool Predict(Mixer& m, bool Forced = false, ModelStats *Stats = NULL);
+  bool Predict(Mixer& m, bool Forced = false, ModelStats *Stats = nullptr);
 };
 
-void exeModel::Train(){
+void exeModel::Train() {
   FileDisk f;
   printf("Pre-training x86/x64 model...");
   OpenFromMyFolder::myself(&f);
   int i=0;
-  do{
+  do {
     Update(buf(1));
     if (Valid)
       cm.Train(i);
@@ -6844,17 +7180,17 @@ void exeModel::Train(){
   memset(&buf[0], 0, buf.size());
 }
 
-void exeModel::Update(U8 B, bool Forced){
+void exeModel::Update(U8 B, bool Forced) {
   pState = State;
   Op.Size++;
-  switch (State){
+  switch (State) {
     case Start: case Error: {
       // previous code may have just been a REX prefix
       bool Skip = false;
-      if (Op.MustCheckREX){
+      if (Op.MustCheckREX) {
         Op.MustCheckREX = false;
         // valid x64 code?
-        if (!IsInvalidX64Op(B) && !IsValidX64Prefix(B)){
+        if (!IsInvalidX64Op(B) && !IsValidX64Prefix(B)) {
           Op.REX = Op.Code;
           Op.Code = B;
           Op.Data = PrefixREX|(Op.Code<<CodeShift)|(Op.Data&PrefixMask);
@@ -6863,7 +7199,7 @@ void exeModel::Update(U8 B, bool Forced){
       }
 
       Op.ModRM = Op.SIB = Op.REX = Op.Flags = Op.BytesRead = 0;
-      if (!Skip){
+      if (!Skip) {
         Op.Code = B;
         // possible REX prefix?
         Op.MustCheckREX = ((Op.Code&0xF0)==0x40) && (!(Op.Decoding && ((Op.Data&PrefixMask)==1)));
@@ -6877,7 +7213,7 @@ void exeModel::Update(U8 B, bool Forced){
                     (Op.Code==LOCK)*6 +
                     (Op.Code==REP_N_STR || Op.Code==REP_STR)*7;
 
-        if (!Op.Decoding){
+        if (!Op.Decoding) {
           TotalOps+=(Op.Data!=0)-(Cache.Index && Cache.Op[ Cache.Index&(CacheSize-1) ]!=0);
           OpMask = (OpMask<<1)|(State!=Error);
           OpCategMask = (OpCategMask<<CategoryShift)|(Op.Category);
@@ -6888,7 +7224,7 @@ void exeModel::Update(U8 B, bool Forced){
 
           if (!Op.Prefix)
             Op.Data = Op.Code<<CodeShift;
-          else{
+          else {
             Op.Data = Op.Prefix;
             Op.Category = TypeOp1[Op.Code];
             Op.Decoding = true;
@@ -6896,14 +7232,14 @@ void exeModel::Update(U8 B, bool Forced){
             break;
           }
         }
-        else{
+        else {
           // we only have enough bits for one prefix, so the
           // instruction will be encoded with the last one
-          if (!Op.Prefix){
+          if (!Op.Prefix) {
             Op.Data|=(Op.Code<<CodeShift);
             Op.Decoding = false;
           }
-          else{
+          else {
             Op.Data = Op.Prefix;
             Op.Category = TypeOp1[Op.Code];
             BrkCtx = hash(1+(BrkPoint = 1), Op.Prefix, OpCategMask&CategoryMask);
@@ -6936,7 +7272,7 @@ void exeModel::Update(U8 B, bool Forced){
         State = Read_OP3_38;
       else if (Op.Code==0x3A)
         State = Read_OP3_3A;
-      else{
+      else {
         ApplyCodeAndSetFlag(Op);
         Op.Flags = Table2[Op.Code];
         Op.Category = TypeOp2[Op.Code];
@@ -6954,12 +7290,12 @@ void exeModel::Update(U8 B, bool Forced){
       Op.ModRM = B;
       Op.Data|=(Op.ModRM<<ModRMShift)|HasModRM;
       Op.SIB = 0;
-      if (Op.Flags==fMEXTRA){
+      if (Op.Flags==fMEXTRA) {
         Op.Data|=HasExtraFlags;
         int i = ((Op.ModRM>>3)&0x07) | ((Op.Code&0x01)<<3) | ((Op.Code&0x08)<<1);
         Op.Flags = TableX[i];
         Op.Category = TypeOpX[i];
-        if (Op.Flags==fERR){
+        if (Op.Flags==fERR) {
           memset(&Op, 0, sizeof(Instruction));
           State = Error;
           BrkCtx = hash(1+(BrkPoint = 6), State);
@@ -6970,7 +7306,7 @@ void exeModel::Update(U8 B, bool Forced){
         break;
       }
 
-      if ((Op.ModRM & ModRM_rm)==4 && Op.ModRM<ModRM_mod){
+      if ((Op.ModRM & ModRM_rm)==4 && Op.ModRM<ModRM_mod) {
         State = ReadSIB;
         BrkCtx = hash(1+(BrkPoint = 8), State);
         break;
@@ -6983,11 +7319,11 @@ void exeModel::Update(U8 B, bool Forced){
     case Read_OP3_38 : case Read_OP3_3A : {
       Op.Code = B;
       ApplyCodeAndSetFlag(Op, Prefix38<<(State-Read_OP3_38));
-      if (State==Read_OP3_38){
+      if (State==Read_OP3_38) {
         Op.Flags = Table3_38[Op.Code];
         Op.Category = TypeOp3_38[Op.Code];
       }
-      else{
+      else {
         Op.Flags = Table3_3A[Op.Code];
         Op.Category = TypeOp3_3A[Op.Code];
       }
@@ -7003,7 +7339,7 @@ void exeModel::Update(U8 B, bool Forced){
       break;
     }
     case Read8 : case Read16 : case Read32 : {
-      if (++Op.BytesRead>=((State-Read8)<<int(Op.imm8+1))){
+      if (++Op.BytesRead>=((State-Read8)<<int(Op.imm8+1))) {
         Op.BytesRead = 0;
         Op.imm8 = false;
         State = Start;
@@ -7017,7 +7353,7 @@ void exeModel::Update(U8 B, bool Forced){
       break;
     }
     case Read16_f : {
-      if (++Op.BytesRead==2){
+      if (++Op.BytesRead==2) {
         Op.BytesRead = 0;
         ProcessFlags2(Op, State);
       }
@@ -7026,7 +7362,7 @@ void exeModel::Update(U8 B, bool Forced){
     }
     case Read32_ModRM : {
       Op.Data|=RegDWordDisplacement;
-      if (++Op.BytesRead==4){
+      if (++Op.BytesRead==4) {
         Op.BytesRead = 0;
         ProcessMode(Op, State);
       }
@@ -7038,7 +7374,7 @@ void exeModel::Update(U8 B, bool Forced){
   Context = State+16*Op.BytesRead+16*(Op.REX & REX_w);
   StateBH[Context] = (StateBH[Context]<<8)|B;
 
-  if (Valid || Forced){
+  if (Valid || Forced) {
     int mask=0, count0=0;
     for (int i=0, j=0; i<N1; ++i){
       if (i>1) mask=mask*2+(buf(i-1)==0), count0+=mask&1;
@@ -7082,13 +7418,13 @@ void exeModel::Update(U8 B, bool Forced){
   }
 }
 
-bool exeModel::Predict(Mixer& m, bool Forced, ModelStats *Stats){
+bool exeModel::Predict(Mixer& m, bool Forced, ModelStats *Stats) {
   if (bpos==0)
     Update(buf(1), Forced);
 
   if (Valid || Forced)
     cm.mix(m);
-  else{
+  else {
       for (int i=0; i<(N1+N2)*8; ++i)
         m.add(0);
   }
@@ -7429,9 +7765,9 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
     XMLContent *Content = &(*Tag).Content;
     pState = State;
     c8 = (c8<<8)|buf(5);
-    if ((B==0x09 || B==0x20) && (B==(U8)(c4>>8) || !WhiteSpaceRun)){
+    if ((B==TAB || B==SPACE) && (B==(U8)(c4>>8) || !WhiteSpaceRun)){
       WhiteSpaceRun++;
-      IndentTab = (B==0x09);
+      IndentTab = (B==TAB);
     }
     else{
       if ((State==None || (State==ReadContent && (*Content).Length<=LineEnding+WhiteSpaceRun)) && WhiteSpaceRun>1+IndentTab && WhiteSpaceRun!=pWSRun){
@@ -7440,8 +7776,8 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
       }
       WhiteSpaceRun=0;
     }
-    if (B==0x0A)
-      LineEnding = 1+((U8)(c4>>8)==0x0D);
+    if (B==NEW_LINE)
+      LineEnding = 1+((U8)(c4>>8)==CARRIAGE_RETURN);
 
     switch (State){
       case None : {
@@ -7457,7 +7793,7 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
         break;
       }
       case ReadTagName : {
-        if ((*Tag).Length>0 && (B==0x09 || B==0x0A || B==0x0D || B==0x20))
+        if ((*Tag).Length>0 && (B==TAB || B==NEW_LINE || B==CARRIAGE_RETURN || B==SPACE))
           State = ReadTag;
         else if ((B==0x3A || (B>='A' && B<='Z') || B==0x5F || (B>='a' && B<='z')) || ((*Tag).Length>0 && (B==0x2D || B==0x2E || (B>='0' && B<='9')))){
           (*Tag).Length++;
@@ -7516,7 +7852,7 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
           else
             State = ReadContent;
         }
-        else if (B!=0x09 && B!=0x0A && B!=0x0D && B!=0x20){
+        else if (B!=TAB && B!=NEW_LINE && B!=CARRIAGE_RETURN && B!=SPACE){
           State = ReadAttributeName;
           (*Attribute).Name = B&0xDF;
         }
@@ -7605,8 +7941,9 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
 
 class ContextModel{
   ContextMap2 cm;
-  exeModel exeModel1;
   RunContextMap rcm7, rcm9, rcm10;
+  exeModel exeModel1;
+  TextModel textModel;
   Mixer m;
   U32 cxt[16];
   Filetype ft2, filetype;
@@ -7614,7 +7951,7 @@ class ContextModel{
   void UpdateContexts(U8 B);
   void Train(const char* Dictionary, int Iterations = 1);
 public:
-  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), m(1056, 4096+(1024+512+1024*3)*(level>=4), 15+5*(level>=4)), ft2(DEFAULT), filetype(DEFAULT), blocksize(0), blockinfo(0){
+  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), textModel(MEM*4), m(1064, 4096+(1024+512+1024*3)*(level>=4), 7+5*(level>=4)), ft2(DEFAULT), filetype(DEFAULT), blocksize(0), blockinfo(0){
     memset(&cxt[0], 0, sizeof(cxt));
     if (trainTXT) {
       Train("english.dic", 3);
@@ -7654,6 +7991,9 @@ void ContextModel::UpdateContexts(U8 B){
     cm.set(cxt[i]);
   cm.set(cxt[8]);
   cm.set(cxt[14]);
+  rcm7.set(cxt[7]);
+  rcm9.set(cxt[10]);
+  rcm10.set(cxt[12]);
 }
 
 int ContextModel::Predict(ModelStats *Stats){
@@ -7695,12 +8035,8 @@ int ContextModel::Predict(ModelStats *Stats){
   if ((filetype==JPEG || filetype==HDR)) if (jpegModel(m)) return m.p();
 
   // Normal model
-  if (bpos==0) {
+  if (bpos==0)
     UpdateContexts(buf(1));
-    rcm7.set(cxt[7]);
-    rcm9.set(cxt[10]);
-    rcm10.set(cxt[12]);
-  }
   int order=cm.mix(m);
 
   rcm7.mix(m);
@@ -7716,6 +8052,7 @@ int ContextModel::Predict(ModelStats *Stats){
     dmcModel(m);
     nestModel(m);
     XMLModel(m, Stats);
+    textModel.Predict(m, buf, Stats);
     exeModel1.Predict(m, filetype==EXE, Stats);
   }
 
