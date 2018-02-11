@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on February 04, 2018
+/* paq8px file compressor/archiver.  Released on February 11, 2018
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -599,7 +599,7 @@ Added gif recompression
 //Change the following values on a new build if applicable
 
 #define PROGNAME     "paq8px"  // Change this if you make a branch
-#define PROGVERSION  "135"
+#define PROGVERSION  "136"
 #define PROGYEAR     "2018"
 
 #define DEFAULT_LEVEL 5
@@ -2818,6 +2818,7 @@ class Segment {
 public:
   Word FirstWord; // useful following questions
   U32 WordCount;
+  U32 NumCount;
 };
 
 class Sentence : public Segment {
@@ -4010,33 +4011,63 @@ public:
   T& operator()(U32 i) {
     return Data[(Index-i)&(Size-1)];
   }
-  void operator++(int){
+  void operator++(int) {
     Index++;
   }
   void operator--(int) {
     Index--;
   }
+  T& Next() {
+    return Index++, *((T*)memset(&Data[Index&(Size-1)], 0, sizeof(T)));
+  }
 };
+
+/*
+  Text model
+
+  Changelog:
+  (04/02/2018) v135: Initial release by Márcio Pais
+  (11/02/2018) v136: Uses 16 contexts, sets 3 mixer contexts
+*/
 
 class TextModel {
 private:
   const U32 MIN_RECOGNIZED_WORDS = 4;
-  ContextMap Map;
+  ContextMap2 Map;
   Array<Stemmer*> Stemmers;
   Array<Language*> Languages;
   Cache<Word, 8> Words[Language::Count];
   Cache<Segment, 4> Segments;
   Cache<Sentence, 4> Sentences;
   Cache<Paragraph, 2> Paragraphs;
-  U32 langCount[Language::Count-1];
-  U64 langMask[Language::Count-1];
-  int langId, pLangId;
+  Array<U32> WordPos;
+  U32 BytePos[256];
   Word *cWord, *pWord; // current word, previous word
   Segment *cSegment; // current segment
   Sentence *cSentence; // current sentence
   Paragraph *cParagraph; // current paragraph
+  enum Parse {
+    Unknown,
+    ReadingWord,
+    PossibleHyphenation,
+    WasAbbreviation,
+    AfterComma,
+    AfterQuote,
+    AfterAbbreviation,
+    ExpectDigit
+  } State, pState;
   struct {
-    U64 numbers[2];
+    U32 Count[Language::Count-1]; // number of recognized words of each language in the last 64 words seen
+    U64 Mask[Language::Count-1];  // binary mask with the recognition status of the last 64 words for each language
+    int Id;  // current language detected
+    int pId; // detected language of the previous word
+  } Lang;
+  struct {
+    U64 numbers[2];   // last 2 numbers seen
+    U32 numHashes[2]; // hashes of the last 2 numbers seen
+    U8  numLength[2]; // digit length of last 2 numbers seen
+    U32 numMask;      // binary mask of the results of the arithmetic comparisons between the numbers seen
+    U32 numDiff;      // log2 of the consecutive differences between the last 16 numbers seen, clipped to 2 bits per difference
     U32 lastUpper;    // distance to last uppercase letter
     U32 maskUpper;    // binary mask of uppercase letters seen (in the last 32 bytes)
     U32 lastLetter;   // distance to last letter
@@ -4047,31 +4078,33 @@ private:
     U32 wordGap;      // distance between the last words
     U32 spaces;       // binary mask of whitespace characters seen (in the last 32 bytes)
     U32 spaceCount;   // count of whitespace characters seen (in the last 32 bytes)
-    U32 numMask;      // binary mask of the results of the arithmetic comparisons between the numbers seen
     U32 commas;       // number of commas seen in this line (not this segment/sentence)
     U32 quoteLength;  // length (in words) of current quote
-    U32 masks[3],
+    U32 maskPunct;    // mask of relative position of last comma related to other punctuation
+    U32 nestHash;     // hash representing current nesting state
+    U32 lastNest;     // distance to last nesting character
+    U32 masks[4],
         wordLength[2];
     int UTF8Remaining;// remaining bytes for current UTF8-encoded Unicode code point (-1 if invalid byte found)
     U8 firstLetter;   // first letter of current word
     U8 firstChar;     // first character of current line
+    U8 expectedDigit; // next expected digit of detected numerical sequence
   } Info;
+  U32 ParseCtx;
   void Update(Buf& buffer, ModelStats *Stats = nullptr);
   void SetContexts(Buf& buffer, ModelStats *Stats = nullptr);
 public:
-  TextModel(const U32 Size) : Map(Size, 1), Stemmers(Language::Count-1), Languages(Language::Count-1), langId(Language::Unknown), pLangId(langId) {
+  TextModel(const U32 Size) : Map(Size, 16), Stemmers(Language::Count-1), Languages(Language::Count-1), WordPos(0x10000), State(Parse::Unknown), pState(State), Lang{ 0, 0, Language::Unknown, Language::Unknown }, Info{ 0 }, ParseCtx(0) {
     Stemmers[Language::English-1] = new EnglishStemmer();
     Stemmers[Language::French-1] = new FrenchStemmer();
     Languages[Language::English-1] = new English();
     Languages[Language::French-1] = new French();
-    cWord = &Words[langId](0);
-    pWord = &Words[langId](1);
+    cWord = &Words[Lang.Id](0);
+    pWord = &Words[Lang.Id](1);
     cSegment = &Segments(0);
     cSentence = &Sentences(0);
     cParagraph = &Paragraphs(0);
-    memset(&Info, 0, sizeof(Info));
-    memset(&langCount[0], 0, sizeof(langCount));
-    memset(&langMask[0], 0, sizeof(langMask));
+    memset(&BytePos[0], 0, 256*sizeof(U32));
   }
   void Predict(Mixer& mixer, Buf& buffer, ModelStats *Stats = nullptr) {
     if (bpos==0) {
@@ -4079,6 +4112,14 @@ public:
       SetContexts(buffer, Stats);
     }
     Map.mix(mixer);
+    mixer.set(hash((Lang.Id!=Language::Unknown)?1+Stemmers[Lang.Id-1]->IsVowel(buffer(1)):0, Info.masks[1]&0xFF, c0)&0x3FF, 1024);
+    mixer.set(hash(ilog2(Info.wordLength[0]+1), c0,
+      (Info.lastDigit<Info.wordLength[0]+Info.wordGap)|
+      ((Info.lastUpper<Info.lastLetter+Info.wordLength[1])<<1)|
+      ((Info.lastPunct<Info.wordLength[0]+Info.wordGap)<<2)|
+      ((Info.lastUpper<Info.wordLength[0])<<3)
+    )&0x3FF, 1024);
+    mixer.set(hash(Info.masks[1]&0x3FF, Info.lastUpper<Info.wordLength[0], Info.lastUpper<Info.lastLetter+Info.wordLength[1])&0x7FF, 2048);
   }
 };
 
@@ -4087,25 +4128,28 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
   Info.lastLetter = min(0x1F, Info.lastLetter+1);
   Info.lastDigit  = min(0xFF, Info.lastDigit+1);
   Info.lastPunct  = min(0x3F, Info.lastPunct+1);
-  Info.lastNewLine++, Info.prevNewLine++;
+  Info.lastNewLine++, Info.prevNewLine++, Info.lastNest++;
   Info.spaceCount-=(Info.spaces>>31), Info.spaces<<=1;
-  Info.masks[0]<<=2, Info.masks[1]<<=2, Info.masks[2]<<=4;
+  Info.masks[0]<<=2, Info.masks[1]<<=2, Info.masks[2]<<=4, Info.masks[3]<<=3;
+  pState = State;  
 
   U8 c = buffer(1), pC=tolower(c);
+  BytePos[c] = pos;
   if (c!=pC) {
     c = pC;
     Info.lastUpper = 0, Info.maskUpper|=1;
   }
   pC = buffer(2);
+  ParseCtx = hash(State=Parse::Unknown, pWord->Hash[1], c, (ilog2(Info.lastNewLine)+1)*(Info.lastNewLine*3>Info.prevNewLine), Info.masks[1]&0xFC);
 
   if ((c>='a' && c<='z') || c=='\'' || c=='-' || c>0x7F) {    
     if (Info.wordLength[0]==0) {
-      // check for syllabification with "+"
+      // check for hyphenation with "+"
       if (pC==NEW_LINE && ((Info.lastLetter==3 && buffer(3)=='+') || (Info.lastLetter==4 && buffer(3)==CARRIAGE_RETURN && buffer(4)=='+'))) {
         Info.wordLength[0] = Info.wordLength[1];
         for (int i=Language::Unknown; i<Language::Count; i++)
           Words[i]--;
-        cWord = pWord, pWord = &Words[pLangId](1);
+        cWord = pWord, pWord = &Words[Lang.pId](1);
         memset(cWord, 0, sizeof(Word));
         for (U32 i=0; i<Info.wordLength[0]; i++)
           (*cWord)+=buffer(Info.wordLength[0]-i+Info.lastLetter);
@@ -4120,53 +4164,59 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
     }
     Info.lastLetter = 0;
     Info.wordLength[0]++;
-    Info.masks[0]+=(langId!=Language::Unknown)?1+Stemmers[langId-1]->IsVowel(c):1, Info.masks[1]++;
+    Info.masks[0]+=(Lang.Id!=Language::Unknown)?1+Stemmers[Lang.Id-1]->IsVowel(c):1, Info.masks[1]++, Info.masks[3]+=Info.masks[0]&3;
     if (c=='\'') {
       Info.masks[2]+=12;
       if (Info.wordLength[0]==1) {
         if (Info.quoteLength==0 && pC==SPACE)
           Info.quoteLength = 1;
-        else if (Info.quoteLength>0 && Info.lastPunct==1)
+        else if (Info.quoteLength>0 && Info.lastPunct==1) {
           Info.quoteLength = 0;
+          ParseCtx = hash(State=Parse::AfterQuote, pC);
+        }
       }
     }
     (*cWord)+=c;
     cWord->GetHashes();
+    ParseCtx = hash(State=Parse::ReadingWord, cWord->Hash[1]);
   }
   else {
     if (cWord->Length()>0) {
-      if (langId!=Language::Unknown)
+      if (Lang.Id!=Language::Unknown)
         memcpy(&Words[Language::Unknown](0), cWord, sizeof(Word));
 
       for (int i=Language::Count-1; i>Language::Unknown; i--) {
-        langCount[i-1]-=(langMask[i-1]>>63), langMask[i-1]<<=1;
-        if (i!=langId)
+        Lang.Count[i-1]-=(Lang.Mask[i-1]>>63), Lang.Mask[i-1]<<=1;
+        if (i!=Lang.Id)
           memcpy(&Words[i](0), cWord, sizeof(Word));
         if (Stemmers[i-1]->Stem(&Words[i](0)))
-          langCount[i-1]++, langMask[i-1]|=1;
+          Lang.Count[i-1]++, Lang.Mask[i-1]|=1;
       }      
-      langId = Language::Unknown;
+      Lang.Id = Language::Unknown;
       U32 best = MIN_RECOGNIZED_WORDS;
       for (int i=Language::Count-1; i>Language::Unknown; i--) {
-        if (langCount[i-1]>=best) {
-          best = langCount[i-1] + (i==pLangId); //bias to prefer the previously detected language
-          langId = i;
+        if (Lang.Count[i-1]>=best) {
+          best = Lang.Count[i-1] + (i==Lang.pId); //bias to prefer the previously detected language
+          Lang.Id = i;
         }
         Words[i]++;
       }
       Words[Language::Unknown]++;
     #ifndef NDEBUG
-      if (langId!=pLangId) {
-        switch (langId) {
+      if (Lang.Id!=Lang.pId) {
+        switch (Lang.Id) {
           case Language::Unknown: { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b[Language: Unknown, blpos: %d]\n",blpos); break; };
           case Language::English: { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b[Language: English, blpos: %d]\n",blpos); break; };
           case Language::French : { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b[Language: French, blpos: %d]\n",blpos);  break; };
         }
       }
     #endif
-      pLangId = langId;
-      pWord = &Words[langId](1), cWord = &Words[langId](0);
+      Lang.pId = Lang.Id;
+      pWord = &Words[Lang.Id](1), cWord = &Words[Lang.Id](0);
       memset(cWord, 0, sizeof(Word));
+      WordPos[pWord->Hash[1]&(WordPos.size()-1)] = pos;
+      if (cSegment->WordCount==0)
+        memcpy(&cSegment->FirstWord, pWord, sizeof(Word));
       cSegment->WordCount++;
       if (cSentence->WordCount==0)
         memcpy(&cSentence->FirstWord, pWord, sizeof(Word));
@@ -4179,8 +4229,10 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
     bool skip = false;
     switch (c) {
       case '.': {
-        if (langId!=Language::Unknown && Info.lastUpper==Info.wordLength[1] && Languages[langId-1]->IsAbbreviation(pWord))
+        if (Lang.Id!=Language::Unknown && Info.lastUpper==Info.wordLength[1] && Languages[Lang.Id-1]->IsAbbreviation(pWord)) {
+          ParseCtx = hash(State=Parse::WasAbbreviation, pWord->Hash[1]);
           break;
+        }
       }
       case '?': case '!': {
         cSentence->Type = (c=='.')?Sentence::Types::Declarative:(c=='?')?Sentence::Types::Interrogative:Sentence::Types::Exclamative;
@@ -4188,66 +4240,98 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
         cParagraph->SentenceCount++;
         cParagraph->TypeCount[cSentence->Type]++;
         cParagraph->TypeMask<<=2, cParagraph->TypeMask|=cSentence->Type;
-        Sentences++;
-        cSentence = &Sentences(0);
-        memset(cSentence, 0, sizeof(Sentence));
+        cSentence = &Sentences.Next();
+        Info.masks[3]+=3;
         skip = true;
       }
       case ',': case ';': case ':': {
-        Info.commas+=(c==',');
-        if (!skip)
+        if (c==',') {
+          Info.commas++;
+          ParseCtx = hash(State=Parse::AfterComma, ilog2(Info.quoteLength+1), ilog2(Info.lastNewLine), Info.lastUpper<Info.lastLetter+Info.wordLength[1]);
+        }
+        if (!skip) {
           cSentence->SegmentCount++;
+          Info.masks[3]+=4;
+        }
         Info.lastPunct = 0;
         Info.masks[0]+=3, Info.masks[1]+=2, Info.masks[2]+=15;
-        Segments++;
-        cSegment = &Segments(0);
-        memset(cSegment, 0, sizeof(Segment));
+        cSegment = &Segments.Next();
         break;
       }
       case NEW_LINE: {
         Info.prevNewLine = Info.lastNewLine, Info.lastNewLine = 0;
         Info.commas = 0;
-        if (Info.prevNewLine==1 || (Info.prevNewLine==2 && pC==CARRIAGE_RETURN)) {
-          Paragraphs++;
-          cParagraph = &Paragraphs(0);
-          memset(cParagraph, 0, sizeof(Paragraph));
-        }
+        if (Info.prevNewLine==1 || (Info.prevNewLine==2 && pC==CARRIAGE_RETURN))
+          cParagraph = &Paragraphs.Next();
+        else if ((Info.lastLetter==2 && pC=='+') || (Info.lastLetter==3 && pC==CARRIAGE_RETURN && buffer(3)=='+'))
+          ParseCtx = hash(Parse::ReadingWord, pWord->Hash[1]), State=Parse::PossibleHyphenation;
       }
       case TAB: case CARRIAGE_RETURN: case SPACE: {
         Info.spaceCount++, Info.spaces|=1;
-        Info.masks[1]+=3;
+        Info.masks[1]+=3, Info.masks[3]+=5;
+        if (c==SPACE && pState==Parse::WasAbbreviation) {
+          ParseCtx = hash(State=Parse::AfterAbbreviation, pWord->Hash[1]);
+        }
         break;
       }
-      case '(' : Info.masks[2]+=1; break;
-      case '[' : Info.masks[2]+=2; break;
-      case '{' : Info.masks[2]+=3; break;
-      case '<' : Info.masks[2]+=4; break;
+      case '(' : Info.masks[2]+=1; Info.masks[3]+=6; Info.nestHash+=31; Info.lastNest=0; break;
+      case '[' : Info.masks[2]+=2; Info.nestHash+=11; Info.lastNest=0; break;
+      case '{' : Info.masks[2]+=3; Info.nestHash+=17; Info.lastNest=0; break;
+      case '<' : Info.masks[2]+=4; Info.nestHash+=23; Info.lastNest=0; break;
       case 0xAB: Info.masks[2]+=5; break;
-      case ')' : Info.masks[2]+=6; break;
-      case ']' : Info.masks[2]+=7; break;
-      case '}' : Info.masks[2]+=8; break;
-      case '>' : Info.masks[2]+=9; break;
+      case ')' : Info.masks[2]+=6; Info.nestHash-=31; Info.lastNest=0; break;
+      case ']' : Info.masks[2]+=7; Info.nestHash-=11; Info.lastNest=0; break;
+      case '}' : Info.masks[2]+=8; Info.nestHash-=17; Info.lastNest=0; break;
+      case '>' : Info.masks[2]+=9; Info.nestHash-=23; Info.lastNest=0; break;
       case 0xBB: Info.masks[2]+=10; break;
       case '"': {
         Info.masks[2]+=11;
-        Info.quoteLength = (Info.quoteLength==0); //start/stop counting
+        // start/stop counting
+        if (Info.quoteLength==0)
+          Info.quoteLength = 1;
+        else {
+          Info.quoteLength = 0;
+          ParseCtx = hash(State=Parse::AfterQuote, 0x100|pC);
+        }
         break;
       }
       case '/' : case '-': case '+': case '*': case '=': case '%': Info.masks[2]+=13; break;
       case '\\': case '|': case '_': case '@': case '&': case '^': Info.masks[2]+=14; break;
     }
     if (c>='0' && c<='9') {
-      Info.numbers[0] = Info.numbers[0]*10 + (c&0xF);
+      Info.numbers[0] = Info.numbers[0]*10 + (c&0xF), Info.numLength[0] = min(19, Info.numLength[0]+1);
+      Info.numHashes[0] = hash(Info.numHashes[0], c, Info.numLength[0]);
+      Info.expectedDigit = -1;
+      if (Info.numLength[0]<Info.numLength[1] && (pState==Parse::ExpectDigit || ((Info.numDiff&3)==0 && Info.numLength[0]<=1))) {
+        U64 ExpectedNum = Info.numbers[1]+(Info.numMask&3)-2, PlaceDivisor=1;
+        for (int i=0; i<Info.numLength[1]-Info.numLength[0]; i++, PlaceDivisor*=10);
+        if (ExpectedNum/PlaceDivisor==Info.numbers[0]) {
+          PlaceDivisor/=10;
+          Info.expectedDigit = (ExpectedNum/PlaceDivisor)%10;
+          State = Parse::ExpectDigit;
+        }
+      }
+      else {
+        U8 d = buffer(Info.numLength[0]+2);
+        if (Info.numLength[0]<3 && buffer(Info.numLength[0]+1)==',' && d>='0' && d<='9')
+          State = Parse::ExpectDigit;
+      }
       Info.lastDigit = 0;
+      Info.masks[3]+=7;
     }
     else if (Info.numbers[0]>0) {
       Info.numMask<<=2, Info.numMask|=1+(Info.numbers[0]>=Info.numbers[1])+(Info.numbers[0]>Info.numbers[1]);
+      Info.numDiff<<=2, Info.numDiff|=min(3,ilog2(abs((int)(Info.numbers[0]-Info.numbers[1]))));
       Info.numbers[1] = Info.numbers[0], Info.numbers[0] = 0;
+      Info.numHashes[1] = Info.numHashes[0], Info.numHashes[0] = 0;
+      Info.numLength[1] = Info.numLength[0], Info.numLength[0] = 0;
+      cSegment->NumCount++, cSentence->NumCount++;
     }
   }
   if (Info.lastNewLine==1)
-    Info.firstChar = (langId!=Language::Unknown)?c:min(c,96);
-  
+    Info.firstChar = (Lang.Id!=Language::Unknown)?c:min(c,96);
+  if (Info.lastNest>512)
+    Info.nestHash = 0;
   int leadingBitsSet = 0;
   while (((c>>(7-leadingBitsSet))&1)!=0) leadingBitsSet++;
 
@@ -4255,12 +4339,37 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
     Info.UTF8Remaining--;
   else
     Info.UTF8Remaining = (leadingBitsSet!=1)?(c!=0xC0 && c!=0xC1 && c<0xF5)?(leadingBitsSet-(leadingBitsSet>0)):-1:0;
+  Info.maskPunct = (BytePos[',']>BytePos['.'])|((BytePos[',']>BytePos['!'])<<1)|((BytePos[',']>BytePos['?'])<<2)|((BytePos[',']>BytePos[':'])<<3)|((BytePos[',']>BytePos[';'])<<4);
 }
 
 void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
-  U8 m2 = Info.masks[2]&0xF, column = min(0xFF, Info.lastNewLine);
+  U8 c = buffer(1), lc = tolower(c), m2 = Info.masks[2]&0xF, column = min(0xFF, Info.lastNewLine);;
+  U16 w = ((State==Parse::ReadingWord)?cWord->Hash[1]:pWord->Hash[1])&0xFFFF;
+  int i = State<<6;
+
+  Map.set(ParseCtx);
+  Map.set(hash(i++, cWord->Hash[0], pWord->Hash[0],
+    (Info.lastUpper<Info.wordLength[0])|
+    ((Info.lastDigit<Info.wordLength[0]+Info.wordGap)<<1)
+  )); 
+  Map.set(hash(i++, cWord->Hash[1], Words[Lang.pId](2).Hash[1], min(10,ilog2((U32)Info.numbers[0])),
+    (Info.lastUpper<Info.lastLetter+Info.wordLength[1])|
+    ((Info.lastLetter>3)<<1)|
+    ((Info.lastLetter>0 && Info.wordLength[1]<3)<<2)
+  ));
+  Map.set(hash(i++, cWord->Hash[1]&0xFFF, Info.masks[1]&0x3FF, Words[Lang.pId](3).Hash[2],
+    (Info.lastDigit<Info.wordLength[0]+Info.wordGap)|
+    ((Info.lastUpper<Info.lastLetter+Info.wordLength[1])<<1)|
+    ((Info.spaces&0x7F)<<2)
+  ));
+  Map.set(hash(i++, cWord->Hash[1], pWord->Hash[3], Words[Lang.pId](2).Hash[3]));
+  Map.set(hash(i++, pWord->Hash[2], Info.masks[1]&0xFC, lc, Info.wordGap));
+  Map.set(hash(i++, (Info.lastLetter==0)?cWord->Hash[1]:pWord->Hash[1], c, cSegment->FirstWord.Hash[2], min(3,ilog2(cSegment->WordCount+1))));
+  Map.set(hash(i++, cWord->Hash[1], c, Segments(1).FirstWord.Hash[3]));
+  Map.set(hash(i++, max(31,lc), Info.masks[1]&0xFFC, (Info.spaces&0xFE)|(Info.lastPunct<Info.lastLetter), (Info.maskUpper&0xFF)|(((0x100|Info.firstLetter)*(Info.wordLength[0]>1))<<8)));
+  Map.set(hash(i++, column, min(7,ilog2(Info.lastUpper+1)), ilog2(Info.lastPunct+1)));
   Map.set(
-    (column&0xF8)|(Info.masks[1]&3)|((ilog2(Info.prevNewLine-Info.lastNewLine)>5)<<2)|
+    (column&0xF8)|(Info.masks[1]&3)|((Info.prevNewLine-Info.lastNewLine>63)<<2)|
     (min(3, Info.lastLetter)<<8)|
     (Info.firstChar<<10)|
     ((Info.commas>4)<<18)|
@@ -4271,6 +4380,30 @@ void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
     ((Info.lastDigit<column)<<23)|
     ((column<Info.prevNewLine-Info.lastNewLine)<<24)
   );
+  Map.set(hash(
+    (2*column)/3,
+    min(13, Info.lastPunct)+(Info.lastPunct>16)+(Info.lastPunct>32)+Info.maskPunct*16,
+    ilog2(Info.lastUpper+1),
+    ilog2(Info.prevNewLine-Info.lastNewLine),
+    ((Info.masks[1]&3)==0)|
+    ((m2<6)<<1)|
+    ((m2<11)<<2)
+  ));
+  Map.set(hash(i++, column>>1, Info.spaces&0xF));
+  Map.set(hash(
+    Info.masks[3]&0x3F,
+    min((max(Info.wordLength[0],3)-2)*(Info.wordLength[0]<8),3),
+    Info.firstLetter*(Info.wordLength[0]<5),
+    w&0x3FF,
+    (c==buffer(2))|
+    ((Info.masks[2]>0)<<1)|
+    ((Info.lastPunct<Info.wordLength[0]+Info.wordGap)<<2)|
+    ((Info.lastUpper<Info.wordLength[0])<<3)|
+    ((Info.lastDigit<Info.wordLength[0]+Info.wordGap)<<4)|
+    ((Info.lastPunct<2+Info.wordLength[0]+Info.wordGap+Info.wordLength[1])<<5)
+  ));
+  Map.set(hash(i++, w, c, Info.numHashes[1]));
+  Map.set(hash(i++, w, c, llog(pos-WordPos[w])>>1));
 }
 
 //////////////////////////// matchModel ///////////////////////////
@@ -4336,7 +4469,7 @@ int matchModel(Mixer& m) {
 }
 
 //////////////////////////// wordModel /////////////////////////
-
+//#define USE_WORD_MODEL // uncomment to use both the textModel and the wordModel concurrently
 // Model English text (words and columns/end of line)
 static U32 frstchar=0, spafdo=0, spaces=0, spacecount=0, words=0, wordcount=0,wordlen=0,wordlen1=0;
 void wordModel(Mixer& m, Filetype filetype) {
@@ -4376,7 +4509,7 @@ void wordModel(Mixer& m, Filetype filetype) {
     }
     if ((c>='a' && c<='z') || c==1 || c==2 ||(c>=128 &&(b2!=3))) {
       if (!wordlen){
-        // model syllabification with "+"
+        // model hyphenation with "+"
         if ((lastLetter==3 && (c4&0xFFFF00)==0x2B0A00) || (lastLetter==4 && (c4&0xFFFFFF00)==0x2B0D0A00)){
           word0 = word1;
           wordlen = wordlen1;
@@ -7951,7 +8084,13 @@ class ContextModel{
   void UpdateContexts(U8 B);
   void Train(const char* Dictionary, int Iterations = 1);
 public:
-  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), textModel(MEM*4), m(1064, 4096+(1024+512+1024*3)*(level>=4), 7+5*(level>=4)), ft2(DEFAULT), filetype(DEFAULT), blocksize(0), blockinfo(0){
+  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), textModel(MEM*16), 
+  #ifdef USE_WORD_MODEL
+    m(896+288, 4096+(1024+512+1024*3+4096)*(level>=4), 7+8*(level>=4)),
+  #else     
+    m(896, 4096+(1024+512+1024*3+4096)*(level>=4), 7+8*(level>=4)),
+  #endif
+    ft2(DEFAULT), filetype(DEFAULT), blocksize(0), blockinfo(0){
     memset(&cxt[0], 0, sizeof(cxt));
     if (trainTXT) {
       Train("english.dic", 3);
@@ -8047,7 +8186,9 @@ int ContextModel::Predict(ModelStats *Stats){
     sparseModel(m,matchlength,order);
     distanceModel(m);
     recordModel(m, filetype, Stats);
+  #ifdef USE_WORD_MODEL
     wordModel(m, filetype);
+  #endif
     indirectModel(m);
     dmcModel(m);
     nestModel(m);
