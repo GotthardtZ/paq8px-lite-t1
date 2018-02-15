@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on February 13, 2018
+/* paq8px file compressor/archiver.  Released on February 15, 2018
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -599,7 +599,7 @@ Added gif recompression
 
 //Change the following values on a new build if applicable
 #define PROGNAME     "paq8px"  // Change this if you make a branch
-#define PROGVERSION  "137"
+#define PROGVERSION  "138"
 #define PROGYEAR     "2018"
 
 
@@ -3134,6 +3134,9 @@ public:
   };
   Types Type;
   U32 SegmentCount;
+  U32 VerbIndex; // relative position of last detected verb
+  U32 NounIndex; // relative position of last detected noun
+  Word lastVerb, lastNoun;
 };
 
 class Paragraph {
@@ -3143,7 +3146,11 @@ public:
 
 class Language {
 public:
-  enum {
+  enum Flags {
+    Verb                   = (1<<0),
+    Noun                   = (1<<1)
+  };
+  enum Ids {
     Unknown,
     English,
     French,
@@ -3158,8 +3165,6 @@ private:
   const char *Abbreviations[NUM_ABBREV]={ "mr","mrs","ms","dr","st","jr" };
 public:
   enum Flags {
-    Verb                   = (1<<0),
-    Noun                   = (1<<1),
     Adjective              = (1<<2),
     Plural                 = (1<<3),
     Male                   = (1<<4),
@@ -3193,8 +3198,6 @@ private:
   const char *Abbreviations[NUM_ABBREV]={ "m","mm" };
 public:
   enum Flags {
-    Verb                   = (1<<0),
-    Noun                   = (1<<1),
     Adjective              = (1<<2),
     Plural                 = (1<<3)
   };
@@ -4338,6 +4341,7 @@ public:
   Changelog:
   (04/02/2018) v135: Initial release by Márcio Pais
   (11/02/2018) v136: Uses 16 contexts, sets 3 mixer contexts
+  (15/02/2018) v138: Uses 21 contexts, sets 4 mixer contexts
 */
 
 class TextModel {
@@ -4399,12 +4403,14 @@ private:
     U8 firstLetter;   // first letter of current word
     U8 firstChar;     // first character of current line
     U8 expectedDigit; // next expected digit of detected numerical sequence
+    U8 prevPunct;     // most recent punctuation character seen
+    Word TopicDescriptor; // last word before ':'
   } Info;
   U32 ParseCtx;
   void Update(Buf& buffer, ModelStats *Stats = nullptr);
   void SetContexts(Buf& buffer, ModelStats *Stats = nullptr);
 public:
-  TextModel(const U32 Size) : Map(Size, 16), Stemmers(Language::Count-1), Languages(Language::Count-1), WordPos(0x10000), State(Parse::Unknown), pState(State), Lang{ 0, 0, Language::Unknown, Language::Unknown }, Info{ 0 }, ParseCtx(0) {
+  TextModel(const U32 Size) : Map(Size, 21), Stemmers(Language::Count-1), Languages(Language::Count-1), WordPos(0x10000), State(Parse::Unknown), pState(State), Lang{ 0, 0, Language::Unknown, Language::Unknown }, Info{ 0 }, ParseCtx(0) {
     Stemmers[Language::English-1] = new EnglishStemmer();
     Stemmers[Language::French-1] = new FrenchStemmer();
     Languages[Language::English-1] = new English();
@@ -4430,6 +4436,13 @@ public:
       ((Info.lastUpper<Info.wordLength[0])<<3)
     )&0x3FF, 1024);
     mixer.set(hash(Info.masks[1]&0x3FF, Info.lastUpper<Info.wordLength[0], Info.lastUpper<Info.lastLetter+Info.wordLength[1])&0x7FF, 2048);
+    mixer.set(hash(Info.spaces&0x1FF,
+      (Info.lastUpper<Info.wordLength[0])|
+      ((Info.lastUpper<Info.lastLetter+Info.wordLength[1])<<1)|
+      ((Info.lastPunct<Info.lastLetter)<<2)|
+      ((Info.lastPunct<Info.wordLength[0]+Info.wordGap)<<3)|
+      ((Info.lastPunct<Info.lastLetter+Info.wordLength[1]+Info.wordGap)<<4)
+    )&0x7FF, 2048);
   }
 };
 
@@ -4536,6 +4549,15 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
       Info.quoteLength+=(Info.quoteLength>0);
       if (Info.quoteLength>0x1F)
         Info.quoteLength = 0;
+      cSentence->VerbIndex++, cSentence->NounIndex++;
+      if ((pWord->Type&Language::Verb)!=0) {
+        cSentence->VerbIndex = 0;
+        memcpy(&cSentence->lastVerb, pWord, sizeof(Word));
+      }
+      if ((pWord->Type&Language::Noun)!=0) {
+        cSentence->NounIndex = 0;
+        memcpy(&cSentence->lastNoun, pWord, sizeof(Word));
+      }
     }
     bool skip = false;
     switch (c) {
@@ -4560,11 +4582,13 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
           Info.commas++;
           ParseCtx = hash(State=Parse::AfterComma, ilog2(Info.quoteLength+1), ilog2(Info.lastNewLine), Info.lastUpper<Info.lastLetter+Info.wordLength[1]);
         }
+        else if (c==':')
+          memcpy(&Info.TopicDescriptor, pWord, sizeof(Word));
         if (!skip) {
           cSentence->SegmentCount++;
           Info.masks[3]+=4;
         }
-        Info.lastPunct = 0;
+        Info.lastPunct = 0, Info.prevPunct = c;
         Info.masks[0]+=3, Info.masks[1]+=2, Info.masks[2]+=15;
         cSegment = &Segments.Next();
         break;
@@ -4656,6 +4680,7 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
 void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
   U8 c = buffer(1), lc = tolower(c), m2 = Info.masks[2]&0xF, column = min(0xFF, Info.lastNewLine);;
   U16 w = ((State==Parse::ReadingWord)?cWord->Hash[1]:pWord->Hash[1])&0xFFFF;
+  U32 h = ((State==Parse::ReadingWord)?cWord->Hash[1]:pWord->Hash[2])*271+c;
   int i = State<<6;
 
   Map.set(ParseCtx);
@@ -4674,6 +4699,8 @@ void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
     ((Info.spaces&0x7F)<<2)
   ));
   Map.set(hash(i++, cWord->Hash[1], pWord->Hash[3], Words[Lang.pId](2).Hash[3]));
+  Map.set(hash(i++, h&0x7FFF, Words[Lang.pId](2).Hash[1]&0xFFF, Words[Lang.pId](3).Hash[1]&0xFFF));
+  Map.set(hash(i++, cWord->Hash[1], c, (cSentence->VerbIndex<cSentence->WordCount)?cSentence->lastVerb.Hash[1]:0));
   Map.set(hash(i++, pWord->Hash[2], Info.masks[1]&0xFC, lc, Info.wordGap));
   Map.set(hash(i++, (Info.lastLetter==0)?cWord->Hash[1]:pWord->Hash[1], c, cSegment->FirstWord.Hash[2], min(3,ilog2(cSegment->WordCount+1))));
   Map.set(hash(i++, cWord->Hash[1], c, Segments(1).FirstWord.Hash[3]));
@@ -4715,6 +4742,9 @@ void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
   ));
   Map.set(hash(i++, w, c, Info.numHashes[1]));
   Map.set(hash(i++, w, c, llog(pos-WordPos[w])>>1));
+  Map.set(hash(i++, w, c, Info.TopicDescriptor.Hash[1]&0x7FFF));
+  Map.set(hash(i++, Info.numLength[0], c, Info.TopicDescriptor.Hash[1]&0x7FFF));
+  Map.set(hash(i++, (Info.lastLetter>0)?c:0x100, Info.masks[1]&0xFFC, Info.nestHash&0x7FF));
 }
 
 #endif //USE_TEXTMODEL
@@ -6101,7 +6131,7 @@ private:
 
     // Context model
     static const int N=32; // size of t, number of contexts
-    BH<9> t{MEM};  // context hash -> bit history
+    BH<9> t; // context hash -> bit history
       // As a cache optimization, the context does not include the last 1-2
       // bits of huffcode if the length (huffbits) is not a multiple of 3.
       // The 7 mapped values are for context+{"", 0, 00, 01, 1, 10, 11}.
@@ -6112,7 +6142,7 @@ private:
     APM a1{0x8000}, a2{0x20000};
 
 public:
-  JpegModel() {
+  JpegModel(): t(MEM) {
     m1=MixerFactory::CreateMixer(N+1, 2050, 3);
   }
   ~JpegModel() {
@@ -8430,9 +8460,9 @@ public:
     next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0) {
     
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(896+288, 4096+(1024+512+1024*3+4096)*(level>=4), 7+8*(level>=4));
+      m=MixerFactory::CreateMixer(936+288, 4096+(1024+512+1024*3+6144)*(level>=4), 7+9*(level>=4));
     #else     
-      m=MixerFactory::CreateMixer(896, 4096+(1024+512+1024*3+4096)*(level>=4), 7+8*(level>=4));
+      m=MixerFactory::CreateMixer(936, 4096+(1024+512+1024*3+6144)*(level>=4), 7+9*(level>=4));
     #endif //USE_WORD_MODEL
 
       memset(&cxt[0], 0, sizeof(cxt));
@@ -10558,7 +10588,7 @@ public:
     if(c==10 || c==13 || c==EOF) //got a newline
       state=FINISHED_A_LINE; //empty lines / extra newlines (cr, crlf or lf) are ignored 
     else if(state==IN_HEADER)return; //ignore anything in header
-    else if(c==8) //got a tab
+    else if(c==TAB) //got a tab
       state=FINISHED_A_FILENAME; //ignore the rest (other columns)
     else { // got a character 
       if(state==FINISHED_A_FILENAME)return; //ignore the rest (other columns)
@@ -10583,7 +10613,7 @@ public:
 int main(int argc, char** argv) {
   try {
 
-    printf(PROGNAME " archiver v" PROGVERSION " (C)" PROGYEAR ", Matt Mahoney et al.\n");
+    printf(PROGNAME " archiver v" PROGVERSION " (C) " PROGYEAR ", Matt Mahoney et al.\n");
 
     // Print help message
     if (argc<2) {
@@ -10616,7 +10646,7 @@ int main(int argc, char** argv) {
         "    When a @FILELIST is provided the FILELIST file will be considered\n"
         "    implicitly as the very first input file. It will be compressed and upon\n"
         "    decompression it will be extracted. The FILELIST is a tab separated text\n"
-        "    filewhere the first column contains the names and optionally the relative\n"
+        "    file where the first column contains the names and optionally the relative\n"
         "    paths of the files to be compressed. The paths should be relative to the\n"
         "    FILELIST file. In the other columns you may store any information you wish\n"
         "    to keep about the files (timestamp, owner, attributes or your own remarks).\n"
@@ -10906,7 +10936,7 @@ int main(int argc, char** argv) {
         output.push_back(0);
       }
       else {
-        printf("\nThere is a problem with the secified output: %s",output.c_str());
+        printf("\nThere is a problem with the specified output: %s",output.c_str());
         quit();
       }
     }
@@ -11081,7 +11111,7 @@ int main(int argc, char** argv) {
         for(int i=0;i<s->strsize();i++)
           if(f.getchar()!=(*s)[i])
             quit("Mismatch in list of files.");
-        if(f.getchar()!=EOF)("Filelist on disk is larger than in archive.\n");
+        if(f.getchar()!=EOF) printf("Filelist on disk is larger than in archive.\n");
         f.close();
       }
     }
@@ -11117,7 +11147,6 @@ int main(int argc, char** argv) {
       printf("Total input bytes     : %" PRIu64 "\n", content_size);
       if(verbose)
       printf("Total auxiliaty bytes : %" PRIu64 "\n", total_size-content_size);
-      printf("Total archive size    : %" PRIu64 "\n", en.size());
       printf("Total archive size    : %" PRIu64 "\n", en.size());
       printf("\n");
       // Log compression results
