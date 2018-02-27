@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on February 25, 2018
+/* paq8px file compressor/archiver.  Released on February 27, 2018
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -599,7 +599,7 @@ Added gif recompression
 
 //Change the following values on a new build if applicable
 #define PROGNAME     "paq8px"  // Change this if you make a branch
-#define PROGVERSION  "139"
+#define PROGVERSION  "140"
 #define PROGYEAR     "2018"
 
 
@@ -3159,6 +3159,7 @@ public:
     Unknown,
     English,
     French,
+    German,
     Count
   };
   virtual bool IsAbbreviation(Word *W) = 0;
@@ -3209,9 +3210,38 @@ public:
   bool IsAbbreviation(Word *W) { return W->MatchesAny(Abbreviations, NUM_ABBREV); };
 };
 
+class German : public Language {
+private:
+  static const int NUM_ABBREV = 3;
+  const char *Abbreviations[NUM_ABBREV]={ "fr","hr","hrn" };
+public:
+  enum Flags {
+    Adjective              = (1<<2),
+    Plural                 = (1<<3),
+    Female                 = (1<<4)
+  };
+  bool IsAbbreviation(Word *W) { return W->MatchesAny(Abbreviations, NUM_ABBREV); };
+};
+
 //////////////////////////// Stemming routines /////////////////////////
 
 class Stemmer {
+protected:
+  U32 GetRegion(const Word *W, const U32 From) {
+    bool hasVowel = false;
+    for (int i=W->Start+From; i<=W->End; i++) {
+      if (IsVowel(W->Letters[i])) {
+        hasVowel = true;
+        continue;
+      }
+      else if (hasVowel)
+        return i-W->Start+1;
+    }
+    return W->Start+W->Length();
+  }
+  bool SuffixInRn(const Word *W, const U32 Rn, const char *Suffix) {
+    return (W->Start!=W->End && Rn<=W->Length()-strlen(Suffix));
+  }
 public:
   virtual bool IsVowel(const char c) = 0;
   virtual void Hash(Word *W) = 0;
@@ -3393,27 +3423,12 @@ private:
   inline bool IsLiEnding(const char c) {
     return CharInArray(c, LiEndings, NUM_LI_ENDINGS);
   }
-  U32 GetRegion(const Word *W, const U32 From) {
-    bool hasVowel = false;
-    for (int i=W->Start+From; i<=W->End; i++) {
-      if (IsVowel(W->Letters[i])) {
-        hasVowel = true;
-        continue;
-      }
-      else if (hasVowel)
-        return i-W->Start+1;
-    }
-    return W->Start+W->Length();
-  }
   U32 GetRegion1(const Word *W) {
     for (int i=0; i<NUM_EXCEPTION_REGION1; i++) {
       if (W->StartsWith(ExceptionsRegion1[i]))
         return U32(strlen(ExceptionsRegion1[i]));
     }
     return GetRegion(W, 0);
-  }
-  bool SuffixInRn(const Word *W, const U32 Rn, const char *Suffix) {
-    return (W->Start!=W->End && Rn<=W->Length()-strlen(Suffix));
   }
   bool EndsInShortSyllable(const Word *W) {
     if (W->End==W->Start)
@@ -4013,21 +4028,6 @@ private:
     }
     return res;
   }
-  U32 GetRegion(const Word *W, const U32 From) {
-    bool hasVowel = false;
-    for (int i=W->Start+From; i<=W->End; i++) {
-      if (IsVowel(W->Letters[i])) {
-        hasVowel = true;
-        continue;
-      }
-      else if (hasVowel)
-        return i-W->Start+1;
-    }
-    return W->Start+W->Length();
-  }
-  bool SuffixInRn(const Word *W, const U32 Rn, const char *Suffix) {
-    return (W->Start!=W->End && Rn<=W->Length()-strlen(Suffix));
-  }
   bool Step1(Word *W, const U32 RV, const U32 R1, const U32 R2, bool *ForceStep2a) {
     int i = 0;
     for (; i<11; i++) {
@@ -4057,7 +4057,7 @@ private:
       }
     }
     for (; i<27; i++) {
-      if (W->EndsWith(SuffixesStep1[i]) && SuffixInRn(W, R1, SuffixesStep1[i]) && IsConsonant(W->Letters[W->End-strlen(SuffixesStep1[i])])) {
+      if (W->EndsWith(SuffixesStep1[i]) && SuffixInRn(W, R1, SuffixesStep1[i]) && IsConsonant((*W)((U8)strlen(SuffixesStep1[i])))) {
         W->End-=U8(strlen(SuffixesStep1[i]));
         return true;
       }
@@ -4133,7 +4133,7 @@ private:
       }
     }
     for (; i<NUM_SUFFIXES_STEP1; i++) {
-      if (W->EndsWith(SuffixesStep1[i]) && SuffixInRn(W, RV+1, SuffixesStep1[i]) && IsVowel(W->Letters[W->End-strlen(SuffixesStep1[i])])) {
+      if (W->EndsWith(SuffixesStep1[i]) && SuffixInRn(W, RV+1, SuffixesStep1[i]) && IsVowel((*W)((U8)strlen(SuffixesStep1[i])))) {
         W->End-=U8(strlen(SuffixesStep1[i]));
         (*ForceStep2a) = true;
         return true;
@@ -4163,7 +4163,7 @@ private:
   }
   bool Step2a(Word *W, const U32 RV) {
     for (int i=0; i<NUM_SUFFIXES_STEP2a; i++) {
-      if (W->EndsWith(SuffixesStep2a[i]) && SuffixInRn(W, RV+1, SuffixesStep2a[i]) && IsConsonant(W->Letters[W->End-strlen(SuffixesStep2a[i])])) {
+      if (W->EndsWith(SuffixesStep2a[i]) && SuffixInRn(W, RV+1, SuffixesStep2a[i]) && IsConsonant((*W)((U8)strlen(SuffixesStep2a[i])))) {
         W->End-=U8(strlen(SuffixesStep2a[i]));
         if (i==31 /*ir*/)
           W->Type|=French::Verb;
@@ -4202,7 +4202,7 @@ private:
   }
   bool Step4(Word *W, const U32 RV, const U32 R2) {
     bool res = false;
-    if (W->Length()>=2 && W->Letters[W->End]=='s' && !CharInArray(W->Letters[W->End-1], SetStep4, NUM_SET_STEP4)) {
+    if (W->Length()>=2 && W->Letters[W->End]=='s' && !CharInArray((*W)(1), SetStep4, NUM_SET_STEP4)) {
       W->End--;
       res = true;
     }
@@ -4210,7 +4210,7 @@ private:
       if (W->EndsWith(SuffixesStep4[i]) && SuffixInRn(W, RV, SuffixesStep4[i])) {
         switch (i) {
           case 2: { //ion
-            char prec = W->Letters[W->End-3];
+            char prec = (*W)(3);
             if (SuffixInRn(W, R2, SuffixesStep4[i]) && SuffixInRn(W, RV+1, SuffixesStep4[i]) && (prec=='s' || prec=='t')) {
               W->End-=3;
               return true;
@@ -4281,17 +4281,15 @@ public:
       Hash(W);
       return false;
     }
-    else {
-      for (int i=0; i<NUM_EXCEPTIONS; i++) {
-        if ((*W)==Exceptions[i][0]) {
-          size_t len=strlen(Exceptions[i][1]);
-          memcpy(&W->Letters[W->Start], Exceptions[i][1], len);
-          W->End=W->Start+U8(len-1);
-          Hash(W);
-          W->Type|=TypesExceptions[i];
-          W->Language = Language::French;
-          return true;
-        }
+    for (int i=0; i<NUM_EXCEPTIONS; i++) {
+      if ((*W)==Exceptions[i][0]) {
+        size_t len=strlen(Exceptions[i][1]);
+        memcpy(&W->Letters[W->Start], Exceptions[i][1], len);
+        W->End=W->Start+U8(len-1);
+        Hash(W);
+        W->Type|=TypesExceptions[i];
+        W->Language = Language::French;
+        return true;
       }
     }
     MarkVowelsAsConsonants(W);
@@ -4314,8 +4312,184 @@ public:
       W->Letters[i] = tolower(W->Letters[i]);
     if (!res)
       res=W->MatchesAny(CommonWords, NUM_COMMON_WORDS);
+    Hash(W);
     if (res)
       W->Language = Language::French;
+    return res;
+  }
+};
+
+/*
+  German suffix stemmer, based on the Porter stemmer.
+
+  Changelog:
+  (27/02/2018) v140: Initial release by Márcio Pais
+*/
+
+class GermanStemmer : public Stemmer {
+private:
+  static const int NUM_VOWELS = 9;
+  const char Vowels[NUM_VOWELS]={'a','e','i','o','u','y','\xE4','\xF6','\xFC'};
+  static const int NUM_COMMON_WORDS = 10;
+  const char *CommonWords[NUM_COMMON_WORDS]={"der","die","das","und","sie","ich","mit","sich","auf","nicht"};
+  static const int NUM_ENDINGS = 10;
+  const char Endings[NUM_ENDINGS]={'b','d','f','g','h','k','l','m','n','t'}; //plus 'r' for words ending in 's'
+  static const int NUM_SUFFIXES_STEP1 = 6;
+  const char *SuffixesStep1[NUM_SUFFIXES_STEP1]={"em","ern","er","e","en","es"};
+  static const int NUM_SUFFIXES_STEP2 = 3;
+  const char *SuffixesStep2[NUM_SUFFIXES_STEP2]={"en","er","est"};
+  static const int NUM_SUFFIXES_STEP3 = 7;
+  const char *SuffixesStep3[NUM_SUFFIXES_STEP3]={"end","ung","ik","ig","isch","lich","heit"};
+  void ConvertUTF8(Word *W) {
+    for (int i=W->Start; i<W->End; i++) {
+      U8 c = W->Letters[i+1]+((W->Letters[i+1]<0x9F)?0x60:0x40);
+      if (W->Letters[i]==0xC3 && (IsVowel(c) || c==0xDF)) {
+        W->Letters[i] = c;
+        if (i+1<W->End)
+          memcpy(&W->Letters[i+1], &W->Letters[i+2], W->End-i-1);
+        W->End--;
+      }
+    }
+  }
+  void ReplaceSharpS(Word *W) {
+    for (int i=W->Start; i<=W->End; i++) {
+      if (W->Letters[i]==0xDF) {
+        W->Letters[i]='s';
+        if (i+1<MAX_WORD_SIZE) {
+          memcpy(&W->Letters[i+2], &W->Letters[i+1], MAX_WORD_SIZE-i-2);
+          W->Letters[i+1]='s';
+          W->End+=(W->End<MAX_WORD_SIZE-1);
+        }
+      }
+    }
+  }    
+  void MarkVowelsAsConsonants(Word *W) {
+    for (int i=W->Start+1; i<W->End; i++) {
+      U8 c = W->Letters[i];
+      if ((c=='u' || c=='y') && IsVowel(W->Letters[i-1]) && IsVowel(W->Letters[i+1]))
+        W->Letters[i] = toupper(c);
+    }
+  }
+  inline bool IsValidEnding(const char c, const bool IncludeR = false) {
+    return CharInArray(c, Endings, NUM_ENDINGS) || (IncludeR && c=='r');
+  }
+  bool Step1(Word *W, const U32 R1) {
+    int i = 0;
+    for (; i<3; i++) {
+      if (W->EndsWith(SuffixesStep1[i]) && SuffixInRn(W, R1, SuffixesStep1[i])) {
+        W->End-=U8(strlen(SuffixesStep1[i]));
+        return true;
+      }
+    }
+    for (; i<NUM_SUFFIXES_STEP1; i++) {
+      if (W->EndsWith(SuffixesStep1[i]) && SuffixInRn(W, R1, SuffixesStep1[i])) {
+        W->End-=U8(strlen(SuffixesStep1[i]));
+        W->End-=U8(W->EndsWith("niss"));
+        return true;
+      }
+    }
+    if (W->EndsWith("s") && SuffixInRn(W, R1, "s") && IsValidEnding((*W)(1), true)) {
+      W->End--;
+      return true;
+    }
+    return false;
+  }
+  bool Step2(Word *W, const U32 R1) {
+    for (int i=0; i<NUM_SUFFIXES_STEP2; i++) {
+      if (W->EndsWith(SuffixesStep2[i]) && SuffixInRn(W, R1, SuffixesStep2[i])) {
+        W->End-=U8(strlen(SuffixesStep2[i]));
+        return true;
+      }
+    }
+    if (W->EndsWith("st") && SuffixInRn(W, R1, "st") && W->Length()>5 && IsValidEnding((*W)(2))) {
+      W->End-=2;
+      return true;
+    }
+    return false;
+  }
+  bool Step3(Word *W, const U32 R1, const U32 R2) {
+    int i = 0;
+    for (; i<2; i++) {
+      if (W->EndsWith(SuffixesStep3[i]) && SuffixInRn(W, R2, SuffixesStep3[i])) {
+        W->End-=U8(strlen(SuffixesStep3[i]));
+        if (W->EndsWith("ig") && (*W)(2)!='e' && SuffixInRn(W, R2, "ig"))
+          W->End-=2;
+        if (i)
+          W->Type|=German::Noun;
+        return true;
+      }
+    }
+    for (; i<5; i++) {
+      if (W->EndsWith(SuffixesStep3[i]) && SuffixInRn(W, R2, SuffixesStep3[i]) && (*W)((U8)strlen(SuffixesStep3[i]))!='e') {
+        W->End-=U8(strlen(SuffixesStep3[i]));
+        if (i>2)
+          W->Type|=German::Adjective;
+        return true;
+      }
+    }
+    for (; i<NUM_SUFFIXES_STEP3; i++) {
+      if (W->EndsWith(SuffixesStep3[i]) && SuffixInRn(W, R2, SuffixesStep3[i])) {
+        W->End-=U8(strlen(SuffixesStep3[i]));
+        if ((W->EndsWith("er") || W->EndsWith("en")) && SuffixInRn(W, R1, "e?"))
+          W->End-=2;
+        if (i>5)
+          W->Type|=German::Noun|German::Female;
+        return true;
+      }
+    }
+    if (W->EndsWith("keit") && SuffixInRn(W, R2, "keit")) {
+      W->End-=4;
+      if (W->EndsWith("lich") && SuffixInRn(W, R2, "lich"))
+        W->End-=4;
+      else if (W->EndsWith("ig") && SuffixInRn(W, R2, "ig"))
+        W->End-=2;
+      W->Type|=German::Noun|German::Female;
+      return true;
+    }
+    return false;
+  }
+public:
+  inline bool IsVowel(const char c) final {
+    return CharInArray(c, Vowels, NUM_VOWELS);
+  }
+  inline void Hash(Word *W) final {
+    W->Hash[2] = W->Hash[3] = ~0xbea7ab1e;
+    for (int i=W->Start; i<=W->End; i++) {
+      U8 l = W->Letters[i];
+      W->Hash[2]=W->Hash[2]*263*32 + l;
+      if (IsVowel(l))
+        W->Hash[3]=W->Hash[3]*997*16 + l;
+      else if (l>='b' && l<='z')
+        W->Hash[3]=W->Hash[3]*251*32 + (l-97);
+      else
+        W->Hash[3]=W->Hash[3]*11*32 + l;
+    }
+  }
+  bool Stem(Word *W) {
+    ConvertUTF8(W);
+    if (W->Length()<2) {
+      Hash(W);
+      return false;
+    }
+    ReplaceSharpS(W);
+    MarkVowelsAsConsonants(W);
+    U32 R1=GetRegion(W, 0), R2=GetRegion(W, R1);
+    R1 = min(3, R1);
+    bool res = Step1(W, R1);
+    res|=Step2(W, R1);
+    res|=Step3(W, R1, R2);
+    for (int i=W->Start; i<=W->End; i++) {
+      switch (W->Letters[i]) {
+        case 0xE4: { W->Letters[i] = 'a'; break; }
+        case 0xF6: case 0xFC: { W->Letters[i]-=0x87; break; }
+        default: W->Letters[i] = tolower(W->Letters[i]);
+      }
+    }
+    if (!res)
+      res=W->MatchesAny(CommonWords, NUM_COMMON_WORDS);
+    Hash(W);
+    if (res)
+      W->Language = Language::German;
     return res;
   }
 };
@@ -4361,6 +4535,7 @@ public:
   (11/02/2018) v136: Uses 16 contexts, sets 3 mixer contexts
   (15/02/2018) v138: Uses 21 contexts, sets 4 mixer contexts
   (25/02/2018) v139: Uses 26 contexts
+  (27/02/2018) v140: Sets 6 mixer contexts
 */
 
 class TextModel {
@@ -4432,8 +4607,10 @@ public:
   TextModel(const U32 Size) : Map(Size, 26), Stemmers(Language::Count-1), Languages(Language::Count-1), WordPos(0x10000), State(Parse::Unknown), pState(State), Lang{ 0, 0, Language::Unknown, Language::Unknown }, Info{ 0 }, ParseCtx(0) {
     Stemmers[Language::English-1] = new EnglishStemmer();
     Stemmers[Language::French-1] = new FrenchStemmer();
+    Stemmers[Language::German-1] = new GermanStemmer();
     Languages[Language::English-1] = new English();
     Languages[Language::French-1] = new French();
+    Languages[Language::German-1] = new German();
     cWord = &Words[Lang.Id](0);
     pWord = &Words[Lang.Id](1);
     cSegment = &Segments(0);
@@ -4462,6 +4639,8 @@ public:
       ((Info.lastPunct<Info.wordLength[0]+Info.wordGap)<<3)|
       ((Info.lastPunct<Info.lastLetter+Info.wordLength[1]+Info.wordGap)<<4)
     )&0x7FF, 2048);
+    mixer.set(hash(Info.firstLetter*(Info.wordLength[0]<4), min(6, Info.wordLength[0]), c0)&0x7FF, 2048);
+    mixer.set(hash((*pWord)[0], (*pWord)(0), min(4, Info.wordLength[0]), Info.lastPunct<Info.lastLetter)&0x7FF, 2048);
   }
 };
 
@@ -4546,11 +4725,12 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
       Words[Language::Unknown]++;
       #ifndef NVERBOSE
       if (Lang.Id!=Lang.pId) {
-        if(to_screen)printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+        if (to_screen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
         switch (Lang.Id) {
           case Language::Unknown: { printf("[Language: Unknown, blpos: %d]\n",blpos); break; };
           case Language::English: { printf("[Language: English, blpos: %d]\n",blpos); break; };
           case Language::French : { printf("[Language: French,  blpos: %d]\n",blpos); break; };
+          case Language::German : { printf("[Language: German,  blpos: %d]\n",blpos); break; };
         }
       }
       #endif
@@ -8500,9 +8680,9 @@ public:
     next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0) {
     
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(976+288, 4096+(1024+512+1024*3+6144)*(level>=4), 7+9*(level>=4));
+      m=MixerFactory::CreateMixer(976+288, 4096+(1024+512+1024*3+10240)*(level>=4), 7+11*(level>=4));
     #else     
-      m=MixerFactory::CreateMixer(976, 4096+(1024+512+1024*3+6144)*(level>=4), 7+9*(level>=4));
+      m=MixerFactory::CreateMixer(976, 4096+(1024+512+1024*3+10240)*(level>=4), 7+11*(level>=4));
     #endif //USE_WORD_MODEL
 
       memset(&cxt[0], 0, sizeof(cxt));
