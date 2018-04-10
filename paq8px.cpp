@@ -1,9 +1,9 @@
-/* paq8px file compressor/archiver.  Released on February 27, 2018
+/* paq8px file compressor/archiver.  Released on April 10, 2018
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
     Jan Ondrus, Andreas Morphis, Pavel L. Holoborodko, Kaido Orav, Simon Berger,
-    Neill Corlett, Márcio Pais
+    Neill Corlett, Márcio Pais, Mauro Vezzosi, Zoltán Gotthardt
 
     LICENSE
 
@@ -599,7 +599,7 @@ Added gif recompression
 
 //Change the following values on a new build if applicable
 #define PROGNAME     "paq8px"  // Change this if you make a branch
-#define PROGVERSION  "140"
+#define PROGVERSION  "141fix1"
 #define PROGYEAR     "2018"
 
 
@@ -677,7 +677,7 @@ Added gif recompression
 
 //////////////////// Cross platform definitions /////////////////////////////////////
 
-#ifdef _MSC_VER  
+#ifdef _MSC_VER
 #define fseeko(a,b,c) _fseeki64(a,b,c)
 #define ftello(a) _ftelli64(a)
 #else
@@ -711,7 +711,7 @@ Added gif recompression
 //#include <zmmintrin.h> //AVX512
 
 //define CPUID
-#ifdef _MSC_VER  
+#ifdef _MSC_VER
 #include <intrin.h>
 #define cpuid(info, x) __cpuidex(info, x, 0)
 #elif defined(__GNUC__)
@@ -722,7 +722,7 @@ Added gif recompression
 #endif
 
 // Define interface to xgetbv instruction
-static inline int64_t xgetbv (int ctr) {	
+static inline int64_t xgetbv (int ctr) {
 #if (defined (_MSC_FULL_VER) && _MSC_FULL_VER >= 160040000) || (defined (__INTEL_COMPILER) && __INTEL_COMPILER >= 1200)
   return _xgetbv(ctr);
 #elif defined(__GNUC__)
@@ -792,7 +792,7 @@ typedef signed char        int8_t;
 inline int min(int a, int b) {return a<b?a:b;}
 inline int max(int a, int b) {return a<b?b:a;}
 
-// A basic exception class to let catch() in main() know 
+// A basic exception class to let catch() in main() know
 // that the exception was thrown intentionally.
 class IntentionalException : public std::exception {};
 
@@ -1024,7 +1024,7 @@ public:
     pop_back(); //Remove NUL
     if(x==0)
       push_back('0');
-    else 
+    else
       append_int_recursive(x);
     push_back(0); //Append NUL
     chk_consistency();
@@ -1108,7 +1108,7 @@ public:
 
 //////////////////// Folder operations ///////////////////////////
 
-//examines given "path" and returns: 
+//examines given "path" and returns:
 //0: on error
 //1: when exists and is a file
 //2: when exists and is a directory
@@ -1173,21 +1173,21 @@ static void makedirectories(const char* filename) {
 
 
 /////////////////////////// File /////////////////////////////
-// The main purpose of these classes is to keep temporary files in 
-// RAM as mush as possible. The default behaviour is to simply pass 
-// function calls to the operating system - except in case of temporary 
+// The main purpose of these classes is to keep temporary files in
+// RAM as mush as possible. The default behaviour is to simply pass
+// function calls to the operating system - except in case of temporary
 // files.
 
 // Helper function: create a temporary file
 //
-// On Windows when using tmpfile() the temporary file may be created 
+// On Windows when using tmpfile() the temporary file may be created
 // in the root directory causing access denied error when User Account Control (UAC) is on.
 // To avoid this issue with tmpfile() we simply use fopen() instead.
-// We create the temporary file in the directory where the executable is launched from. 
+// We create the temporary file in the directory where the executable is launched from.
 // Luckily the MS C runtime library provides two (MS specific) fopen() flags: "T"emporary and "D"elete.
 
 FILE* maketmpfile(void) {
-#if defined(WINDOWS)  
+#if defined(WINDOWS)
   char szTempFileName[MAX_PATH];
   UINT uRetVal = GetTempFileName(TEXT("."), TEXT("tmp"), 0, szTempFileName);
   if(uRetVal==0)return 0;
@@ -1228,22 +1228,22 @@ protected:
 public:
   FileDisk() {file=0;}
   ~FileDisk() {close();}
-  bool open(const char *filename, bool must_succeed) { 
-    assert(file==0); 
-    file = fopen(filename, "rb"); 
+  bool open(const char *filename, bool must_succeed) {
+    assert(file==0);
+    file = fopen(filename, "rb");
     bool success=(file!=0);
     if(!success && must_succeed){printf("Unable to open file %s (%s)", filename, strerror(errno));quit();}
-    return success; 
+    return success;
   }
-  void create(const char *filename) { 
-    assert(file==0); 
-    makedirectories(filename); 
+  void create(const char *filename) {
+    assert(file==0);
+    makedirectories(filename);
     file=fopen(filename, "wb+");
-    if (!file) {printf("Unable to create file %s (%s)", filename, strerror(errno));quit();} 
+    if (!file) {printf("Unable to create file %s (%s)", filename, strerror(errno));quit();}
   }
-  void createtmp() { 
-    assert(file==0); 
-    file = maketmpfile(); 
+  void createtmp() {
+    assert(file==0);
+    file = maketmpfile();
     if (!file) {printf("Unable to create temporary file (%s)", strerror(errno));quit();}
   }
   void close() { if(file) fclose(file); file=0;}
@@ -1259,7 +1259,7 @@ public:
 
 // This class is responsible for temporary files in RAM or on disk
 // Initially it uses RAM for temporary file content.
-// In case of the content size in RAM grows too large, it is written to disk, 
+// In case of the content size in RAM grows too large, it is written to disk,
 // the RAM is freed and all subsequent file operations will use the file on disk.
 
 class FileTmp :public File {
@@ -1280,13 +1280,13 @@ private:
   FileDisk *file_on_disk;
   void forget_file_on_disk() {
     if (file_on_disk) {
-      file_on_disk->close(); 
+      file_on_disk->close();
       delete file_on_disk;
       file_on_disk = 0;
     }
   }
   //switch: ram->disk
-  #ifdef NDEBUG 
+  #ifdef NDEBUG
   static const U32 MAX_RAM_FOR_TMP_CONTENT = 64 * 1024 * 1024; //64 MB (per file)
   #else
   static const U32 MAX_RAM_FOR_TMP_CONTENT = 64; // to trigger switching to disk earlier - for testing
@@ -1312,11 +1312,11 @@ public:
   int getchar() {
     if(content_in_ram) {
       if (filepos >= filesize)
-        return EOF; 
+        return EOF;
       else {
         U8 c = (*content_in_ram)[(U32)filepos];
-        filepos++; 
-        return c; 
+        filepos++;
+        return c;
       }
     }
     else return file_on_disk->getchar();
@@ -1345,7 +1345,7 @@ public:
   }
   void blockwrite(U8 *ptr, U64 count) {
     if(content_in_ram) {
-      if (filepos+count <= MAX_RAM_FOR_TMP_CONTENT) { 
+      if (filepos+count <= MAX_RAM_FOR_TMP_CONTENT) {
         content_in_ram->resize((U32)(filepos + count));
         if(count>0)memcpy(&((*content_in_ram)[(U32)filepos]), ptr, count);
         filesize += count;
@@ -1356,22 +1356,22 @@ public:
     }
     file_on_disk->blockwrite(ptr,count);
   }
-  void setpos(U64 newpos) { 
+  void setpos(U64 newpos) {
     if(content_in_ram) {
       if(newpos>filesize)ram_to_disk(); //panic: we don't support seeking past end of file (but stdio does) - let's switch to disk
       else {filepos = newpos; return;}
-    }  
+    }
     file_on_disk->setpos(newpos);
   }
-  void setend() { 
+  void setend() {
     if(content_in_ram) filepos = filesize;
     else file_on_disk->setend();
   }
-  U64 curpos() { 
+  U64 curpos() {
     if(content_in_ram) return filepos;
     else return file_on_disk->curpos();
   }
-  bool eof() { 
+  bool eof() {
     if(content_in_ram)return filepos >= filesize;
     else return file_on_disk->eof();
   }
@@ -1396,10 +1396,8 @@ public:
     if(readlink("/proc/self/exe", &myfilename[0], PATH_MAX)!=-1)
   #endif
       f->open(&myfilename[0],true);
-    else {
-      strerror(errno);
+    else
       quit(mypatherror);
-    }
   }
 
   //this static method will open a file from the executable's folder
@@ -1421,10 +1419,8 @@ public:
         strcpy(endofpath, filename); //append filename to my path
         f->open(&myfilename[0],true);
       }
-      else {
-        strerror(errno);
+      else
         quit(mypatherror);
-      }
   }
 };
 
@@ -1621,7 +1617,7 @@ inline U32 ilog2(U32 x) {
   x |= (x >> 4);
   x |= (x >> 8);
   x |= (x >>16);
-  //how many trailing bits do we have (except the first)? 
+  //how many trailing bits do we have (except the first)?
   return BitCount(x >> 1);
 }
 #endif
@@ -2061,20 +2057,20 @@ public:
       if(simd==SIMD_AVX2)
         train_simd_avx2(&tx[0], &wx[cxt[i]*N], nx, err*rates[i]);
       if (options&OPTION_ADAPTIVE){
-        U32 logErr = min(0xF,ilog2(abs(err)));
+        U32 logErr=min(0xF,ilog2(abs(err)));
         info[i].Sum-=SQR(info[i].Data[1]>>28);
         info[i].Data[1]<<=4; info[i].Data[1]|=info[i].Data[0]>>28;
         info[i].Data[0]<<=4; info[i].Data[0]|=logErr;
         info[i].Sum+=SQR(logErr);
-        info[i].Collected = min(info[i].Collected+1, 2048);
-        info[i].Mask<<=1; info[i].Mask|= (logErr <= ((info[i].Data[0]>>4)&0xF) );
-        U32 count = BitCount( info[i].Mask );
-        if (info[i].Collected>=64 && (info[i].Sum>1700 || ((info[i].Mask&0xFF)==0))){
-          rates[i] = DEFAULT_LEARNING_RATE;
+        info[i].Collected+=info[i].Collected<4096;
+        info[i].Mask<<=1; info[i].Mask|=(logErr<=((info[i].Data[0]>>4)&0xF));
+        U32 count=BitCount(info[i].Mask);
+        if (info[i].Collected>=64 && (info[i].Sum>1500+U32(rates[i])*64 || count<9 || (info[i].Mask&0xFF)==0)){
+          rates[i]=DEFAULT_LEARNING_RATE;
           memset(&info[i], 0, sizeof(ErrorInfo));
         }
-        else if (info[i].Collected==2048 && info[i].Sum>=56 && info[i].Sum<=144 && count>24 && ((info[i].Mask&0xFF)==0xFF) ){
-          rates[i] = max(1, rates[i]-1 );
+        else if (info[i].Collected==4096 && info[i].Sum>=56 && info[i].Sum<=144 && count>28-U32(rates[i]) && ((info[i].Mask&0xFF)==0xFF)){
+          rates[i]-=rates[i]>2;
           memset(&info[i], 0, sizeof(ErrorInfo));
         }
       }
@@ -2138,7 +2134,7 @@ template<SIMD simd> SIMDMixer<simd>::~SIMDMixer() {
 }
 
 template<SIMD simd> SIMDMixer<simd>::SIMDMixer(int n, int m, int s, int w):
-    N((n+(simd_width()-1))&-(simd_width())), M(m), S(s), tx(N), wx(N*M), cxt(S), info(S), rates(S), 
+    N((n+(simd_width()-1))&-(simd_width())), M(m), S(s), tx(N), wx(N*M), cxt(S), info(S), rates(S),
     ncxt(0), base(0), nx(0), pr(S), mp(0) {
   assert(n>0 && N>0 && (N&(simd_width()-1))==0 && M>0);
   int i;
@@ -2231,7 +2227,7 @@ protected:
     else p0=(p0&0xfffffc00)|limit;
     int target=y<<22;
     int delta=((target-pr)>>3)*dt[n]; //the larger the count (n) the less it should adapt
-    p0+=delta&0xfffffc00; 
+    p0+=delta&0xfffffc00;
     p[0]=p0;
   }
 
@@ -2364,12 +2360,12 @@ inline  U8* BH<B>::operator[](U32 i) {
 //////////////////////////// HashTable /////////////////////////
 
 // A HashTable is an array of n items representing n contexts.
-// Each item is a storage area of B bytes. In every slot the first 
-// byte is a checksum using the upper 8 bits of the context 
+// Each item is a storage area of B bytes. In every slot the first
+// byte is a checksum using the upper 8 bits of the context
 // selector. The second byte is a priority (0 = empty) for hash
-// replacement. Priorities must be set by the caller (0: lowest, 
-// 255: highest). Items with lower priorities will be replaced in 
-// case of a collision. Only 2 additional items are probed for the 
+// replacement. Priorities must be set by the caller (0: lowest,
+// 255: highest). Items with lower priorities will be replaced in
+// case of a collision. Only 2 additional items are probed for the
 // given checksum.
 // The caller can store any information about the given context
 // in bytes [2..B-1].
@@ -2378,7 +2374,7 @@ inline  U8* BH<B>::operator[](U32 i) {
 
 // HashTable<B> h(n) - creates a hashtable with n slots where
 //     n and B must be powers of 2 with n >= B*4, and B >= 2.
-// h[i] returns a pointer to the storage area starting from 
+// h[i] returns a pointer to the storage area starting from
 //     position 1 (e.g. without the checksum)
 
 template <int B>
@@ -2754,7 +2750,7 @@ int ContextMap::mix(Mixer& m) {
     else
     {
       U16 chksum=cxt[i]>>16;
-      U64 tmask=t.size()-1; 
+      U64 tmask=t.size()-1;
       switch(bpos)
       {
         case 1: case 3: case 6: cp[i]=cp0[i]+1+(c0&1); break;
@@ -2804,7 +2800,7 @@ int ContextMap::mix(Mixer& m) {
     int s = 0;
     if (cp[i]) s = *cp[i];
     mix2(m,s,sm[i]);
-    
+
     if(s>0)result++;
 
   }
@@ -2816,7 +2812,7 @@ int ContextMap::mix(Mixer& m) {
 Context map for large contexts (32bits).
 Maps to a bit history state, a 3 MRU byte history, and 1 byte RunStats.
 
-Bit and byte histories are stored in a hash table with 64 byte buckets. 
+Bit and byte histories are stored in a hash table with 64 byte buckets.
 The buckets are indexed by a context ending after 0, 2 or 5 bits of the
 current byte. Thus, each byte modeled results in 3 main memory accesses
 per context, with all other accesses to cache.
@@ -2838,7 +2834,7 @@ class ContextMap2 {
     U8 BitState[7][7]; // byte context, 3-bit context -> bit history state
                        // BitState[][0] = 1st bit, BitState[][1,2] = 2nd bit, BitState[][3..6] = 3rd bit
                        // BitState[][0] is also a replacement priority, 0 = empty
-    inline U8* Find(U16 Checksum) { // Find or create hash element matching checksum. 
+    inline U8* Find(U16 Checksum) { // Find or create hash element matching checksum.
                                     // If not found, insert or replace lowest priority (skipping 2 most recent).
       if (Checksums[MRU&15]==Checksum)
         return &BitState[MRU&15][0];
@@ -3049,7 +3045,7 @@ public:
   U8 Letters[MAX_WORD_SIZE];
   U8 Start, End;
   U32 Hash[4], Type, Language;
-  Word() : Start(0), End(0), Hash{0,0,0,0}, Type(0) {
+  Word() : Start(0), End(0), Hash{0,0,0,0}, Type(0), Language(0) {
     memset(&Letters[0], 0, sizeof(U8)*MAX_WORD_SIZE);
   }
   bool operator==(const char *s) const {
@@ -3081,7 +3077,7 @@ public:
     for (int i=Start; i<=End; i++) {
       U8 l = Letters[i];
       Hash[0]^=hash(Hash[0], l, i);
-      Hash[1]^=hash(Hash[1], 
+      Hash[1]^=hash(Hash[1],
         ((l&0x80)==0)?l&0x5F:
         ((l&0xC0)==0x80)?l&0x3F:
         ((l&0xE0)==0xC0)?l&0x1F:
@@ -3410,7 +3406,7 @@ private:
   };
   static const int NUM_EXCEPTIONS2 = 8;
   const char *Exceptions2[NUM_EXCEPTIONS2]={"inning","outing","canning","herring","earring","proceed","exceed","succeed"};
-  const U32 TypesExceptions2[NUM_EXCEPTIONS2]={English::Noun,English::Noun,English::Noun,English::Noun,English::Noun,English::Verb,English::Verb,English::Verb}; 
+  const U32 TypesExceptions2[NUM_EXCEPTIONS2]={English::Noun,English::Noun,English::Noun,English::Noun,English::Noun,English::Verb,English::Verb,English::Verb};
   inline bool IsConsonant(const char c) {
     return !IsVowel(c);
   }
@@ -3651,7 +3647,7 @@ private:
                           ((*W)(2)=='a' && ((*W)(3)=='r' || ((*W)(3)=='h' && (*W)(4)=='c'))) ||
                           (W->EndsWith("ring") && ((*W)(4)=='c' || (*W)(4)=='f'))
                          )
-                        ) 
+                        )
                       )
                         (*W)+='e';
                       break;
@@ -3749,7 +3745,7 @@ private:
             case 'b': {
               W->Letters[W->End]='e';
               W->Type|=English::AdverbOfManner;
-              return true;              
+              return true;
             }
             case 'i': {
               if (W->Length()>4) {
@@ -3996,7 +3992,7 @@ private:
       if (W->Letters[i]==0xC3 && (IsVowel(c) || (W->Letters[i+1]&0xDF)==0x87)) {
         W->Letters[i] = c;
         if (i+1<W->End)
-          memcpy(&W->Letters[i+1], &W->Letters[i+2], W->End-i-1);
+          memmove(&W->Letters[i+1], &W->Letters[i+2], W->End-i-1);
         W->End--;
       }
     }
@@ -4188,7 +4184,7 @@ private:
               return true;
             }
           }
-        }        
+        }
       }
     }
     return false;
@@ -4346,7 +4342,7 @@ private:
       if (W->Letters[i]==0xC3 && (IsVowel(c) || c==0xDF)) {
         W->Letters[i] = c;
         if (i+1<W->End)
-          memcpy(&W->Letters[i+1], &W->Letters[i+2], W->End-i-1);
+          memmove(&W->Letters[i+1], &W->Letters[i+2], W->End-i-1);
         W->End--;
       }
     }
@@ -4356,13 +4352,13 @@ private:
       if (W->Letters[i]==0xDF) {
         W->Letters[i]='s';
         if (i+1<MAX_WORD_SIZE) {
-          memcpy(&W->Letters[i+2], &W->Letters[i+1], MAX_WORD_SIZE-i-2);
+          memmove(&W->Letters[i+2], &W->Letters[i+1], MAX_WORD_SIZE-i-2);
           W->Letters[i+1]='s';
           W->End+=(W->End<MAX_WORD_SIZE-1);
         }
       }
     }
-  }    
+  }
   void MarkVowelsAsConsonants(Word *W) {
     for (int i=W->Start+1; i<W->End; i++) {
       U8 c = W->Letters[i];
@@ -4652,7 +4648,7 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
   Info.lastNewLine++, Info.prevNewLine++, Info.lastNest++;
   Info.spaceCount-=(Info.spaces>>31), Info.spaces<<=1;
   Info.masks[0]<<=2, Info.masks[1]<<=2, Info.masks[2]<<=4, Info.masks[3]<<=3;
-  pState = State;  
+  pState = State;
 
   U8 c = buffer(1), pC=tolower(c);
   BytePos[c] = pos;
@@ -4663,7 +4659,7 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
   pC = buffer(2);
   ParseCtx = hash(State=Parse::Unknown, pWord->Hash[1], c, (ilog2(Info.lastNewLine)+1)*(Info.lastNewLine*3>Info.prevNewLine), Info.masks[1]&0xFC);
 
-  if ((c>='a' && c<='z') || c=='\'' || c=='-' || c>0x7F) {    
+  if ((c>='a' && c<='z') || c=='\'' || c=='-' || c>0x7F) {
     if (Info.wordLength[0]==0) {
       // check for hyphenation with "+"
       if (pC==NEW_LINE && ((Info.lastLetter==3 && buffer(3)=='+') || (Info.lastLetter==4 && buffer(3)==CARRIAGE_RETURN && buffer(4)=='+'))) {
@@ -4712,7 +4708,7 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
           memcpy(&Words[i](0), cWord, sizeof(Word));
         if (Stemmers[i-1]->Stem(&Words[i](0)))
           Lang.Count[i-1]++, Lang.Mask[i-1]|=1;
-      }      
+      }
       Lang.Id = Language::Unknown;
       U32 best = MIN_RECOGNIZED_WORDS;
       for (int i=Language::Count-1; i>Language::Unknown; i--) {
@@ -4890,7 +4886,7 @@ void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
   Map.set(hash(i++, cWord->Hash[0], pWord->Hash[0],
     (Info.lastUpper<Info.wordLength[0])|
     ((Info.lastDigit<Info.wordLength[0]+Info.wordGap)<<1)
-  )); 
+  ));
   Map.set(hash(i++, cWord->Hash[1], Words[Lang.pId](2).Hash[1], min(10,ilog2((U32)Info.numbers[0])),
     (Info.lastUpper<Info.lastLetter+Info.wordLength[1])|
     ((Info.lastLetter>3)<<1)|
@@ -5314,7 +5310,7 @@ void recordModel(Mixer& m, Blocktype blocktype, ModelStats *Stats = nullptr) {
         rlen[0] = dbase.RecordLength;
         rcount[0]=rcount[1]=0;
       }
-      
+
       int r=pos-cpos1[c];
       if (r>1 && r==cpos1[c]-cpos2[c]
           && r==cpos2[c]-cpos3[c] && (r>32 || r==cpos3[c]-cpos4[c])
@@ -5428,7 +5424,7 @@ void recordModel(Mixer& m, Blocktype blocktype, ModelStats *Stats = nullptr) {
     else
       Map0.set(Clip(c*2-d)|i);
     Map1.set(Clip(c+buf(rlen[0])-buf(rlen[0]+1))|i);
-      
+
     // update last context positions
     cpos4[c]=cpos3[c];
     cpos3[c]=cpos2[c];
@@ -5669,7 +5665,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(hash( WW, buf(stride*4)&0x1F, buf(stride*6)&0x1F, column[1] ));
         cm.set(hash( NNN, buf(w*6)&0x1F, buf(w*9)&0x1F, column[1] ));
         cm.set(hash(++i, column[1]));
-        
+
         cm.set(hash(++i, W, LogMeanDiffQt(W,WW)));
         cm.set(hash(++i, W, p1));
         cm.set(hash(++i, W/4, LogMeanDiffQt(W,p1), LogMeanDiffQt(W,p2) ));
@@ -5747,7 +5743,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         cm.set(hash(++i, Clamp4(Clip(W*2-WW)+Clip(N*2-NN)-Clip(NW*2-NNWW),W,NW,N,NE)-px));
         cm.set(hash(++i, buf(stride+(x<=stride)), buf(1+(x<2)), buf(2+(x<3))));
         cm.set(hash(++i, buf(1+(x<2)), px));
-        cm.set(hash(i>>8, buf(w+1), buf((w+1)*2), buf((w+1)*3), px));                                                             
+        cm.set(hash(i>>8, buf(w+1), buf((w+1)*2), buf((w+1)*3), px));
         cm.set(~0x5ca1ab1e);
 
         ctx[0] = (min(color,stride-1)<<9)|((abs(W-N)>3)<<8)|((W>N)<<7)|((W>NW)<<6)|((abs(N-NW)>3)<<5)|((N>NW)<<4)|((N>NE)<<3)|min(5, filterOn?filter+1:0);
@@ -6961,7 +6957,7 @@ public:
      default: { int hc=1+(huffcode&1); for (int i=0; i<N; ++i){ cp[i]+=hc, m1->add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>1); }} break;
     }
 
-    m1->set(firstcol, 2); 
+    m1->set(firstcol, 2);
     m1->set(coef | (min(3,huffbits)<<8), 1024);
     m1->set(((hc&0x1FE)<<1) | min(3,ilog2(zu+zv)), 1024);
     int pr=m1->p();
@@ -7049,7 +7045,7 @@ void wavModel(Mixer& m, int info, ModelStats *Stats = nullptr) {
     wmode=info;
     z1=z2=z3=z4=z5=z6=z7=0;
     if (channels==1) {S=48;D=0;} else {S=36;D=12;}
-    for (k=0; k<=S+D; k++) 
+    for (k=0; k<=S+D; k++)
       for (l=0; l<=S+D; l++) {
         L_(k,l)=0.0;
         for (int chn=0; chn<channels; chn++)
@@ -7079,7 +7075,7 @@ void wavModel(Mixer& m, int info, ModelStats *Stats = nullptr) {
         z6=X2(1)+X1(1)-X2(2);
         z7=X2(1);
       } else {
-        z6=2*X1(1)-X1(2); 
+        z6=2*X1(1)-X1(2);
         z7=X1(1);
       }
 
@@ -8269,7 +8265,7 @@ void dmcModel(Mixer& m) {
         t[j*255+i].c0=128;
         t[j*255+i].c1=128;
         //reset of the states: (sometimes it's better to reset and sometimes it's better to keep the previous values)
-        //t[j*255+i].state=0x00; 
+        //t[j*255+i].state=0x00;
       }
     }
     top=65280;
@@ -8665,23 +8661,23 @@ class ContextModel{
   TextModel textModel;
   #endif //USE_TEXTMODEL
   Mixer *m;
-  U32 cxt[16];
+  U32 cxt[15];
   Blocktype next_blocktype, blocktype;
   int blocksize, blockinfo;
   void UpdateContexts(U8 B);
   void Train(const char* Dictionary, int Iterations = 1);
 public:
-  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), 
+  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM),
 
     #ifdef USE_TEXTMODEL
       textModel(MEM*16),
     #endif //USE_TEXTMODEL
 
     next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0) {
-    
+
     #ifdef USE_WORDMODEL
       m=MixerFactory::CreateMixer(976+288, 4096+(1024+512+1024*3+10240)*(level>=4), 7+11*(level>=4));
-    #else     
+    #else
       m=MixerFactory::CreateMixer(976, 4096+(1024+512+1024*3+10240)*(level>=4), 7+11*(level>=4));
     #endif //USE_WORD_MODEL
 
@@ -8720,9 +8716,11 @@ void ContextModel::Train(const char* Dictionary, int Iterations){
   memset(&buf[0], 0, buf.size());
 }
 
-void ContextModel::UpdateContexts(U8 B){
-  for (int i=15; i>0; --i)
-    cxt[i]=cxt[i-1]*257+B+1;
+void ContextModel::UpdateContexts(const U8 B){
+  for (int i=14; i>0; --i) {
+    U32 prev=cxt[i-1];
+    cxt[i]=(prev<<8)+prev+B+1;
+  }
   for (int i=0; i<7; ++i)
     cm.set(cxt[i]);
   cm.set(cxt[8]);
@@ -9131,7 +9129,7 @@ int expand_cd_sector(U8 *data, int address, int test) {
   eccedc_init();
   //sync pattern: 00 FF FF FF FF FF FF FF FF FF FF 00
   d2[0]=d2[11]=0;
-  for (int i=1; i<11; i++) d2[i]=255; 
+  for (int i=1; i<11; i++) d2[i]=255;
   //determine Mode and Form
   int mode=(data[15]!=1?2:1);
   int form=(data[15]==3?2:1);
@@ -9156,7 +9154,7 @@ int expand_cd_sector(U8 *data, int address, int test) {
       d2[1]=d2[12],d2[2]=d2[13],d2[3]=d2[14];
       d2[12]=d2[13]=d2[14]=d2[15]=0;
     } else {
-      for(int i=2068; i<2076; i++) d2[i]=0; //Mode1: reserved 8 (zero) bytes 
+      for(int i=2068; i<2076; i++) d2[i]=0; //Mode1: reserved 8 (zero) bytes
     }
     for (int i=16+8*(mode==2); i<2064+8*(mode==2); i++) d2[i]=data[i]; //data bytes
     U32 edc=edc_compute(d2+16*(mode==2), 2064-8*(mode==2));
@@ -9393,7 +9391,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
         if (nlen<256 && i+30+nlen<n) zzippos=i+30+nlen;
     }
     #endif //USE_ZLIB
-    
+
     if (i-pdfimp>1024) pdfim=pdfimw=pdfimh=pdfimb=pdfgray=0;
     if (pdfim>1 && !(isspace(c) || isdigit(c))) pdfim=1;
     if (pdfim==2 && isdigit(c)) pdfimw=pdfimw*10+(c-'0');
@@ -9853,11 +9851,11 @@ U64 decode_cd(File *in, U64 size, File *out, FMode mode, U64 &diffFound) {
       return nextblockpos+residual;
     } else if (i==0) { //first sector
       in->blockread(blk+12, 4); //header (4 bytes) consisting of address (Minutes, Seconds, Sectors) and mode (1 = Mode1, 2 = Mode2/Form1, 3 = Mode2/Form2)
-      if (blk[15]!=1) in->blockread(blk+16, 4);  //Mode2: 4 bytes from the read 8-byte subheader 
+      if (blk[15]!=1) in->blockread(blk+16, 4);  //Mode2: 4 bytes from the read 8-byte subheader
       datasize=2048+(blk[15]==3)*276; //user data bytes: Mode1 and Mode2/Form1: 2048 (ECC is present) or Mode2/Form2: 2048+276=2324 bytes (ECC is not present)
       i+=4+4*(blk[15]!=1); //4 byte header + ( Mode2: 4 bytes from the 8-byte subheader )
     } else { //normal sector
-      address=(blk[12]<<16)+(blk[13]<<8)+blk[14]; //3-byte address (Minutes, Seconds, Sectors) 
+      address=(blk[12]<<16)+(blk[13]<<8)+blk[14]; //3-byte address (Minutes, Seconds, Sectors)
     }
     in->blockread(blk+16+(blk[15]!=1)*8, datasize);  //read data bytes, but skip 8-byte subheader in Mode 2 (which we processed alread above)
     i+=datasize;
@@ -10672,7 +10670,7 @@ void compressRecursive(File *in, const U64 blocksize, Encoder &en, String &blstr
     U64 len=detected_end-begin;
     if (len>0) {
       en.set_status_range(p1,p2=p1+pscale*len);
-      
+
       //Compose block enumeration string
       String blstr_sub;
       blstr_sub+=blstr.c_str();
@@ -10684,7 +10682,7 @@ void compressRecursive(File *in, const U64 blocksize, Encoder &en, String &blstr
       if (type==AUDIO) printf(" (%s)", audiotypes[info%4]);
       else if (type==IMAGE1 || type==IMAGE4 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32 || (type==ZLIB && (info>>24)>=PNG8)) printf(" (width: %d)", (type==ZLIB)?(info&0xFFFFFF):info);
       else if (hasRecursion(type) && (info>>24) > 0) printf(" (%s)",typenames[info>>24]);
-      else if (type==CD) printf(" (mode%d/form%d)", info==1?1:2, info!=3?1:2); 
+      else if (type==CD) printf(" (mode%d/form%d)", info==1?1:2, info!=3?1:2);
       printf("\n");
       transform_encode_block(type, in, len, en, info, blstr_sub, recursion_level, p1, p2, begin);
       p1=p2;
@@ -10713,11 +10711,13 @@ void compressfile(const char* filename, U64 filesize, Encoder& en, bool verbose)
   String blstr;
   compressRecursive(&in, filesize, en, blstr, 0, 0.0f, 1.0f);
   in.close();
-  
-  if(verbose)
-  printf("File size to encode   : 4\n"); //This string must be long enough. "Compressing ..." is still on screen, we need to overwrite it.
-  printf("File input size       : %" PRIu64 "\n",filesize); 
-  printf("File compressed size  : %" PRIu64 "\n",en.size()-start);
+
+  if(options & OPTION_MULTIPLE_FILE_MODE) { //multiple file mode
+    if(verbose)
+    printf("File size to encode   : 4\n"); //This string must be long enough. "Compressing ..." is still on screen, we need to overwrite it.
+    printf("File input size       : %" PRIu64 "\n",filesize);
+    printf("File compressed size  : %" PRIu64 "\n",en.size()-start);
+  }
 }
 
 U64 decompressRecursive(File *out, U64 blocksize, Encoder& en, FMode mode, int recursion_level) {
@@ -10808,11 +10808,11 @@ public:
   void addchar(char c) {
     if(c!=EOF)list_of_files+=c;
     if(c==10 || c==13 || c==EOF) //got a newline
-      state=FINISHED_A_LINE; //empty lines / extra newlines (cr, crlf or lf) are ignored 
+      state=FINISHED_A_LINE; //empty lines / extra newlines (cr, crlf or lf) are ignored
     else if(state==IN_HEADER)return; //ignore anything in header
     else if(c==TAB) //got a tab
       state=FINISHED_A_FILENAME; //ignore the rest (other columns)
-    else { // got a character 
+    else { // got a character
       if(state==FINISHED_A_FILENAME)return; //ignore the rest (other columns)
       if(state==FINISHED_A_LINE) {
         names.push_back(new FileName(basepath.c_str()));
@@ -10881,12 +10881,12 @@ int main(int argc, char** argv) {
         "    input file resides. The archive filename will be constructed from the\n"
         "    input file name by appending ." PROGNAME PROGVERSION " extension\n"
         "    to it.\n"
-        "    When OUTPUTSPEC is a filename (with an optional path) it will be\n" 
+        "    When OUTPUTSPEC is a filename (with an optional path) it will be\n"
         "    used as the archive filename.\n"
         "    When OUTPUTSPEC is a folder the archive file will be generated from\n"
         "    the input filename and will be created in the specified folder.\n"
         "\n"
-        "    Examples:\n" 
+        "    Examples:\n"
         "      " PROGNAME " -8 enwik8\n"
         "      " PROGNAME " -8ba b64sample.xml\n"
         "      " PROGNAME " -8 @myfolder/myfilelist.txt\n"
@@ -10912,7 +10912,7 @@ int main(int argc, char** argv) {
         "To list archive contents:\n"
         "\n"
         "  " PROGNAME " -l [INPUTFOLDER/]ARCHIVEFILE\n"
-        "    Extracts @FILELIST from archive (to memory) and prints its content\n" 
+        "    Extracts @FILELIST from archive (to memory) and prints its content\n"
         "    to screen. This command is only applicable to multi-file archives.\n"
         "\n"
         "Additional optional swithes:\n"
@@ -10921,7 +10921,7 @@ int main(int argc, char** argv) {
         "    Print more detailed (verbose) information to screen.\n"
         "\n"
         "    -log LOGFILE\n"
-        "    Logs (appends) compression results in the specified tab separated LOGFILE.\n" 
+        "    Logs (appends) compression results in the specified tab separated LOGFILE.\n"
         "    Logging is only applicable for compression.\n"
         "\n"
         "    -simd [NONE|SSE2|AVX2]\n"
@@ -10930,9 +10930,9 @@ int main(int argc, char** argv) {
         "Remark: the command line parameters may be used in any order except the input\n"
         "and output: always the input comes first then (the optional) output.\n"
         "\n"
-        "    Example:\n" 
+        "    Example:\n"
         "      " PROGNAME " -8 enwik8 folder/ -v -log logfile.txt -simd sse2\n"
-        "    is equivalent to:\n" 
+        "    is equivalent to:\n"
         "      " PROGNAME " -v -simd sse2 enwik8 -log logfile.txt folder/ -8\n"
       );
       quit();
@@ -11012,10 +11012,10 @@ int main(int argc, char** argv) {
           output+=argv[i];
           output.replaceslashes();
         }
-        else 
+        else
           quit("More than two filenames specified. Only an input and an output is needed.");
       }
-    }    
+    }
 
     if(verbose) {
       //print compiled-in modules
@@ -11026,7 +11026,7 @@ int main(int argc, char** argv) {
       #else
       printf("NO_ZLIB ");
       #endif
-    
+
       #ifdef USE_WAVMODEL
       printf("USE_WAVMODEL ");
       #else
@@ -11046,33 +11046,30 @@ int main(int argc, char** argv) {
       #endif
       printf("\n");
     }
-    
-    printf("\n");
 
     // Determine CPU's (and OS) support for SIMD vectorization istruction set 
-    printf("Highest SIMD vectorization support on this system: ");
     int detected_simd_iset = simd_detect();
-    if(detected_simd_iset<0 || detected_simd_iset>9)quit("Oop, sorry. Unexpected result.");
-    static const char* vectorization_string[10]={"None","MMX","SSE","SSE2","SSE3","SSSE3","SSE4.1","SSE4.2","AVX","AVX2"};
-    printf("%s.\n", vectorization_string[detected_simd_iset]);
     if(simd_iset==-1)simd_iset=detected_simd_iset;
     if(simd_iset>detected_simd_iset)printf("Overriding system highest vectorization support. Expect a crash.");
 
+    // Print anything only if the user wants/needs to know
+    if(verbose || simd_iset!=detected_simd_iset) {
+      printf("Highest SIMD vectorization support on this system: ");
+      if(detected_simd_iset<0 || detected_simd_iset>9)quit("Oops, sorry. Unexpected result.");
+      static const char* vectorization_string[10]={"None","MMX","SSE","SSE2","SSE3","SSSE3","SSE4.1","SSE4.2","AVX","AVX2"};
+      printf("%s.\n", vectorization_string[detected_simd_iset]);
+
+      printf("Using ");
+      if(simd_iset>=9) printf("AVX2");
+      else if(simd_iset>=3) printf("SSE2");  
+      else printf("non-vectorized");  
+      printf(" neural network functions.\n");  
+    }
+
     // Set highest or user selected vectorization mode
-    printf("Using ");
-    if(simd_iset>=9) {//AVX2
-      MixerFactory::set_simd(SIMD_AVX2);
-      printf("AVX2");  
-    }
-    else if(simd_iset>=3) { //SSE2 or higher
-      MixerFactory::set_simd(SIMD_SSE2);
-      printf("SSE2");  
-    }
-    else { //nothing we can use
-      MixerFactory::set_simd(SIMD_NONE);
-      printf("non-vectorized");  
-    }
-    printf(" neural network functions.\n");  
+    if(simd_iset>=9) MixerFactory::set_simd(SIMD_AVX2);
+    else if(simd_iset>=3) MixerFactory::set_simd(SIMD_SSE2);
+    else MixerFactory::set_simd(SIMD_NONE);
 
     if(verbose) {
       printf("\n");
@@ -11113,7 +11110,7 @@ int main(int argc, char** argv) {
       if(whattodo!=doCompress)
         quit("A log file may only be specified for compression.");
       pathtype=examinepath(logfile.c_str());
-      if(pathtype==2 && pathtype==4)
+      if(pathtype==2 || pathtype==4)
         quit("Specified log file should be a file not a directory.");
       if(pathtype==0) {
         printf("\nThere is a problem with the log file: %s",logfile.c_str());
@@ -11169,7 +11166,7 @@ int main(int argc, char** argv) {
         archiveName+=input.c_str();
         archiveName+="." PROGNAME PROGVERSION;
       }
-      else 
+      else
         archiveName+=output.c_str();
     } else { // extract/compare/list: archivename is simply the input
       archiveName+=inputpath.c_str();
@@ -11181,13 +11178,13 @@ int main(int argc, char** argv) {
       printf(" Output folder  = %s\n",outputpath.strsize()==0 ? "." : outputpath.c_str());
     }
 
-    Mode mode = whattodo==doCompress ? COMPRESS : DECOMPRESS; 
+    Mode mode = whattodo==doCompress ? COMPRESS : DECOMPRESS;
 
     ListOfFiles listoffiles;
 
     //set basepath for filelist
     listoffiles.setbasepath(whattodo==doCompress ? inputpath.c_str() : outputpath.c_str());
-    
+
     // Process file list (in multiple file mode)
     if(options & OPTION_MULTIPLE_FILE_MODE) { //multiple file mode
       assert(whattodo==doCompress);
@@ -11199,12 +11196,12 @@ int main(int argc, char** argv) {
       f.close();
       //Verify input files
       for(int i=0;i<listoffiles.getcount();i++)
-        getfilesize(listoffiles.getfilename(i)); // Does file exist? Is it readable? (we don't actially need the filesize now)
+        getfilesize(listoffiles.getfilename(i)); // Does file exist? Is it readable? (we don't actually need the filesize now)
     } else { //single file mode or extract/compare/list
       FileName fn(inputpath.c_str());fn+=input.c_str();
-      getfilesize(fn.c_str()); // Does file exist? Is it readable? (we don't actially need the filesize now)
+      getfilesize(fn.c_str()); // Does file exist? Is it readable? (we don't actually need the filesize now)
     }
-  
+
     FileDisk archive;  // compressed file
 
     if(mode==DECOMPRESS) {
@@ -11283,11 +11280,11 @@ int main(int argc, char** argv) {
       total_size+=start;
       if ((options & OPTION_MULTIPLE_FILE_MODE)!=0) { //multiple file mode
         U64 len1=input.size(); //with ending zero
-        for (U64 i=0; i<len1; i++) 
+        for (U64 i=0; i<len1; i++)
           en.compress(input[i]); //ASCIIZ filename
         const String * const s=listoffiles.getstring();
         U64 len2=s->size(); //with ending zero
-        for (U64 i=0; i<len2; i++) 
+        for (U64 i=0; i<len2; i++)
           en.compress((*s)[i]); //ASCIIZ filenames
         printf("1/2 - Filename of listfile : %" PRIu64 " bytes\n", len1);
         printf("2/2 - Content of listfile  : %" PRIu64 " bytes\n", len2);
@@ -11310,13 +11307,13 @@ int main(int argc, char** argv) {
         if(c==255)quit("Invalid character or unexpected end of archive file.");
         listoffiles.addchar((char)c);
       }
-      if (whattodo==doList) 
+      if (whattodo==doList)
         printf("File list of %s archive:\n", archiveName.c_str());
 
       number_of_files=listoffiles.getcount();
 
       //write filenames to screen or listfile or verify (compare) contents
-      if (whattodo==doList) 
+      if (whattodo==doList)
         printf("%s\n",listoffiles.getstring()->c_str());
       else if (whattodo==doExtract) {
         FileDisk f;
@@ -11337,7 +11334,7 @@ int main(int argc, char** argv) {
       }
     }
 
-    if(whattodo==doList && (options & OPTION_MULTIPLE_FILE_MODE)==0) 
+    if(whattodo==doList && (options & OPTION_MULTIPLE_FILE_MODE)==0)
       quit("Can't list. Filenames are not stored in single file mode.\n");
 
     // Compress or decompress files
@@ -11360,15 +11357,15 @@ int main(int argc, char** argv) {
         total_size+=fsize+4; //4: file size information
         content_size+=fsize;
       }
-      
+
       U64 pre_flush=en.size();
       en.flush();
       total_size+=en.size()-pre_flush; //we consider padding bytes as auxiliary bytes
       printf("-----------------------\n");
-      printf("Total input bytes     : %" PRIu64 "\n", content_size);
+      printf("Total input size     : %" PRIu64 "\n", content_size);
       if(verbose)
-      printf("Total auxiliary bytes : %" PRIu64 "\n", total_size-content_size);
-      printf("Total archive size    : %" PRIu64 "\n", en.size());
+      printf("Total metadata bytes : %" PRIu64 "\n", total_size-content_size);
+      printf("Total archive size   : %" PRIu64 "\n", en.size());
       printf("\n");
       // Log compression results
       if(logfile.strsize()!=0) {
@@ -11411,7 +11408,7 @@ int main(int argc, char** argv) {
   }
   // we catch only the intentional exceptions from quit() to exit gracefully
   // any other exception should result in a crash and must be investigated
-  catch(IntentionalException const& e) {} 
+  catch(IntentionalException const& e) {}
 
   return 0;
 }
