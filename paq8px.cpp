@@ -8717,10 +8717,8 @@ void ContextModel::Train(const char* Dictionary, int Iterations){
 }
 
 void ContextModel::UpdateContexts(const U8 B){
-  for (int i=14; i>0; --i) {
-    U32 prev=cxt[i-1];
-    cxt[i]=(prev<<8)+prev+B+1;
-  }
+  for (int i=14; i>0; --i)
+    cxt[i]=(cxt[i-1]<<8)+cxt[i-1]+B+1;
   for (int i=0; i<7; ++i)
     cm.set(cxt[i]);
   cm.set(cxt[8]);
