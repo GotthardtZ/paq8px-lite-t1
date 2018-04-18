@@ -1,4 +1,4 @@
-/* paq8px file compressor/archiver.  Released on April 10, 2018
+/* paq8px file compressor/archiver.  Released on April 18, 2018
 
     Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
@@ -599,7 +599,7 @@ Added gif recompression
 
 //Change the following values on a new build if applicable
 #define PROGNAME     "paq8px"  // Change this if you make a branch
-#define PROGVERSION  "141fix1"
+#define PROGVERSION  "141fix2"
 #define PROGYEAR     "2018"
 
 
@@ -1579,11 +1579,11 @@ Ilog::Ilog(): t(65536) {
 // llog(x) accepts 32 bits
 inline int llog(U32 x) {
   if (x>=0x1000000)
-    return 256+ilog(x>>16);
+    return 256+ilog(U16(x>>16));
   else if (x>=0x10000)
-    return 128+ilog(x>>8);
+    return 128+ilog(U16(x>>8));
   else
-    return ilog(x);
+    return ilog(U16(x));
 }
 
 inline U32 BitCount(U32 v) {
@@ -1881,7 +1881,7 @@ Stretch::Stretch(): t(4096) {
   for (int x=-2047; x<=2047; ++x) {  // invert squash()
     int i=squash(x);
     for (int j=pi; j<=i; ++j)
-      t[j]=x;
+      t[j]=(short)x;
     pi=i+1;
   }
   t[4095]=2047;
@@ -1908,9 +1908,8 @@ Stretch::Stretch(): t(4096) {
 //   12 bit number (0 to 4095).
 
 #ifdef __GNUC__
-#pragma GCC target ("avx2")
+__attribute__ ((target ("avx2")))
 #endif
-
 static inline int dot_product_simd_avx2 (const short* const t, const short* const w, int n) {
   __m256i sum = _mm256_setzero_si256();
 
@@ -1929,6 +1928,9 @@ static inline int dot_product_simd_avx2 (const short* const t, const short* cons
   return _mm_cvtsi128_si32(newsum);
 }
 
+#ifdef __GNUC__
+__attribute__ ((target ("avx2")))
+#endif
 static inline void train_simd_avx2 (const short* const t, short* const w, int n, const int e)  {
   const __m256i one = _mm256_set1_epi16(1);
   const __m256i err = _mm256_set1_epi16(short(e));
@@ -1944,10 +1946,8 @@ static inline void train_simd_avx2 (const short* const t, short* const w, int n,
 }
 
 #ifdef __GNUC__
-#pragma GCC reset_options
-#pragma GCC target ("sse2")
+__attribute__ ((target ("sse2")))
 #endif
-
 static inline int dot_product_simd_sse2(const short* const t, const short* const w, int n) {
   __m128i sum = _mm_setzero_si128();
 
@@ -1962,6 +1962,9 @@ static inline int dot_product_simd_sse2(const short* const t, const short* const
   return _mm_cvtsi128_si32(sum);
 }
 
+#ifdef __GNUC__
+__attribute__ ((target ("sse2")))
+#endif
 static inline void train_simd_sse2(const short* const t, short* const w, int n, const int e) {
   const __m128i one = _mm_set1_epi16(1);
   const __m128i err = _mm_set1_epi16(short(e));
@@ -1976,10 +1979,6 @@ static inline void train_simd_sse2(const short* const t, short* const w, int n, 
   }
 }
 
-#ifdef __GNUC__
-#pragma GCC reset_options
-#endif
-
 static inline int dot_product_simd_none(const short* const t, const short* const w, int n) {
   int sum = 0;
   while ((n -= 2) >= 0) {
@@ -1991,13 +1990,9 @@ static inline int dot_product_simd_none(const short* const t, const short* const
 static inline void train_simd_none(const short* const t, short* const w, int n, const int err) {
   while ((n -= 1) >= 0) {
     int wt = w[n] + ((((t[n] * err * 2) >> 16) + 1) >> 1);
-    if (wt < -32768) {
-      w[n] = -32768;
-    } else if (wt > 32767) {
-      w[n] = 32767;
-    } else {
-      w[n] = wt;
-    }
+    if (wt < -32768) wt = -32768;
+    else if (wt > 32767) wt = 32767;
+    w[n] = (short)wt;
   }
 }
 
@@ -2395,7 +2390,7 @@ inline U8* HashTable<B>::operator[](U32 i) { //i: context selector
   i*=123456791;
   i=i<<16|i>>16;
   i*=234567891;
-  int chk=i>>24; //8-bit checksum
+  U8 chk=U8(i>>24); //8-bit checksum
   i=(i*B)&(N-B); //force bounds
   //search for the checksum in t
   U8 *p = &t[0];
@@ -2838,18 +2833,18 @@ class ContextMap2 {
                                     // If not found, insert or replace lowest priority (skipping 2 most recent).
       if (Checksums[MRU&15]==Checksum)
         return &BitState[MRU&15][0];
-      int worst=0xFFFF, index=0;
+      int worst=0xFFFF, idx=0;
       for (int i=0; i<7; ++i) {
         if (Checksums[i]==Checksum)
           return MRU=MRU<<4|i, (U8*)&BitState[i][0];
         if (BitState[i][0]<worst && (MRU&15)!=i && MRU>>4!=i) {
           worst = BitState[i][0];
-          index=i;
+          idx=i;
         }
       }
-      MRU = 0xF0|index;
-      Checksums[index] = Checksum;
-      return (U8*)memset(&BitState[index][0], 0, 7);
+      MRU = 0xF0|idx;
+      Checksums[idx] = Checksum;
+      return (U8*)memset(&BitState[idx][0], 0, 7);
     }
   };
   Array<Bucket, 64> Table; // bit histories for bits 0-1, 2-4, 5-7
@@ -4600,7 +4595,7 @@ private:
   void Update(Buf& buffer, ModelStats *Stats = nullptr);
   void SetContexts(Buf& buffer, ModelStats *Stats = nullptr);
 public:
-  TextModel(const U32 Size) : Map(Size, 26), Stemmers(Language::Count-1), Languages(Language::Count-1), WordPos(0x10000), State(Parse::Unknown), pState(State), Lang{ 0, 0, Language::Unknown, Language::Unknown }, Info{ 0 }, ParseCtx(0) {
+  TextModel(const U32 Size) : Map(Size, 26), Stemmers(Language::Count-1), Languages(Language::Count-1), WordPos(0x10000), State(Parse::Unknown), pState(State), Lang{ {0}, {0}, Language::Unknown, Language::Unknown }, Info{}, ParseCtx(0) {
     Stemmers[Language::English-1] = new EnglishStemmer();
     Stemmers[Language::French-1] = new FrenchStemmer();
     Stemmers[Language::German-1] = new GermanStemmer();
@@ -5563,13 +5558,12 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
       filterOn = false;
       columns[0] = max(1,w/max(1,ilog2(w)*3));
       columns[1] = max(1,columns[0]/max(1,ilog2(columns[0])));
-      if (lastPos && lastWasPNG!=isPNG){
+      if (lastPos>0 && lastWasPNG!=isPNG){
         for (int i=0;i<nMaps;i++)
           Map[i].Reset();
       }
       lastWasPNG = isPNG;
-    }
-    else{
+    } else {
       x++;
       if(x>=w+isPNG){x=0;line++;}
     }
@@ -5578,11 +5572,13 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
     if (x==1 && isPNG)
       filter = c4 & 0xFF;
     else{
-      if (x+padding<w)
-        color*=(++color)<stride;
-      else
-        color=(padding>0)*(stride+1);
-
+      if (x+padding<w){
+        color++;
+        if(color>=stride)color=0;
+      }else{
+        if(padding>0) color=stride+1;
+        else color=0;
+      }
       if (isPNG){
         U8 B = c4 & 0xFF;
         switch (filter){
@@ -5619,7 +5615,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
         buffer.Add(c4 & 0xFF);
     }
 
-    if (x || !isPNG){
+    if (x>0 || !isPNG){
       int i=color<<5;
       column[0]=(x-isPNG)/columns[0];
       column[1]=(x-isPNG)/columns[1];
@@ -5803,7 +5799,7 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
   }
 
   // Predict next bit
-  if (x || !isPNG){
+  if (x>0 || !isPNG){
     cm.mix(m);
     for (int i=0;i<nMaps;i++)
       Map[i].mix(m);
@@ -5848,7 +5844,7 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
   static Array<short> jumps(0x8000);
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 px = 0, res = 0; // current PNG filter prediction, expected residual
-  static int ctx, lastPos=0, lastWasPNG=0, col=0, line=0, x=0, filter=0, jump=0;
+  static int ctx=0, lastPos=0, lastWasPNG=0, col=0, line=0, x=0, filter=0, jump=0;
   static bool filterOn = false;
   static int columns[2] = {1,1}, column[2];
   // Select nearby pixels as context
@@ -6950,11 +6946,10 @@ public:
     m1->add(128); //network bias
     assert(hbcount<=2);
     int p;
-   switch(hbcount)
-    {
-     case 0: for (int i=0; i<N; ++i){ cp[i]=t[cxt[i]]+1, m1->add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>1);} break;
-     case 1: { int hc=1+(huffcode&1)*3; for (int i=0; i<N; ++i){ cp[i]+=hc, m1->add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>1); }} break;
-     default: { int hc=1+(huffcode&1); for (int i=0; i<N; ++i){ cp[i]+=hc, m1->add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>1); }} break;
+    switch(hbcount) {
+      case 0: for (int i=0; i<N; ++i){ cp[i]=t[cxt[i]]+1, m1->add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>1);} break;
+      case 1: { int hc=1+(huffcode&1)*3; for (int i=0; i<N; ++i){ cp[i]+=hc, m1->add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>1); }} break;
+      default: { int hc=1+(huffcode&1); for (int i=0; i<N; ++i){ cp[i]+=hc, m1->add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>1); }} break;
     }
 
     m1->set(firstcol, 2);
@@ -8656,7 +8651,7 @@ class ContextModel{
   ContextMap2 cm;
   RunContextMap rcm7, rcm9, rcm10;
   exeModel exeModel1;
-  JpegModel jpegModel;
+  JpegModel *jpegModel;
   #ifdef USE_TEXTMODEL
   TextModel textModel;
   #endif //USE_TEXTMODEL
@@ -8667,7 +8662,7 @@ class ContextModel{
   void UpdateContexts(U8 B);
   void Train(const char* Dictionary, int Iterations = 1);
 public:
-  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM),
+  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), jpegModel(0),
 
     #ifdef USE_TEXTMODEL
       textModel(MEM*16),
@@ -8689,6 +8684,7 @@ public:
     }
   ~ContextModel() {
     delete m;
+    if(jpegModel) delete jpegModel;
   }
   int Predict(ModelStats *Stats = NULL);
 };
@@ -8766,7 +8762,10 @@ int ContextModel::Predict(ModelStats *Stats){
   #ifdef USE_WAVMODEL
   if (blocktype==AUDIO) return wavModel(*m, blockinfo, Stats), m->p();
   #endif //USE_WAVMODEL
-  if ((blocktype==JPEG || blocktype==HDR)) if (jpegModel.jpegModel(*m)) return m->p();
+  if ((blocktype==JPEG || blocktype==HDR)) {
+    if(jpegModel==nullptr)jpegModel=new JpegModel();
+    if (jpegModel->jpegModel(*m)) return m->p();
+  }
 
   // Normal model
   if (bpos==0)
@@ -10079,14 +10078,15 @@ int encode_zlib(File *in, File *out, U64 len, int &hdrsize) {
   U64 diffPos[81*LIMIT];
 
   // Step 1 - parse offset type form zlib stream header
-  U64 pos=in->curpos();
+  U64 pos_backup=in->curpos();
   U32 h1=in->getchar(), h2=in->getchar();
-  in->setpos(pos);
+  in->setpos(pos_backup);
   int zh=parse_zlib_header(h1*256+h2);
   int memlevel,clevel,window=zh==-1?0:MAX_WBITS+10+zh/4,ctype=zh%4;
   int minclevel=window==0?1:ctype==3?7:ctype==2?6:ctype==1?2:1;
   int maxclevel=window==0?9:ctype==3?9:ctype==2?6:ctype==1?5:1;
-  int index=-1, found=0, nTrials=0;
+  int index=-1, nTrials=0;
+  bool found=false;
 
   // Step 2 - check recompressiblitiy, determine parameters and save differences
   z_stream main_strm, rec_strm[81];
@@ -10115,7 +10115,7 @@ int encode_zlib(File *in, File *out, U64 len, int &hdrsize) {
     U32 blsize=min(U32(len-i),BLOCK);
     nTrials=0;
     for (int j=0; j<81; j++) {
-      if (diffCount[j]>=LIMIT) continue;
+      if (diffCount[j]==LIMIT) continue;
       nTrials++;
       if (recpos[j]>=BLOCK)
         recpos[j]-=BLOCK;
@@ -10136,7 +10136,7 @@ int encode_zlib(File *in, File *out, U64 len, int &hdrsize) {
 
       // Recompress/deflate block with all possible parameters
       for (int j=MTF.GetFirst(); j>=0; j=MTF.GetNext()){
-        if (diffCount[j]>=LIMIT) continue;
+        if (diffCount[j]==LIMIT) continue;
         nTrials++;
         rec_strm[j].next_in=&zout[0];  rec_strm[j].avail_in=BLOCK-main_strm.avail_out;
         rec_strm[j].next_out=&zrec[recpos[j]]; rec_strm[j].avail_out=BLOCK*2-recpos[j];
@@ -10157,9 +10157,9 @@ int encode_zlib(File *in, File *out, U64 len, int &hdrsize) {
           }
         }
         // Early break on perfect match
-        if (main_ret==Z_STREAM_END && !diffCount[j]){
+        if (main_ret==Z_STREAM_END && diffCount[j]==0){
           index=j;
-          found=1;
+          found=true;
           break;
         }
         recpos[j]=2*BLOCK-rec_strm[j].avail_out;
@@ -10190,7 +10190,7 @@ int encode_zlib(File *in, File *out, U64 len, int &hdrsize) {
   }
   for (int i=0; i<diffCount[index]; i++) out->putchar(diffByte[index*LIMIT+i+1]);
 
-  in->setpos(pos);
+  in->setpos(pos_backup);
   main_strm.zalloc=Z_NULL; main_strm.zfree=Z_NULL; main_strm.opaque=Z_NULL;
   main_strm.next_in=Z_NULL; main_strm.avail_in=0;
   if (zlib_inflateInit(&main_strm,zh)!=Z_OK) return false;
@@ -10518,7 +10518,8 @@ int decode_gif(File *in, U64 size, File *out, FMode mode, U64 &diffFound) {
   if (mode==FDECOMPRESS) out->putchar(codesize);
   else if (mode==FCOMPARE) if (codesize!=out->getchar() && !diffFound) diffFound=1;
   if (diffcount==0 || diffpos[0]!=0) gif_write_code(1<<codesize) else curdiff++;
-  while (size-->=0 && (input=in->getchar())>=0) {
+  while (size!=0 && (input=in->getchar())!=EOF) {
+    size--;
     int code=-1, key=(last<<8)+input;
     for (int i=(1<<codesize)+2; i<=min(maxcode,4095); i++) if (dict[i]==key) code=i;
     if (curdiff<diffcount && total-(int)size>diffpos[curdiff]) curdiff++,code=-1;
@@ -10626,7 +10627,13 @@ void transform_encode_block(Blocktype type, File *in, U64 len, Encoder &en, int 
         en.encode_blocksize(tmpsize);
         Blocktype type2=(Blocktype)((info>>24)&0xFF);
         if (type2!=DEFAULT) {
+          String blstr_sub0;blstr_sub0+=blstr.c_str();blstr_sub0+="->";
+          String blstr_sub1;blstr_sub1+=blstr.c_str();blstr_sub1+="-->";
+          String blstr_sub2;blstr_sub2+=blstr.c_str();blstr_sub2+="-->";
+          printf(" %-11s | ->  exploded     |%10d bytes [%d - %d]\n",blstr_sub0.c_str(),int(tmpsize),0,int(tmpsize-1));
+          printf(" %-11s | --> added header |%10d bytes [%d - %d]\n",blstr_sub1.c_str(),hdrsize,0,hdrsize-1);
           direct_encode_block(HDR, &tmp, hdrsize, en);
+          printf(" %-11s | --> data         |%10d bytes [%d - %d]\n",blstr_sub2.c_str(),int(tmpsize-hdrsize),hdrsize,int(tmpsize-1));
           transform_encode_block(type2, &tmp, tmpsize-hdrsize, en, info&0xffffff, blstr, recursion_level, p1, p2, hdrsize);
         } else {
           compressRecursive(&tmp, tmpsize, en, blstr, recursion_level+1, p1, p2);
@@ -10762,7 +10769,7 @@ void decompressfile(const char* filename, FMode fmode, Encoder& en) {
   assert(filename && filename[0]);
 
   Blocktype blocktype=(Blocktype)en.decompress();
-  assert(blocktype==FILECONTAINER);
+  if(blocktype!=FILECONTAINER)quit("Bad archive.");
   U64 filesize=en.decode_blocksize();
 
   FileDisk f;
@@ -11048,11 +11055,11 @@ int main(int argc, char** argv) {
     // Determine CPU's (and OS) support for SIMD vectorization istruction set 
     int detected_simd_iset = simd_detect();
     if(simd_iset==-1)simd_iset=detected_simd_iset;
-    if(simd_iset>detected_simd_iset)printf("Overriding system highest vectorization support. Expect a crash.");
+    if(simd_iset>detected_simd_iset)printf("\nOverriding system highest vectorization support. Expect a crash.");
 
     // Print anything only if the user wants/needs to know
     if(verbose || simd_iset!=detected_simd_iset) {
-      printf("Highest SIMD vectorization support on this system: ");
+      printf("\nHighest SIMD vectorization support on this system: ");
       if(detected_simd_iset<0 || detected_simd_iset>9)quit("Oops, sorry. Unexpected result.");
       static const char* vectorization_string[10]={"None","MMX","SSE","SSE2","SSE3","SSSE3","SSE4.1","SSE4.2","AVX","AVX2"};
       printf("%s.\n", vectorization_string[detected_simd_iset]);
@@ -11209,8 +11216,9 @@ int main(int argc, char** argv) {
       for(int i=0;i<len;i++)
         if(archive.getchar()!=PROGNAME[i]) {printf("%s: not a valid %s file.", archiveName.c_str(), PROGNAME); quit();}
       level=archive.getchar();
-      options=archive.getchar();
-      if(options==EOF) printf("Unexpected end of archive file.\n");
+      c=archive.getchar();
+      if(c==EOF) printf("Unexpected end of archive file.\n");
+      options=(U8)c;
     }
 
     if(verbose) {
