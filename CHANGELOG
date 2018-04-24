@@ -1,0 +1,1116 @@
+---------------
+VERSION HISTORY
+---------------
+
+Newest entries are at the bottom.
+Dates are in YYYY.MM.DD format.
+
+
+DIFFERENCES FROM PAQ7
+
+An .exe model and filter are added.  Context maps are improved using 16-bit
+checksums to reduce collisions.  The state table uses probabilistic updates
+for large counts, more states that remember the last bit, and decreased
+discounting of the opposite count.  It is implemented as a fixed table.
+There are also many minor changes.
+
+DIFFERENCES FROM PAQ8A
+
+The user interface supports directory compression and drag and drop.
+The preprocessor segments the input into blocks and uses more robust
+EXE detection.  An indirect context model was added.  There is no
+dictionary preprocesor like PAQ8B/C/D/E.
+
+DIFFERENCES FROM PAQ8F
+
+Different models, usually from paq8hp*. Also changed rate from 8 to 7. A bug
+in Array was fixed that caused the program to silently crash upon exit.
+
+DIFFERENCES FROM PAQ8J
+
+1) Slightly improved sparse model.
+2) Added new family of sparse contexts. Each byte mapped to 3-bit value, where
+different values corresponds to different byte classes. For example, input
+byte 0x00 transformed into 0, all bytes that less then 16 -- into 5, all
+punctuation marks (ispunct(c)!=0) -- into 2 etc. Then this flags from 11
+previous bytes combined into 32-bit pseudo-context.
+
+All this improvements gives only 62 byte on BOOK1, but on binaries archive size
+reduced on 1-2%.
+
+DIFFERENCES FROM PAQ8JA
+
+Introduced distance model. Distance model uses distance to last occurence
+of some anchor char (0x00, space, newline, 0xff), combined with previous
+charactes as context. This slightly improves compression of files with
+variable-width record data.
+
+DIFFERENCES FROM PAQ8JB
+
+Restored recordModel(), broken in paq8hp*. Slightly tuned indirectModel().
+
+DIFFERENCES FROM PAQ8JC
+
+Changed the APMs in the Predictor. Up to a 0.2% improvement for some files.
+
+DIFFERENCES FROM PAQ8JD
+
+Added DMCModel.  Removed some redundant models from SparseModel and other
+minor tuneups.  Changes introduced in PAQ8K were not carried over.
+
+PAQ8L v.2
+
+Changed Mixer::p() to p() to fix a compiler error in Linux
+(patched by Indrek Kruusa, Apr. 15, 2007).
+
+DIFFERENCES FROM PAQ8L, PAQ8M
+
+Modified JPEG model by Jan Ondrus (paq8fthis2).  The new model improves
+compression by using decoded pixel values of current and adjacent blocks
+as context.  PAQ8M was an earlier version of the new JPEG model
+(from paq8fthis).
+
+DIFFERENCES FROM PAQ8N
+
+Improved bmp model. Slightly faster.
+
+DIFFERENCES FROM PAQ8O
+
+Modified JPEG model by Jan Ondrus (paq8fthis4).
+Added PGM (grayscale image) model form PAQ8I.
+Added grayscale BMP model to PGM model.
+Ver. 2 can be compiled using either old or new "for" loop scoping rules.
+Added APM and StateMap from LPAQ1
+Code optimizations from Enrico Zeidler
+Detection of BMP 4,8,24 bit and PGM 8 bit images before compress
+On non BMP,PGM,JPEG data mem is lower
+Fixed bug in BMP 8-bit detection in other files like .exe
+15. oct 2007
+Updates JPEG model by Jan Ondrus
+PGM detection bug fix
+22. oct 2007
+improved JPEG model by Jan Ondrus
+16. feb 2008
+fixed bmp detection bug
+added .rgb file support (uncompressed grayscale)
+
+DIFFERENCES FROM PAQ8O9
+
+Added wav Model. Slightly improved bmp model.
+
+DIFFERENCES FROM PAQ8P (i.e. PAQ8PX is born)
+
+pap8px_v0
+2009.04.25
+- Added nestModel from paq8p3
+- Modified wordModel from paq8p3
+- Modified .pbm, .pgm, .ppm, .bmp, .rgb detection (from paq8p3)
+- Modified WAV model (from paq8p_)
+- Modified JPEG model (from paq8p2)
+- Added im1bitModel (1-bit) (from paq8p3)
+- Added compression of PPM, PBM images (from paq8p3)
+- Removed pic model
+
+
+pap8px_v1
+2009.04.26
+- Fixed "Transform fails at 79385" when compressiong WcgopFsd.dll
+- A fix for properly compressing partially currupted images (e.g. 2359362 bytes 1024x768 bitmap)
+- JPEG model wasn't replaced in previous version
+
+
+pap8px_v2
+2009.04.29
+- Fixed bug in pgm/pbm/ppm detection.
+
+
+pap8px_v4
+2009.05.01
+- There was a problem with compressing files larger than 1 block (512MB for -7 switch, 4MB for -0 swtich). Fixed.
+
+
+pap8px_v5
+2009.05.04
+- Small modifications in exe detection and e8/e9 exe filter
+
+
+pap8px_v6
+2009.05.05
+- fixed: compressing using -8 switch was broken
+- fixed: you could use (not working) -9 switch in previous versions
+
+
+pap8px_v7
+2009.05.07
+- Same fix as done for paqp3. Bmp detection for negative height was broken
+
+
+pap8px_v8
+2009.05.07
+- Some code modified in 1-bit/8-bit/24-bit BMP detection (compression size is different only for 1-bit BMPs = was wrong starting offset in old version)
+
+
+pap8px_v9
+2009.05.08
+- now there are only im24bitModel, im8bitModel and im1bitModel instead of im24bitModel, pgmModel, bmpModel8, rgbModel8, bmpModel1 and pbmModel
+- all image header detection is removed from models (only place for image detection is detect procedure)
+- every image is divided into 2 blocks - IMAGEHDR (header) and IMAGEx (where x is 1, 8 or 24)
+- there are additional 8 bytes in compressed stream (for size of IMAGEHDR block and for image width)
+- experimental improved tiff detection (should detect uncompressed tiff created by IrfanView)
+- RGB detection can detect images with more chanels (3 or 4) - chanels are compressed independently using im8bitModel (IMAGE8 block)
+- during compression can't be printed such info BMP(width x height), instead of it program prints info about blocks: blocktype(size in bytes)
+
+
+pap8px_v10
+2009.05.08
+- Added 24-bit tga compression
+- Added More checks for Tiff
+- Added 1-bit Tiff compression
+- Changed many if[...]if[...] to if[...]else if[...] in detect
+- Fixed compiling error with MSVC++ because of unknown abs type
+
+
+pap8px_v11
+2009.05.09
+- Fixed parsing the tga header.
+
+
+pap8px_v12
+2009.05.09
+-fixed bug in TGA detection
+-some code changed in BMP,RGB and TIFF detection
+
+
+pap8px_v13
+2009.05.09
+- fixed: monochrome TGA works again
+- some code modified in TIFF detection
+
+
+pap8px_v14
+2009.05.10
+- uncompressed audio 8-bit/16-bit mono/stereo is now compressed in separate AUDIO blocks
+- wave file is divided into HDR and AUDIO block (images into HDR and IMAGEx)
+- extra information (like width for images) saved in compressed stream is BitsPerSample+Channels (possible values are 9, 10, 17, 18)
+- found and fixed problem for images blocks - metadata (=size of block, image width) were compressed using special models (image models)
+
+
+pap8px_v15
+2009.05.10
+- fixed: WAVE detection can skip metadata now
+
+
+pap8px_v16
+2009.05.12
+- fixed JPEG detection
+
+
+pap8px_v17
+2009.05.12
+- removed file segmenting by BLOCKS=MEM*128 (as is in paq8p3) -> entire file is processed as one block
+- some source code cleaning (removed some spaces and tabs)
+- int wavmodel changed to void wavmodel (not returning value)
+
+
+pap8px_v18
+2009.05.12
+- increased tolerance for TIFF files (start of raw image data) from 64kb to 256kb
+- experimental MOD file detection and compression
+
+
+pap8px_v19
+2009.05.12
+- fixed bug in MOD detection (broken detecting files with 64 patterns) + more MODs can be recognized (those marked with M.K. 8CHN 6CHN FLT4 or FLT8)
+
+
+pap8px_v20
+2009.05.12
+- ?
+
+pap8px_v21
+2009.05.16
+- changed some code in wavmodel to improve its speed (no compression ratio changes)
+
+
+pap8px_v22
+2009.05.18
+- fixed bug in wavmodel
+
+
+pap8px_v23
+2009.05.19
+- added experimental S3M modules detection
+
+
+pap8px_v24
+2009.05.19
+- fixed bug in S3M detection (one variable wasn't properly initialized).
+
+
+pap8px_v25
+2009.05.19
+- different handling of 8-bit WAVE data. (samples were interpreted as number 0..255 in previous versions -> current version -128..127) -> improves compression on most files
+
+
+pap8px_v26
+2009.05.20
+- Block segmentation information is printed before actual compression starts.
+- Percentage is displayed during compression.
+
+
+pap8px_v27
+2009.05.20
+- Merged void encode and void compress procedures.
+- Block segmentation information is printed during compression now.
+
+
+pap8px_v28
+2009.05.20
+- fixed: string "Compressing..." was printed twice because of default block with size=0 in between jpeg blocks.
+
+
+pap8px_v29
+2009.05.21
+- Changed the structure of the compress function a lot. It now stops using encode_default instead it compresses directly from input file.
+  In files without EXE data there is no temporary file anymore and surely also no comparing.
+
+
+pap8px_v30
+2009.05.21
+- Removed some redundant code from compress procedure
+- Added direct_encode_block() procedure for repeated task in compress() procedure
+
+
+pap8px_v31
+2009.05.21
+- added experimental AIFF detection and compression
+- some small modification in handling 8-bit audio data (wavmodel)
+
+
+pap8px_v32
+2009.05.22
+- Fixed bug in wavmodel.
+- You can use -0 to -3 switch for faster wave compression now
+
+
+pap8px_v32
+2009.05.22
+- fixed another bug (fix from v32 wasn't optimal for some files)
+
+
+pap8px_v34
+2009.05.22
+- Improved AIFF detection.
+
+
+pap8px_v35
+2009.05.23
+- Improved AIFF detection - can skip padding byte correctly
+- Corrected handling with 8-bit audio in AIFF format
+- Max size of extra blocks before sound data in AIFF is 1024 now
+
+
+pap8px_v36
+2009.05.26
+- Removed two writes (and reads) of size of exe-block
+- Changes in sparseModel, exeModel, indirectModel, nestModel which should improve compression of executables a bit
+
+
+pap8px_v37
+2009.05.28
+- improved exe filter - relative to absolute address conversion is now performed also for conditional jumps (for 0x0f80..0x0f8f instructions)
+
+
+pap8px_v38
+2009.05.30
+- Experimental detection and transformation of CD sectors in CD images(only type #1) as done in ECM -> sequence of sectors is detected as new block type : cd
+- Functions for computing ECC and EDC are taken from UNECM decoder (GPL) by Neill Corlett
+- Ro test detection/transformation you can use -0 switch
+
+
+pap8px_v39
+2009.05.30
+- Fixed bug: conflict in CD and EXE detection (exe detected inside cd image could cause bad things)
+
+
+pap8px_v40
+2009.05.30
+- limited maximal size of cd block to 38535168 (16384 sectors) so larger cd images are divided into more blocks and user can see progress
+
+
+pap8px_v41
+2009.05.30
+- disabled detecting anything else when CD is detected.
+
+
+pap8px_v42
+2009.05.30
+- fixed bug: special models for special blocks (image/audio) wasn't used when found after CD block due to wrong/missing size of encoded cd block calculation.
+
+
+pap8px_v43
+2009.06.01
+- improved CD sectors transformation - addresses are not saved which improves efficiency of transformation and allow possibility for future detection images/audio inside CD image data
+
+
+pap8px_v44
+2009.06.01
+- fixed bug: wrong size of encoded CD block
+
+
+pap8px_v45
+2009.06.01
+- detection images/audio/exe/cd/jpeg blocks inside transformed cd block data
+- works recursively (maximal deep of recursion is set to 5 - controlled by #define MAX_ITER 5)
+- each CD block now contains subblocks
+- meaning of percentage is changed - it shows progress for individual block (i think this is bad and will try to return previous behavior in next versions)
+
+
+pap8px_v46
+2009.06.02
+- added support for CD-ROM Mode 2 XA (CD-ROM/XA) Form 1 (2352 bytes) sectors
+- percentage shows again progress for entire files
+
+
+pap8px_v47
+2009.06.03
+- added support for mode 2/form 2 CD sectors (experimental)
+- fixed bug in recursion
+- fixed bug with wrong detection of special block types in first CD sector
+
+
+pap8px_v48
+2009.06.04
+- fixed bug in encoding exe blocks: block header was written twice which caused that exeModel was not used
+
+
+pap8px_v49
+2009.06.04
+- fixed bug: wrong percentage when more files were compressed
+
+
+pap8px_v50
+2009.06.05
+- improved detection exe code
+
+
+pap8px_v51
+2009.06.05
+- fixed bug in decode()
+
+
+pap8px_v52
+2009.06.05
+- fixed: in detect() "cdm" has never been initialized
+
+
+pap8px_v53
+2009.06.06
+- changed xor-parameter of exe transformation (old: 64=01000000, new: 176=10110000) -> three bytes of absolute adress are xored using this value before encoding
+
+
+pap8px_v54
+2009.06.11
+- added new decompression system from Simon Berger/paq8q
+- new style of block segmentation information during compression
+
+
+pap8px_v55
+2009.06.13
+- new version of wavModel
+- recordModel is no longer used inside wavModel which may lead to increased speed and small loss in compression ratio.
+
+
+pap8px_v56
+2009.06.13
+- before value from sum is used it is coverted to float:  sum=float(sum);
+
+
+pap8px_v57
+2009.06.13
+- converting to float wasn't good idea - this could hurt compression ratio very much -> instead of it sum is rounded in this version: sum=round(sum);
+
+
+pap8px_v58
+2009.06.17
+- changed end of exe-block detection (size of no x86 code increased from 4kb to 16kb)
+- minor changes in block information output
+
+
+pap8px_v59
+2009.06.19
+- Added internal C99 compliant round() function. Compile with '-DLPROUND_ON' to enable.
+
+
+pap8px_v60
+2009.06.20
+- improved wavModel
+  1.) Replaced round(sum) with floor(sum+0.5)
+  2.) Some changes in contexts (improving compression)
+  3.) RecordModel is used in wavModel again (because it improves compression mainly for 8bit audio)
+
+
+pap8px_v61
+2009.06.25
+- Added a simple color transformation to paq8px. All detected 24-bit image data are transformed. Different formats have diferent color order RGB (.tiff) vs. BGR (.bmp) -> this could cause different compression for the same image in different formats.
+
+
+pap8px_v62
+2009.08.16
+- some double brackets removed
+- fixed some compiler warnings
+
+
+pap8px_v63
+2009.08.16
+- fixed additional -Wparentheses compiler warnings 
+
+
+pap8px_v64
+2009.08.16
+- fixed warnings produced by -DNOASM and -O2 switches in GCC 4.4.0
+
+
+pap8px_v65
+2009.10.28
+- fixed bug: compression/transformation of 24-bit images in BMP format with width not divisible by 4
+
+
+pap8px_v66
+2009.10.29
+- fixed bug: when comparing 24-bit image wrong difference position could be reported
+- improved 24-bit image model
+
+
+pap8px_v67
+2009.11.05
+- changes in Mixer initialization and context
+- changes in indirectModel and nestModel
+
+
+pap8px_v68
+2010.01.18
+- file list / archive header is compressed
+- you can list archive contents with -l switch
+
+
+pap8px_v69
+2010.04.26
+- problem with compressing files in different paths fixed.
+
+
+pap8px_v70
+2016.03.09
+- added zlib recompression from AntiZ (it probably has lot of bugs and can crash randomly)
+
+
+pap8px_v71
+2016.03.11
+- fixed bug with special image/audio models broken by zlib recompression
+- fixed bug with wrong progress display
+- some changes in recompressed zlib data header
+- added pdfimage support
+
+
+pap8px_v72
+2016.03.19
+- Added base64 transform (from paq8pxd)
+- Modified im8bitModel (8-bit) (from paq8pxd)
+- Added gif recompression
+
+
+pap8px_v73
+2016.03.19
+- Fixed a bug in base64 transform
+
+
+pap8px_v74
+2016.03.20
+- model changes from paq8pxd
+- fix bugs in gif detection/recompression
+
+
+pap8px_v75
+2016.03.22
+- fixed gif routines ("Transform fails")
+
+
+pap8px_v76
+2017.07.09
+- improved JPEG model to allow it to account for sub-sampling
+
+
+pap8px_v77
+2017.07.10
+- modified the record model (new heuristic for checking the candidate lengths, and a new context, both derived from EMMA's record model).
+- modified the BMP parsing code to detect embedded DIB's in executable files.
+
+
+pap8px_v77b
+2017.07.10
+- fixed a small error in the code
+- added 2 new contexts from EMMA to the record model.
+
+
+pap8px_v78
+2017.07.15
+- Changed the JPEG model to be able to detect embedded thumbnails and to compress MJPEG video frames (by loading the default huffman tables).
+- The recursion level on the thumbnail detection can be configured by a simple constant change, currently it can detect a thumbnail within a thumbnail.
+- Added 5 contexts from my grayscale 8bpp model in EMMA to the 8bpp and 24bpp models in paq8px.
+
+
+pap8px_v79
+2017.07.17
+- Modified the 24bpp image model to also be able to compress 32bpp images, to be able to account for padding in BMP/DIB images, and changed one of its mixer contexts. 
+- Changed a mixer context for the 8bpp image model.
+
+
+pap8px_v80
+2017.07.23
+- Fixed the JPEG thumbnail detection bug and other bugs in previous versions.
+- Modified the record model.
+
+
+pap8px_v81
+2017.07.24
+- This version detects if a 8bpp image is grayscale or a color-palette image by parsing the color table, if available 
+  (for PGM files a grayscale image is assumed, the check is made for BMP/DIB and TGA images). 
+  This is done because their characteristics are completely different, so they require different approaches.
+- Modified the 8bpp image model to account for both variants, 
+- And added 5 simple contexts for the color-palette branch. 
+- Modified a global mixer context, it should give better compression on executable files.
+
+
+pap8px_v82
+2017.07.25
+- Made a few simple tweaks to the JPEG model, compression is now even closer to that of EMMA.
+
+
+pap8px_v83
+2017.07.25
+- small changes in jpegmodel
+
+
+pap8px_v84
+2017.07.25
+- Fixed problems in JPEG model.
+- Added a new context to the 24/32bpp image model
+- Made a few simple tweaks to the audio model.
+
+
+pap8px_v85
+2017.07.27
+- Small changes in jpegmodel
+
+
+pap8px_v86
+2017.07.28
+- Added 2 new contexts in jpegmodel
+- Fixed the grayscale detection routine.
+
+
+pap8px_v87
+2017.07.28
+- adjustments of new contexts in jpeg model
+
+
+pap8px_v88
+2017.08.04
+- additional small jpeg model improvements
+
+
+pap8px_v89
+2017.08.05
+- a few quick tweaks to the jpeg model contexts, and added a new context.
+
+
+pap8px_v90
+2017.08.08
+- added few more small tweaks to jpeg model
+
+
+pap8px_v91
+2017.08.11
+- Small changes to the word model, 24/32bpp image model and the JPEG model
+
+
+pap8px_v92
+2017.08.12
+- more jpeg model tweaks
+
+
+pap8px_v93
+2017.08.15
+- fixed issue with maxpc.pdf (thanks for reporting Stephan Busch)
+
+
+pap8px_v94
+2017.08.16
+- fixed issue with VirtualAlloc and VirtualFree when compiling on Mac OSX 
+- improvements to the nest model
+- slight tweak to the exe model
+
+
+pap8px_v95
+2017.08.16
+- added PAM format detection, 32bit-image transformation
+
+
+pap8px_v96
+2017.08.17
+- fixed the bug in the initialization of the number of mixer inputs.
+- added a new experimental model for XML, similar to the one in EMMA. 
+
+
+pap8px_v97
+2017.08.17
+- bug fixes (thank you Mauro)
+- improvements to the XML model
+- detects audio in SoundFont .SF2 files.
+
+
+pap8px_v98
+2017.08.18
+- This version features a new and much improved x86/x64 model, based on a blending of the old model,
+  DisFilter by Fabian Giesen (http://www.farbrausch.de/~fg/code/disfilter/) and the x86/x64 model in EMMA.
+
+
+pap8px_v99
+2017.08.19
+- fixed a few more bugs and made some improvements to the exe model.
+- removed all code that made the complexity of the models dependent on the compression level
+
+
+pap8px_v100
+2017.08.23
+- Fixed a bug in the exe model
+- made the .PAM image parser case-insensitive, just in case some images weren't being detected.
+- added 2 contexts from EMMA in the 24/32bpp image model.
+
+
+pap8px_v101
+2017.08.26
+- a small change to allow paq8px to compress JPEG images created by guetzli
+
+
+pap8px_v102
+2017.08.29
+- Improved the x86/x64 model and the 1bpp image model, and fixed a few bugs.
+- The BMP/DIB detection should now handle icons and cursors better
+- The PDF parser now handles 1bpp images compressed with Deflate and distinguishes 8bpp grayscale images from 8bpp indexed-color images.
+
+
+pap8px_v103
+2017.08.31
+- Made a few improvements to the wordModel, 
+- Created a model for 4bpp images, which are very common in executables.
+
+
+pap8px_v104
+2017.09.02
+- This version can recompress some 24/32bpp PNG images with a proper image model.
+- Modified the existing 24/32bpp image model to also compress the filtered PNG pixel data.
+- Created a few example contexts designed to model such data
+- Tweaked the existing (non-PNG, unfiltered pixel data) model a bit.
+
+
+pap8px_v105
+2017.09.03
+- simplified block type handling routines
+- because we now have 4-bit image model we should use it for 4-bit pdf image (we used here the 8-bit model instead)
+
+
+pap8px_v106
+2017.09.04
+- Improved the 24/32bpp PNG image model. 
+- Improved the parsers for WAV and TGA.
+- The GIF parser now detects if the image is grayscale by analysing the global color palette.
+
+
+pap8px_v107
+2017.09.04
+- Enabled 8bpp PNG recompression with the 8bpp image model.
+- Improved the 24/32bpp image model.
+
+
+pap8px_v108
+2017.09.06
+- Made variants of the 8bpp image model to handle 8bpp PNG images, both grayscale and indexed color.
+- Improved the 24/32bpp image model, both the normal and the PNG variants.
+
+
+pap8px_v109
+2017.09.07
+- Improved the 24/32bpp image model (both variants, PNG or not), along with the grayscale 8bpp model (also both variants).
+- The JPEG model is now called also on header blocks, to allow the detection of some embedded thumbnails in some TIF\RAW images.
+
+
+pap8px_v110
+2017.09.08
+- Merged the 8bpp image model indexed color variants (both PNG and non-PNG) and made a few improvements to it.
+
+
+pap8px_v111
+2017.09.09
+- Deleted the old 8bpp grayscale model that was being used for non-PNG images and modified the PNG variant to do both.
+- Improved the new 8bpp image model so this is now a completely new model, both for grayscale and color-indexed images, PNG or not.
+- Improved the 24/32bpp image model, also both PNG or not.
+- created a new model for modelling stationary (or nearly so) data
+
+
+pap8px_v112
+2017.09.17
+- Pre-training of x86/x64 model with the compiled binary itself
+- Pre-training of part of the main model with file "english.dic", if present (optional)
+- Improved StationaryMap
+- Improved 24/32bpp and 8bpp grayscale image models
+
+
+pap8px_v113
+2017.10.10
+- improved the 24/32bpp image model, both for PNG and non-PNG images.
+
+
+pap8px_v114
+2017.10.15
+- Made a few more improvements to the 24/32bpp image model, especially on the PNG variant.
+- The 8bpp color-indexed model is also slightly improved.
+- The heuristic for the record model now attempts to detect 24bpp images, and the model now uses 2 contexts for 8bpp and 24bpp images. This helps on images that aren't detected by the parsers, such as Tif images.
+
+
+pap8px_v115
+2017.10.21
+- Improved the record model 
+- Made a few tweaks to the DMC model.
+
+
+pap8px_v116
+2017.10.22
+- Bug fixes in DMC model reported by Mauro
+
+
+paq8px_v117 
+2017.10.29
+- Fixes assertion failed errors reported by Mauro:
+  - Line 897 : Expression: i>0
+  - Line 1957: Expression: (((unsigned long long)cp[i])&63)>=15
+  - Line 1226: Expression: p>=0 && p<4096
+
+paq8px_v118
+2017.11.01
+- Bugfixes in recordModel, wordModel, and the 8bpp image model 
+- Improvements to the record model, the 8bpp and the 24/32bpp image models
+
+
+paq8px_v119
+2017.11.04
+- Improved the 8bpp and 24/32bpp image models
+- Modified the DEFLATE transform to use a Move-To-Front list to keep the possible zlib parameter combinations ranked by recency and to break as soon as a perfect match is found.
+
+
+paq8px_v120 
+2017.11.12
+- Implemented a brute-force mode for detection of DEFLATE streams
+- Fixed a small bug in the DIB detection code.
+- No models were improved
+
+
+paq8px_v121
+2017.11.26
+- Fixed incorrect scaling in StationaryMap
+- Fixed a bug in pdf detection (zbuf[])
+- Made both pre-training modes and also the brute-force DEFLATE stream detection optional.
+- No model improvements
+
+
+paq8px_v121_fixed1
+2017.12.05
+- Fixed a MS Visual C++ 2015 optimization issue in im24bitModel (division by zero)
+- Fixed two minor bugs in class Array
+- Fixed a bug in class zLibMTF
+- Fixed access denied error when creating temporary files on Windows
+- Fixed some #defines in order to compile properly with MS Visual C++
+- Eliminated all Visual C++ 2015 compiler warnings (W3) and most MinGW-w64 compiler warnings
+- Removed "-level[switches] archive files..." from help screen
+- No model or compression improvements
+
+
+paq8px_v121_fixed2
+2017.12.09
+- Fixed ilog2 (in recordModel)
+- Created an MSVC variant for ilog2
+- HashTable: fixed its code to match its documentation (h([i] should return p+i+1, not p+i), updated its references (in im4bitModel)
+- HashTable: revised documentation to understand it easier (hopefully)
+- SmallStationaryContextMap: changed implementation to be more intuitive (hopefully)
+- im24bitModel: minor details in code were changed to be more intuitive (hopefully) and removed the unused scm10 and Map[29] contextmaps
+- im8bitModel: minor details in code were changed to be more intuitive (hopefully)
+- wavModel: rewritten 1) to use Array 2) peeled 2 expressions from loops 3) changed minor details in code to be more intuitive (hopefully)
+- No model or compression improvements
+
+
+paq8px_v121_fixed3
+2017.12.09
+- Fixed im24bitModel: put back scm10 and Map[29] contextmaps (erroneously removed in paq8px_v121_fixed2).
+- Clip, Climp4, LogMeanDiffQt: modified code to be more intuitive (hopefully)
+- No model or compression improvements
+
+
+paq8px_v122
+2017.12.18
+- dmcModel: applied the patch from Mauro
+- jpegModel: set a faster learning rate
+- code(): instead of increasing all lower probabilities ( p+=p<2048; ) we simply forbid only p=0; ( if(p==0)p++; )
+
+
+paq8px_v123
+2017.12.18
+- Small improvements to the 24/32bpp image model (PNG and non-PNG variants)
+- Adaptive learning rate, available through an optional switch
+
+
+paq8px_v124 
+2017.12.19
+- Improved 8bpp grayscale model (PNG and non-PNG variants)
+- Record model now detects and parses dBASE tables
+
+
+paq8px_v125
+2017.12.23
+- Improved 8bpp grayscale image model, slightly improved 24/32bpp image model
+- Changes to the zlib transform:
+  - Fixed bug when zlib doesn't produce any output when using Z_NO_FLUSH
+  - Early break when no more combinations are left to try, skipping decompression of the remaining stream
+- Optional switch to skip the 24/32bpp RGB color transform and only perform channel reordering
+
+
+paq8px_v126 
+2017.12.26
+- Improved IO functions (tmpfile)
+  - Temporary files are kept in memory
+  - Windows MSVCRT root folder "access denied" issue is fixed properly with true temporary files
+- No model or compression improvements
+
+
+paq8px_v127 
+2017.12.29
+- Experimental English stemmer
+- Tweaked StationaryMap, added a new context to the 24/32bpp image model
+
+
+paq8px_v128 
+2017.01.02
+- Improved 8bpp grayscale image model (PNG and non-PNG variants)
+- Tweaked SmallStationaryMap
+
+
+paq8px_v129 
+2017.01.09
+- Slightly improved 24/32bpp image model (PNG and non-PNG variants)
+- Horizontal symmetries search for 8bpp model
+- New context map and hash table, used in the main model only
+- Bug fixes in Array class
+
+
+paq8px_v129_fix1 
+2017.01.13
+- Fixed "error: use of deleted function" in gcc in Array class (v114-129) reported by Mauro
+- Sanity check in makedir function
+- Changed "rb+" to "rb" in FileDisk.open() to enable compressing read-only files
+- Assert failed in FileTmp.blockwrite() during zlib decompression when count was 0 and asserts were on (it caused no problems otherwise in release mode); fixed in both blockread() and blockwrite()
+- Assert failed in FileTmp.setpos() when IMAGE8 bmp detection calculated a "detd" value larger than the actual block. Fixed in setpos(); will try to isolate it to let it fix in detect() as well.
+- Minor fixes in doc and/or code (Buf, IntBuf, Mixer, ContextMap, matchModel, ContextModel)
+- im24bitModel: reverted undesired Visual Studio autoformatting
+- No model or compression improvements (archives must be binary compatible with paq8px_v129) 
+
+
+paq8px_v129_fix2
+2017.01.14
+- fixed redefinition warning for NOMINMAX (when compiling with newer MinGW-w64 versions)
+- fixed a couple of "misleading-indentation" (in Mixer) and "suggest parentheses" warnings (in ContextModel) (when compiling with MinGW-w64)
+- fixed a "comparison between signed and unsigned integer expressions" warning in ContextMapB64 (when compiling with MinGW-w64)
+- fixed the printf() format specifier in Array.chkindex()
+- enabled the use of compression level 9 (using 3348 MB RAM)
+- removed dependency on compression level in wavModel
+- fixed seeking past end of file problems in FileTmp class 
+
+
+paq8px_v130 
+2017.01.14
+- Created a new ContextMap variant merging features from both previous variants. 
+
+
+paq8px_v130_fix1 
+2017.01.17
+- Fixed 4 asserts: assert(true) -> assert(false)
+- Fixed decode_cd(): dealing with the "residual" data was buggy
+- Removed unnecessary includes
+- Corrected comments here and there
+- Heavily commented expand_cd_sector(), encode_cd() and decode_cd() functions
+
+
+paq8px_v130_fix2 
+2017.01.18
+- On decompression the following message was printed: "FileDisk: unable to open file (No such file or directory)". Fixed.
+- Printing more info when FileDisk.create() or FileDisk.createtmp() fails for any reason (name of the file and error: access denied, filen not found, etc.)
+- Cosmetic fixes in remarks and/or code (Array's chkindex, IntBuf, jpegModel, Encoder, detect(), etc.)
+- No model or compression improvements
+
+
+paq8px_v131 
+2017.01.21
+- Refactored new ContextMap, now used on the exeModel also
+- Text pre-training now performs 3 iterations on the dictionary (word list) file, and also trains on an optional expression list file
+- New context for the 8bpp grayscale image model
+
+
+paq8px_v132 
+2017.01.25
+- Restored linux compatibility.
+- Eliminated some compiler warnings.
+- A little cleanup here and there.
+- No model or compression improvements
+
+
+paq8px_v132_fix1 
+2017.01.27
+- Fixed (finalized) exception handling
+- Removed some unnecessary #includes, organised the remaining ones and explained PRIu64
+- Separated platform-specific logic from ContextModel::Train() and exeModel::Train(){
+- Fixed a "pass thru" bug in FileTmp::blockwrite()
+- No model or compression improvements
+
+
+paq8px_v133 
+2017.01.28
+- Refactored stemming routines
+- New French stemmer (currently unused)
+- English stemmer now handles "non/non-" prefixes
+
+
+paq8px_v134
+2017.02.03
+- Implemented dot_product() and train() in AVX2
+- Fixes for proper Mac OSX compilation
+
+
+paq8px_v135 
+2017.02.04
+- New experimental text model with language detection via stemming/common word lists, currently using only one context
+- Text pre-training now uses the RunContextMaps
+- Code refactoring
+
+
+paq8px_v136 
+2017.02.11
+- Improved text model
+
+
+paq8px_v137 
+2017.02.14
+- Fixed some compatibility issues with older compilers
+- Changed some [] arrays to Array<> in order to detect out of bound operations
+- Now you can disable/enable compilation of certain models/transformations (ZLIB, TEXTMODEL, WORDMODEL, WAVMODEL)
+- The "String" class is extended with new functions to support the new command line interface
+- A new "FileName" class to represent a filename/filepath.
+- Introduced some file/folder helper functions (examinepath(), getfilesize(), appendtofile(), isoutputredirected() - see source)
+- Dispatcher for SSE2/AVX2 neural network functions
+- Remark: needed to switch jpegmodel from function to class for the new CPU-dispatched Mixer.
+- Improvements - for users
+  - Archive names are now generated by adding the full version (e.g. .paq8px137) to the input filename.
+  - Archives are now comparable - based solely on their content regardless of the input filename and path
+  - Input filename and its path is not stored in the archive anymore.
+  - Wildcard support and folder compression is removed for the sake of a list-based file enumeration.
+  - If you wish to compress more files, you'll have to gather the filenames (with optional relative paths) in a text file.
+  - When compressing multiple files you may now save extra information about those files (date, permissions,
+    file attributes, even your own remarks). But you have to gather it yourself. See the help screen for more info.
+  - All "Windows drag and drop" support is removed:
+  - No pause and no "Close this window or press ENTER to continue..." message at the end.
+  - Output file is not created automatically in the folder of the input file. It is created in the current folder or in the folder you specify.
+  - Removed default compression level "5" (it was part of the drag-and-drop support). Now you have to specify the compression level explicitly.
+  - Separated the ambiguous -d command line switch to -d (decompress) and -t (test)
+  - Now you can log compression results (size, time, memory, command line options) in a logfile (use the -log command line switch).
+  - SSE2/AVX2 dot product and training is now contained in the same executable. The executable runs on "all" CPUs.
+  - After launch it detects the vectorization support, which you can override from the command line.
+  - In decompression/testing mode you can now print the command options used for compression (use the -v (verbose) command line switch).
+  - If screen output is redirected to a file then "onscreen" information is printed without the progress indicator -> no garbage in the captured output.
+  - The optional compression switches (b/e/t/a/s) come after the compression level without the brackets.
+  - You can give the command line parameters in any order you want. Only the order of the input and output specification is a must (obviously).
+  - Rewritten help screen
+
+
+paq8px_v137_fix1 
+2017.02.15
+- Fixed: missing space on helpscreen ("filewhere")
+- Fixed: problem in multiple file mode when parsing the listfile (code for tab was incorrect) 
+
+
+paq8px_v138 
+2017.02.15
+- A small improvement to the new text model 
+
+
+paq8px_v138_e1w3fix
+2017.02.24
+- Fixing 1 error and 3 warnings that happen while building v138 on Linux.
+
+
+paq8px_v139
+2017.02.25
+- Slightly improved text model
+- French stemmer nows handles UTF8 Unicode code points common to that language
+
+
+paq8px_v140 
+2017.02.27
+- Slightly improved text model
+- New german stemmer
+
+
+paq8px_v141
+2017.03.08
+- Tuned the adaptive learning rates in Mixer
+
+
+paq8px_v141fix1
+2018.04.11
+- Fixed a bug in the stemmers reported by Mauro - gcc incorrectly optimized memcpys believing that the memory ranges do not overlap when the -ftree-vrp flag was 'on' (it is 'on' by default on -O2 and higher)
+- Fixed some minor bugs and typos
+- Print the selected vectorization info only if the user wants/needs to know.
+- On single file mode (almost) the same information was printed 3 times on screen (input file size). Now it prints it only twice (at the beginning of segmentation and in the summary) like in the old days.
+- Fixed wording (bytes vs size) - thank you, Darek.
+- No model or compression improvements
+
+
+pap8px_v141fix2
+2018.04.18
+- Restored clang (linux) compatibility (changed gcc pragmas to function attributes for the dot product and train functions)
+- Fixed compiler warnings
+- Fixed a bug in decode_gif() (1st part of a while condition was always true)
+- Fixed a bug in main() (value of 'options' was never EOF)
+- JpegModel reserved memory always (even if this model was not used). Fixed.
+- Until now we didn't know the overhead (the size of the added "diff" information) of zlib recompression. Now we know. It is printed on screen along with the segmentation information.
+- No model or compression improvements
+
+
+pap8px_v141fix3
+2018.04.19
+- Separated documentation from the source file (README, DOC, CHANGELOG)
+- Updated (rewrote) README
+- Gathered CHANGELOG information
+- No code changes
+
+
+pap8px_v141fix4
+2018.04.23
+- Cosmetic changes in the documents
+  - README: is now UTF8 encoded for having non-ascii characters + small changes in the text
+  - DOC: added warning that contents are partially obsolete
+  - source file: a bit clearer header
+- Small changes/fixes in Word, Language, TextModel and the English Stemmer classes
+  - Added virtual destructors
+  - Created a function to print the result of the stemmer (i.e. word stem) for debugging
+  - Fixed 2 items in the Exceptions1 list (idle, gentle)
+  - Fixed a bug in Step5 ( W->End+=!EndsInShortSyllable(W);  ->  W->End+=EndsInShortSyllable(W); )
+  - Modified TrimStartingApostrophe() to trim more than 1 apostrophe both from the beginning and end in pairs
+  - Commented some parts of the English Stemming routines
+- Finally fixed the printf formatting warnings in Linux/GCC and Linux/Clang (changed typedef shortcuts for U8..U64)
