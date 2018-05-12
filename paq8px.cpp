@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "141fix4"  //update version here before publishing your changes
+#define PROGVERSION  "142"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -3979,6 +3979,7 @@ public:
   (15/02/2018) v138: Uses 21 contexts, sets 4 mixer contexts
   (25/02/2018) v139: Uses 26 contexts
   (27/02/2018) v140: Sets 6 mixer contexts
+  (12/05/2018) v142: Sets 7 mixer contexts
 */
 
 class TextModel {
@@ -4062,12 +4063,10 @@ public:
     memset(&BytePos[0], 0, sizeof(BytePos));
   }
   ~TextModel() {
-    delete Stemmers[Language::English-1];
-    delete Stemmers[Language::French-1];
-    delete Stemmers[Language::German-1];
-    delete Languages[Language::English-1];
-    delete Languages[Language::French-1];
-    delete Languages[Language::German-1];
+    for (int i=0; i<Language::Count; i++) {
+      delete Stemmers[i];
+      delete Languages[i];
+    }
   }
   void Predict(Mixer& mixer, Buf& buffer, ModelStats *Stats = nullptr) {
     if (bpos==0) {
@@ -4075,13 +4074,13 @@ public:
       SetContexts(buffer, Stats);
     }
     Map.mix(mixer);
-    mixer.set(hash((Lang.Id!=Language::Unknown)?1+Stemmers[Lang.Id-1]->IsVowel(buffer(1)):0, Info.masks[1]&0xFF, c0)&0x3FF, 1024);
+    mixer.set(hash((Lang.Id!=Language::Unknown)?1+Stemmers[Lang.Id-1]->IsVowel(buffer(1)):0, Info.masks[1]&0xFF, c0)&0x7FF, 2048);
     mixer.set(hash(ilog2(Info.wordLength[0]+1), c0,
       (Info.lastDigit<Info.wordLength[0]+Info.wordGap)|
       ((Info.lastUpper<Info.lastLetter+Info.wordLength[1])<<1)|
       ((Info.lastPunct<Info.wordLength[0]+Info.wordGap)<<2)|
       ((Info.lastUpper<Info.wordLength[0])<<3)
-    )&0x3FF, 1024);
+    )&0x7FF, 2048);
     mixer.set(hash(Info.masks[1]&0x3FF, Info.lastUpper<Info.wordLength[0], Info.lastUpper<Info.lastLetter+Info.wordLength[1])&0x7FF, 2048);
     mixer.set(hash(Info.spaces&0x1FF,
       (Info.lastUpper<Info.wordLength[0])|
@@ -4092,6 +4091,10 @@ public:
     )&0x7FF, 2048);
     mixer.set(hash(Info.firstLetter*(Info.wordLength[0]<4), min(6, Info.wordLength[0]), c0)&0x7FF, 2048);
     mixer.set(hash((*pWord)[0], (*pWord)(0), min(4, Info.wordLength[0]), Info.lastPunct<Info.lastLetter)&0x7FF, 2048);
+    mixer.set(hash(min(4, Info.wordLength[0]), c0,
+      Info.lastUpper<Info.wordLength[0],
+      (Info.nestHash>0)?Info.nestHash&0xFF:0x100|(Info.firstLetter*(Info.wordLength[0]>0 && Info.wordLength[0]<4))
+    )&0xFFF, 4096);
   }
 };
 
@@ -8131,9 +8134,9 @@ public:
     next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0) {
 
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(976+288, 4096+(1024+512+1024*3+10240)*(level>=4), 7+11*(level>=4));
+      m=MixerFactory::CreateMixer(976+288, 4096+(1024+512+1024*3+16384)*(level>=4), 7+12*(level>=4));
     #else
-      m=MixerFactory::CreateMixer(976, 4096+(1024+512+1024*3+10240)*(level>=4), 7+11*(level>=4));
+      m=MixerFactory::CreateMixer(976, 4096+(1024+512+1024*3+16384)*(level>=4), 7+12*(level>=4));
     #endif //USE_WORD_MODEL
 
       memset(&cxt[0], 0, sizeof(cxt));
@@ -9665,6 +9668,7 @@ int encode_zlib(File *in, File *out, U64 len, int &hdrsize) {
     } while (main_strm.avail_out==0 && main_ret==Z_BUF_ERROR);
     if (main_ret!=Z_BUF_ERROR && main_ret!=Z_STREAM_END) break;
   }
+  inflateEnd(&main_strm);
   hdrsize=diffCount[index]*5+7;
   return main_ret==Z_STREAM_END;
 }
