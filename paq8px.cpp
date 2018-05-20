@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "142"  //update version here before publishing your changes
+#define PROGVERSION  "143"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -4063,7 +4063,7 @@ public:
     memset(&BytePos[0], 0, sizeof(BytePos));
   }
   ~TextModel() {
-    for (int i=0; i<Language::Count; i++) {
+    for (int i=0; i<Language::Count-1; i++) {
       delete Stemmers[i];
       delete Languages[i];
     }
@@ -7608,8 +7608,9 @@ bool exeModel::Predict(Mixer& m, bool Forced, ModelStats *Stats) {
 
   m.set(Context*4+(s>>4), 1024);
   m.set(State*64+bpos*8+(Op.BytesRead>0)*4+(s>>4), 1024);
-  m.set( (BrkCtx&0x1FF)|((s&0x20)<<4), 1024 );
-
+  m.set((BrkCtx&0x1FF)|((s&0x20)<<4), 1024);
+  m.set(hash(Op.Code, State, OpN(Cache, 1)&CodeMask)&0x1FFF, 8192);
+  m.set(hash(State, bpos, Op.Code, Op.BytesRead)&0x1FFF, 8192);
   if (Stats)
     (*Stats).x86_64 = (Valid?1:0)|(Context<<1)|(s<<9);
   return Valid;
@@ -8134,9 +8135,9 @@ public:
     next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0) {
 
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(976+288, 4096+(1024+512+1024*3+16384)*(level>=4), 7+12*(level>=4));
+      m=MixerFactory::CreateMixer(976+288, 4096+(1536/*recordModel*/+19456/*exeModel*/+16384/*textModel*/)*(level>=4), 7+14*(level>=4));
     #else
-      m=MixerFactory::CreateMixer(976, 4096+(1024+512+1024*3+16384)*(level>=4), 7+12*(level>=4));
+      m=MixerFactory::CreateMixer(976, 4096+(1536/*recordModel*/+19456/*exeModel*/+16384/*textModel*/)*(level>=4), 7+14*(level>=4));
     #endif //USE_WORD_MODEL
 
       memset(&cxt[0], 0, sizeof(cxt));
