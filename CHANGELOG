@@ -1120,3 +1120,7 @@ paq8px_v142
 2018.05.12
 - Fixed memory leak in zlib transform
 - Increased precision of 2 TextModel mixer contexts, added a new one
+
+paq8px_v143
+2018.05.20
+- Added 2 mixer contexts to the exeModel
