@@ -1124,3 +1124,10 @@ paq8px_v142
 paq8px_v143
 2018.05.20
 - Added 2 mixer contexts to the exeModel
+
+
+paq8px_v144
+2018.06.17
+- Improved the 24/32bpp image model
+- Added another mixer context to the exeModel
+- Truncated detections are now possible
