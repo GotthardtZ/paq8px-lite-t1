@@ -1121,6 +1121,7 @@ paq8px_v142
 - Fixed memory leak in zlib transform
 - Increased precision of 2 TextModel mixer contexts, added a new one
 
+
 paq8px_v143
 2018.05.20
 - Added 2 mixer contexts to the exeModel
@@ -1131,3 +1132,11 @@ paq8px_v144
 - Improved the 24/32bpp image model
 - Added another mixer context to the exeModel
 - Truncated detections are now possible
+
+
+paq8px_v145
+2018.06.25
+- Updated memory usage information displayed on help screen
+- Fixed and improved the DMC model
+  - Compression is better but a bit slower
+  - Memory requirements are the same

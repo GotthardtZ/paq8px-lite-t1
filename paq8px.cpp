@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "144"  //update version here before publishing your changes
+#define PROGVERSION  "145"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -16,7 +16,7 @@
 
 // Uncomment one or more of the following #define-s to disable compilation of certain models/transformations
 // This is useful when
-// - you'd like to slim the executable by eliminating unnecessary code for benchmarks where exe size matters or
+// - you would like to slim the executable by eliminating unnecessary code for benchmarks where exe size matters or
 // - you would like to experiment with the model-mixture
 // TODO: make more models "optional"
 #define USE_ZLIB
@@ -7716,93 +7716,235 @@ void indirectModel(Mixer& m) {
 
 //////////////////////////// dmcModel //////////////////////////
 
-// Model using DMC.  The bitwise context is represented by a state graph,
-// initilaized to a bytewise order 1 model as in
-// http://plg.uwaterloo.ca/~ftp/dmc/dmc.c but with the following difference:
-// - It uses integer arithmetic.
-// - The threshold for cloning a state increases as memory is used up.
-// - Each state maintains both a 0,1 count and a bit history (as in a
-//   context model).  The 0,1 count is best for stationary data, and the
-//   bit history for nonstationary data.  The bit history is mapped to
-//   a probability adaptively using a StateMap.  The two computed probabilities
-//   are combined.
-// - When memory is used up the state graph is reinitialized to a bytewise
-//   order 1 context as in the original DMC.  However, the bit histories
-//   are not cleared.
+// Model using DMC (Dynamic Markov Compression).
+//
+// The bitwise context is represented by a state graph.
+//
+// See the original paper: http://webhome.cs.uvic.ca/~nigelh/Publications/DMC.pdf
+// See the original DMC implementation: http://maveric0.uwaterloo.ca/ftp/dmc/
+//
+// Main differences:
+// - Instead of floats we use fixed point arithmetic.
+// - For probability estimation each state maintains both a 0,1 count ("c0" and "c1") 
+//   and a bit history ("state"). The bit history is mapped to a probability adaptively using 
+//   a StateMap. The two computed probabilities are emitted to the Mixer to be combined.
+// - All counts are updated adaptively.
+// - The "dmcModel" is used in "dmcForest". See below.
 
-struct DMCNode {  // 12 bytes
-  U32 nx[2];  // next pointers
-  U8 state;  // bit history
-  U32 c0:12, c1:12;  // counts * 256
+struct DMCNode { // 12 bytes
+private:
+  // c0,c1: adaptive counts of zeroes and ones; 
+  //   fixed point numbers with 4 integer and 8 fractional bits, i.e. scaling factor=256;
+  //   thus the counts 0.0 .. 15.996 are represented by 0 .. 4095
+  // state: bit history state - as in a contextmodel
+  U32 state_c0_c1;  // 8 + 12 + 12 = 32 bits
+public:
+  U32 nx0,nx1;     //indexes of next DMC nodes in the state graph
+  U8   get_state() const {return state_c0_c1>>24;}
+  void set_state(U8 state) {state_c0_c1=(state_c0_c1 & 0x00FFFFFF)|(state<<24);}
+  U32 get_c0() const {return (state_c0_c1>>12) & 0xFFF;}
+  void set_c0(U32 c0) {assert(c0>=0 && c0<4096);state_c0_c1=(state_c0_c1 &0xFF000FFF) | (c0<<12);}
+  U32 get_c1() const {return state_c0_c1 & 0xFFF;}
+  void set_c1(U32 c1) {assert(c1>=0 && c1<4096);state_c0_c1=(state_c0_c1 &0xFFFFF000) | c1;}
 };
 
-void dmcModel(Mixer& m) {
-  static U32 top=0, curr=0;  // allocated, current node
-  static Array<DMCNode> t(MEM*2);  // state graph
-  static StateMap sm;
-  static int threshold=256;
+class dmcModel {
+private:
+  U32 top, curr;     // index of first unallocated node (i.e. number of allocated nodes); index of current node
+  U32 threshold;     // cloning threshold parameter: fixed point number as c0,c1
+  Array<DMCNode> t;  // state graph
+  StateMap sm;
 
-  // clone next state
-  if (top>0 && top<t.size()) {
-    int next=t[curr].nx[y];
-    int n=y?t[curr].c1:t[curr].c0;
-    int nn=t[next].c0+t[next].c1;
-    if (n>=threshold*2 && nn-n>=threshold*3) {
-      int r=n*4096/nn;
-      assert(r>=0 && r<=4096);
-      t[next].c0 -= t[top].c0 = t[next].c0*r>>12;
-      t[next].c1 -= t[top].c1 = t[next].c1*r>>12;
-      t[top].nx[0]=t[next].nx[0];
-      t[top].nx[1]=t[next].nx[1];
-      t[top].state=t[next].state;
-      t[curr].nx[y]=top;
-      ++top;
-      if (top==(MEM/2) || top==MEM)
-        threshold+=256;
-    }
-  }
-
-  // Initialize to a bytewise order 1 model at startup or when flushing memory
-  if (top==t.size() && bpos==1) top=0;
-  if (top==0) {
-    assert(t.size()>=65280);
-    for (int i=0; i<255; ++i) {
-      for (int j=0; j<256; ++j) {
-        if (i<127) {
-          t[j*255+i].nx[0]=j*255+i*2+1;
-          t[j*255+i].nx[1]=j*255+i*2+2;
+  // Initialize the state graph to a bytewise order 1 model
+  // See an explanation of the initial structure in:
+  // http://wing.comp.nus.edu.sg/~junping/docs/njp-icita2005.pdf
+  
+  void resetstategraph() {
+    assert(top==0 || top>65280);
+    for (int i=0; i<255; ++i) { //255 nodes in each tree
+      for (int j=0; j<256; ++j) { //256 trees
+        int node_idx=j*255+i;
+        if (i<127) { //internal tree nodes
+          t[node_idx].nx0=node_idx+i+1; // left node 
+          t[node_idx].nx1=node_idx+i+2; // right node
         }
-        else {
-          t[j*255+i].nx[0]=(i-127)*255;
-          t[j*255+i].nx[1]=(i+1)*255;
+        else { // 128 leaf nodes - they each references a root node of tree(i)
+          t[node_idx].nx0=(i-127)*255; // left node -> root of tree 0,1,2,3,... 
+          t[node_idx].nx1=(i+1)*255;   // right node -> root of tree 128,129,...
         }
-        t[j*255+i].c0=128;
-        t[j*255+i].c1=128;
-        //reset of the states: (sometimes it's better to reset and sometimes it's better to keep the previous values)
-        //t[j*255+i].state=0x00;
+        t[node_idx].set_c0(128); //0.5
+        t[node_idx].set_c1(128); //0.5
+        t[node_idx].set_state(0);
       }
     }
     top=65280;
     curr=0;
-    threshold=256;
   }
 
-  // update count, state
-  if (y) {
-    if (t[curr].c1<3840) t[curr].c1+=256;
+  // helper function: adaptively increment a counter
+  U32 increment_counter (const U32 x, const U32 increment) const { //"*x" is a fixed point number as c0,c1 ; "increment"  is 0 or 1
+    return (((x<<4)-x)>>4)+(increment<<8); // x * (1-1/16) + increment*256
   }
-  else if (t[curr].c0<3840) t[curr].c0+=256;
-  t[curr].state=nex(t[curr].state, y);
-  curr=t[curr].nx[y];
 
-  // predict
-  const int pr1=sm.p(t[curr].state);
-  const int n1=t[curr].c1;
-  const int n0=t[curr].c0;
-  const int pr2=(n1+5)*4096/(n0+n1+10);
-  m.add(stretch(pr1)/4);
-  m.add(stretch(pr2)/4);
-}
+  //update stategraph
+  void processbit() {
+
+    U32 c0=t[curr].get_c0();
+    U32 c1=t[curr].get_c1();
+    const U32 n = y ==0 ? c0 : c1;
+
+    // update counts, state
+    t[curr].set_c0(increment_counter(c0,1-y));
+    t[curr].set_c1(increment_counter(c1,y));
+
+    t[curr].set_state(nex(t[curr].get_state(), y));
+
+    // clone next state when threshold is reached
+    const U32 next = y==0 ? t[curr].nx0 : t[curr].nx1;
+    c0=t[next].get_c0();
+    c1=t[next].get_c1();
+    const U32 nn=c0+c1;
+    if(n>=threshold && nn>=n+threshold && top<t.size()) {
+      U32 c0_top=U64(c0)*n/nn;
+      U32 c1_top=U64(c1)*n/nn;
+      assert(c0>=c0_top);
+      assert(c1>=c1_top);
+      c0-=c0_top;
+      c1-=c1_top;
+
+      t[top].set_c0(c0_top);
+      t[top].set_c1(c1_top);
+      t[next].set_c0(c0);
+      t[next].set_c1(c1);
+      
+      t[top].nx0=t[next].nx0;
+      t[top].nx1=t[next].nx1;
+      t[top].set_state(t[next].get_state());
+      if(y==0) t[curr].nx0=top;
+      else t[curr].nx1=top;
+      ++top;
+    }
+
+    if(y==0) curr=t[curr].nx0;
+    else     curr=t[curr].nx1;
+  }
+
+public: 
+  dmcModel(U32 mem, U32 th) : t(mem), threshold(th), top(0), sm() {resetstategraph();}
+
+  bool isfull() {return bpos==1 && top==t.size();}
+  bool isalmostfull() {return bpos==1 && top>=t.size()*15 >>4;} // *15/16
+  void reset() {resetstategraph();sm.Reset();}
+  void mix(Mixer& m, bool activate) {
+    processbit();
+    if(activate) {
+      const U32 n0=t[curr].get_c0()+1;
+      const U32 n1=t[curr].get_c1()+1;
+      const int pr1=(n1<<12)/(n0+n1);
+      const int pr2=sm.p(t[curr].get_state());
+      m.add(stretch(pr1)>>2);
+      m.add(stretch(pr2)>>2);
+    }
+  }
+};
+
+// This class solves two problems of the DMC model
+// 1) The DMC model is a memory hungry algorighm. In theory it works best when it can clone
+//    nodes forever. But memory is a limited resource. When the state graph is full you can't
+//    clone nodes anymore. You can either i) reset the model (the state graph) and start over
+//    or ii) you can keep updating the counts forever in the already fixed state graph. Both
+//    choices are troublesome: i) resetting the model degrades the predictive power significantly
+//    until the graph becomes large enough again and ii) a fixed structure can't adapt anymore.
+//    To solve this issue:
+//    Two models with the same parameters work in tandem. Always both models are updated but
+//    only one model (the larger, mature one) is active (predicts) at any time. When one model
+//    needs resetting the other one feeds the mixer with predictions until the first one
+//    becomes mature (nearly full) again.
+//    Disadvantages: with the same memory reuirements we have just half of the number of nodes
+//    in each model. Also keeping two models updated at all times requires 2x as much
+//    calculations as updating one model only.
+//    Advantage: stable and better compression - even with reduced number of nodes.
+// 2) The DMC model is sensitive to the cloning threshold parameter. Some files prefer
+//    a smaller threshold other files prefer a larger threshold.
+//    The difference in terms of compression is significant.
+//    To solve this issue:
+//    Three models with different thresholds are used and their predictions are emitted to 
+//    the mixer. This way the model with the better threshold will be favored naturally.
+//    Disadvantage: same as in 1) just the available number of nodes is 1/3 of the 
+//    one-model case.
+//    Advantage: same as in 1).
+
+class dmcForest {
+private:
+  dmcModel dmcmodel1a; // models a and b have the same parameters and work in tandem
+  dmcModel dmcmodel1b;
+  dmcModel dmcmodel2a; // models 1,2,3 have different threshold parameters
+  dmcModel dmcmodel2b;
+  dmcModel dmcmodel3a;
+  dmcModel dmcmodel3b;
+  int model1_state=0; // initial state, model (a) is active, both models are growing
+  int model2_state=0; // model (a) is full and active, model (b) is reset and growing
+  int model3_state=0; // model (b) is full and active, model (a) is reset and growing
+public:
+  dmcForest():dmcmodel1a(MEM*4/9,240),dmcmodel1b(MEM*4/9,240),dmcmodel2a(MEM*4/9,480),dmcmodel2b(MEM*4/9,480),dmcmodel3a(MEM*4/9,720),dmcmodel3b(MEM*4/9,720){}
+  void mix(Mixer& m) {
+
+    switch(model1_state) {
+      case 0:
+        dmcmodel1a.mix(m,true);
+        dmcmodel1b.mix(m,false);
+        if(dmcmodel1a.isalmostfull()){dmcmodel1b.reset();model1_state++;}
+        break;
+      case 1:
+        dmcmodel1a.mix(m, true);
+        dmcmodel1b.mix(m, false);
+        if(dmcmodel1a.isfull() && dmcmodel1b.isalmostfull()){dmcmodel1a.reset();model1_state++;}
+        break;
+      case 2:
+        dmcmodel1b.mix(m,true);
+        dmcmodel1a.mix(m,false);
+        if(dmcmodel1b.isfull() && dmcmodel1a.isalmostfull()){dmcmodel1b.reset();model1_state--;}
+        break;
+    }
+    
+    switch(model2_state) {
+    case 0:
+      dmcmodel2a.mix(m,true);
+      dmcmodel2b.mix(m,false);
+      if(dmcmodel2a.isalmostfull()){dmcmodel2b.reset();model2_state++;}
+      break;
+    case 1:
+      dmcmodel2a.mix(m,true);
+      dmcmodel2b.mix(m,false);
+      if(dmcmodel2a.isfull() && dmcmodel2b.isalmostfull()){dmcmodel2a.reset();model2_state++;}
+      break;
+    case 2:
+      dmcmodel2b.mix(m,true);
+      dmcmodel2a.mix(m,false);
+      if(dmcmodel2b.isfull() && dmcmodel2a.isalmostfull()){dmcmodel2b.reset();model2_state--;}
+      break;
+    }
+
+    switch(model3_state) {
+    case 0:
+      dmcmodel3a.mix(m,true);
+      dmcmodel3b.mix(m,false);
+      if(dmcmodel3a.isalmostfull()){dmcmodel3b.reset();model3_state++;}
+      break;
+    case 1:
+      dmcmodel3a.mix(m,true);
+      dmcmodel3b.mix(m,false);
+      if(dmcmodel3a.isfull() && dmcmodel3b.isalmostfull()){dmcmodel3a.reset();model3_state++;}
+      break;
+    case 2:
+      dmcmodel3b.mix(m,true);
+      dmcmodel3a.mix(m,false);
+      if(dmcmodel3b.isfull() && dmcmodel3a.isalmostfull()){dmcmodel3b.reset();model3_state--;}
+      break;
+    }
+  }
+};
+
 
 void nestModel(Mixer& m)
 {
@@ -8169,6 +8311,7 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
 class ContextModel{
   ContextMap2 cm;
   RunContextMap rcm7, rcm9, rcm10;
+  dmcForest *dmcforest;
   exeModel exeModel1;
   JpegModel *jpegModel;
   #ifdef USE_TEXTMODEL
@@ -8181,7 +8324,7 @@ class ContextModel{
   void UpdateContexts(U8 B);
   void Train(const char* Dictionary, int Iterations = 1);
 public:
-  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), jpegModel(0),
+  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), jpegModel(0), dmcforest(0),
 
     #ifdef USE_TEXTMODEL
       textModel(MEM*16),
@@ -8189,10 +8332,12 @@ public:
 
     next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0) {
 
+    if(level>=4)dmcforest=new dmcForest();
+
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(976+288, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer(980+288, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
     #else
-      m=MixerFactory::CreateMixer(976, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer(980, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
     #endif //USE_WORD_MODEL
 
       memset(&cxt[0], 0, sizeof(cxt));
@@ -8204,6 +8349,7 @@ public:
   ~ContextModel() {
     delete m;
     if(jpegModel) delete jpegModel;
+    if(dmcforest) delete dmcforest;
   }
   int Predict(ModelStats *Stats = nullptr);
 };
@@ -8303,7 +8449,7 @@ int ContextModel::Predict(ModelStats *Stats){
     wordModel(*m, blocktype);
     #endif //USE_WORDMODEL
     indirectModel(*m);
-    dmcModel(*m);
+    dmcforest->mix(*m);
     nestModel(*m);
     XMLModel(*m, Stats);
     #ifdef USE_TEXTMODEL
@@ -10390,9 +10536,9 @@ int main(int argc, char** argv) {
         "  " PROGNAME " -LEVEL[SWITCHES] INPUTSPEC [OUTPUTSPEC]\n"
         "\n"
         "    -LEVEL:\n"
-        "      -0 = store (uses 30 MB)\n"
-        "      -1 -2 -3 = faster (uses 60, 69, 88 MB)\n"
-        "      -4 -5 -6 -7 -8 -9 = smaller (uses 202, 330, 586, 1099, 2125, 4177 MB)\n"
+        "      -0 = store (uses 15 MB)\n"
+        "      -1 -2 -3 = faster (uses 44, 52, 68 MB)\n"
+        "      -4 -5 -6 -7 -8 -9 = smaller (uses 268, 388, 626, 1103, 2057, 3965 MB)\n"
         "    The listed memory requirements are indicative, actual usage may vary\n"
         "    depending on several factors including need for temporary files,\n"
         "    temporary memory needs of some preprocessing (transformations), etc.\n"
