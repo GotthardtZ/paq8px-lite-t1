@@ -1141,6 +1141,14 @@ paq8px_v145
   - Compression is better but a bit slower
   - Memory requirements are the same
 
+
 paq8px_v146
 2018.07.05
 - Improved the 24/32bpp image model
+
+
+paq8px_v147
+2018.07.06
+- Further improved the DMC model
+  - Compression is even better but a bit slower
+  - Memory requirements are the same
