@@ -1140,3 +1140,7 @@ paq8px_v145
 - Fixed and improved the DMC model
   - Compression is better but a bit slower
   - Memory requirements are the same
+
+paq8px_v146
+2018.07.05
+- Improved the 24/32bpp image model
