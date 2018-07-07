@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "146"  //update version here before publishing your changes
+#define PROGVERSION  "147"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -7789,6 +7789,7 @@ void indirectModel(Mixer& m) {
 //
 // Main differences:
 // - Instead of floats we use fixed point arithmetic.
+// - The threshold for cloning a state increases gradually as memory is used up.
 // - For probability estimation each state maintains both a 0,1 count ("c0" and "c1") 
 //   and a bit history ("state"). The bit history is mapped to a probability adaptively using 
 //   a StateMap. The two computed probabilities are emitted to the Mixer to be combined.
@@ -7804,54 +7805,58 @@ private:
   U32 state_c0_c1;  // 8 + 12 + 12 = 32 bits
 public:
   U32 nx0,nx1;     //indexes of next DMC nodes in the state graph
-  U8   get_state() const {return state_c0_c1>>24;}
+  U8   get_state() const   {return state_c0_c1>>24;}
   void set_state(U8 state) {state_c0_c1=(state_c0_c1 & 0x00FFFFFF)|(state<<24);}
-  U32 get_c0() const {return (state_c0_c1>>12) & 0xFFF;}
-  void set_c0(U32 c0) {assert(c0>=0 && c0<4096);state_c0_c1=(state_c0_c1 &0xFF000FFF) | (c0<<12);}
-  U32 get_c1() const {return state_c0_c1 & 0xFFF;}
-  void set_c1(U32 c1) {assert(c1>=0 && c1<4096);state_c0_c1=(state_c0_c1 &0xFFFFF000) | c1;}
+  U32  get_c0() const      {return (state_c0_c1>>12) & 0xFFF;}
+  void set_c0(U32 c0)      {assert(c0<4096);state_c0_c1=(state_c0_c1 &0xFF000FFF) | (c0<<12);}
+  U32  get_c1() const      {return state_c0_c1 & 0xFFF;}
+  void set_c1(U32 c1)      {assert(c1<4096);state_c0_c1=(state_c0_c1 &0xFFFFF000) | c1;}
 };
 
 class dmcModel {
 private:
-  Array<DMCNode> t;  // state graph
+  Array<DMCNode> t;     // state graph
   StateMap sm;
-  U32 top, curr;     // index of first unallocated node (i.e. number of allocated nodes); index of current node
-  U32 threshold;     // cloning threshold parameter: fixed point number as c0,c1
+  U32 top, curr;        // index of first unallocated node (i.e. number of allocated nodes); index of current node
+  U32 threshold;        // cloning threshold parameter: fixed point number as c0,c1
+  U32 threshold_start;
+  U32 threshold_end;    
+
+  // helper function: adaptively increment a counter
+  U32 increment_counter (const U32 x, const U32 increment) const { // x is a fixed point number as c0,c1 ; "increment"  is 0 or 1
+    return (((x<<4)-x)>>4)+(increment<<8); // x * (1-1/16) + increment*256
+  }
+  
+public: 
+  dmcModel(U32 mem, U32 th_start, U32 th_end) : t(mem), sm() {resetstategraph(th_start, th_end);}
 
   // Initialize the state graph to a bytewise order 1 model
   // See an explanation of the initial structure in:
   // http://wing.comp.nus.edu.sg/~junping/docs/njp-icita2005.pdf
-  
-  void resetstategraph() {
-    assert(top==0 || top>65280);
-    for (int i=0; i<255; ++i) { //255 nodes in each tree
-      for (int j=0; j<256; ++j) { //256 trees
-        int node_idx=j*255+i;
+  void resetstategraph(U32 th_start, U32 th_end) {
+    top=curr=0;
+    threshold=threshold_start=th_start;
+    threshold_end=th_end;
+    for (int j=0; j<256; ++j) { //256 trees
+      for (int i=0; i<255; ++i) { //255 nodes in each tree
         if (i<127) { //internal tree nodes
-          t[node_idx].nx0=node_idx+i+1; // left node 
-          t[node_idx].nx1=node_idx+i+2; // right node
+          t[top].nx0=top+i+1; // left node 
+          t[top].nx1=top+i+2; // right node
         }
         else { // 128 leaf nodes - they each references a root node of tree(i)
-          t[node_idx].nx0=(i-127)*255; // left node -> root of tree 0,1,2,3,... 
-          t[node_idx].nx1=(i+1)*255;   // right node -> root of tree 128,129,...
+          t[top].nx0=(i-127)*255; // left node -> root of tree 0,1,2,3,... 
+          t[top].nx1=(i+1)*255;   // right node -> root of tree 128,129,...
         }
-        t[node_idx].set_c0(128); //0.5
-        t[node_idx].set_c1(128); //0.5
-        t[node_idx].set_state(0);
+        t[top].set_c0(128); //0.5
+        t[top].set_c1(128); //0.5
+        t[top].set_state(0);
+        top++;
       }
     }
-    top=65280;
-    curr=0;
-  }
-
-  // helper function: adaptively increment a counter
-  U32 increment_counter (const U32 x, const U32 increment) const { //"*x" is a fixed point number as c0,c1 ; "increment"  is 0 or 1
-    return (((x<<4)-x)>>4)+(increment<<8); // x * (1-1/16) + increment*256
   }
 
   //update stategraph
-  void processbit() {
+  void update() {
 
     U32 c0=t[curr].get_c0();
     U32 c1=t[curr].get_c1();
@@ -7860,7 +7865,6 @@ private:
     // update counts, state
     t[curr].set_c0(increment_counter(c0,1-y));
     t[curr].set_c1(increment_counter(c1,y));
-
     t[curr].set_state(nex(t[curr].get_state(), y));
 
     // clone next state when threshold is reached
@@ -7868,9 +7872,9 @@ private:
     c0=t[next].get_c0();
     c1=t[next].get_c1();
     const U32 nn=c0+c1;
-    if(n>=threshold && nn>=n+threshold && top<t.size()) {
-      U32 c0_top=U64(c0)*n/nn;
-      U32 c1_top=U64(c1)*n/nn;
+    if(n>threshold && nn>n+threshold && top<t.size()) {
+      U32 c0_top=c0*n/nn;
+      U32 c1_top=c1*n/nn;
       assert(c0>=c0_top);
       assert(c1>=c1_top);
       c0-=c0_top;
@@ -7880,40 +7884,35 @@ private:
       t[top].set_c1(c1_top);
       t[next].set_c0(c0);
       t[next].set_c1(c1);
-      
+
       t[top].nx0=t[next].nx0;
       t[top].nx1=t[next].nx1;
       t[top].set_state(t[next].get_state());
       if(y==0) t[curr].nx0=top;
       else t[curr].nx1=top;
+
       ++top;
+
+      U32 const target=(t.size()-65280);
+      double const rate=double(top-65280)/double(target);
+      threshold=threshold_start+(threshold_end-threshold_start)*rate;
     }
 
     if(y==0) curr=t[curr].nx0;
     else     curr=t[curr].nx1;
   }
 
-public: 
-  dmcModel(U32 mem, U32 th) : t(mem), sm(), top(0), threshold(th) {resetstategraph();}
-
-  bool isfull() {return bpos==1 && top==t.size();}
-  bool isalmostfull() {return bpos==1 && top>=t.size()*15 >>4;} // *15/16
-  void reset() {resetstategraph();sm.Reset();}
-  void mix(Mixer& m, bool activate) {
-    processbit();
-    if(activate) {
-      const U32 n0=t[curr].get_c0()+1;
-      const U32 n1=t[curr].get_c1()+1;
-      const int pr1=(n1<<12)/(n0+n1);
-      const int pr2=sm.p(t[curr].get_state());
-      m.add(stretch(pr1)>>2);
-      m.add(stretch(pr2)>>2);
-    }
+  bool isfull() const {return top==t.size() && bpos==1;}
+  int pr1() const {
+    const U32 n0=t[curr].get_c0()+1;
+    const U32 n1=t[curr].get_c1()+1;
+    return (n1<<12)/(n0+n1);
   }
+  int pr2() {return sm.p(t[curr].get_state(),256);}
 };
 
 // This class solves two problems of the DMC model
-// 1) The DMC model is a memory hungry algorighm. In theory it works best when it can clone
+// 1) The DMC model is a memory hungry algorithm. In theory it works best when it can clone
 //    nodes forever. But memory is a limited resource. When the state graph is full you can't
 //    clone nodes anymore. You can either i) reset the model (the state graph) and start over
 //    or ii) you can keep updating the counts forever in the already fixed state graph. Both
@@ -7924,7 +7923,7 @@ public:
 //    only one model (the larger, mature one) is active (predicts) at any time. When one model
 //    needs resetting the other one feeds the mixer with predictions until the first one
 //    becomes mature (nearly full) again.
-//    Disadvantages: with the same memory reuirements we have just half of the number of nodes
+//    Disadvantages: with the same memory requirements we have just half of the number of nodes
 //    in each model. Also keeping two models updated at all times requires 2x as much
 //    calculations as updating one model only.
 //    Advantage: stable and better compression - even with reduced number of nodes.
@@ -7946,66 +7945,84 @@ private:
   dmcModel dmcmodel2b;
   dmcModel dmcmodel3a;
   dmcModel dmcmodel3b;
-  int model1_state=0; // initial state, model (a) is active, both models are growing
-  int model2_state=0; // model (a) is full and active, model (b) is reset and growing
-  int model3_state=0; // model (b) is full and active, model (a) is reset and growing
+  // states of each model-pair:
+  //   0: model (a) and (b) are both active, both are growing (initial state)
+  //   1: model (a) is full and active, model (b) is reset and growing
+  //   2: model (b) is full and active, model (a) is reset and growing
+  int model1_state=0; 
+  int model2_state=0; 
+  int model3_state=0; 
 public:
-  dmcForest():dmcmodel1a(MEM*4/9,240),dmcmodel1b(MEM*4/9,240),dmcmodel2a(MEM*4/9,480),dmcmodel2b(MEM*4/9,480),dmcmodel3a(MEM*4/9,720),dmcmodel3b(MEM*4/9,720){}
+  dmcForest():dmcmodel1a(MEM*4/9,20,1800),dmcmodel1b(MEM*4/9,1,1800),dmcmodel2a(MEM*4/9,30,1800),dmcmodel2b(MEM*4/9,4,1800),dmcmodel3a(MEM*4/9,256,1800),dmcmodel3b(MEM*4/9,128,1800){}
   void mix(Mixer& m) {
 
+    int pr11=0,pr12=0,pr21=0,pr22=0,pr31=0,pr32=0;
+
+    dmcmodel1a.update();
+    dmcmodel1b.update();
     switch(model1_state) {
-      case 0:
-        dmcmodel1a.mix(m,true);
-        dmcmodel1b.mix(m,false);
-        if(dmcmodel1a.isalmostfull()){dmcmodel1b.reset();model1_state++;}
-        break;
-      case 1:
-        dmcmodel1a.mix(m, true);
-        dmcmodel1b.mix(m, false);
-        if(dmcmodel1a.isfull() && dmcmodel1b.isalmostfull()){dmcmodel1a.reset();model1_state++;}
-        break;
-      case 2:
-        dmcmodel1b.mix(m,true);
-        dmcmodel1a.mix(m,false);
-        if(dmcmodel1b.isfull() && dmcmodel1a.isalmostfull()){dmcmodel1b.reset();model1_state--;}
-        break;
-    }
-    
-    switch(model2_state) {
     case 0:
-      dmcmodel2a.mix(m,true);
-      dmcmodel2b.mix(m,false);
-      if(dmcmodel2a.isalmostfull()){dmcmodel2b.reset();model2_state++;}
+      pr11=(dmcmodel1a.pr1()+dmcmodel1b.pr1()+1)>>1;
+      pr12=(dmcmodel1a.pr2()+dmcmodel1b.pr2()+1)>>1;
+      if(dmcmodel1a.isfull()){dmcmodel1b.resetstategraph(256,1800);model1_state++;}
       break;
     case 1:
-      dmcmodel2a.mix(m,true);
-      dmcmodel2b.mix(m,false);
-      if(dmcmodel2a.isfull() && dmcmodel2b.isalmostfull()){dmcmodel2a.reset();model2_state++;}
+      pr11=dmcmodel1a.pr1();
+      pr12=dmcmodel1a.pr2();
+      if(dmcmodel1b.isfull()){dmcmodel1a.resetstategraph(256,1800);model1_state++;}
       break;
     case 2:
-      dmcmodel2b.mix(m,true);
-      dmcmodel2a.mix(m,false);
-      if(dmcmodel2b.isfull() && dmcmodel2a.isalmostfull()){dmcmodel2b.reset();model2_state--;}
+      pr11=dmcmodel1b.pr1();
+      pr12=dmcmodel1b.pr2();
+      if(dmcmodel1a.isfull()){dmcmodel1b.resetstategraph(256,1800);model1_state--;}
       break;
     }
 
-    switch(model3_state) {
+    dmcmodel2a.update();
+    dmcmodel2b.update();
+    switch(model2_state) {
     case 0:
-      dmcmodel3a.mix(m,true);
-      dmcmodel3b.mix(m,false);
-      if(dmcmodel3a.isalmostfull()){dmcmodel3b.reset();model3_state++;}
+      pr21=(dmcmodel2a.pr1()+dmcmodel2b.pr1()+1)>>1;
+      pr22=(dmcmodel2a.pr2()+dmcmodel2b.pr2()+1)>>1;
+      if(dmcmodel2a.isfull()){dmcmodel2b.resetstategraph(512,1800);model2_state++;} 
       break;
     case 1:
-      dmcmodel3a.mix(m,true);
-      dmcmodel3b.mix(m,false);
-      if(dmcmodel3a.isfull() && dmcmodel3b.isalmostfull()){dmcmodel3a.reset();model3_state++;}
+      pr21=dmcmodel2a.pr1();
+      pr22=dmcmodel2a.pr2();
+      if(dmcmodel2b.isfull()){dmcmodel2a.resetstategraph(512,1800);model2_state++;}
       break;
     case 2:
-      dmcmodel3b.mix(m,true);
-      dmcmodel3a.mix(m,false);
-      if(dmcmodel3b.isfull() && dmcmodel3a.isalmostfull()){dmcmodel3b.reset();model3_state--;}
+      pr21=dmcmodel2b.pr1();
+      pr22=dmcmodel2b.pr2();
+      if(dmcmodel2a.isfull()){dmcmodel2b.resetstategraph(512,1800);model2_state--;}
       break;
     }
+
+    dmcmodel3a.update();
+    dmcmodel3b.update();
+    switch(model3_state) {
+    case 0:
+      pr31=(dmcmodel3a.pr1()+dmcmodel3b.pr1()+1)>>1;
+      pr32=(dmcmodel3a.pr2()+dmcmodel3b.pr2()+1)>>1;
+      if(dmcmodel3a.isfull()){dmcmodel3b.resetstategraph(768,1800);model3_state++;}
+      break;
+    case 1:
+      pr31=dmcmodel3a.pr1();
+      pr32=dmcmodel3a.pr2();
+      if(dmcmodel3b.isfull()){dmcmodel3a.resetstategraph(768,1800);model3_state++;}
+      break;
+    case 2:
+      pr31=dmcmodel3b.pr1();
+      pr32=dmcmodel3b.pr2();
+      if(dmcmodel3a.isfull()){dmcmodel3b.resetstategraph(768,1800);model3_state--;}
+      break;
+    }
+    m.add(stretch(pr11)>>2);
+    m.add(stretch(pr12)>>2);
+    m.add(stretch(pr21)>>2);
+    m.add(stretch(pr22)>>2);
+    m.add(stretch(pr31)>>2);
+    m.add(stretch(pr32)>>2);
   }
 };
 
