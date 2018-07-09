@@ -1152,3 +1152,8 @@ paq8px_v147
 - Further improved the DMC model
   - Compression is even better but a bit slower
   - Memory requirements are the same
+
+paq8px_v148
+2018.07.08
+- Mixer dot-product shifts are now configurable
+- SmallStationaryContextMap and StationaryMap can also use configurable prediction multipliers and divisors

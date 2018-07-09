@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "147"  //update version here before publishing your changes
+#define PROGVERSION  "148"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -1422,7 +1422,7 @@ public:
   virtual void update()=0;
   virtual void add(int x)=0;
   virtual void set(int cx, int range)=0;
-  virtual int p()=0;
+  virtual int p(const int shift0=0, const int shift1=0)=0;
 };
 
 template <SIMD simd> class SIMDMixer: public Mixer {
@@ -1500,33 +1500,33 @@ public:
   }
 
   // predict next bit
-  int p() {
+  int p(const int shift0=0, const int shift1=0) {
     while (nx&(simd_width()-1)) tx[nx++]=0;  // pad
     if (mp) {  // combine outputs
       mp->update();
       for (int i=0; i<ncxt; ++i) {
         int dp;
         if(simd==SIMD_NONE)
-          dp=dot_product_simd_none(&tx[0], &wx[cxt[i]*N], nx)>>5;
+          dp=dot_product_simd_none(&tx[0], &wx[cxt[i]*N], nx)>>(5+shift0);
         if(simd==SIMD_SSE2)
-          dp=dot_product_simd_sse2(&tx[0], &wx[cxt[i]*N], nx)>>5;
+          dp=dot_product_simd_sse2(&tx[0], &wx[cxt[i]*N], nx)>>(5+shift0);
         if(simd==SIMD_AVX2)
-          dp=dot_product_simd_avx2(&tx[0], &wx[cxt[i]*N], nx)>>5;
+          dp=dot_product_simd_avx2(&tx[0], &wx[cxt[i]*N], nx)>>(5+shift0);
         if(dp<-2047)dp=-2047;else if(dp>2047)dp=2047;
         mp->add(dp);
         pr[i]=squash(dp);
       }
       mp->set(0, 1);
-      return mp->p();
+      return mp->p(shift0, shift1);
     }
     else {  // S=1 context
       int dp;
       if(simd==SIMD_NONE)
-        dp=dot_product_simd_none(&tx[0], &wx[0], nx)>>8;
+        dp=dot_product_simd_none(&tx[0], &wx[0], nx)>>(8+shift1);
       if(simd==SIMD_SSE2)
-        dp=dot_product_simd_sse2(&tx[0], &wx[0], nx)>>8;
+        dp=dot_product_simd_sse2(&tx[0], &wx[0], nx)>>(8+shift1);
       if(simd==SIMD_AVX2)
-        dp=dot_product_simd_avx2(&tx[0], &wx[0], nx)>>8;
+        dp=dot_product_simd_avx2(&tx[0], &wx[0], nx)>>(8+shift1);
       return pr[0]=squash(dp);
     }
   }
@@ -1904,7 +1904,7 @@ public:
   void set(U32 cx) {
     cxt=cx;
   }
-  void mix(Mixer& m, int rate=7) {
+  void mix(Mixer& m, const int rate=7, const int Multiplier = 1, const int Divisor = 2) {
     //adapt (update prediction from previous pass)
     *cp += ((y<<16)-(*cp)+(1<<(rate-1))) >> rate;
     //predict
@@ -1912,8 +1912,7 @@ public:
     assert(idx<t.size());
     cp=&t[idx];
     int p=(*cp)>>4;
-    int stretched_p=stretch(p);
-    m.add(stretched_p/2);
+    m.add((stretch(p)*Multiplier)/Divisor);
   }
 };
 
@@ -1949,7 +1948,7 @@ public:
     for (U32 i=0; i<Data.size(); ++i)
       Data[i]=(0x7FF<<20)|min(0x3FF,Rate);
   }
-  void mix(Mixer& m, const U16 Limit = 0x3FF) {
+  void mix(Mixer& m, const int Multiplier = 1, const int Divisor = 4, const U16 Limit = 0x3FF) {
     U32 Count = min(min(Limit,0x3FF), ((*cp)&0x3FF)+1);
     int Prediction = (*cp)>>10, Error = (y<<22)-Prediction;
     Error = ((Error/8)*dt[Count])/1024;
@@ -1958,8 +1957,8 @@ public:
     B+=(y && B>1);
     cp=&Data[Context+B];
     Prediction = (*cp)>>20;
-    m.add(stretch(Prediction)/4);
-    m.add((Prediction-2048)/8);
+    m.add((stretch(Prediction)*Multiplier)/Divisor);
+    m.add(((Prediction-2048)*Multiplier)/(Divisor*2));
     bCount<<=1; B<<=1;
     if (bCount==Mask){
       bCount=1;
@@ -5419,7 +5418,14 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
 void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
   static const int nMaps = 57;
   static ContextMap cm(MEM*4, 49);
-  static StationaryMap Map[nMaps] = { 12, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
+  static StationaryMap Map[nMaps] = { 12, 8, 8, 8, 8, 8, 8, 8,
+                                       8, 8, 8, 8, 8, 8, 8, 8,
+                                       8, 8, 8, 8, 8, 8, 8, 8,
+                                       8, 8, 8, 8, 8, 8, 8, 8,
+                                       8, 8, 8, 8, 8, 8, 8, 8,
+                                       8, 8, 8, 8, 8, 8, 8, 8,
+                                       8, 8, 8, 8, 8, 8, 8, 8,
+                                       0 };
   static RingBuffer buffer(0x100000); // internal rotating buffer for (PNG unfiltered) pixel data
   static Array<short> jumps(0x8000);
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
@@ -5614,62 +5620,63 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
         cm.set(hash(++i, Clip(W*2-WW)-px, LogMeanDiffQt(NE,Clip(N*2-NW))));
         cm.set(~0xde7ec7ed);
 
-        Map[0].set(((U8)(Clip(W+N-NW)-px))|(LogMeanDiffQt(Clip(N+NE-NNE),Clip(N+NW-NNW))<<8));
-        Map[1].set(Clamp4(W+N-NW,W,NW,N,NE)-px);
-        Map[2].set(Clip(W+N-NW)-px);
-        Map[3].set(Clamp4(W+NE-N,W,NW,N,NE)-px);
-        Map[4].set(Clip(W+NE-N)-px);
-        Map[5].set(Clamp4(N+NW-NNW,W,NW,N,NE)-px);
-        Map[6].set(Clip(N+NW-NNW)-px);
-        Map[7].set(Clamp4(N+NE-NNE,W,N,NE,NEE)-px);
-        Map[8].set(Clip(N+NE-NNE)-px);
-        Map[9].set((W+NEE)/2-px);
-        Map[10].set(Clip(N*3-NN*3+NNN)-px);
-        Map[11].set(Clip(W*3-WW*3+WWW)-px);
-        Map[12].set((W+Clip(NE*3-NNE*3+buffer(w*3-1)))/2-px);
-        Map[13].set((W+Clip(NEE*3-buffer(w*2-3)*3+buffer(w*3-4)))/2-px);
-        Map[14].set(Clip(NN+buffer(w*4)-buffer(w*6))-px);
-        Map[15].set(Clip(WW+buffer(4)-buffer(6))-px);
-        Map[16].set(Clip((buffer(w*5)-6*buffer(w*4)+15*NNN-20*NN+15*N+Clamp4(W*2-NWW,W,NW,N,NN))/6)-px);
-        Map[17].set(Clip((-3*WW+8*W+Clamp4(NEE*3-NNEE*3+buffer(w*3-2),NE,NEE,buffer(w-3),buffer(w-4)))/6)-px);
-        Map[18].set(Clip(NN+NW-buffer(w*3+1))-px);
-        Map[19].set(Clip(NN+NE-buffer(w*3-1))-px);
-        Map[20].set(Clip((W*2+NW)-(WW+2*NWW)+buffer(w+3))-px);
-        Map[21].set(Clip(((NW+NWW)/2)*3-buffer(w*2+3)*3+(buffer(w*3+4)+buffer(w*3+5))/2)-px);
-        Map[22].set(Clip(NEE+NE-buffer(w*2-3))-px);
-        Map[23].set(Clip(NWW+WW-buffer(w+4))-px);
-        Map[24].set(Clip(((W+NW)*3-NWW*6+buffer(w+3)+buffer(w*2+3))/2)-px);
-        Map[25].set(Clip((NE*2+NNE)-(NNEE+buffer(w*3-2)*2)+buffer(w*4-3))-px);
-        Map[26].set(buffer(w*6)-px);
-        Map[27].set((buffer(w-4)+buffer(w-6))/2-px);
-        Map[28].set((buffer(4)+buffer(6))/2-px);
-        Map[29].set((W+N+buffer(w-5)+buffer(w-7))/4-px);
-        Map[30].set(Clip(buffer(w-3)+W-NEE)-px);
-        Map[31].set(Clip(4*NNN-3*buffer(w*4))-px);
-        Map[32].set(Clip(N+NN-NNN)-px);
-        Map[33].set(Clip(W+WW-WWW)-px);
-        Map[34].set(Clip(W+NEE-NE)-px);
-        Map[35].set(Clip(WW+NEE-N)-px);
-        Map[36].set((Clip(W*2-NW)+Clip(W*2-NWW)+N+NE)/4-px);
-        Map[37].set(Clamp4(N*2-NN,W,N,NE,NEE)-px);
-        Map[38].set((N+NNN)/2-px);
-        Map[39].set(Clip(NN+W-NNW)-px);
-        Map[40].set(Clip(NWW+N-NNWW)-px);
-        Map[41].set(Clip((4*WWW-15*WW+20*W+Clip(NEE*2-NNEE))/10)-px);
-        Map[42].set(Clip((buffer(w*3-3)-4*NNEE+6*NE+Clip(W*3-NW*3+NNW))/4)-px);
-        Map[43].set(Clip((N*2+NE)-(NN+2*NNE)+buffer(w*3-1))-px);
-        Map[44].set(Clip((NW*2+NNW)-(NNWW+buffer(w*3+2)*2)+buffer(w*4+3))-px);
-        Map[45].set(Clip(NNWW+W-buffer(w*2+3))-px);
-        Map[46].set(Clip((-buffer(w*4)+5*NNN-10*NN+10*N+Clip(W*4-NWW*6+buffer(w*2+3)*4-buffer(w*3+4)))/5)-px);
-        Map[47].set(Clip(NEE+Clip(buffer(w-3)*2-buffer(w*2-4))-buffer(w-4))-px);
-        Map[48].set(Clip(NW+W-NWW)-px);
-        Map[49].set(Clip((N*2+NW)-(NN+2*NNW)+buffer(w*3+1))-px);
-        Map[50].set(Clip(NN+Clip(NEE*2-buffer(w*2-3))-NNE)-px);
-        Map[51].set(Clip((-buffer(4)+5*WWW-10*WW+10*W+Clip(NE*2-NNE))/5)-px);
-        Map[52].set(Clip((-buffer(5)+4*buffer(4)-5*WWW+5*W+Clip(NE*2-NNE))/4)-px);
-        Map[53].set(Clip((WWW-4*WW+6*W+Clip(NE*3-NNE*3+buffer(w*3-1)))/4)-px);
-        Map[54].set(Clip((-NNEE+3*NE+Clip(W*4-NW*6+NNW*4-buffer(w*3+1)))/3)-px);
-        Map[55].set(((W+N)*3-NW*2)/4-px);
+        i=0;
+        Map[i++].set(((U8)(Clip(W+N-NW)-px))|(LogMeanDiffQt(Clip(N+NE-NNE),Clip(N+NW-NNW))<<8));
+        Map[i++].set(Clamp4(W+N-NW,W,NW,N,NE)-px);
+        Map[i++].set(Clip(W+N-NW)-px);
+        Map[i++].set(Clamp4(W+NE-N,W,NW,N,NE)-px);
+        Map[i++].set(Clip(W+NE-N)-px);
+        Map[i++].set(Clamp4(N+NW-NNW,W,NW,N,NE)-px);
+        Map[i++].set(Clip(N+NW-NNW)-px);
+        Map[i++].set(Clamp4(N+NE-NNE,W,N,NE,NEE)-px);
+        Map[i++].set(Clip(N+NE-NNE)-px);
+        Map[i++].set((W+NEE)/2-px);
+        Map[i++].set(Clip(N*3-NN*3+NNN)-px);
+        Map[i++].set(Clip(W*3-WW*3+WWW)-px);
+        Map[i++].set((W+Clip(NE*3-NNE*3+buffer(w*3-1)))/2-px);
+        Map[i++].set((W+Clip(NEE*3-buffer(w*2-3)*3+buffer(w*3-4)))/2-px);
+        Map[i++].set(Clip(NN+buffer(w*4)-buffer(w*6))-px);
+        Map[i++].set(Clip(WW+buffer(4)-buffer(6))-px);
+        Map[i++].set(Clip((buffer(w*5)-6*buffer(w*4)+15*NNN-20*NN+15*N+Clamp4(W*2-NWW,W,NW,N,NN))/6)-px);
+        Map[i++].set(Clip((-3*WW+8*W+Clamp4(NEE*3-NNEE*3+buffer(w*3-2),NE,NEE,buffer(w-3),buffer(w-4)))/6)-px);
+        Map[i++].set(Clip(NN+NW-buffer(w*3+1))-px);
+        Map[i++].set(Clip(NN+NE-buffer(w*3-1))-px);
+        Map[i++].set(Clip((W*2+NW)-(WW+2*NWW)+buffer(w+3))-px);
+        Map[i++].set(Clip(((NW+NWW)/2)*3-buffer(w*2+3)*3+(buffer(w*3+4)+buffer(w*3+5))/2)-px);
+        Map[i++].set(Clip(NEE+NE-buffer(w*2-3))-px);
+        Map[i++].set(Clip(NWW+WW-buffer(w+4))-px);
+        Map[i++].set(Clip(((W+NW)*3-NWW*6+buffer(w+3)+buffer(w*2+3))/2)-px);
+        Map[i++].set(Clip((NE*2+NNE)-(NNEE+buffer(w*3-2)*2)+buffer(w*4-3))-px);
+        Map[i++].set(buffer(w*6)-px);
+        Map[i++].set((buffer(w-4)+buffer(w-6))/2-px);
+        Map[i++].set((buffer(4)+buffer(6))/2-px);
+        Map[i++].set((W+N+buffer(w-5)+buffer(w-7))/4-px);
+        Map[i++].set(Clip(buffer(w-3)+W-NEE)-px);
+        Map[i++].set(Clip(4*NNN-3*buffer(w*4))-px);
+        Map[i++].set(Clip(N+NN-NNN)-px);
+        Map[i++].set(Clip(W+WW-WWW)-px);
+        Map[i++].set(Clip(W+NEE-NE)-px);
+        Map[i++].set(Clip(WW+NEE-N)-px);
+        Map[i++].set((Clip(W*2-NW)+Clip(W*2-NWW)+N+NE)/4-px);
+        Map[i++].set(Clamp4(N*2-NN,W,N,NE,NEE)-px);
+        Map[i++].set((N+NNN)/2-px);
+        Map[i++].set(Clip(NN+W-NNW)-px);
+        Map[i++].set(Clip(NWW+N-NNWW)-px);
+        Map[i++].set(Clip((4*WWW-15*WW+20*W+Clip(NEE*2-NNEE))/10)-px);
+        Map[i++].set(Clip((buffer(w*3-3)-4*NNEE+6*NE+Clip(W*3-NW*3+NNW))/4)-px);
+        Map[i++].set(Clip((N*2+NE)-(NN+2*NNE)+buffer(w*3-1))-px);
+        Map[i++].set(Clip((NW*2+NNW)-(NNWW+buffer(w*3+2)*2)+buffer(w*4+3))-px);
+        Map[i++].set(Clip(NNWW+W-buffer(w*2+3))-px);
+        Map[i++].set(Clip((-buffer(w*4)+5*NNN-10*NN+10*N+Clip(W*4-NWW*6+buffer(w*2+3)*4-buffer(w*3+4)))/5)-px);
+        Map[i++].set(Clip(NEE+Clip(buffer(w-3)*2-buffer(w*2-4))-buffer(w-4))-px);
+        Map[i++].set(Clip(NW+W-NWW)-px);
+        Map[i++].set(Clip((N*2+NW)-(NN+2*NNW)+buffer(w*3+1))-px);
+        Map[i++].set(Clip(NN+Clip(NEE*2-buffer(w*2-3))-NNE)-px);
+        Map[i++].set(Clip((-buffer(4)+5*WWW-10*WW+10*W+Clip(NE*2-NNE))/5)-px);
+        Map[i++].set(Clip((-buffer(5)+4*buffer(4)-5*WWW+5*W+Clip(NE*2-NNE))/4)-px);
+        Map[i++].set(Clip((WWW-4*WW+6*W+Clip(NE*3-NNE*3+buffer(w*3-1)))/4)-px);
+        Map[i++].set(Clip((-NNEE+3*NE+Clip(W*4-NW*6+NNW*4-buffer(w*3+1)))/3)-px);
+        Map[i++].set(((W+N)*3-NW*2)/4-px);
 
         if (isPNG)
           ctx = ((abs(W-N)>8)<<10)|((W>N)<<9)|((abs(N-NW)>8)<<8)|((N>NW)<<7)|((abs(N-NE)>8)<<6)|((N>NE)<<5)|((W>WW)<<4)|((N>NN)<<3)|min(5,filterOn?filter+1:0);
@@ -8498,12 +8505,12 @@ int ContextModel::Predict(ModelStats *Stats){
   if (blocktype==IMAGE1) im1bitModel(*m, blockinfo);
   if (blocktype==IMAGE4) return im4bitModel(*m, blockinfo), m->p();
   if (blocktype==IMAGE8) return im8bitModel(*m, blockinfo), m->p();
-  if (blocktype==IMAGE8GRAY) return im8bitModel(*m, blockinfo, 1), m->p();
-  if (blocktype==IMAGE24) return im24bitModel(*m, blockinfo), m->p();
+  if (blocktype==IMAGE8GRAY) return im8bitModel(*m, blockinfo, 1), m->p(0,1);
+  if (blocktype==IMAGE24) return im24bitModel(*m, blockinfo), m->p(1,1);
   if (blocktype==IMAGE32) return im24bitModel(*m, blockinfo, 1), m->p();
   if (blocktype==PNG8) return im8bitModel(*m, blockinfo, 0, 1), m->p();
-  if (blocktype==PNG8GRAY) return im8bitModel(*m, blockinfo, 1, 1), m->p();
-  if (blocktype==PNG24) return im24bitModel(*m, blockinfo, 0, 1), m->p();
+  if (blocktype==PNG8GRAY) return im8bitModel(*m, blockinfo, 1, 1), m->p(0,1);
+  if (blocktype==PNG24) return im24bitModel(*m, blockinfo, 0, 1), m->p(1,1);
   if (blocktype==PNG32) return im24bitModel(*m, blockinfo, 1, 1), m->p();
   #ifdef USE_WAVMODEL
   if (blocktype==AUDIO) return wavModel(*m, blockinfo, Stats), m->p();
@@ -8558,7 +8565,7 @@ int ContextModel::Predict(ModelStats *Stats){
   }
   else c=c3>>7 | (c4>>31)<<1 | (c2>>6)<<2 | (c1&240);
   m->set(c, 1536);
-  int pr=m->p();
+  int pr=m->p(1,1);
   return pr;
 }
 
