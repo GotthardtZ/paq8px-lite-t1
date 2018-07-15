@@ -1157,3 +1157,8 @@ paq8px_v148
 2018.07.08
 - Mixer dot-product shifts are now configurable
 - SmallStationaryContextMap and StationaryMap can also use configurable prediction multipliers and divisors
+
+paq8px_v149
+2018.07.15
+- New match model with fast mode
+- Bug fixes for the ContextMaps and the 24/32bpp image model

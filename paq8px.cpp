@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "148"  //update version here before publishing your changes
+#define PROGVERSION  "149"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -78,6 +78,7 @@
 #include <sys/stat.h> //stat(), mkdir()
 #include <math.h>     //floor(), sqrt()
 #include <stdexcept>  //std::exception
+#include <algorithm>
 
 #ifdef USE_ZLIB
 #include <zlib.h>
@@ -946,6 +947,7 @@ U8 options=0;
 #define OPTION_TRAINTXT 8
 #define OPTION_ADAPTIVE 16
 #define OPTION_SKIPRGB 32
+#define OPTION_FASTMODE 64
 
 struct ModelStats{
   U32 XML, x86_64, Record;
@@ -1422,6 +1424,7 @@ public:
   virtual void update()=0;
   virtual void add(int x)=0;
   virtual void set(int cx, int range)=0;
+  virtual void reset()=0;
   virtual int p(const int shift0=0, const int shift1=0)=0;
 };
 
@@ -1479,7 +1482,7 @@ public:
         }
       }
     }
-    nx=base=ncxt=0;
+    reset();
   }
 
   // Input x (call up to N times)
@@ -1497,6 +1500,10 @@ public:
     assert(base+range<=M);
     cxt[ncxt++]=base+cx;
     base+=range;
+  }
+
+  void reset() {
+    nx=base=ncxt=0;
   }
 
   // predict next bit
@@ -1853,7 +1860,7 @@ inline void mix2(Mixer& m, int s, StateMap& sm) {
   p1>>=4;
   int p0=255-p1;
   m.add(p1-p0);
-  m.add(st*(n1-n0));
+  m.add(st*abs(n1-n0));
   m.add((p1&n0)-(p0&n1));
   m.add((p1&n1)-(p0&n0));
 }
@@ -2413,7 +2420,7 @@ public:
       m.add((p1-2047)>>3);
       p1>>=4;
       int p0 = 255-p1;
-      m.add((st*(n1-n0)));
+      m.add(st*abs(n1-n0));
       m.add((p1&n0)-(p0&n1));
       m.add((p1&n1)-(p0&n0));
       m.add(stretch(Maps12b[i]->p((state<<9)|(bitPos<<6)|k))>>2);
@@ -4426,64 +4433,120 @@ void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
 
 // matchModel() finds the most recent matching context and returns its max length
 
-int matchModel(Mixer& m) {
-  const int MAXLEN=65534;  // longest allowed match + 1
-  static Array<int> t(MEM);  // hash table of pointers to contexts
-  static int h=0;  // hash of last 7 bytes
-  static int ptr=0;  // points to next byte of match if any
-  static int len=0;  // length of match, or 0 if no match
-  static int result=0;
-
-  static SmallStationaryContextMap scm1(0x10000);
-
-  if (bpos==0) {
-    h=(h*997*8+buf(1)+1)&(t.size()-1);  // update context hash
-    if (len) ++len, ++ptr;
-    else {  // find match
-      ptr=t[h];
-      if (ptr && pos-ptr<(int)buf.size())
-        while (buf(len+1)==buf[ptr-len-1] && len<MAXLEN) ++len;
+class MatchModel {
+private:
+  enum Parameters : U32{
+    MaxLen = 63,        // longest allowed match when not in bypass mode
+    MinLen = 2,         // minimum required match
+    DeltaLen = 5,       // minimum length to switch to delta mode
+    MaxBypass = 0xFFFF, // absolute longest allowed match
+    NumCtxs = 5,        // number of contexts used
+    NumHashes = 2       // number of hashes used
+  };
+  Array<U32> Table;
+  StateMap StateMaps[NumCtxs];
+  SmallStationaryContextMap SCM;
+  StationaryMap Map;
+  U32 hashes[NumHashes];
+  U32 ctx[NumCtxs];
+  U32 length;    // length of match, or 0 if no match
+  U32 index;     // points to next byte of match, if any
+  U32 mask;
+  bool delta;
+  bool canBypass;
+  void Update(Buf& buffer, ModelStats *Stats = nullptr) {
+    delta = false;
+    if (length==0 && Bypass)
+      Bypass = false; // can only quit bypass mode on byte boundary
+    // update hashes
+    hashes[0] = (hashes[0]*(3<<3) + buffer(1))&mask;
+    hashes[1] = (hashes[1]*(5<<5) + buffer(1))&mask;
+    // extend current match, if available
+    if (length) {
+      index++;
+      if (length<MaxLen || (canBypass && length<MaxBypass))
+        length++;
     }
-    t[h]=pos;  // update hash table
-    result=len;
-//    if (result>0 && !(result&0xffff)) printf("pos=%d len=%d ptr=%d\n", pos, len, ptr);
-    scm1.set(pos);
+    // or find a new match
+    else {
+      for (U32 i=0; i<NumHashes && length<MinLen; i++){
+        index = Table[hashes[i]];
+        if (index && index!=(U32)pos && (U64)pos<(index+buffer.size())) {
+          while ((length<MaxLen || (canBypass && length<MaxBypass)) && (index-length-1)!=(U32)pos && buffer(length+1)==buffer[index-length-1])
+            length++;
+        }
+      }
+    }
+    Table[hashes[0]] = Table[hashes[1]] = pos;
+    SCM.set(buffer[index]);
+    Map.set((buffer[index]<<8)|buffer(1));
   }
-
-  // predict
-  if (len)
+public:
+  bool Bypass;
+  U16 BypassPrediction; // prediction for bypass mode
+  MatchModel(const U32 Size, const bool AllowBypass = false) :
+    Table(Size/sizeof(U32)),
+    StateMaps{ 56<<8, 0x80800, 0x10100, 0x10100, 0x10100 },
+    SCM{ 0x10000 },
+    Map{ 16 },
+    hashes{ 0 },
+    ctx{ 0 },
+    length(0),
+    mask((Size-1)/sizeof(U32)),
+    delta(false),
+    canBypass(AllowBypass),
+    Bypass(false),
+    BypassPrediction(2047)
   {
-   if (buf(1)==buf[ptr-1] && c0==(buf[ptr]+256)>>(8-bpos))
-   {
-    if (len>MAXLEN) len=MAXLEN;
-    if (buf[ptr]>>(7-bpos)&1)
-    {
-     m.add(ilog(len)<<2);
-     m.add(min(len, 32)<<6);
-    }
-    else
-    {
-     m.add(-(ilog(len)<<2));
-     m.add(-(min(len, 32)<<6));
-    }
-   }
-   else
-   {
-    len=0;
-    m.add(0);
-    m.add(0);
-   }
+    assert((Size&(Size-1))==0);
   }
-  else
-  {
-   m.add(0);
-   m.add(0);
+  int Predict(Mixer& mixer, Buf& buffer, ModelStats *Stats = nullptr) {
+    if (bpos==0)
+      Update(buffer, Stats);
+    int bit = (buffer[index]>>(7-bpos))&1;
+    if (canBypass && Bypass) {
+      if (length>0 && ((buffer[index]+256)>>(8-bpos))!=c0)
+        length = 0;
+    }
+    else {
+      ctx[0] = ctx[1] = ctx[2] = ctx[3] = ctx[4] = c0;
+      ctx[2]+= (buffer(1)+1)<<8;
+      if (!delta) {
+        if (length)
+        {
+          if (buffer(1)==buffer[index-1] && c0==((buffer[index] + 256)>>(8-bpos))) { // bits match?
+            if (length<16)
+              ctx[0] = std::min<U32>(length, MaxLen)*2 + bit;
+            else
+              ctx[0] = (std::min<U32>(length, MaxLen)>>2)*2 + bit + 24;
+            ctx[0] = (ctx[0]<<8) + buffer(1);
+            ctx[1] = ((buffer[index]+1)<<11)|(bpos<<8)|buffer(1);
+            mixer.add((std::min<U32>(length, 32)<<5)*(2*bit-1));
+          }
+          else // we have a mismatch
+          {
+            delta = length>DeltaLen;
+            length = 0;
+            mixer.add(0);
+          }
+        }
+        else
+          mixer.add(0);
+      }
+      else { //delta mode
+        ctx[3] = ctx[2];
+        ctx[4]+= (buffer[index]+1)<<8;
+        mixer.add(0);
+      }
+      for (U32 i=0; i<NumCtxs; i++)
+        mixer.add(stretch(StateMaps[i].p(ctx[i]))/2);
+      SCM.mix(mixer, 7, 1, 4);
+      Map.mix(mixer, 1, 4, 0xFF);
+    }
+    BypassPrediction = (length)?bit*0xFFF:0x7FF;
+    return length;
   }
-
-  scm1.mix(m);
-  return result;
-}
-
+};
 
 //////////////////////////// wordModel /////////////////////////
 
@@ -5020,10 +5083,10 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
                                       8,  8,  8,  8,  8,  8,  8,  8,  8,  8,
                                       8,  8,  8,  8,  8,  8,  8,  8,  8,  8,
                                       8,  8,  8,  8,  8,  8,  8,  8,  8,  8,
-                                      8,  8,  8,  8,  8,  8,  8,  2,  8,  8,
                                       8,  8,  8,  8,  8,  8,  8,  8,  8,  8,
                                       8,  8,  8,  8,  8,  8,  8,  8,  8,  8,
-                                      8,  8,  8,  0};
+                                      8,  8,  8,  8,  8,  8,  8,  8,  8,  8,
+                                      8,  8,  2,  0};
   static RingBuffer buffer(0x100000); // internal rotating buffer for (PNG unfiltered) pixel data
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 WWp1, Wp1, p1, NWp1, Np1, NEp1, NNp1;
@@ -5265,32 +5328,32 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
       Map[i++].set(Clip(N+NE-NNE)-px);
       Map[i++].set(Clip(N+NE-NNE+p1-Clip(Np1+NEp1-buffer(w*2-stride+1)))-px);
       Map[i++].set(Clip(N+NE-NNE+p2-Clip(Np2+NEp2-buffer(w*2-stride+2)))-px);
-      Map[i++].set(Clip(N+NN-NNN));
+      Map[i++].set(Clip(N+NN-NNN)-px);
       Map[i++].set(Clip(N+NN-NNN+p1-Clip(Np1+NNp1-buffer(w*3+1)))-px);
       Map[i++].set(Clip(N+NN-NNN+p2-Clip(Np2+NNp2-buffer(w*3+2)))-px);
-      Map[i++].set(Clip(W+WW-WWW));
+      Map[i++].set(Clip(W+WW-WWW)-px);
       Map[i++].set(Clip(W+WW-WWW+p1-Clip(Wp1+WWp1-buffer(stride*3+1)))-px);
       Map[i++].set(Clip(W+WW-WWW+p2-Clip(Wp2+WWp2-buffer(stride*3+2)))-px);
-      Map[i++].set(Clip(W+NEE-NE));
+      Map[i++].set(Clip(W+NEE-NE)-px);
       Map[i++].set(Clip(W+NEE-NE+p1-Clip(Wp1+buffer(w-stride*2+1)-NEp1))-px);
       Map[i++].set(Clip(W+NEE-NE+p2-Clip(Wp2+buffer(w-stride*2+2)-NEp2))-px);
       Map[i++].set(Clip(NN+p1-NNp1)-px);
       Map[i++].set(Clip(NN+p2-NNp2)-px);
-      Map[i++].set(Clip(NN+W-NNW));
+      Map[i++].set(Clip(NN+W-NNW)-px);
       Map[i++].set(Clip(NN+W-NNW+p1-Clip(NNp1+Wp1-buffer(w*2+stride+1)))-px);
       Map[i++].set(Clip(NN+W-NNW+p2-Clip(NNp2+Wp2-buffer(w*2+stride+2)))-px);
-      Map[i++].set(Clip(NN+NW-buffer(w*3+stride)));
+      Map[i++].set(Clip(NN+NW-buffer(w*3+stride))-px);
       Map[i++].set(Clip(NN+NW-buffer(w*3+stride)+p1-Clip(NNp1+NWp1-buffer(w*3+stride+1)))-px);
       Map[i++].set(Clip(NN+NW-buffer(w*3+stride)+p2-Clip(NNp2+NWp2-buffer(w*3+stride+2)))-px);
-      Map[i++].set(Clip(NN+NE-buffer(w*3-stride)));
+      Map[i++].set(Clip(NN+NE-buffer(w*3-stride))-px);
       Map[i++].set(Clip(NN+NE-buffer(w*3-stride)+p1-Clip(NNp1+NEp1-buffer(w*3-stride+1)))-px);
       Map[i++].set(Clip(NN+NE-buffer(w*3-stride)+p2-Clip(NNp2+NEp2-buffer(w*3-stride+2)))-px);
-      Map[i++].set(Clip(NN+buffer(w*4)-buffer(w*6)));
+      Map[i++].set(Clip(NN+buffer(w*4)-buffer(w*6))-px);
       Map[i++].set(Clip(NN+buffer(w*4)-buffer(w*6)+p1-Clip(NNp1+buffer(w*4+1)-buffer(w*6+1)))-px);
       Map[i++].set(Clip(NN+buffer(w*4)-buffer(w*6)+p2-Clip(NNp2+buffer(w*4+2)-buffer(w*6+2)))-px);
       Map[i++].set(Clip(WW+p1-WWp1)-px);
       Map[i++].set(Clip(WW+p2-WWp2)-px);
-      Map[i++].set(Clip(WW+buffer(stride*4)-buffer(stride*6)));
+      Map[i++].set(Clip(WW+buffer(stride*4)-buffer(stride*6))-px);
       Map[i++].set(Clip(WW+buffer(stride*4)-buffer(stride*6)+p1-Clip(WWp1+buffer(stride*4+1)-buffer(stride*6+1)))-px);
       Map[i++].set(Clip(WW+buffer(stride*4)-buffer(stride*6)+p2-Clip(WWp2+buffer(stride*4+2)-buffer(stride*6+2)))-px);
 
@@ -5321,64 +5384,64 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
       Map[i++].set(min(color,stride-1));
 
       i=0;
-      SCMap[i++].set(N+p1-Np1);
-      SCMap[i++].set(N+p2-Np2);
-      SCMap[i++].set(W+p1-Wp1);
-      SCMap[i++].set(W+p2-Wp2);
-      SCMap[i++].set(NW+p1-NWp1);
-      SCMap[i++].set(NW+p2-NWp2);
-      SCMap[i++].set(NE+p1-NEp1);
-      SCMap[i++].set(NE+p2-NEp2);
-      SCMap[i++].set(NN+p1-NNp1);
-      SCMap[i++].set(NN+p2-NNp2);
-      SCMap[i++].set(WW+p1-WWp1);
-      SCMap[i++].set(WW+p2-WWp2);
-      SCMap[i++].set(W+N-NW);
-      SCMap[i++].set(W+N-NW+p1-Wp1-Np1+NWp1);
-      SCMap[i++].set(W+N-NW+p2-Wp2-Np2+NWp2);
-      SCMap[i++].set(W+NE-N);
-      SCMap[i++].set(W+NE-N+p1-Wp1-NEp1+Np1);
-      SCMap[i++].set(W+NE-N+p2-Wp2-NEp2+Np2);
-      SCMap[i++].set(W+NEE-NE);
-      SCMap[i++].set(W+NEE-NE+p1-Wp1-buffer(w-stride*2+1)+NEp1);
-      SCMap[i++].set(W+NEE-NE+p2-Wp2-buffer(w-stride*2+2)+NEp2);
-      SCMap[i++].set(N+NN-NNN);
-      SCMap[i++].set(N+NN-NNN+p1-Np1-NNp1+buffer(w*3+1));
-      SCMap[i++].set(N+NN-NNN+p2-Np2-NNp2+buffer(w*3+2));
-      SCMap[i++].set(N+NE-NNE);
-      SCMap[i++].set(N+NE-NNE+p1-Np1-NEp1+buffer(w*2-stride+1));
-      SCMap[i++].set(N+NE-NNE+p2-Np2-NEp2+buffer(w*2-stride+2));
-      SCMap[i++].set(N+NW-NNW);
-      SCMap[i++].set(N+NW-NNW+p1-Np1-NWp1+buffer(w*2+stride+1));
-      SCMap[i++].set(N+NW-NNW+p2-Np2-NWp2+buffer(w*2+stride+2));
-      SCMap[i++].set(NE+NW-NN);
-      SCMap[i++].set(NE+NW-NN+p1-NEp1-NWp1+NNp1);
-      SCMap[i++].set(NE+NW-NN+p2-NEp2-NWp2+NNp2);
-      SCMap[i++].set(NW+W-NWW);
-      SCMap[i++].set(NW+W-NWW+p1-NWp1-Wp1+buffer(w+stride*2+1));
-      SCMap[i++].set(NW+W-NWW+p2-NWp2-Wp2+buffer(w+stride*2+2));
-      SCMap[i++].set(W*2-WW);
-      SCMap[i++].set(W*2-WW+p1-Wp1*2+WWp1);
-      SCMap[i++].set(W*2-WW+p2-Wp2*2+WWp2);
-      SCMap[i++].set(N*2-NN);
-      SCMap[i++].set(N*2-NN+p1-Np1*2+NNp1);
-      SCMap[i++].set(N*2-NN+p2-Np2*2+NNp2);
-      SCMap[i++].set(NW*2-NNWW);
-      SCMap[i++].set(NW*2-NNWW+p1-NWp1*2+buffer(w*2+stride*2+1));
-      SCMap[i++].set(NW*2-NNWW+p2-NWp2*2+buffer(w*2+stride*2+2));
-      SCMap[i++].set(NE*2-NNEE);
-      SCMap[i++].set(NE*2-NNEE+p1-NEp1*2+buffer(w*2-stride*2+1));
-      SCMap[i++].set(NE*2-NNEE+p2-NEp2*2+buffer(w*2-stride*2+2));
-      SCMap[i++].set(N*3-NN*3+NNN+p1-Np1*3+NNp1*3-buffer(w*3+1));
-      SCMap[i++].set(N*3-NN*3+NNN+p2-Np2*3+NNp2*3-buffer(w*3+2));
-      SCMap[i++].set(N*3-NN*3+NNN);
-      SCMap[i++].set((W+NE*2-NNE)/2);
-      SCMap[i++].set((W+NE*3-NNE*3+buffer(w*3-stride))/2);
-      SCMap[i++].set((W+NE*2-NNE)/2+p1-(Wp1+NEp1*2-buffer(w*2-stride+1))/2);
-      SCMap[i++].set((W+NE*2-NNE)/2+p2-(Wp2+NEp2*2-buffer(w*2-stride+2))/2);
-      SCMap[i++].set(NNE+NE-buffer(w*3-stride));
-      SCMap[i++].set(NNE+W-NN);
-      SCMap[i++].set(NNW+W-NNWW);
+      SCMap[i++].set(N+p1-Np1-px);
+      SCMap[i++].set(N+p2-Np2-px);
+      SCMap[i++].set(W+p1-Wp1-px);
+      SCMap[i++].set(W+p2-Wp2-px);
+      SCMap[i++].set(NW+p1-NWp1-px);
+      SCMap[i++].set(NW+p2-NWp2-px);
+      SCMap[i++].set(NE+p1-NEp1-px);
+      SCMap[i++].set(NE+p2-NEp2-px);
+      SCMap[i++].set(NN+p1-NNp1-px);
+      SCMap[i++].set(NN+p2-NNp2-px);
+      SCMap[i++].set(WW+p1-WWp1-px);
+      SCMap[i++].set(WW+p2-WWp2-px);
+      SCMap[i++].set(W+N-NW-px);
+      SCMap[i++].set(W+N-NW+p1-Wp1-Np1+NWp1-px);
+      SCMap[i++].set(W+N-NW+p2-Wp2-Np2+NWp2-px);
+      SCMap[i++].set(W+NE-N-px);
+      SCMap[i++].set(W+NE-N+p1-Wp1-NEp1+Np1-px);
+      SCMap[i++].set(W+NE-N+p2-Wp2-NEp2+Np2-px);
+      SCMap[i++].set(W+NEE-NE-px);
+      SCMap[i++].set(W+NEE-NE+p1-Wp1-buffer(w-stride*2+1)+NEp1-px);
+      SCMap[i++].set(W+NEE-NE+p2-Wp2-buffer(w-stride*2+2)+NEp2-px);
+      SCMap[i++].set(N+NN-NNN-px);
+      SCMap[i++].set(N+NN-NNN+p1-Np1-NNp1+buffer(w*3+1)-px);
+      SCMap[i++].set(N+NN-NNN+p2-Np2-NNp2+buffer(w*3+2)-px);
+      SCMap[i++].set(N+NE-NNE-px);
+      SCMap[i++].set(N+NE-NNE+p1-Np1-NEp1+buffer(w*2-stride+1)-px);
+      SCMap[i++].set(N+NE-NNE+p2-Np2-NEp2+buffer(w*2-stride+2)-px);
+      SCMap[i++].set(N+NW-NNW-px);
+      SCMap[i++].set(N+NW-NNW+p1-Np1-NWp1+buffer(w*2+stride+1)-px);
+      SCMap[i++].set(N+NW-NNW+p2-Np2-NWp2+buffer(w*2+stride+2)-px);
+      SCMap[i++].set(NE+NW-NN-px);
+      SCMap[i++].set(NE+NW-NN+p1-NEp1-NWp1+NNp1-px);
+      SCMap[i++].set(NE+NW-NN+p2-NEp2-NWp2+NNp2-px);
+      SCMap[i++].set(NW+W-NWW-px);
+      SCMap[i++].set(NW+W-NWW+p1-NWp1-Wp1+buffer(w+stride*2+1)-px);
+      SCMap[i++].set(NW+W-NWW+p2-NWp2-Wp2+buffer(w+stride*2+2)-px);
+      SCMap[i++].set(W*2-WW-px);
+      SCMap[i++].set(W*2-WW+p1-Wp1*2+WWp1-px);
+      SCMap[i++].set(W*2-WW+p2-Wp2*2+WWp2-px);
+      SCMap[i++].set(N*2-NN-px);
+      SCMap[i++].set(N*2-NN+p1-Np1*2+NNp1-px);
+      SCMap[i++].set(N*2-NN+p2-Np2*2+NNp2-px);
+      SCMap[i++].set(NW*2-NNWW-px);
+      SCMap[i++].set(NW*2-NNWW+p1-NWp1*2+buffer(w*2+stride*2+1)-px);
+      SCMap[i++].set(NW*2-NNWW+p2-NWp2*2+buffer(w*2+stride*2+2)-px);
+      SCMap[i++].set(NE*2-NNEE-px);
+      SCMap[i++].set(NE*2-NNEE+p1-NEp1*2+buffer(w*2-stride*2+1)-px);
+      SCMap[i++].set(NE*2-NNEE+p2-NEp2*2+buffer(w*2-stride*2+2)-px);
+      SCMap[i++].set(N*3-NN*3+NNN+p1-Np1*3+NNp1*3-buffer(w*3+1)-px);
+      SCMap[i++].set(N*3-NN*3+NNN+p2-Np2*3+NNp2*3-buffer(w*3+2)-px);
+      SCMap[i++].set(N*3-NN*3+NNN-px);
+      SCMap[i++].set((W+NE*2-NNE)/2-px);
+      SCMap[i++].set((W+NE*3-NNE*3+buffer(w*3-stride))/2-px);
+      SCMap[i++].set((W+NE*2-NNE)/2+p1-(Wp1+NEp1*2-buffer(w*2-stride+1))/2-px);
+      SCMap[i++].set((W+NE*2-NNE)/2+p2-(Wp2+NEp2*2-buffer(w*2-stride+2))/2-px);
+      SCMap[i++].set(NNE+NE-buffer(w*3-stride)-px);
+      SCMap[i++].set(NNE+W-NN-px);
+      SCMap[i++].set(NNW+W-NNWW-px);
     }
   }
 
@@ -8405,6 +8468,7 @@ class ContextModel{
   #ifdef USE_TEXTMODEL
   TextModel textModel;
   #endif //USE_TEXTMODEL
+  MatchModel matchModel;
   Mixer *m;
   U32 cxt[15];
   Blocktype next_blocktype, blocktype;
@@ -8412,20 +8476,22 @@ class ContextModel{
   void UpdateContexts(U8 B);
   void Train(const char* Dictionary, int Iterations = 1);
 public:
+  bool Bypass;
   ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), jpegModel(0), dmcforest(0),
 
     #ifdef USE_TEXTMODEL
       textModel(MEM*16),
     #endif //USE_TEXTMODEL
+    matchModel(MEM*4, options&OPTION_FASTMODE),
 
-    next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0) {
+    next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0), Bypass(false) {
 
     if(level>=4)dmcforest=new dmcForest();
 
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(980+288, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer(981+288, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
     #else
-      m=MixerFactory::CreateMixer(980, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer(981, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
     #endif //USE_WORD_MODEL
 
       memset(&cxt[0], 0, sizeof(cxt));
@@ -8498,10 +8564,17 @@ int ContextModel::Predict(ModelStats *Stats){
   }
 
   m->update();
+  Bypass=false;
   m->add(256); //network bias
+  int matchlength=matchModel.Predict(*m, buf, Stats);
+  if (matchlength>0xFFF || matchModel.Bypass) {
+    matchModel.Bypass = Bypass = true;
+    m->reset();
+    return matchModel.BypassPrediction;
+  }
+  matchlength=ilog(matchlength); // ilog of length of most recent match (0..255)
 
   // Test for special block types
-  int matchlength=ilog(matchModel(*m));  // ilog of length of most recent match (0..255)
   if (blocktype==IMAGE1) im1bitModel(*m, blockinfo);
   if (blocktype==IMAGE4) return im4bitModel(*m, blockinfo), m->p();
   if (blocktype==IMAGE8) return im8bitModel(*m, blockinfo), m->p();
@@ -8610,9 +8683,13 @@ void Predictor::update() {
   }
   bpos=(bpos+1)&7;
 
-  // Filter the context model with APMs
   int pr0=ContextModel2.Predict(&stats);
-
+  if (ContextModel2.Bypass) {
+    pr=pr0;
+    return;
+  }
+  
+  // Filter the context model with APMs
   pr=a.p(pr0, c0);
 
   int pr1=a1.p(pr0, c0+256*buf(1));
@@ -10637,7 +10714,8 @@ int main(int argc, char** argv) {
         "      t = Pre-train main model with word and expression list\n"
         "          (english.dic, english.exp)\n"
         "      a = Adaptive learning rate\n"
-        "      s = Skip the color transform, just reorder the RGB channels\n\n"
+        "      s = Skip the color transform, just reorder the RGB channels\n"
+        "      f = Bypass modeling and mixing on long matches\n\n"
         "    INPUTSPEC:\n"
         "    The input may be a FILE or a PATH/FILE or a [PATH/]@FILELIST.\n"
         "    Only file content and the file size is kept in the archive. Filename,\n"
@@ -10746,6 +10824,7 @@ int main(int argc, char** argv) {
               case 'T': options |= OPTION_TRAINTXT; break;
               case 'A': options |= OPTION_ADAPTIVE; break;
               case 'S': options |= OPTION_SKIPRGB; break;
+              case 'F': options |= OPTION_FASTMODE; break;
               default: {printf("Invalid compression switch: %c",argv[1][j]); quit();}
             }
           }
@@ -11010,6 +11089,7 @@ int main(int argc, char** argv) {
       printf(" Train txt  (t) = %s\n",options&OPTION_TRAINTXT ? "On  (Pre-train main model with word and expression list)" : "Off");
       printf(" Adaptive   (a) = %s\n",options&OPTION_ADAPTIVE ? "On  (Adaptive learning rate)" : "Off");
       printf(" Skip RGB   (s) = %s\n",options&OPTION_SKIPRGB  ? "On  (Skip the color transform, just reorder the RGB channels)" : "Off");
+      printf(" Fast mode  (f) = %s\n",options&OPTION_FASTMODE ? "On  (Bypass modeling and mixing on long matches)" : "Off");
       printf(" File mode      = %s\n",options & OPTION_MULTIPLE_FILE_MODE ? "Multiple": "Single");
     }
     printf("\n");
