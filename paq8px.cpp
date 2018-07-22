@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "149"  //update version here before publishing your changes
+#define PROGVERSION  "150"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -1943,7 +1943,7 @@ class StationaryMap {
   U32 *cp;
 public:
   StationaryMap(int BitsOfContext, int BitsPerContext = 8, int Rate = 0): Data(1ull<<(BitsOfContext+BitsPerContext)), Context(0), Mask(1<<BitsPerContext), bCount(1), B(1) {
-    assert(BitsOfContext<16);
+    assert(BitsOfContext<=16);
     assert(BitsPerContext && BitsPerContext<=8);
     Reset(Rate);
     cp=&Data[0];
@@ -4436,16 +4436,15 @@ void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
 class MatchModel {
 private:
   enum Parameters : U32{
-    MaxLen = 63,        // longest allowed match when not in bypass mode
+    MaxLen = 0xFFFF,    // longest allowed match
     MinLen = 2,         // minimum required match
     DeltaLen = 5,       // minimum length to switch to delta mode
-    MaxBypass = 0xFFFF, // absolute longest allowed match
     NumCtxs = 5,        // number of contexts used
     NumHashes = 2       // number of hashes used
   };
   Array<U32> Table;
   StateMap StateMaps[NumCtxs];
-  SmallStationaryContextMap SCM;
+  SmallStationaryContextMap SCM[2];
   StationaryMap Map;
   U32 hashes[NumHashes];
   U32 ctx[NumCtxs];
@@ -4459,12 +4458,12 @@ private:
     if (length==0 && Bypass)
       Bypass = false; // can only quit bypass mode on byte boundary
     // update hashes
-    hashes[0] = (hashes[0]*(3<<3) + buffer(1))&mask;
-    hashes[1] = (hashes[1]*(5<<5) + buffer(1))&mask;
+    hashes[0] = (hashes[0]*(3<<3)+buffer(1))&mask;
+    hashes[1] = (hashes[1]*(5<<5)+buffer(1))&mask;
     // extend current match, if available
     if (length) {
       index++;
-      if (length<MaxLen || (canBypass && length<MaxBypass))
+      if (length<MaxLen)
         length++;
     }
     // or find a new match
@@ -4472,13 +4471,15 @@ private:
       for (U32 i=0; i<NumHashes && length<MinLen; i++){
         index = Table[hashes[i]];
         if (index && index!=(U32)pos && (U64)pos<(index+buffer.size())) {
-          while ((length<MaxLen || (canBypass && length<MaxBypass)) && (index-length-1)!=(U32)pos && buffer(length+1)==buffer[index-length-1])
+          while (length<MaxLen && (index-length-1)!=(U32)pos && buffer(length+1)==buffer[index-length-1])
             length++;
         }
       }
     }
-    Table[hashes[0]] = Table[hashes[1]] = pos;
-    SCM.set(buffer[index]);
+    for (U32 i=0; i<NumHashes; i++)
+      Table[hashes[i]] = pos;
+    SCM[0].set(buffer[index]);
+    SCM[1].set(pos);
     Map.set((buffer[index]<<8)|buffer(1));
   }
 public:
@@ -4487,7 +4488,7 @@ public:
   MatchModel(const U32 Size, const bool AllowBypass = false) :
     Table(Size/sizeof(U32)),
     StateMaps{ 56<<8, 0x80800, 0x10100, 0x10100, 0x10100 },
-    SCM{ 0x10000 },
+    SCM{ 0x10000, 0x10000 },
     Map{ 16 },
     hashes{ 0 },
     ctx{ 0 },
@@ -4516,31 +4517,36 @@ public:
         {
           if (buffer(1)==buffer[index-1] && c0==((buffer[index] + 256)>>(8-bpos))) { // bits match?
             if (length<16)
-              ctx[0] = std::min<U32>(length, MaxLen)*2 + bit;
+              ctx[0] = length*2 + bit;
             else
-              ctx[0] = (std::min<U32>(length, MaxLen)>>2)*2 + bit + 24;
+              ctx[0] = (std::min<U32>(length, 63)>>2)*2 + bit + 24;
             ctx[0] = (ctx[0]<<8) + buffer(1);
             ctx[1] = ((buffer[index]+1)<<11)|(bpos<<8)|buffer(1);
             mixer.add((std::min<U32>(length, 32)<<5)*(2*bit-1));
+            mixer.add((ilog(length)<<2)*(2*bit-1));
           }
-          else // we have a mismatch
-          {
+          else { // we have a mismatch
             delta = length>DeltaLen;
             length = 0;
             mixer.add(0);
+            mixer.add(0);
           }
         }
-        else
+        else {
           mixer.add(0);
+          mixer.add(0);
+        }
       }
       else { //delta mode
         ctx[3] = ctx[2];
         ctx[4]+= (buffer[index]+1)<<8;
         mixer.add(0);
+        mixer.add(0);
       }
       for (U32 i=0; i<NumCtxs; i++)
         mixer.add(stretch(StateMaps[i].p(ctx[i]))/2);
-      SCM.mix(mixer, 7, 1, 4);
+      SCM[0].mix(mixer, 7, 1, 4);
+      SCM[1].mix(mixer, 5);
       Map.mix(mixer, 1, 4, 0xFF);
     }
     BypassPrediction = (length)?bit*0xFFF:0x7FF;
@@ -8489,9 +8495,9 @@ public:
     if(level>=4)dmcforest=new dmcForest();
 
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(981+288, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer(983+288, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
     #else
-      m=MixerFactory::CreateMixer(981, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer(983, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
     #endif //USE_WORD_MODEL
 
       memset(&cxt[0], 0, sizeof(cxt));
@@ -8567,7 +8573,7 @@ int ContextModel::Predict(ModelStats *Stats){
   Bypass=false;
   m->add(256); //network bias
   int matchlength=matchModel.Predict(*m, buf, Stats);
-  if (matchlength>0xFFF || matchModel.Bypass) {
+  if (options&OPTION_FASTMODE && (matchlength>0xFFF || matchModel.Bypass)) {
     matchModel.Bypass = Bypass = true;
     m->reset();
     return matchModel.BypassPrediction;
@@ -9700,16 +9706,31 @@ U64 decode_cd(File *in, U64 size, File *out, FMode mode, U64 &diffFound) {
 }
 
 
-// 24-bit image data transform:
-// simple color transform (b, g, r) -> (g, g-r, g-b)
+// 24-bit image data transforms, controlled by OPTION_SKIPRGB:
+// - simple color transform (b, g, r) -> (g, g-r, g-b)
+// - channel reorder only (b, g, r) -> (g, r, b)
+// Detects RGB565 to RGB888 conversions
+
+#define RGB565_MIN_RUN 63
 
 void encode_bmp(File *in, File *out, U64 len, int width) {
-  int r,g,b;
+  int r, g, b, total=0;
+  bool isPossibleRGB565 = true;
   for (int i=0; i<(int)(len/width); i++) {
     for (int j=0; j<width/3; j++) {
       b=in->getchar();
       g=in->getchar();
       r=in->getchar();
+      if (isPossibleRGB565) {
+        int pTotal=total;
+        total=std::min<int>(total+1, 0xFFFF)*((b&7)==((b&8)-((b>>3)&1)) && (g&3)==((g&4)-((g>>2)&1)) && (r&7)==((r&8)-((r>>3)&1)));
+        if (total>RGB565_MIN_RUN || pTotal>=RGB565_MIN_RUN) {
+          b^=(b&8)-((b>>3)&1);
+          g^=(g&4)-((g>>2)&1);
+          r^=(r&8)-((r>>3)&1);
+        }
+        isPossibleRGB565=total>0;
+      }
       out->putchar(g);
       out->putchar(options&OPTION_SKIPRGB?r:g-r);
       out->putchar(options&OPTION_SKIPRGB?b:g-b);
@@ -9720,23 +9741,35 @@ void encode_bmp(File *in, File *out, U64 len, int width) {
 }
 
 U64 decode_bmp(Encoder& en, U64 size, int width, File *out, FMode mode, U64 &diffFound) {
-  int r,g,b,p;
+  int r, g, b, p, total=0;
+  bool isPossibleRGB565 = true;
   for (int i=0; i<(int)(size/width); i++) {
     p=i*width;
     for (int j=0; j<width/3; j++) {
-      b=en.decompress();
       g=en.decompress();
       r=en.decompress();
+      b=en.decompress();
+      if (!(options&OPTION_SKIPRGB))
+        r=g-r, b=g-b;
+      if (isPossibleRGB565){
+        if (total>=RGB565_MIN_RUN) {
+          b^=(b&8)-((b>>3)&1);
+          g^=(g&4)-((g>>2)&1);
+          r^=(r&8)-((r>>3)&1);
+        }
+        total=std::min<int>(total+1, 0xFFFF)*((b&7)==((b&8)-((b>>3)&1)) && (g&3)==((g&4)-((g>>2)&1)) && (r&7)==((r&8)-((r>>3)&1)));
+        isPossibleRGB565=total>0;
+      }
       if (mode==FDECOMPRESS) {
-        out->putchar(options&OPTION_SKIPRGB?r:b-r);
         out->putchar(b);
-        out->putchar(options&OPTION_SKIPRGB?g:b-g);
+        out->putchar(g);
+        out->putchar(r);
         if (!j && !(i&0xf)) en.print_status();
       }
       else if (mode==FCOMPARE) {
-        if (((options&OPTION_SKIPRGB?r:b-r)&255)!=out->getchar() && !diffFound) diffFound=p+1;
-        if (b!= out->getchar() && !diffFound) diffFound=p+2;
-        if (((options&OPTION_SKIPRGB?g:b-g)&255)!= out->getchar() && !diffFound) diffFound=p+3;
+        if ((b&255)!=out->getchar() && !diffFound) diffFound=p+1;
+        if (g!=out->getchar() && !diffFound) diffFound=p+2;
+        if ((r&255)!=out->getchar() && !diffFound) diffFound=p+3;
         p+=3;
       }
     }
@@ -9754,7 +9787,7 @@ U64 decode_bmp(Encoder& en, U64 size, int width, File *out, FMode mode, U64 &dif
       out->putchar(en.decompress());
     }
     else if (mode==FCOMPARE) {
-      if (en.decompress()!= out->getchar() && !diffFound){ diffFound=size-i; break; }
+      if (en.decompress()!=out->getchar()&&!diffFound) { diffFound=size-i; break; }
     }
   }
   return size;

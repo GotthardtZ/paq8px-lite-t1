@@ -1162,3 +1162,8 @@ paq8px_v149
 2018.07.15
 - New match model with fast mode
 - Bug fixes for the ContextMaps and the 24/32bpp image model
+
+paq8px_v150
+2018.07.22
+- Improved the new MatchModel
+- New heuristic in the 24bpp color transform to detect RGB565 to RGB888 conversions
