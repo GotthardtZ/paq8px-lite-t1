@@ -1167,3 +1167,8 @@ paq8px_v150
 2018.07.22
 - Improved the new MatchModel
 - New heuristic in the 24bpp color transform to detect RGB565 to RGB888 conversions
+
+paq8px_v151
+2018.07.25
+- Improved the 24/32bpp image model, reduced the memory usage
+- Slightly tweaked the JPEG model
