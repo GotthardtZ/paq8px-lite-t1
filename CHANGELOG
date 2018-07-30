@@ -1172,3 +1172,8 @@ paq8px_v151
 2018.07.25
 - Improved the 24/32bpp image model, reduced the memory usage
 - Slightly tweaked the JPEG model
+
+paq8px_v152
+2018.07.30
+- Modified the SmallStationaryContextMap to allow for variable bits-per-context
+- Improved the 24/32bpp image model, reduced the memory usage

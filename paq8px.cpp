@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "151"  //update version here before publishing your changes
+#define PROGVERSION  "152"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -1891,35 +1891,48 @@ public:
   }
 };
 
-// Context is looked up directly.
-// m: Count of (bit) contexts. m must be a power of 2.
-// c0 (the partial byte) and some of the lower bits of cx are used for context selection.
-// For example with m=65536 (=2^16) c0 (8 bits) and the lowest 8 bits of cx are used thus giving the total of 16 bits.
+/*
+Map for modelling contexts of (nearly-)stationary data.
+The context is looked up directly. For each bit modelled, a 16bit prediction is stored.
+The adaptation rate is controlled by the caller, see mix().
+
+- BitsOfContext: How many bits to use for each context. Higher bits are discarded.
+- BitsPerContext: How many bits [1..8] of input are to be modelled for each context.
+New contexts must be set at those intervals.
+
+Uses 2^(BitsOfContext+BitsPerContext+1) bytes of memory.
+*/
 class SmallStationaryContextMap {
-private:
-  Array<U16> t; // 0..65535 representing p = 0.0 .. 1.0
-  U32 cxt;      // selected bit context
-  U16 *cp;      // pointer to last context (to update in next pass)
-  const int mask;
+  Array<U16> Data;
+  int Context, Mask, bCount, B;
+  U16 *cp;
 public:
-  SmallStationaryContextMap(int m): t(m), cxt(0), mask(m-1) {
-    assert((m&mask)==0); // power of 2?
-    for (U32 i=0; i<t.size(); ++i)
-      t[i]=32768; // initial p=0.5
-    cp=&t[0];
+  SmallStationaryContextMap(int BitsOfContext, int BitsPerContext = 8) : Data(1ull<<(BitsOfContext+BitsPerContext)), Context(0), Mask(1<<BitsPerContext), bCount(1), B(1) {
+    assert(BitsOfContext<=16);
+    assert(BitsPerContext && BitsPerContext<=8);
+    Reset();
+    cp=&Data[0];
   }
-  void set(U32 cx) {
-    cxt=cx;
+  void set(U32 ctx) {
+    Context = (ctx*Mask)&(Data.size() - Mask);
+    bCount=B=1;
   }
-  void mix(Mixer& m, const int rate=7, const int Multiplier = 1, const int Divisor = 2) {
-    //adapt (update prediction from previous pass)
-    *cp += ((y<<16)-(*cp)+(1<<(rate-1))) >> rate;
-    //predict
-    U32 idx=(cxt*256+c0)&mask;  //c0: the partial byte
-    assert(idx<t.size());
-    cp=&t[idx];
-    int p=(*cp)>>4;
-    m.add((stretch(p)*Multiplier)/Divisor);
+  void Reset() {
+    for (U32 i=0; i<Data.size(); ++i)
+      Data[i]=0x7FFF;
+  }
+  void mix(Mixer& m, const int rate = 7, const int Multiplier = 1, const int Divisor = 4) {
+    *cp+=((y<<16)-(*cp)+(1<<(rate-1)))>>rate;
+    B+=(y && B>1);
+    cp = &Data[Context+B];
+    int Prediction = (*cp)>>4;
+    m.add((stretch(Prediction)*Multiplier)/Divisor);
+    m.add(((Prediction-2048)*Multiplier)/(Divisor*2));
+    bCount<<=1; B<<=1;
+    if (bCount==Mask) {
+      bCount=1;
+      B=1;
+    }
   }
 };
 
@@ -4489,7 +4502,7 @@ public:
   MatchModel(const U32 Size, const bool AllowBypass = false) :
     Table(Size/sizeof(U32)),
     StateMaps{ 56<<8, 0x80800, 0x10100, 0x10100, 0x10100 },
-    SCM{ 0x10000, 0x10000 },
+    SCM{ {8,8},{8,8} },
     Map{ 16 },
     hashes{ 0 },
     ctx{ 0 },
@@ -5072,18 +5085,17 @@ inline U8 Paeth(U8 W, U8 N, U8 NW){
 // Model for filtered (PNG) or unfiltered 24/32-bit image data
 
 void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
-  static const int SCM=0x10000;
   static const int nMaps = 94;
   static const int nSCMaps = 59;
   static ContextMap cm(MEM*4, 45);
-  static SmallStationaryContextMap SCMap[nSCMaps] = { SCM, SCM, SCM, SCM, SCM, SCM, SCM, SCM,
-                                                      SCM, SCM, SCM, SCM, SCM, SCM, SCM, SCM,
-                                                      SCM, SCM, SCM, SCM, SCM, SCM, SCM, SCM,
-                                                      SCM, SCM, SCM, SCM, SCM, SCM, SCM, SCM,
-                                                      SCM, SCM, SCM, SCM, SCM, SCM, SCM, SCM,
-                                                      SCM, SCM, SCM, SCM, SCM, SCM, SCM, SCM,
-                                                      SCM, SCM, SCM, SCM, SCM, SCM, SCM, SCM,
-                                                      SCM, SCM, 256};
+  static SmallStationaryContextMap SCMap[nSCMaps] = { {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4},
+                                                      {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4},
+                                                      {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4},
+                                                      {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4},
+                                                      {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4},
+                                                      {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4},
+                                                      {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4},
+                                                      {9,4}, {9,4}, {0,8}};
   static StationaryMap Map[nMaps] ={      8,      8,      8,      2,      0, {13,4}, {13,4}, {13,4}, {13,4}, {13,4},
                                      {15,4}, {15,4}, {15,4}, {15,4}, {11,4}, {11,4}, {11,4}, {11,4}, { 9,4}, { 9,4},
                                      { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4},
@@ -5293,66 +5305,6 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
       }
 
       i=0;
-      SCMap[i++].set(N+p1-Np1-px);
-      SCMap[i++].set(N+p2-Np2-px);
-      SCMap[i++].set(W+p1-Wp1-px);
-      SCMap[i++].set(W+p2-Wp2-px);
-      SCMap[i++].set(NW+p1-NWp1-px);
-      SCMap[i++].set(NW+p2-NWp2-px);
-      SCMap[i++].set(NE+p1-NEp1-px);
-      SCMap[i++].set(NE+p2-NEp2-px);
-      SCMap[i++].set(NN+p1-NNp1-px);
-      SCMap[i++].set(NN+p2-NNp2-px);
-      SCMap[i++].set(WW+p1-WWp1-px);
-      SCMap[i++].set(WW+p2-WWp2-px);
-      SCMap[i++].set(W+N-NW-px);
-      SCMap[i++].set(W+N-NW+p1-Wp1-Np1+NWp1-px);
-      SCMap[i++].set(W+N-NW+p2-Wp2-Np2+NWp2-px);
-      SCMap[i++].set(W+NE-N-px);
-      SCMap[i++].set(W+NE-N+p1-Wp1-NEp1+Np1-px);
-      SCMap[i++].set(W+NE-N+p2-Wp2-NEp2+Np2-px);
-      SCMap[i++].set(W+NEE-NE-px);
-      SCMap[i++].set(W+NEE-NE+p1-Wp1-buffer(w-stride*2+1)+NEp1-px);
-      SCMap[i++].set(W+NEE-NE+p2-Wp2-buffer(w-stride*2+2)+NEp2-px);
-      SCMap[i++].set(N+NN-NNN-px);
-      SCMap[i++].set(N+NN-NNN+p1-Np1-NNp1+buffer(w*3+1)-px);
-      SCMap[i++].set(N+NN-NNN+p2-Np2-NNp2+buffer(w*3+2)-px);
-      SCMap[i++].set(N+NE-NNE-px);
-      SCMap[i++].set(N+NE-NNE+p1-Np1-NEp1+buffer(w*2-stride+1)-px);
-      SCMap[i++].set(N+NE-NNE+p2-Np2-NEp2+buffer(w*2-stride+2)-px);
-      SCMap[i++].set(N+NW-NNW-px);
-      SCMap[i++].set(N+NW-NNW+p1-Np1-NWp1+buffer(w*2+stride+1)-px);
-      SCMap[i++].set(N+NW-NNW+p2-Np2-NWp2+buffer(w*2+stride+2)-px);
-      SCMap[i++].set(NE+NW-NN-px);
-      SCMap[i++].set(NE+NW-NN+p1-NEp1-NWp1+NNp1-px);
-      SCMap[i++].set(NE+NW-NN+p2-NEp2-NWp2+NNp2-px);
-      SCMap[i++].set(NW+W-NWW-px);
-      SCMap[i++].set(NW+W-NWW+p1-NWp1-Wp1+buffer(w+stride*2+1)-px);
-      SCMap[i++].set(NW+W-NWW+p2-NWp2-Wp2+buffer(w+stride*2+2)-px);
-      SCMap[i++].set(W*2-WW-px);
-      SCMap[i++].set(W*2-WW+p1-Wp1*2+WWp1-px);
-      SCMap[i++].set(W*2-WW+p2-Wp2*2+WWp2-px);
-      SCMap[i++].set(N*2-NN-px);
-      SCMap[i++].set(N*2-NN+p1-Np1*2+NNp1-px);
-      SCMap[i++].set(N*2-NN+p2-Np2*2+NNp2-px);
-      SCMap[i++].set(NW*2-NNWW-px);
-      SCMap[i++].set(NW*2-NNWW+p1-NWp1*2+buffer(w*2+stride*2+1)-px);
-      SCMap[i++].set(NW*2-NNWW+p2-NWp2*2+buffer(w*2+stride*2+2)-px);
-      SCMap[i++].set(NE*2-NNEE-px);
-      SCMap[i++].set(NE*2-NNEE+p1-NEp1*2+buffer(w*2-stride*2+1)-px);
-      SCMap[i++].set(NE*2-NNEE+p2-NEp2*2+buffer(w*2-stride*2+2)-px);
-      SCMap[i++].set(N*3-NN*3+NNN+p1-Np1*3+NNp1*3-buffer(w*3+1)-px);
-      SCMap[i++].set(N*3-NN*3+NNN+p2-Np2*3+NNp2*3-buffer(w*3+2)-px);
-      SCMap[i++].set(N*3-NN*3+NNN-px);
-      SCMap[i++].set((W+NE*2-NNE)/2-px);
-      SCMap[i++].set((W+NE*3-NNE*3+buffer(w*3-stride))/2-px);
-      SCMap[i++].set((W+NE*2-NNE)/2+p1-(Wp1+NEp1*2-buffer(w*2-stride+1))/2-px);
-      SCMap[i++].set((W+NE*2-NNE)/2+p2-(Wp2+NEp2*2-buffer(w*2-stride+2))/2-px);
-      SCMap[i++].set(NNE+NE-buffer(w*3-stride)-px);
-      SCMap[i++].set(NNE+W-NN-px);
-      SCMap[i++].set(NNW+W-NNWW-px);
-
-      i=0;
       Map[i++].set((W&0xC0)|((N&0xC0)>>2)|((WW&0xC0)>>4)|(NN>>6));
       Map[i++].set((N&0xC0)|((NN&0xC0)>>2)|((NE&0xC0)>>4)|(NEE>>6));
       Map[i++].set(buf(1+(isPNG && x<2)));
@@ -5457,6 +5409,66 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
     Map[i++].set((((W+N)*3-NW*2)/4-px-B)*2+lsb);
     Map[i++].set((N-px-B)*2+lsb);
     Map[i++].set((NN-px-B)*2+lsb);
+
+    i=0;
+    SCMap[i++].set((N+p1-Np1-px-B)*2+lsb);
+    SCMap[i++].set((N+p2-Np2-px-B)*2+lsb);
+    SCMap[i++].set((W+p1-Wp1-px-B)*2+lsb);
+    SCMap[i++].set((W+p2-Wp2-px-B)*2+lsb);
+    SCMap[i++].set((NW+p1-NWp1-px-B)*2+lsb);
+    SCMap[i++].set((NW+p2-NWp2-px-B)*2+lsb);
+    SCMap[i++].set((NE+p1-NEp1-px-B)*2+lsb);
+    SCMap[i++].set((NE+p2-NEp2-px-B)*2+lsb);
+    SCMap[i++].set((NN+p1-NNp1-px-B)*2+lsb);
+    SCMap[i++].set((NN+p2-NNp2-px-B)*2+lsb);
+    SCMap[i++].set((WW+p1-WWp1-px-B)*2+lsb);
+    SCMap[i++].set((WW+p2-WWp2-px-B)*2+lsb);
+    SCMap[i++].set((W+N-NW-px-B)*2+lsb);
+    SCMap[i++].set((W+N-NW+p1-Wp1-Np1+NWp1-px-B)*2+lsb);
+    SCMap[i++].set((W+N-NW+p2-Wp2-Np2+NWp2-px-B)*2+lsb);
+    SCMap[i++].set((W+NE-N-px-B)*2+lsb);
+    SCMap[i++].set((W+NE-N+p1-Wp1-NEp1+Np1-px-B)*2+lsb);
+    SCMap[i++].set((W+NE-N+p2-Wp2-NEp2+Np2-px-B)*2+lsb);
+    SCMap[i++].set((W+NEE-NE-px-B)*2+lsb);
+    SCMap[i++].set((W+NEE-NE+p1-Wp1-buffer(w-stride*2+1)+NEp1-px-B)*2+lsb);
+    SCMap[i++].set((W+NEE-NE+p2-Wp2-buffer(w-stride*2+2)+NEp2-px-B)*2+lsb);
+    SCMap[i++].set((N+NN-NNN-px-B)*2+lsb);
+    SCMap[i++].set((N+NN-NNN+p1-Np1-NNp1+buffer(w*3+1)-px-B)*2+lsb);
+    SCMap[i++].set((N+NN-NNN+p2-Np2-NNp2+buffer(w*3+2)-px-B)*2+lsb);
+    SCMap[i++].set((N+NE-NNE-px-B)*2+lsb);
+    SCMap[i++].set((N+NE-NNE+p1-Np1-NEp1+buffer(w*2-stride+1)-px-B)*2+lsb);
+    SCMap[i++].set((N+NE-NNE+p2-Np2-NEp2+buffer(w*2-stride+2)-px-B)*2+lsb);
+    SCMap[i++].set((N+NW-NNW-px-B)*2+lsb);
+    SCMap[i++].set((N+NW-NNW+p1-Np1-NWp1+buffer(w*2+stride+1)-px-B)*2+lsb);
+    SCMap[i++].set((N+NW-NNW+p2-Np2-NWp2+buffer(w*2+stride+2)-px-B)*2+lsb);
+    SCMap[i++].set((NE+NW-NN-px-B)*2+lsb);
+    SCMap[i++].set((NE+NW-NN+p1-NEp1-NWp1+NNp1-px-B)*2+lsb);
+    SCMap[i++].set((NE+NW-NN+p2-NEp2-NWp2+NNp2-px-B)*2+lsb);
+    SCMap[i++].set((NW+W-NWW-px-B)*2+lsb);
+    SCMap[i++].set((NW+W-NWW+p1-NWp1-Wp1+buffer(w+stride*2+1)-px-B)*2+lsb);
+    SCMap[i++].set((NW+W-NWW+p2-NWp2-Wp2+buffer(w+stride*2+2)-px-B)*2+lsb);
+    SCMap[i++].set((W*2-WW-px-B)*2+lsb);
+    SCMap[i++].set((W*2-WW+p1-Wp1*2+WWp1-px-B)*2+lsb);
+    SCMap[i++].set((W*2-WW+p2-Wp2*2+WWp2-px-B)*2+lsb);
+    SCMap[i++].set((N*2-NN-px-B)*2+lsb);
+    SCMap[i++].set((N*2-NN+p1-Np1*2+NNp1-px-B)*2+lsb);
+    SCMap[i++].set((N*2-NN+p2-Np2*2+NNp2-px-B)*2+lsb);
+    SCMap[i++].set((NW*2-NNWW-px-B)*2+lsb);
+    SCMap[i++].set((NW*2-NNWW+p1-NWp1*2+buffer(w*2+stride*2+1)-px-B)*2+lsb);
+    SCMap[i++].set((NW*2-NNWW+p2-NWp2*2+buffer(w*2+stride*2+2)-px-B)*2+lsb);
+    SCMap[i++].set((NE*2-NNEE-px-B)*2+lsb);
+    SCMap[i++].set((NE*2-NNEE+p1-NEp1*2+buffer(w*2-stride*2+1)-px-B)*2+lsb);
+    SCMap[i++].set((NE*2-NNEE+p2-NEp2*2+buffer(w*2-stride*2+2)-px-B)*2+lsb);
+    SCMap[i++].set((N*3-NN*3+NNN+p1-Np1*3+NNp1*3-buffer(w*3+1)-px-B)*2+lsb);
+    SCMap[i++].set((N*3-NN*3+NNN+p2-Np2*3+NNp2*3-buffer(w*3+2)-px-B)*2+lsb);
+    SCMap[i++].set((N*3-NN*3+NNN-px-B)*2+lsb);
+    SCMap[i++].set(((W+NE*2-NNE)/2-px-B)*2+lsb);
+    SCMap[i++].set(((W+NE*3-NNE*3+buffer(w*3-stride))/2-px-B)*2+lsb);
+    SCMap[i++].set(((W+NE*2-NNE)/2+p1-(Wp1+NEp1*2-buffer(w*2-stride+1))/2-px-B)*2+lsb);
+    SCMap[i++].set(((W+NE*2-NNE)/2+p2-(Wp2+NEp2*2-buffer(w*2-stride+2))/2-px-B)*2+lsb);
+    SCMap[i++].set((NNE+NE-buffer(w*3-stride)-px-B)*2+lsb);
+    SCMap[i++].set((NNE+W-NN-px-B)*2+lsb);
+    SCMap[i++].set((NNW+W-NNWW-px-B)*2+lsb);
   }
 
   // Predict next bit
@@ -6689,8 +6701,7 @@ void wavModel(Mixer& m, int info, ModelStats *Stats = nullptr) {
   static Array<double> F{49*49*2}; //[49][49][2]
   static Array<double> L{49*49}; //[49][49]
   static const double a=0.996,a2=1.0/a;
-  static const int SC=0x10000;
-  static SmallStationaryContextMap scm1(SC), scm2(SC), scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC);
+  static SmallStationaryContextMap scm1(8,8), scm2(8,8), scm3(8,8), scm4(8,8), scm5(8,8), scm6(8,8), scm7(8,8);
   static ContextMap cm(MEM*4, 11);
   static int bits, channels, w, ch;
   static int z1, z2, z3, z4, z5, z6, z7;
@@ -8503,9 +8514,9 @@ public:
     if(level>=4)dmcforest=new dmcForest();
 
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(983+288, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer(985+288, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
     #else
-      m=MixerFactory::CreateMixer(983, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer(985, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
     #endif //USE_WORD_MODEL
 
       memset(&cxt[0], 0, sizeof(cxt));
