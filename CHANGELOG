@@ -1177,3 +1177,10 @@ paq8px_v152
 2018.07.30
 - Modified the SmallStationaryContextMap to allow for variable bits-per-context
 - Improved the 24/32bpp image model, reduced the memory usage
+
+paq8px_v153
+2018.08.01
+- New text detection heuristic
+- New EOL transform
+- Modified text pre-training
+- On text blocks the exeModel is no longer used, and a different SSE stage is used
