@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "152"  //update version here before publishing your changes
+#define PROGVERSION  "153"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -929,11 +929,11 @@ public:
 
 /////////////////////// Global context /////////////////////////
 
-typedef enum {DEFAULT=0, FILECONTAINER, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF, PNG8, PNG8GRAY, PNG24, PNG32} Blocktype;
+typedef enum {DEFAULT=0, FILECONTAINER, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF, PNG8, PNG8GRAY, PNG24, PNG32, TEXT, TEXT_EOL} Blocktype;
 
 inline bool hasRecursion(Blocktype ft) { return ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft== FILECONTAINER; }
 inline bool hasInfo(Blocktype ft) { return ft==IMAGE1 || ft==IMAGE4 || ft==IMAGE8 || ft==IMAGE8GRAY || ft==IMAGE24 || ft==IMAGE32 || ft==AUDIO || ft==PNG8 || ft==PNG8GRAY || ft==PNG24 || ft==PNG32; }
-inline bool hasTransform(Blocktype ft) { return ft==IMAGE24 || ft==IMAGE32 || ft==EXE || ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF; }
+inline bool hasTransform(Blocktype ft) { return ft==IMAGE24 || ft==IMAGE32 || ft==EXE || ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft==TEXT_EOL; }
 
 int level=0; //this value will be overwritten at the beginning of compression/decompression
 #define MEM (U64(65536)<<level)
@@ -951,6 +951,7 @@ U8 options=0;
 
 struct ModelStats{
   U32 XML, x86_64, Record;
+  Blocktype blockType;
 };
 
 // Global context set by Predictor and available to all models.
@@ -1664,40 +1665,39 @@ StateMap::StateMap(int n): N(n), cxt(0), t(n) {
 
 // An APM maps a probability and a context to a new probability.  Methods:
 //
-// APM a(n) creates with n contexts using 96*n bytes memory.
+// APM a(n) creates with n contexts using 4*STEPS*n bytes memory.
 // a.pp(y, pr, cx, limit) updates and returns a new probability (0..4095)
 //     like with StateMap.  pr (0..4095) is considered part of the context.
-//     The output is computed by interpolating pr into 24 ranges nonlinearly
+//     The output is computed by interpolating pr into STEPS ranges nonlinearly
 //     with smaller ranges near the ends.  The initial output is pr.
 //     y=(0..1) is the last bit.  cx=(0..n-1) is the other context.
 //     limit=(0..1023) defaults to 255.
 
-class APM: public StateMap {
+template <int steps> class APM : public StateMap {
+  static_assert(steps>4, "APM: number of steps must be a positive integer bigger than 4");
 public:
-  APM(int n);
-  int p(int pr, int cx, int limit=255) {
+  APM(int n) : StateMap(n*steps) {
+    for (int i=0; i<N; ++i) {
+      int p = ((i%steps*2+1)*4096)/(steps*2)-2048;
+      t[i] = (U32(squash(p))<<20)+6; //initial count: 6
+    }
+  }
+  int p(int pr, int cx, const int limit=0xFF) {
     assert(pr>=0 && pr<4096);
-    assert(cx>=0 && cx<N/24);
+    assert(cx>=0 && cx<N/steps);
     assert(limit>0 && limit<1024);
     //adapt (update prediction from previous pass)
     update(limit);
     //predict
-    pr=(stretch(pr)+2048)*23;
-    int wt=pr&0xfff;  // interpolation weight (0..4095)
-    cx=cx*24+(pr>>12);
+    pr = (stretch(pr)+2048)*(steps-1);
+    int wt = pr&0xfff;  // interpolation weight (0..4095)
+    cx = cx*steps+(pr>>12);
     assert(cx>=0 && cx<N-1);
-    cxt=cx+(wt>>11);
-    pr=((t[cx]>>13)*(4096-wt)+(t[cx+1]>>13)*wt)>>19;
+    cxt = cx+(wt>>11);
+    pr = ((t[cx]>>13)*(4096-wt)+(t[cx+1]>>13)*wt)>>19;
     return pr;
   }
 };
-
-APM::APM(int n): StateMap(n*24) {
-  for (int i=0; i<N; ++i) {
-    int p=((i%24*2+1)*4096)/48-2048;
-    t[i]=(U32(squash(p))<<20)+6; //initial count: 6
-  }
-}
 
 
 //////////////////////////// hash //////////////////////////////
@@ -4575,7 +4575,7 @@ public:
 #ifdef USE_WORDMODEL
 
 static U32 frstchar=0, spafdo=0, spaces=0, spacecount=0, words=0, wordcount=0,wordlen=0,wordlen1=0;
-void wordModel(Mixer& m, Blocktype blocktype) {
+void wordModel(Mixer& m, ModelStats *Stats = nullptr) {
   static U32 word0=0, word1=0, word2=0, word3=0, word4=0, word5=0;  // hashes
   static U32 xword0=0,xword1=0,xword2=0,cword0=0,ccword=0;
   static U32 number0=0, number1=0;  // hashes
@@ -4664,7 +4664,7 @@ void wordModel(Mixer& m, Blocktype blocktype) {
         if (c==']'&& (frstchar==':' || frstchar=='*')) xword0=word0;
         ccword=0;
         word0=wordlen=0;
-        if((c=='.'||c=='!'||c=='?' ||c=='}' ||c==')') && buf(2)!=10 && blocktype!=EXE) f=1;
+        if((c=='.'||c=='!'||c=='?' ||c=='}' ||c==')') && buf(2)!=10 && (Stats && Stats->blockType!=EXE)) f=1;
       }
       if ((c4&0xFFFF)==0x3D3D) xword1=word1,xword2=word2; // ==
       if ((c4&0xFFFF)==0x2727) xword1=word1,xword2=word2; // ''
@@ -4806,7 +4806,7 @@ struct dBASE {
   int Start, End;
 };
 
-void recordModel(Mixer& m, Blocktype blocktype, ModelStats *Stats = nullptr) {
+void recordModel(Mixer& m, ModelStats *Stats = nullptr) {
   static Array<int> cpos1(256) , cpos2(256), cpos3(256), cpos4(256);
   static Array<int> wpos1(0x10000); // buf(1..2) -> last position
   static int rlen[3] = {2,3,4}; // run length and 2 candidates
@@ -4831,7 +4831,7 @@ void recordModel(Mixer& m, Blocktype blocktype, ModelStats *Stats = nullptr) {
       // detect dBASE tables
       if (blpos==0 || (dbase.Version>0 && blpos>=dbase.End))
         dbase.Version = 0;
-      else if (dbase.Version==0 && blocktype==DEFAULT && blpos>=31){
+      else if (dbase.Version==0 && (Stats && Stats->blockType==DEFAULT) && blpos>=31){
         U8 b = buf(32);
         if ( ((b&7)==3 || (b&7)==4 || (b>>4)==3 || b==0xF5) &&
              ((b=buf(30))>0 && b<13) &&
@@ -6028,7 +6028,7 @@ private:
     Array<U8*> cp{N};  // context pointers
     StateMap sm[N]{};
     Mixer *m1;
-    APM a1{0x8000}, a2{0x20000};
+    APM<24> a1{0x8000}, a2{0x20000};
 
 public:
   JpegModel(): t(MEM) {
@@ -6839,8 +6839,8 @@ void wavModel(Mixer& m, int info, ModelStats *Stats = nullptr) {
   cm.mix(m);
   if (level>=4){
     if (Stats)
-      (*Stats).Record = (w<<16)|((*Stats).Record&0xFFFF);
-    recordModel(m, AUDIO, Stats);
+      Stats->Record = (w<<16)|(Stats->Record&0xFFFF);
+    recordModel(m, Stats);
   }
   col++;
   if(col==w*8)col=0;
@@ -8533,25 +8533,29 @@ public:
   int Predict(ModelStats *Stats = nullptr);
 };
 
-void ContextModel::Train(const char* Dictionary, int Iterations){
+void ContextModel::Train(const char* Dictionary, int Iterations) {
   FileDisk f;
   printf("Pre-training main model...");
   OpenFromMyFolder::anotherfile(&f, Dictionary);
   int i;
   while (Iterations-->0) {
     f.setpos(0);
-    i=pos=0;
+    i=SPACE, pos=0;
     do {
-      if (!i||i==10||i==13)
-        i = SPACE;
-      UpdateContexts(buf(1));
+      if (i==CARRIAGE_RETURN)
+        continue;
+      else if (i==NEW_LINE){
+        i=SPACE;
+        memset(&cxt[0], 0, sizeof(cxt));
+      }
       cm.Train(i);
       buf[pos++]=i;
+      UpdateContexts(i);
     } while ((i=f.getchar())!=EOF);
   }
   printf(" done [%s, %d bytes]\n", Dictionary, pos);
   f.close();
-  pos=0;
+  pos = 0;
   memset(&cxt[0], 0, sizeof(cxt));
   memset(&buf[0], 0, buf.size());
 }
@@ -8586,6 +8590,8 @@ int ContextModel::Predict(ModelStats *Stats){
     }
     if (blpos==0) blocktype=next_blocktype; //got all the info - switch to next blocktype
     if (blocksize==0) blocktype=DEFAULT;
+    if (Stats)
+      Stats->blockType = blocktype;
   }
 
   m->update();
@@ -8630,9 +8636,9 @@ int ContextModel::Predict(ModelStats *Stats){
   if (level>=4 && blocktype!=IMAGE1) {
     sparseModel(*m,matchlength,order);
     distanceModel(*m);
-    recordModel(*m, blocktype, Stats);
+    recordModel(*m, Stats);
     #ifdef USE_WORDMODEL
-    wordModel(*m, blocktype);
+    wordModel(*m, Stats);
     #endif //USE_WORDMODEL
     indirectModel(*m);
     dmcforest->mix(*m);
@@ -8641,7 +8647,8 @@ int ContextModel::Predict(ModelStats *Stats){
     #ifdef USE_TEXTMODEL
     textModel.Predict(*m, buf, Stats);
     #endif //USE_TEXTMODEL
-    exeModel1.Predict(*m, blocktype==EXE, Stats);
+    if (blocktype!=TEXT && blocktype!=TEXT_EOL)
+      exeModel1.Predict(*m, blocktype==EXE, Stats);
   }
 
   order = order-2;
@@ -8676,7 +8683,9 @@ int ContextModel::Predict(ModelStats *Stats){
 
 class Predictor {
   int pr;  // next prediction
-  ContextModel ContextModel2;
+  ContextModel contextModel;
+  APM<24> APMs[4];
+  APM1 APM1s[7];
   ModelStats stats;
 public:
   Predictor();
@@ -8684,14 +8693,11 @@ public:
   void update();
 };
 
-Predictor::Predictor(): pr(2048) {
+Predictor::Predictor() : pr(2048), APMs{ 256, 0x10000, 0x10000, 0x10000 }, APM1s{ 256, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000 } {
   memset(&stats, 0, sizeof(ModelStats));
 }
 
 void Predictor::update() {
-  static APM1 a(256), a1(0x10000), a2(0x10000), a3(0x10000),
-                      a4(0x10000), a5(0x10000), a6(0x10000);
-
   // Update global context: pos, bpos, c0, c4, buf, f4
   c0+=c0+y;
   if (c0>=256) {
@@ -8708,23 +8714,31 @@ void Predictor::update() {
   }
   bpos=(bpos+1)&7;
 
-  int pr0=ContextModel2.Predict(&stats);
-  if (ContextModel2.Bypass) {
+  int pr0=contextModel.Predict(&stats);
+  if (contextModel.Bypass) {
     pr=pr0;
     return;
   }
-  
-  // Filter the context model with APMs
-  pr=a.p(pr0, c0);
 
-  int pr1=a1.p(pr0, c0+256*buf(1));
-  int pr2=a2.p(pr0, (c0^hash(buf(1), buf(2)))&0xffff);
-  int pr3=a3.p(pr0, (c0^hash(buf(1), buf(2), buf(3)))&0xffff);
+  // Filter the context model with APMs
+  int pr1, pr2, pr3;
+  if (stats.blockType==TEXT || stats.blockType==TEXT_EOL){
+    pr =APMs[0].p(pr0, c0, 0x3FF);
+    pr1=APMs[1].p(pr0, c0+256*buf(1), 0x3FF);
+    pr2=APMs[2].p(pr0, (c0^hash(buf(1), buf(2)))&0xffff, 0x3FF);
+    pr3=APMs[3].p(pr0, (c0^hash(buf(1), buf(2), buf(3)))&0xffff, 0x3FF);
+  }
+  else{
+    pr =APM1s[0].p(pr0, c0);
+    pr1=APM1s[1].p(pr0, c0+256*buf(1));
+    pr2=APM1s[2].p(pr0, (c0^hash(buf(1), buf(2)))&0xffff);
+    pr3=APM1s[3].p(pr0, (c0^hash(buf(1), buf(2), buf(3)))&0xffff);
+  }
   pr0=(pr0+pr1+pr2+pr3+2)>>2;
 
-  pr1=a4.p(pr, c0+256*buf(1));
-  pr2=a5.p(pr, (c0^hash(buf(1), buf(2)))&0xffff);
-  pr3=a6.p(pr, (c0^hash(buf(1), buf(2), buf(3)))&0xffff);
+  pr1=APM1s[4].p(pr, c0+256*buf(1));
+  pr2=APM1s[5].p(pr, (c0^hash(buf(1), buf(2)))&0xffff);
+  pr3=APM1s[6].p(pr, (c0^hash(buf(1), buf(2), buf(3)))&0xffff);
   pr=(pr+pr1+pr2+pr3+2)>>2;
 
   pr=(pr+pr0+1)>>1;
@@ -8855,9 +8869,6 @@ Encoder::Encoder(Mode m, File *f):
     for (int i=0; i<4; ++i)
       x=(x<<8)+(archive->getchar()&255);
   }
-  for (int i=0; i<1024; ++i)
-    dt[i]=16384/(i+i+3);
-
 }
 
 void Encoder::flush() {
@@ -9076,6 +9087,20 @@ bool IsGrayscalePalette(File *in, int n = 256, int isRGBA = 0){
   return (res>>8)>0;
 }
 
+#define MIN_TEXT_SIZE 0x400 //1KB
+#define MAX_TEXT_MISSES 2 //number of misses in last 32 bytes before resetting
+struct TextInfo {
+  U64 start;
+  U32 lastSpace;
+  U32 lastNL;
+  U32 wordLength;
+  U32 misses;
+  U32 missCount;
+  U32 zeroRun;
+  U32 spaceRun;
+  bool isLetter, isUTF8, needsEolTransform, seenNL;
+};
+
 // Detect blocks
 Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
   //TODO: Large file support
@@ -9109,7 +9134,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
   int b64s=0,b64i=0,b64line=0,b64nl=0; // For base64 detection
   int gif=0,gifa=0,gifi=0,gifw=0,gifc=0,gifb=0,gifplt=0,gifgray=0; // For GIF detection
   int png=0, pngw=0, pngh=0, pngbps=0, pngtype=0, pnggray=0, lastchunk=0, nextchunk=0; // For PNG detection
-
+  TextInfo text = {0};
   // For image detection
   static int deth=0,detd=0;  // detected header/data size in bytes
   static Blocktype dett;  // detected block type
@@ -9656,6 +9681,66 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
       if ((b64s==4 && i-b64i>128) || (b64s==5 && i-b64i>512 && i-b64i<(1<<27))) return in->setpos(start+b64i),detd=i-b64i,BASE64;
       if (b64s>3) b64s=0;
     }
+
+    // detect text
+    text.isLetter = tolower(c)!=toupper(c);
+    text.isUTF8 = ((c!=0xC0 && c!=0xC1 && c<0xF5) && (
+        (c<0x80) ||
+        // possible 1st byte of UTF8 sequence
+        ((buf0&0xC000)!=0xC000 && ((c&0xE0)==0xC0 || (c&0xF0)==0xE0 || (c&0xF8)==0xF0)) ||
+        // possible 2nd byte of UTF8 sequence
+        ((buf0&0xE0C0)==0xC080 && (buf0&0xFE00)!=0xC000) || (buf0&0xF0C0)==0xE080 || ((buf0&0xF8C0)==0xF080 && ((buf0>>8)&0xFF)<0xF5) ||
+        // possible 3rd byte of UTF8 sequence
+        (buf0&0xF0C0C0)==0xE08080 || ((buf0&0xF8C0C0)==0xF08080 && ((buf0>>16)&0xFF)<0xF5) ||
+        // possible 4th byte of UTF8 sequence
+        ((buf0&0xF8C0C0C0)==0xF0808080 && (buf0>>24)<0xF5)
+    ));
+    text.lastNL = (c==NEW_LINE || c==CARRIAGE_RETURN)?0:text.lastNL+1;
+    if (c==SPACE || c==TAB){
+      text.lastSpace = 0;
+      text.spaceRun++;
+    }
+    else{
+      text.lastSpace++;
+      text.spaceRun = 0;
+    }
+    text.wordLength = (text.isLetter)?text.wordLength+1:0;
+    text.missCount-=text.misses>>31;
+    text.misses<<=1;
+    text.zeroRun=(!c && text.zeroRun<32)?text.zeroRun+1:0;
+    if (c==NEW_LINE){
+      if (!text.seenNL)
+        text.needsEolTransform = true;
+      text.seenNL = true;
+      text.needsEolTransform&=U8(buf0>>8)==CARRIAGE_RETURN;
+    }
+    if ((c<SPACE && c!=TAB && (text.zeroRun<2 || text.zeroRun>8) && text.lastNL!=0) || 
+        ((buf0&0xFF00)==(CARRIAGE_RETURN<<8) && c!=NEW_LINE) ||
+        (text.spaceRun>8 && text.lastNL>256) ||
+        (!text.isLetter && !text.isUTF8 && (
+          text.lastNL>128 ||
+		      text.lastSpace > std::max<U32>({ text.lastNL, text.wordLength*8, 64u }) ||
+          text.wordLength>32)
+        )
+     ) {
+        text.misses|=1;
+        text.missCount++;
+        int length = i-text.start-1;
+        if ((length<MIN_TEXT_SIZE || (png || pdfimw || cdi || soi || pgm || rgbi || tga || gif || b64s))){
+          text = {0};
+          text.start = i+1;
+        }
+        else if (text.missCount>MAX_TEXT_MISSES) {
+          in->setpos(start + text.start);
+          detd = length;
+          return (text.needsEolTransform)?TEXT_EOL:TEXT;
+        }
+    }
+  }
+  if (n-text.start>=MIN_TEXT_SIZE){
+    in->setpos(start + text.start);
+    detd = n-text.start;
+    return (text.needsEolTransform)?TEXT_EOL:TEXT;
   }
   return type;
 }
@@ -9869,6 +9954,49 @@ U64 decode_im32(Encoder& en, U64 size, int width, File *out, FMode mode, U64 &di
     }
   }
   return size;
+}
+
+// EOL transform
+
+void encode_eol(File *in, File *out, U64 len) {
+  U8 B=0, pB=0;
+  for (int i=0; i<(int)len; i++){
+    B = in->getchar();
+    if (pB==CARRIAGE_RETURN && B!=NEW_LINE)
+      out->putchar(pB);
+    if (B!=CARRIAGE_RETURN)
+      out->putchar(B);
+    pB = B;
+  }
+  if (B==CARRIAGE_RETURN)
+    out->putchar(B);
+}
+
+U64 decode_eol(Encoder& en, U64 size, File *out, FMode mode, U64 &diffFound) {
+  U8 B;
+  for (int i=0; i<(int)size; i++){
+    if ((B=en.decompress())==NEW_LINE){
+      if (mode==FDECOMPRESS)
+        out->putchar(CARRIAGE_RETURN);
+      else if (mode == FCOMPARE){
+        if (out->getchar()!=CARRIAGE_RETURN && !diffFound){
+          diffFound=size-i;
+          break;
+        }
+      }
+    }
+    if (mode==FDECOMPRESS)
+      out->putchar(B);
+    else if (mode==FCOMPARE){
+      if (B!=out->getchar() && !diffFound){
+        diffFound=size-i;
+        break;
+      }
+    }
+    if (mode == FDECOMPRESS && !(i&0xFFF))
+      en.print_status();
+  }
+  return out->curpos();
 }
 
 // EXE transform: <encoded-size> <begin> <block>...
@@ -10478,6 +10606,7 @@ U64 decode_func(Blocktype type, Encoder &en, File *tmp, U64 len, int info, File 
   if (type==IMAGE24) return decode_bmp(en, len, info, out, mode, diffFound);
   else if (type==IMAGE32) return decode_im32(en, len, info, out, mode, diffFound);
   else if (type==EXE) return decode_exe(en, len, out, mode, diffFound);
+  else if (type == TEXT_EOL) return decode_eol(en, len, out, mode, diffFound);
   else if (type==CD) return decode_cd(tmp, len, out, mode, diffFound);
   #ifdef USE_ZLIB
   else if (type==ZLIB) return decode_zlib(tmp, len, out, mode, diffFound);
@@ -10492,6 +10621,7 @@ U64 encode_func(Blocktype type, File *in, File *tmp, U64 len, int info, int &hdr
   if (type==IMAGE24) encode_bmp(in, tmp, len, info);
   else if (type==IMAGE32) encode_im32(in, tmp, len, info);
   else if (type==EXE) encode_exe(in, tmp, len, info);
+  else if (type == TEXT_EOL) encode_eol(in, tmp, len);
   else if (type==CD) encode_cd(in, tmp, len, info);
   #ifdef USE_ZLIB
   else if (type==ZLIB) return encode_zlib(in, tmp, len, hdrsize)?0:1;
@@ -10550,8 +10680,8 @@ void transform_encode_block(Blocktype type, File *in, U64 len, Encoder &en, int 
 }
 
 void compressRecursive(File *in, const U64 blocksize, Encoder &en, String &blstr, int recursion_level, float p1, float p2) {
-  static const char* typenames[20]={"default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
-    "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif", "png-8b", "png-8b-grayscale", "png-24b", "png-32b"};
+  static const char* typenames[22]={"default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
+    "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif", "png-8b", "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol"};
   static const char* audiotypes[4]={"8b-mono", "8b-stereo", "16b-mono","16b-stereo"};
   Blocktype type=DEFAULT;
   int blnum=0, info=0;  // image width or audio type
@@ -11178,7 +11308,8 @@ int main(int argc, char** argv) {
     // Set globals according to requested compression level
     assert(level>=0 && level<=9);
     buf.setsize(MEM*8);
-
+    for (int i = 0; i<1024; ++i)
+      dt[i] = 16384 / (i + i + 3);
     Encoder en(mode, &archive);
     U64 content_size=0;
     U64 total_size=0;
