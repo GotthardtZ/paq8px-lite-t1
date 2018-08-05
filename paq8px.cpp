@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "153"  //update version here before publishing your changes
+#define PROGVERSION  "154"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -951,6 +951,19 @@ U8 options=0;
 
 struct ModelStats{
   U32 XML, x86_64, Record;
+  struct {
+    U8 state:3;
+    U8 lastPunct:5;
+    U8 wordLength:4;
+    U8 boolmask:4;
+    U8 firstLetter;
+    U8 mask;
+  } Text;
+  struct {
+    U32 length;
+    U8 byte;
+  } Match;
+  U64 Misses;
   Blocktype blockType;
 };
 
@@ -4353,6 +4366,17 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
   else
     Info.UTF8Remaining = (leadingBitsSet!=1)?(c!=0xC0 && c!=0xC1 && c<0xF5)?(leadingBitsSet-(leadingBitsSet>0)):-1:0;
   Info.maskPunct = (BytePos[',']>BytePos['.'])|((BytePos[',']>BytePos['!'])<<1)|((BytePos[',']>BytePos['?'])<<2)|((BytePos[',']>BytePos[':'])<<3)|((BytePos[',']>BytePos[';'])<<4);
+  if (Stats) {
+    Stats->Text.state = State;
+    Stats->Text.lastPunct = std::min<U32>(0x1F, Info.lastPunct);
+    Stats->Text.wordLength = std::min<U32>(0xF, Info.wordLength[0]);
+    Stats->Text.boolmask = (Info.lastDigit<Info.wordLength[0]+Info.wordGap)|
+                          ((Info.lastUpper<Info.lastLetter+Info.wordLength[1])<<1)|
+                          ((Info.lastPunct<Info.wordLength[0]+Info.wordGap)<<2)|
+                          ((Info.lastUpper<Info.wordLength[0])<<3);
+    Stats->Text.firstLetter = Info.firstLetter;
+    Stats->Text.mask = Info.masks[1]&0xFF;
+  }
 }
 
 void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
@@ -4495,6 +4519,8 @@ private:
     SCM[0].set(buffer[index]);
     SCM[1].set(pos);
     Map.set((buffer[index]<<8)|buffer(1));
+    if (Stats)
+      Stats->Match.byte = (length)?buffer[index]:0;
   }
 public:
   bool Bypass;
@@ -4564,6 +4590,8 @@ public:
       Map.mix(mixer, 1, 4, 0xFF);
     }
     BypassPrediction = (length)?bit*0xFFF:0x7FF;
+    if (Stats)
+      Stats->Match.length = length;
     return length;
   }
 };
@@ -8693,13 +8721,14 @@ public:
   void update();
 };
 
-Predictor::Predictor() : pr(2048), APMs{ 256, 0x10000, 0x10000, 0x10000 }, APM1s{ 256, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000 } {
+Predictor::Predictor() : pr(2048), APMs{ 0x010000, 0x10000, 0x10000, 0x10000 }, APM1s{ 256, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000 } {
   memset(&stats, 0, sizeof(ModelStats));
 }
 
 void Predictor::update() {
   // Update global context: pos, bpos, c0, c4, buf, f4
   c0+=c0+y;
+  stats.Misses+=stats.Misses+((pr>>11)!=y);
   if (c0>=256) {
     buf[pos++]=c0;
     c4=(c4<<8)+c0-256;
@@ -8722,26 +8751,40 @@ void Predictor::update() {
 
   // Filter the context model with APMs
   int pr1, pr2, pr3;
-  if (stats.blockType==TEXT || stats.blockType==TEXT_EOL){
-    pr =APMs[0].p(pr0, c0, 0x3FF);
-    pr1=APMs[1].p(pr0, c0+256*buf(1), 0x3FF);
-    pr2=APMs[2].p(pr0, (c0^hash(buf(1), buf(2)))&0xffff, 0x3FF);
-    pr3=APMs[3].p(pr0, (c0^hash(buf(1), buf(2), buf(3)))&0xffff, 0x3FF);
-  }
-  else{
-    pr =APM1s[0].p(pr0, c0);
-    pr1=APM1s[1].p(pr0, c0+256*buf(1));
-    pr2=APM1s[2].p(pr0, (c0^hash(buf(1), buf(2)))&0xffff);
-    pr3=APM1s[3].p(pr0, (c0^hash(buf(1), buf(2), buf(3)))&0xffff);
-  }
-  pr0=(pr0+pr1+pr2+pr3+2)>>2;
+  switch (stats.blockType) {
+    case TEXT: case TEXT_EOL: {
+      int limit=0x3FF>>((blpos<0xFFF)*2);
+      pr  = APMs[0].p(pr0, (c0<<8)|(stats.Text.mask&0xF)|((stats.Misses&0xF)<<4), limit);
+      pr1 = APMs[1].p(pr0, hash(bpos, stats.Misses&3, buf(1), buf(2), stats.Text.mask>>4)&0xFFFF, limit);
+      pr2 = APMs[2].p(pr0, hash(c0, stats.Match.byte, std::min<U32>(3, ilog2(stats.Match.length+1)))&0xFFFF, limit);
+      pr3 = APMs[3].p(pr0, hash(c0, buf(1), buf(2), stats.Text.firstLetter)&0xFFFF, limit);
 
-  pr1=APM1s[4].p(pr, c0+256*buf(1));
-  pr2=APM1s[5].p(pr, (c0^hash(buf(1), buf(2)))&0xffff);
-  pr3=APM1s[6].p(pr, (c0^hash(buf(1), buf(2), buf(3)))&0xffff);
-  pr=(pr+pr1+pr2+pr3+2)>>2;
+      pr0 = (pr0+pr1+pr2+pr3+2)>>2;
 
-  pr=(pr+pr0+1)>>1;
+      pr1 = APM1s[4].p(pr0, hash(stats.Match.byte, std::min<U32>(3, ilog2(stats.Match.length+1)), buf(1))&0xFFFF);
+      pr2 = APM1s[5].p(pr, hash(c0, buf(1), buf(2), buf(3))&0xFFFF, 6);
+      pr3 = APM1s[6].p(pr, hash(c0, buf(2), buf(3), buf(4))&0xFFFF, 6);
+      
+      pr = (pr+pr1+pr2+pr3+2)>>2;
+      pr = (pr+pr0+1)>>1;
+      break;
+    }
+    default: {
+      pr  = APM1s[0].p(pr0, c0);
+      pr1 = APM1s[1].p(pr0, c0+256*buf(1));
+      pr2 = APM1s[2].p(pr0, (c0^hash(buf(1), buf(2)))&0xFFFF);
+      pr3 = APM1s[3].p(pr0, (c0^hash(buf(1), buf(2), buf(3)))&0xFFFF);
+
+      pr0 = (pr0+pr1+pr2+pr3+2)>>2;
+
+      pr1 = APM1s[4].p(pr, c0+256*buf(1));
+      pr2 = APM1s[5].p(pr, (c0^hash(buf(1), buf(2)))&0xFFFF);
+      pr3 = APM1s[6].p(pr, (c0^hash(buf(1), buf(2), buf(3)))&0xFFFF);
+
+      pr = (pr+pr1+pr2+pr3+2)>>2;
+      pr = (pr+pr0+1)>>1;
+    }
+  }
 }
 
 //////////////////////////// Encoder ////////////////////////////
