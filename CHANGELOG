@@ -1184,3 +1184,7 @@ paq8px_v153
 - New EOL transform
 - Modified text pre-training
 - On text blocks the exeModel is no longer used, and a different SSE stage is used
+
+paq8px_v154
+2018.08.05
+- Improved SSE stage for text blocks
