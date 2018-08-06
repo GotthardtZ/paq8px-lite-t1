@@ -1188,3 +1188,7 @@ paq8px_v153
 paq8px_v154
 2018.08.05
 - Improved SSE stage for text blocks
+
+paq8px_v154a
+2018.08.06
+- Fix bug in EOL transform decode routine

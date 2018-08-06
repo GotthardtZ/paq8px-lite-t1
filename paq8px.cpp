@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "154"  //update version here before publishing your changes
+#define PROGVERSION  "154a"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -10017,7 +10017,8 @@ void encode_eol(File *in, File *out, U64 len) {
 
 U64 decode_eol(Encoder& en, U64 size, File *out, FMode mode, U64 &diffFound) {
   U8 B;
-  for (int i=0; i<(int)size; i++){
+  U64 count = 0;
+  for (int i=0; i<(int)size; i++, count++){
     if ((B=en.decompress())==NEW_LINE){
       if (mode==FDECOMPRESS)
         out->putchar(CARRIAGE_RETURN);
@@ -10027,6 +10028,7 @@ U64 decode_eol(Encoder& en, U64 size, File *out, FMode mode, U64 &diffFound) {
           break;
         }
       }
+      count++;
     }
     if (mode==FDECOMPRESS)
       out->putchar(B);
@@ -10039,7 +10041,7 @@ U64 decode_eol(Encoder& en, U64 size, File *out, FMode mode, U64 &diffFound) {
     if (mode == FDECOMPRESS && !(i&0xFFF))
       en.print_status();
   }
-  return out->curpos();
+  return count;
 }
 
 // EXE transform: <encoded-size> <begin> <block>...
