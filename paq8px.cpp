@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "154a"  //update version here before publishing your changes
+#define PROGVERSION  "155"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -963,6 +963,13 @@ struct ModelStats{
     U32 length;
     U8 byte;
   } Match;
+  struct {
+    struct {
+      U8 WW, W, NN, N, Wp1, Np1;
+    } pixels;
+    U8 plane;
+    U8 ctx;
+  } Image;
   U64 Misses;
   Blocktype blockType;
 };
@@ -5112,7 +5119,7 @@ inline U8 Paeth(U8 W, U8 N, U8 NW){
 
 // Model for filtered (PNG) or unfiltered 24/32-bit image data
 
-void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
+void im24bitModel(Mixer& m, int info, ModelStats *Stats = nullptr, int alpha=0, int isPNG=0) {
   static const int nMaps = 94;
   static const int nSCMaps = 59;
   static ContextMap cm(MEM*4, 45);
@@ -5337,6 +5344,16 @@ void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
       Map[i++].set((N&0xC0)|((NN&0xC0)>>2)|((NE&0xC0)>>4)|(NEE>>6));
       Map[i++].set(buf(1+(isPNG && x<2)));
       Map[i++].set(min(color, stride-1));
+      if (Stats) {
+        Stats->Image.plane = std::min<int>(color, stride-1);
+        Stats->Image.pixels.W = W;
+        Stats->Image.pixels.N = N;
+        Stats->Image.pixels.NN = NN;
+        Stats->Image.pixels.WW = WW;
+        Stats->Image.pixels.Wp1 = Wp1;
+        Stats->Image.pixels.Np1 = Np1;
+        Stats->Image.ctx = ctx[0]>>3;
+      }
     }
   }
   if ((bpos==0 || bpos==4) && (x>0 || !isPNG)) {
@@ -8638,12 +8655,12 @@ int ContextModel::Predict(ModelStats *Stats){
   if (blocktype==IMAGE4) return im4bitModel(*m, blockinfo), m->p();
   if (blocktype==IMAGE8) return im8bitModel(*m, blockinfo), m->p();
   if (blocktype==IMAGE8GRAY) return im8bitModel(*m, blockinfo, 1), m->p(0,1);
-  if (blocktype==IMAGE24) return im24bitModel(*m, blockinfo), m->p(1,1);
-  if (blocktype==IMAGE32) return im24bitModel(*m, blockinfo, 1), m->p();
+  if (blocktype==IMAGE24) return im24bitModel(*m, blockinfo, Stats), m->p(1,1);
+  if (blocktype==IMAGE32) return im24bitModel(*m, blockinfo, Stats, 1), m->p();
   if (blocktype==PNG8) return im8bitModel(*m, blockinfo, 0, 1), m->p();
   if (blocktype==PNG8GRAY) return im8bitModel(*m, blockinfo, 1, 1), m->p(0,1);
-  if (blocktype==PNG24) return im24bitModel(*m, blockinfo, 0, 1), m->p(1,1);
-  if (blocktype==PNG32) return im24bitModel(*m, blockinfo, 1, 1), m->p();
+  if (blocktype==PNG24) return im24bitModel(*m, blockinfo, Stats, 0, 1), m->p(1,1);
+  if (blocktype==PNG32) return im24bitModel(*m, blockinfo, Stats, 1, 1), m->p();
   #ifdef USE_WAVMODEL
   if (blocktype==AUDIO) return wavModel(*m, blockinfo, Stats), m->p();
   #endif //USE_WAVMODEL
@@ -8712,8 +8729,17 @@ int ContextModel::Predict(ModelStats *Stats){
 class Predictor {
   int pr;  // next prediction
   ContextModel contextModel;
-  APM<24> APMs[4];
-  APM1 APM1s[7];
+  struct {
+    APM<24> APMs[4];
+    APM1 APM1s[3];
+  } Text;
+  struct {
+    APM<24> APMs[4];
+    APM1 APM1s[2];
+  } Image;
+  struct {
+    APM1 APM1s[7];
+  } Generic;
   ModelStats stats;
 public:
   Predictor();
@@ -8721,7 +8747,12 @@ public:
   void update();
 };
 
-Predictor::Predictor() : pr(2048), APMs{ 0x010000, 0x10000, 0x10000, 0x10000 }, APM1s{ 256, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000 } {
+Predictor::Predictor() :
+  pr(2048), 
+  Text{ {0x10000, 0x10000, 0x10000, 0x10000}, {0x10000, 0x10000, 0x10000} },
+  Image{ {0x1000, 0x10000, 0x10000, 0x10000}, {0x10000, 0x10000} },
+  Generic{ {256, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000} }
+  {
   memset(&stats, 0, sizeof(ModelStats));
 }
 
@@ -8754,32 +8785,48 @@ void Predictor::update() {
   switch (stats.blockType) {
     case TEXT: case TEXT_EOL: {
       int limit=0x3FF>>((blpos<0xFFF)*2);
-      pr  = APMs[0].p(pr0, (c0<<8)|(stats.Text.mask&0xF)|((stats.Misses&0xF)<<4), limit);
-      pr1 = APMs[1].p(pr0, hash(bpos, stats.Misses&3, buf(1), buf(2), stats.Text.mask>>4)&0xFFFF, limit);
-      pr2 = APMs[2].p(pr0, hash(c0, stats.Match.byte, std::min<U32>(3, ilog2(stats.Match.length+1)))&0xFFFF, limit);
-      pr3 = APMs[3].p(pr0, hash(c0, buf(1), buf(2), stats.Text.firstLetter)&0xFFFF, limit);
+      pr  = Text.APMs[0].p(pr0, (c0<<8)|(stats.Text.mask&0xF)|((stats.Misses&0xF)<<4), limit);
+      pr1 = Text.APMs[1].p(pr0, hash(bpos, stats.Misses&3, buf(1), buf(2), stats.Text.mask>>4)&0xFFFF, limit);
+      pr2 = Text.APMs[2].p(pr0, hash(c0, stats.Match.byte, std::min<U32>(3, ilog2(stats.Match.length+1)))&0xFFFF, limit);
+      pr3 = Text.APMs[3].p(pr0, hash(c0, buf(1), buf(2), stats.Text.firstLetter)&0xFFFF, limit);
 
       pr0 = (pr0+pr1+pr2+pr3+2)>>2;
 
-      pr1 = APM1s[4].p(pr0, hash(stats.Match.byte, std::min<U32>(3, ilog2(stats.Match.length+1)), buf(1))&0xFFFF);
-      pr2 = APM1s[5].p(pr, hash(c0, buf(1), buf(2), buf(3))&0xFFFF, 6);
-      pr3 = APM1s[6].p(pr, hash(c0, buf(2), buf(3), buf(4))&0xFFFF, 6);
+      pr1 = Text.APM1s[0].p(pr0, hash(stats.Match.byte, std::min<U32>(3, ilog2(stats.Match.length+1)), buf(1))&0xFFFF);
+      pr2 = Text.APM1s[1].p(pr, hash(c0, buf(1), buf(2), buf(3))&0xFFFF, 6);
+      pr3 = Text.APM1s[2].p(pr, hash(c0, buf(2), buf(3), buf(4))&0xFFFF, 6);
       
       pr = (pr+pr1+pr2+pr3+2)>>2;
       pr = (pr+pr0+1)>>1;
       break;
     }
-    default: {
-      pr  = APM1s[0].p(pr0, c0);
-      pr1 = APM1s[1].p(pr0, c0+256*buf(1));
-      pr2 = APM1s[2].p(pr0, (c0^hash(buf(1), buf(2)))&0xFFFF);
-      pr3 = APM1s[3].p(pr0, (c0^hash(buf(1), buf(2), buf(3)))&0xFFFF);
+    case IMAGE24: case IMAGE32: {
+      int limit=0x3FF>>((blpos<0xFFF)*4);
+      pr  = Image.APMs[0].p(pr0, (c0<<4)|(stats.Misses&0xF), limit);
+      pr1 = Image.APMs[1].p(pr0, hash(c0, stats.Image.pixels.W, stats.Image.pixels.WW)&0xFFFF, limit);
+      pr2 = Image.APMs[2].p(pr0, hash(c0, stats.Image.pixels.N, stats.Image.pixels.NN)&0xFFFF, limit);
+      pr3 = Image.APMs[3].p(pr0, (c0<<8)|stats.Image.ctx, limit);
 
       pr0 = (pr0+pr1+pr2+pr3+2)>>2;
 
-      pr1 = APM1s[4].p(pr, c0+256*buf(1));
-      pr2 = APM1s[5].p(pr, (c0^hash(buf(1), buf(2)))&0xFFFF);
-      pr3 = APM1s[6].p(pr, (c0^hash(buf(1), buf(2), buf(3)))&0xFFFF);
+      pr1 = Image.APM1s[0].p(pr, hash(c0, stats.Image.pixels.W, buf(1)-stats.Image.pixels.Wp1, stats.Image.plane)&0xFFFF);
+      pr2 = Image.APM1s[1].p(pr, hash(c0, stats.Image.pixels.N, buf(1)-stats.Image.pixels.Np1, stats.Image.plane)&0xFFFF);
+
+      pr=(pr*2+pr1*3+pr2*3+4)>>3;
+      pr = (pr+pr0+1)>>1;
+      break;
+    }
+    default: {
+      pr  = Generic.APM1s[0].p(pr0, c0);
+      pr1 = Generic.APM1s[1].p(pr0, c0+256*buf(1));
+      pr2 = Generic.APM1s[2].p(pr0, (c0^hash(buf(1), buf(2)))&0xFFFF);
+      pr3 = Generic.APM1s[3].p(pr0, (c0^hash(buf(1), buf(2), buf(3)))&0xFFFF);
+
+      pr0 = (pr0+pr1+pr2+pr3+2)>>2;
+
+      pr1 = Generic.APM1s[4].p(pr, c0+256*buf(1));
+      pr2 = Generic.APM1s[5].p(pr, (c0^hash(buf(1), buf(2)))&0xFFFF);
+      pr3 = Generic.APM1s[6].p(pr, (c0^hash(buf(1), buf(2), buf(3)))&0xFFFF);
 
       pr = (pr+pr1+pr2+pr3+2)>>2;
       pr = (pr+pr0+1)>>1;
