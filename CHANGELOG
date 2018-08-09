@@ -1192,3 +1192,7 @@ paq8px_v154
 paq8px_v154a
 2018.08.06
 - Fix bug in EOL transform decode routine
+
+paq8px_v155
+2018.08.09
+- Improved SSE stage for 24/32bpp non-PNG images
