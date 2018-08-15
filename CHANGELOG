@@ -1152,3 +1152,47 @@ paq8px_v147
 - Further improved the DMC model
   - Compression is even better but a bit slower
   - Memory requirements are the same
+
+paq8px_v148
+2018.07.08
+- Mixer dot-product shifts are now configurable
+- SmallStationaryContextMap and StationaryMap can also use configurable prediction multipliers and divisors
+
+paq8px_v149
+2018.07.15
+- New match model with fast mode
+- Bug fixes for the ContextMaps and the 24/32bpp image model
+
+paq8px_v150
+2018.07.22
+- Improved the new MatchModel
+- New heuristic in the 24bpp color transform to detect RGB565 to RGB888 conversions
+
+paq8px_v151
+2018.07.25
+- Improved the 24/32bpp image model, reduced the memory usage
+- Slightly tweaked the JPEG model
+
+paq8px_v152
+2018.07.30
+- Modified the SmallStationaryContextMap to allow for variable bits-per-context
+- Improved the 24/32bpp image model, reduced the memory usage
+
+paq8px_v153
+2018.08.01
+- New text detection heuristic
+- New EOL transform
+- Modified text pre-training
+- On text blocks the exeModel is no longer used, and a different SSE stage is used
+
+paq8px_v154
+2018.08.05
+- Improved SSE stage for text blocks
+
+paq8px_v154a
+2018.08.06
+- Fix bug in EOL transform decode routine
+
+paq8px_v155
+2018.08.09
+- Improved SSE stage for 24/32bpp non-PNG images
