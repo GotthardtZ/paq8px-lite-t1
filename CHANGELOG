@@ -1227,3 +1227,18 @@ paq8px_v156
 - Cleanup: the global "f4" context was updated in the Predictor and was used both by wordModel and sparseModel. Moved all code to wordModel where it ought to be.
 - Cleanup: "normal model" is now a real model (not enbedded in ContextModel)
 - Miscellaneous cleanup in code/comments
+
+
+paq8px_v157
+2018.08.18
+- New hash functions (currently used in matchModel only)
+- Compression enhancement: "skipping mixing (add(0)) when state is empty (unknown context)" from v156 is now "skipping some mixing when state is empty (unknown context)"
+- Compression and speed enhancement: eliminated a useless prediction from ContextMap and ContextMap2
+- Tiny compression enhancement: rounding in ContextMap and ContextMap2 (1-2-byte gain only)
+- "c8" in exeModel is now global - it may be referenced from other models. Unfortunately using it in matchModel would yield only a very tiny speedup for the cost of more code. Therefore, this matchModel change is not committed.
+- Enhancements in matchModel:
+  - using a bit more diffuse hash calculation for less collision 
+  - now 3 sequences are monitored (lengths: 9, 7, 5)
+  - matching is performed all the way (not just for a minimal length of 2, but for 9->7->5)
+  - matching expansion didn't work out; the code is provided, it may just need some tweaking
+- Miscellaneous cleanup in code/comments
