@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "156"  //update version here before publishing your changes
+#define PROGVERSION  "157"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -979,7 +979,8 @@ struct ModelStats{
 // Global context set by Predictor and available to all models.
 
 int c0=1; // Last 0-7 bits of the partial byte with a leading 1 bit (1-255)
-U32 c4=0; // Last 4 whole bytes, packed.  Last byte is bits 0-7.
+U32 c4=0; // Last 4 whole bytes (buf(4)..buf(1)), packed.  Last byte is bits 0-7.
+U32 c8=0; // Another 4 bytes (buf(8)..buf(5))
 int bpos=0; // bits in c0 (0 to 7)
 Buf buf;  // Rotating input queue set by Predictor
 int blpos=0; // Relative position in block
@@ -1720,7 +1721,7 @@ public:
 };
 
 
-//////////////////////////// hash //////////////////////////////
+//////////////////////// Hash functions //////////////////////////
 
 // Hash 2-5 ints.
 inline U32 hash(U32 a, U32 b, U32 c=0xffffffff, U32 d=0xffffffff,
@@ -1728,6 +1729,32 @@ inline U32 hash(U32 a, U32 b, U32 c=0xffffffff, U32 d=0xffffffff,
   U32 h=a*200002979u+b*30005491u+c*50004239u+d*70004807u+e*110002499u;
   return h^h>>9^a>>2^b>>3^c>>4^d>>5^e>>6;
 }
+
+// Magic number 2654435761 is the prime number closest to the 
+// golden ratio of 2^32 (2654435769)
+#define PHI 0x9E3779B1 //2654435761
+
+// A hash function to diffuse a 32-bit input
+U32 hash(U32 x) {
+  x++; // zeroes are common and mapped to zero
+  x = ((x >> 16) ^ x) * 0x45d9f3b;
+  x = ((x >> 16) ^ x) * 0x45d9f3b;
+  x = (x >> 16) ^ x;
+  return x;
+}
+
+// Combine a hash value (seed) with another (non-hash) value.
+// The result is a combined hash. 
+//
+// Use this function repeatedly to combine all input values 
+// to be hashed to a final hash value.
+U32 combine(U32 seed, U32 x) {
+  seed+=(x+1)*PHI;
+  seed+=seed<<10;
+  seed^=seed>6;
+  return seed;
+}
+
 
 ///////////////////////////// BH ////////////////////////////////
 
@@ -1873,23 +1900,18 @@ inline U8* HashTable<B>::operator[](U32 i) { //i: context selector
 // a probability.
 inline void mix2(Mixer& m, int s, StateMap& sm) {
   int p1=sm.p(s);
-  if (s==0) {
-    m.add(0);
-    m.add(0);
-    m.add(0);
+  int st=(stretch(p1)+(1<<1))>>2;
+  m.add(st);
+  m.add((p1-2047+(1<<2))>>3);
+  if (s == 0) {
     m.add(0);
     m.add(0);
   } else {
     int n0=-!nex(s,2);
     int n1=-!nex(s,3);
-    int st=stretch(p1)>>2;
-    m.add(st);
-    m.add((p1-2047)>>3);
-    p1>>=4;
-    int p0=255-p1;
     m.add(st*abs(n1-n0));
-    m.add((p1&n0)-(p0&n1));
-    m.add((p1&n1)-(p0&n0));
+    const int p0=4095-p1;
+    m.add(((p1&n0)-(p0&n1)+(1<<3))>>4);
   }
 }
 
@@ -2446,6 +2468,18 @@ public:
       else
         m.add(0);
 
+      int st=(stretch(p1)+(1<<1))>>2;
+      m.add(st);
+      m.add((p1-2047)>>3);
+      if (state == 0) {
+        m.add(0);
+        m.add(0);
+      } else {
+        m.add(st*abs(n1-n0));
+        const int p0=4095-p1;
+        m.add(((p1&n0)-(p0&n1)+(1<<3))>>4);
+      }
+
       if (HasHistory[i]) {
         state  = (ByteHistory[i][1]>>(7-bitPos))&1;
         state |= ((ByteHistory[i][2]>>(7-bitPos))&1)*2;
@@ -2454,14 +2488,6 @@ public:
       else
         state = 8;
 
-      int st = stretch(p1)>>2;
-      m.add(st);
-      m.add((p1-2047)>>3);
-      p1>>=4;
-      int p0 = 255-p1;
-      m.add(st*abs(n1-n0));
-      m.add((p1&n0)-(p0&n1));
-      m.add((p1&n1)-(p0&n0));
       m.add(stretch(Maps12b[i]->p((state<<9)|(bitPos<<6)|k))>>2);
       m.add(stretch(Maps6b[i]->p((state<<3)|bitPos))>>2);
     }
@@ -4481,25 +4507,32 @@ void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
 
 //////////////////////////// matchModel ///////////////////////////
 
-// matchModel() finds the most recent matching context and returns its max length
+//
+// Predict the next bit based on a preceding long matching byte sequence
+//
+// This model monitors byte sequences and keeps their most recent 
+// positions in a hashtable.
+// When the current byte sequence matches an older sequence (having 
+// the same hash) the model predicts the forthcoming bits.
 
 class MatchModel {
 private:
-  enum Parameters : U32{
+  enum Parameters : U32 {
     MaxLen = 0xFFFF,    // longest allowed match
-    MinLen = 2,         // minimum required match
-    DeltaLen = 5,       // minimum length to switch to delta mode
-    NumCtxs = 5,        // number of contexts used
-    NumHashes = 2       // number of hashes used
+    MaxExtend = 0,      // longest match expansion allowed // warning: larger value -> slowdown
+    MinLen1 = 9,        // default minimum required match length
+    MinLen2 = 7,        // first backup 
+    MinLen3 = 5,        // second backup  (must be at least 4)
+    NumCtxs = 5         // number of contexts used
   };
   Array<U32> Table;
   StateMap StateMaps[NumCtxs];
   SmallStationaryContextMap SCM[2];
   StationaryMap Map;
-  U32 hashes[NumHashes];
+  U32 hash1, hash2, hash3;
   U32 ctx[NumCtxs];
   U32 length;    // length of match, or 0 if no match
-  U32 index;     // points to next byte of match, if any
+  U32 index;     // points to next byte of match in buffer, 0 when there is no match
   U32 mask;
   bool delta;
   bool canBypass;
@@ -4507,9 +4540,21 @@ private:
     delta = false;
     if (length==0 && Bypass)
       Bypass = false; // can quit bypass mode on byte boundary only
+
     // update hashes
-    hashes[0] = (hashes[0]*(3<<3)+buffer(1))&mask;
-    hashes[1] = (hashes[1]*(5<<5)+buffer(1))&mask;
+    hash1 = hash(c4);
+    hash2 = ~hash1;
+    hash3 = (hash1>>16) | (hash1<<16);
+    for (U32 i = 5; i <= MinLen1; i++) // 9
+      hash1=combine(hash1,buffer(i));
+    for (U32 i = 5; i <= MinLen2; i++) // 7
+      hash2=combine(hash2,buffer(i)+2);
+    for (U32 i = 5; i <= MinLen3; i++) // 5
+      hash3=combine(hash3,buffer(i)+5);
+    hash1 &= mask;
+    hash2 &= mask;
+    hash3 &= mask;
+    
     // extend current match, if available
     if (length) {
       index++;
@@ -4517,17 +4562,51 @@ private:
         length++;
     }
     // or find a new match
-    else {
-      for (U32 i=0; i<NumHashes && length<MinLen; i++) {
-        index = Table[hashes[i]];
-        if (index && index!=(U32)pos && (U64)pos<(index+buffer.size())) {
-          while (length<MaxLen && (index-length-1)!=(U32)pos && buffer(length+1)==buffer[index-length-1])
-            length++;
+    // -> first let's try the longest sequence then fall back to shorter ones
+    else { 
+      const U32 baselen=MinLen3-1; // rebasing: length==1... means sequence true length is MinLen3...
+      index = Table[hash1];
+      if(index!=0) {
+        U32 i=1;
+        for (; i <= MinLen1; i++)
+          if(buffer[index-i]!=buffer(i)){index=0;break;}
+        if(index!=0) {
+          length=MinLen1-baselen; // 5
+//        for (; i <= MaxExtend; i++)
+//          if(buffer[index-i]!=buffer(i))break;else length++;
+        }
+      }
+      if(length==0) {
+        index = Table[hash2];
+        if(index!=0) {
+          U32 i=1;
+          for (; i <= MinLen2; i++)
+            if(buffer[index-i]!=buffer(i)){index=0;break;}
+          if(index!=0) {
+            length=MinLen2-baselen; // 3
+//          for (; i <= MaxExtend; i++)
+//            if(buffer[index-i]!=buffer(i))break;else length++;
+          }
+        }
+      }
+      if(length==0) {
+        index = Table[hash3];
+        if(index!=0) {
+          U32 i=1;
+          for (; i <= MinLen3; i++)
+            if(buffer[index-i]!=buffer(i)){index=0;break;}
+          if(index!=0) {
+            length=MinLen3-baselen; // 1
+//          for (; i <= MaxExtend; i++)
+//            if(buffer[index-i]!=buffer(i))break;else length++;
+          }
         }
       }
     }
-    for (U32 i=0; i<NumHashes; i++)
-      Table[hashes[i]] = pos;
+
+    // update position information in hashtable
+    Table[hash1] = Table[hash2] = Table[hash3] = pos;
+
     SCM[0].set(buffer[index]);
     SCM[1].set(pos);
     Map.set((buffer[index]<<8)|buffer(1));
@@ -4542,16 +4621,16 @@ public:
     StateMaps{ 56*256, 8*256*256+1, 256*256, 256, 256*256 },
     SCM{ {8,8},{8,8} },
     Map{ 16 },
-    hashes{ 0 },
+    hash1 { 0 }, hash2 { 0 }, hash3 { 0 },
     ctx{ 0 },
     length(0),
-    mask((Size-1)/sizeof(U32)),
+    mask(Size/sizeof(U32)-1),
     delta(false),
     canBypass(AllowBypass),
     Bypass(false),
     BypassPrediction(2047)
   {
-    assert((Size&(Size-1))==0);
+    assert(ispowerof2(Size));
   }
   int Predict(Mixer& m, Buf& buffer, ModelStats *Stats = nullptr) {
     if (bpos==0)
@@ -4563,17 +4642,18 @@ public:
         length = 0;
     }
     else {
-      //these 3 contexts are matchmodel-specific
+      // these 3 contexts are matchmodel-specific
       ctx[0] = ctx[1] = ctx[2] = 0; 
-      //these 2 contexts are general (8-bit images benefit from them the most)
-      ctx[3] = c0;                  //order 0 context
-      ctx[4] = c0 | (buffer(1)<<8); //order 1 context // note: modeled also by normalModel
+      // these 2 contexts are general (8-bit images benefit from them the most)
+      // note: they are modeled by normalModel as well
+      ctx[3] = c0;                  // order 0 context
+      ctx[4] = c0 | (buffer(1)<<8); // order 1 context
       if (length>0) {
         if (buffer(1)==buffer[index-1] && ismatch) { // next bit matches the prediction?
           if (length<=16)
-            ctx[0] = (((length-1)<<1) | predicted_bit); //0..31
+            ctx[0] = (((length-1)<<1) | predicted_bit); // 0..31
           else
-            ctx[0] = (((min(length-1, 63)>>2)<<1) + predicted_bit + 24); //32..55
+            ctx[0] = (((min(length-1, 63)>>2)<<1) + predicted_bit + 24); // 32..55
           ctx[0] = ((ctx[0]<<8) | c0);
           ctx[1] = (((buffer[index])<<11) | (bpos<<8) | buffer(1)) + 1;
           const int sign=2*predicted_bit-1;
@@ -4581,7 +4661,7 @@ public:
           m.add(sign*(ilog(length)<<2));   // +/-  0..1024
         }
         else { // we have a mismatch
-          delta = length>DeltaLen;
+          delta = true; // switch to delta mode
           length = 0;
         }
       }
@@ -7877,7 +7957,7 @@ bool exeModel::Predict(Mixer& m, bool Forced, ModelStats *Stats) {
   if (Valid || Forced)
     cm.mix(m);
   else {
-      for (int i=0; i<(N1+N2)*8; ++i)
+      for (int i=0; i<(N1+N2)*7; ++i)
         m.add(0);
   }
   U8 s = ((StateBH[Context]>>(28-bpos))&0x08) |
@@ -8369,7 +8449,7 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
   static XMLTagCache Cache;
   static U32 StateBH[8];
   static XMLState State = None, pState = None;
-  static U32 c8, WhiteSpaceRun = 0, pWSRun = 0, IndentTab = 0, IndentStep = 2, LineEnding = 2;
+  static U32 WhiteSpaceRun = 0, pWSRun = 0, IndentTab = 0, IndentStep = 2, LineEnding = 2;
 
   if (bpos==0) {
     U8 B = (U8)c4;
@@ -8377,7 +8457,6 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
     XMLAttribute *Attribute = &((*Tag).Attributes.Items[ (*Tag).Attributes.Index&3 ]);
     XMLContent *Content = &(*Tag).Content;
     pState = State;
-    c8 = (c8<<8)|buf(5);
     if ((B==TAB || B==SPACE) && (B==(U8)(c4>>8) || !WhiteSpaceRun)){
       WhiteSpaceRun++;
       IndentTab = (B==TAB);
@@ -8550,19 +8629,22 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
 
 
 //////////////////////// Order-N Model //////////////////
-// Model for order 1-14 contexts
-// Contexts are hashes of previous 1..14 bytes
-
+// Model for order 0-14 contexts
+// Contexts are hashes of previous 0..14 bytes
+// Order 0..6, 8 and 14 are used for prediction
+// Note: order 7+ contexts are modeled by matchModel as well
 
 class normalModel { 
   ContextMap2 cm;
   RunContextMap rcm7, rcm9, rcm10;
-  U32 cxt[15]; // context hashes // note:cxt[0] is always 0
+  U32 cxt[15]; // context hashes // note: cxt[0] is always 0
   void update_contexts(U8 B) {
     B++; 
+    // update order 1..14 context hashes
+    // note: order 0 context does not need an update
     for (int i=14; i>0; --i)
-      cxt[i]=(cxt[i-1]<<8)+cxt[i-1]+B; //update order 1..14 context hashes
-    for (int i=0; i<=6; ++i)
+      cxt[i]=(cxt[i-1]<<8)+cxt[i-1]+B; 
+    for (int i=0; i<=6; ++i) 
       cm.set(cxt[i]);
     cm.set(cxt[8]);
     cm.set(cxt[14]);
@@ -8651,9 +8733,9 @@ public:
     if(level>=4)dmcforest=new dmcForest();
 
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(985+288, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer(1083, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
     #else
-      m=MixerFactory::CreateMixer(985, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer( 833, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
     #endif //USE_WORD_MODEL
     }
 
@@ -8803,8 +8885,10 @@ void Predictor::update() {
   c0+=c0+y;
   stats.Misses+=stats.Misses+((pr>>11)!=y);
   if (c0>=256) {
+    c0=U8(c0);
     buf[pos++]=c0;
-    c4=(c4<<8)+c0-256;
+    c4=(c4<<8)|c0;
+    c8=(c8<<8)|buf(5);
     c0=1;
   }
   bpos=(bpos+1)&7;
@@ -11475,7 +11559,7 @@ int main(int argc, char** argv) {
       if(output.strsize()!=0)
         quit("Output filename must not be specified when extracting multiple files.");
       if((c=en.decompress())!=TEXT)quit(errmsg_invalid_char);
-      U64 blocksize=en.decode_blocksize(); //we don't really need it
+      en.decode_blocksize(); //we don't really need it
       while((c=en.decompress())!=0) {
         if(c==255)quit(errmsg_invalid_char);
         list_filename+=(char)c;
