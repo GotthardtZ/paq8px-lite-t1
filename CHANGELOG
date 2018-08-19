@@ -1242,3 +1242,10 @@ paq8px_v157
   - matching is performed all the way (not just for a minimal length of 2, but for 9->7->5)
   - matching expansion didn't work out; the code is provided, it may just need some tweaking
 - Miscellaneous cleanup in code/comments
+
+
+paq8px_v158
+2018.08.19
+- Improved SSE stage for 8bpp grayscale non-PNG images
+- Improved WAV detection
+- Simplified MatchModel to allow for easier tweaking, moved generic contexts to normalModel
