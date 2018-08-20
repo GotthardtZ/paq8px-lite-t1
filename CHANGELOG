@@ -1249,3 +1249,11 @@ paq8px_v158
 - Improved SSE stage for 8bpp grayscale non-PNG images
 - Improved WAV detection
 - Simplified MatchModel to allow for easier tweaking, moved generic contexts to normalModel
+
+
+paq8px_v159
+2018.08.20
+- Comments and cosmetic changes in ModelStats
+- Fixed a rare and low-impact overflow ("if (bestLen>=MinLen)") in matchModel
+- More cosmetic changes in matchModel
+- New model for ascii files / mixed files containing ascci fragments: charGroupModel
