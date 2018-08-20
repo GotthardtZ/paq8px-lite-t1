@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "158"  //update version here before publishing your changes
+#define PROGVERSION  "159"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -951,29 +951,67 @@ U8 options=0;
 #define OPTION_SKIPRGB 32
 #define OPTION_FASTMODE 64
 
+
+// Information shared by models
+// Order: in appearance -> models may use information 
+// from models that appears above them
 struct ModelStats{
-  U32 XML, x86_64, Record;
+
+  //general shared information
+  Blocktype blockType;  //used by wordModel, recordModel, SSE stage
+  U64 Misses;        //used by SSE stage
+
+  //matchModel
   struct {
-    U8 state:3;
-    U8 lastPunct:5;
-    U8 wordLength:4;
-    U8 boolmask:4;
-    U8 firstLetter;
-    U8 mask;
-  } Text;
-  struct {
-    U32 length;
-    U8 byte;
+    U32 length;      //used by SSE stage
+    U8 expectedByte; //used by SSE stage
   } Match;
+
+  //normalModel
+
+  //image models
   struct {
     struct {
-      U8 WW, W, NN, N, Wp1, Np1;
-    } pixels;
-    U8 plane;
-    U8 ctx;
+      U8 WW, W, NN, N, Wp1, Np1; 
+    } pixels;        //used by SSE stage
+    U8 plane;        //used by SSE stage
+    U8 ctx;          //used by SSE stage
   } Image;
-  U64 Misses;
-  Blocktype blockType;
+
+  //wavModel
+  U32 Wav;           //used by recordModel
+
+  //jpegModel
+  //sparseModel
+  //distanceModel
+
+  //recordModel
+  U32 Record;        //unused
+
+  //charGroupModel
+  U32 charGroup;     //unused
+
+  //wordModel
+  //indirectModel
+  //dmcforest
+  //nestModel
+
+  //XMLModel
+  U32 XML;           //unused
+
+  //textModel
+  struct {
+    U8 state:3;      //unused
+    U8 lastPunct:5;  //unused
+    U8 wordLength:4; //unused
+    U8 boolmask:4;   //unused
+    U8 firstLetter;  //used by SSE stage
+    U8 mask;         //used by SSE stage
+  } Text;
+
+  //exeModel
+  U32 x86_64; //unused
+
 };
 
 // Global context set by Predictor and available to all models.
@@ -1944,19 +1982,19 @@ The context is looked up directly. For each bit modelled, a 16bit prediction is 
 The adaptation rate is controlled by the caller, see mix().
 
 - BitsOfContext: How many bits to use for each context. Higher bits are discarded.
-- BitsPerContext: How many bits [1..8] of input are to be modelled for each context.
+- InputBits: How many bits [1..8] of input are to be modelled for each context.
 New contexts must be set at those intervals.
 
-Uses 2^(BitsOfContext+BitsPerContext+1) bytes of memory.
+Uses 2^(BitsOfContext+InputBits+1) bytes of memory.
 */
 class SmallStationaryContextMap {
   Array<U16> Data;
   int Context, Mask, bCount, B;
   U16 *cp;
 public:
-  SmallStationaryContextMap(int BitsOfContext, int BitsPerContext = 8) : Data(1ull<<(BitsOfContext+BitsPerContext)), Context(0), Mask(1<<BitsPerContext), bCount(1), B(1) {
+  SmallStationaryContextMap(int BitsOfContext, int InputBits = 8) : Data(1ull<<(BitsOfContext+InputBits)), Context(0), Mask(1<<InputBits), bCount(1), B(1) {
     assert(BitsOfContext<=16);
-    assert(BitsPerContext>0 && BitsPerContext<=8);
+    assert(InputBits>0 && InputBits<=8);
     Reset();
     cp=&Data[0];
   }
@@ -1989,12 +2027,12 @@ public:
   a 22 bit prediction and a 10 bit adaptation rate offset.
 
   - BitsOfContext: How many bits to use for each context. Higher bits are discarded.
-  - BitsPerContext: How many bits [1..8] of input are to be modelled for each context.
+  - InputBits: How many bits [1..8] of input are to be modelled for each context.
     New contexts must be set at those intervals.
   - Rate: Initial adaptation rate offset [0..1023]. Lower offsets mean faster adaptation.
     Will be increased on every occurrence until the higher bound is reached.
 
-  Uses 2^(BitsOfContext+BitsPerContext+2) bytes of memory.
+  Uses 2^(BitsOfContext+InputBits+2) bytes of memory.
 */
 
 class StationaryMap {
@@ -2002,9 +2040,9 @@ class StationaryMap {
   int Context, Mask, bCount, B;
   U32 *cp;
 public:
-  StationaryMap(int BitsOfContext, int BitsPerContext = 8, int Rate = 0): Data(1ull<<(BitsOfContext+BitsPerContext)), Context(0), Mask(1<<BitsPerContext), bCount(1), B(1) {
+  StationaryMap(int BitsOfContext, int InputBits = 8, int Rate = 0): Data(1ull<<(BitsOfContext+InputBits)), Context(0), Mask(1<<InputBits), bCount(1), B(1) {
     assert(BitsOfContext<=16);
-    assert(BitsPerContext>0 && BitsPerContext<=8);
+    assert(InputBits>0 && InputBits<=8);
     Reset(Rate);
     cp=&Data[0];
   }
@@ -2014,9 +2052,9 @@ public:
   }
   void Reset( int Rate = 0 ){
     for (U32 i=0; i<Data.size(); ++i)
-      Data[i]=(0x7FF<<20)|min(0x3FF,Rate);
+      Data[i]=(0x7FF<<20)|min(1023,Rate);
   }
-  void mix(Mixer& m, const int Multiplier = 1, const int Divisor = 4, const U16 Limit = 0x3FF) {
+  void mix(Mixer& m, const int Multiplier = 1, const int Divisor = 4, const U16 Limit = 1023) {
     U32 Count = min(min(Limit,0x3FF), ((*cp)&0x3FF)+1);
     int Prediction = (*cp)>>10, Error = (y<<22)-Prediction;
     Error = ((Error/8)*dt[Count])/1024;
@@ -4519,7 +4557,7 @@ class MatchModel {
 private:
   enum Parameters : U32 {
     MaxLen = 0xFFFF, // longest allowed match
-    MaxExtend = 0,   // longest match expansion allowed // warning: larger value -> slowdown
+    MaxExtend = 0,   // longest allowed match expansion // warning: larger value -> slowdown
     MinLen = 5,      // minimum required match length
     StepSize = 2,    // additional minimum length increase per higher order hash
     DeltaLen = 5,    // minimum length to switch to delta mode
@@ -4532,9 +4570,10 @@ private:
   StationaryMap Map;
   U32 hashes[NumHashes];
   U32 ctx[NumCtxs];
-  U32 length;    // length of match, or 0 if no match
+  U32 length;    // rebased length of match (length=1 represents the smallest accepted match length), or 0 if no match
   U32 index;     // points to next byte of match in buffer, 0 when there is no match
   U32 mask;
+  U8 expectedByte; // prediction is based on this byte (buffer[index]), valid only when length>0
   bool delta;
   bool canBypass;
   void Update(Buf& buffer, ModelStats *Stats = nullptr) {
@@ -4569,7 +4608,7 @@ private:
           }
         }
       }
-      if (bestLen>=minLen) {
+      if (bestLen>=MinLen) {
         length = bestLen-(MinLen-1); // rebase, a length of 1 actually means a length of MinLen
         index = bestIndex;
       }
@@ -4579,12 +4618,13 @@ private:
     // update position information in hashtable
     for (U32 i=0; i<NumHashes; i++)
       Table[hashes[i]] = pos;
-    SCM[0].set(buffer[index]);
-    SCM[1].set(buffer[index]);
+    expectedByte = buffer[index];
+    SCM[0].set(expectedByte);
+    SCM[1].set(expectedByte);
     SCM[2].set(pos);
-    Map.set((buffer[index]<<8)|buffer(1));
+    Map.set((expectedByte<<8)|buffer(1));
     if (Stats)
-      Stats->Match.byte = (length)?buffer[index]:0;
+      Stats->Match.expectedByte = (length>0) ? expectedByte : 0;
   }
 public:
   bool Bypass;
@@ -4609,41 +4649,38 @@ public:
     if (bpos==0)
       Update(buffer, Stats);
     else
-      SCM[1].set((bpos<<8)|(buffer[index]^U8(c0<<(8-bpos))));
-    const int expectedBit = (buffer[index]>>(7-bpos))&1;
-    const bool isMatch=((buffer[index]+256)>>(8-bpos))==c0;
-    if (canBypass && Bypass) {
-      if (length>0 && !isMatch)
+      SCM[1].set((bpos<<8)|(expectedByte^U8(c0<<(8-bpos))));
+    const int expectedBit = (expectedByte>>(7-bpos))&1;
+
+    if(length>0) {
+      const bool isMatch = bpos==0 ? buffer(1)==buffer[index-1] : ((expectedByte+256)>>(8-bpos))==c0; // next bit matches the prediction?
+      if(!isMatch) {
+        delta = (length+MinLen)>DeltaLen;
         length = 0;
+      }
     }
-    else {
+
+    if (!(canBypass && Bypass)) {
       for (U32 i=0; i<NumCtxs; i++)
         ctx[i] = 0;
       if (length>0) {
-        if (buffer(1)==buffer[index-1] && isMatch) { // next bit matches the prediction?
           if (length<=16)
             ctx[0] = (length-1)*2 + expectedBit; // 0..31
           else
             ctx[0] = 24 + (min(length-1, 63)>>2)*2 + expectedBit; // 32..55
           ctx[0] = ((ctx[0]<<8) | c0);
-          ctx[1] = (((buffer[index])<<11) | (bpos<<8) | buffer(1)) + 1;
-          const int sign=2*expectedBit-1;
+          ctx[1] = ((expectedByte<<11) | (bpos<<8) | buffer(1)) + 1;
+          const int sign = 2*expectedBit-1;
           m.add(sign*(min(length,32)<<5)); // +/- 32..1024
           m.add(sign*(ilog(length)<<2));   // +/-  0..1024
         }
-        else { // we have a mismatch
-          delta = (length+MinLen)>DeltaLen;
-          length = 0;
+        else { // no match at all or delta mode
+          m.add(0);
+          m.add(0);
         }
-      }
-
-      if (length==0) { // no match at all or delta mode
-        m.add(0);
-        m.add(0);
-      }
 
       if (delta)
-        ctx[2] = (buffer[index]<<8) | c0;
+        ctx[2] = (expectedByte<<8) | c0;
 
       for (U32 i=0; i<NumCtxs; i++) {
         const U32 c = ctx[i];
@@ -4665,6 +4702,73 @@ public:
     return length;
   }
 };
+
+
+//////////////////////////// charGroupModel /////////////////////////
+
+void charGroupModel(Mixer& m, ModelStats *Stats = nullptr) {
+static ContextMap cm(MEM/2, 7);
+static U64 g_ascii=0;
+  if(bpos==0) {
+    
+    // modeling ascii character sequences
+    U8 c=buf(1);
+    U32 g=0; //group identifier: 0-31
+    if(c==0)g=0;
+    else if('0'<=c && c<='9')g=1;
+    else if('A'<=c && c<='Z')g=2;
+    else if('a'<=c && c<='z')g=3;
+    else if(c=='\n' || c=='\r')g=4;
+    else if(1<=c && c<=31)   g=5;
+    else if(c==' ') g=6;
+    else if(c=='!') g=7;
+    else if(c=='"') g=8;
+    else if(c=='%') g=9;
+    else if(c=='\'') g=10;
+    else if(c=='(') g=11;
+    else if(c==')') g=12;
+    else if(c==',') g=13;
+    else if(c=='-') g=14;
+    else if(c=='.') g=15;
+    else if(c=='/') g=16;
+    else if(32<=c && c<=47)  g=17;     // the rest of  !"#$%&'()*+,-./
+    else if(c==':') g=18;
+    else if(c==';') g=19;
+    else if(c=='<') g=20;
+    else if(c=='>') g=21;
+    else if(c=='?') g=22;
+    else if(58<=c && c<=64)  g=23;    // the rest of :;<=>?@
+    else if(c=='[') g=24;
+    else if(c==']') g=25;
+    else if(c=='_') g=26;
+    else if(91<=c && c<=96)  g=27;    // the rest of [\]^_`
+    else if(c=='{') g=28;
+    else if(c=='}') g=29;
+    else if(123<=c && c<=127)g=30;    // the rest of {|}~
+    else if(c>=128)g=31;
+    else {
+      printf("\n%d\n",c);assert(false);
+    }
+
+    if(!((g<=4) && g == (g_ascii&0x1f))) //repetition is allowed for groups 0..4
+      g_ascii = ((g_ascii<<5) | g) & ((U64(1)<<60)-1); //keep last 12 groups (12x5=60 bits)
+
+    U32 last6 = g_ascii & ((1<<30)-1); //keep last 6 groups (6x5=30 bits)
+
+    cm.set(last6); //last 6 groups
+    cm.set(hash(U32(g_ascii),U32(g_ascii>>32))); //last 12 groups
+    cm.set(g_ascii & ((1<<20)-1)); //last 4 groups
+    cm.set(g_ascii & ((1<<10)-1)); //last 2 groups
+    cm.set(hash((g_ascii>>5) &((1<<30)-1),buf(1)));
+    cm.set(hash((g_ascii>>10)&((1<<30)-1),buf(1),buf(2)));
+    cm.set(hash((g_ascii>>15)&((1<<30)-1),buf(1),buf(2),buf(3)));
+
+    if (Stats)
+      Stats->charGroup = g_ascii;
+  }
+  cm.mix(m);
+}
+
 
 //////////////////////////// wordModel /////////////////////////
 
@@ -4934,9 +5038,8 @@ void recordModel(Mixer& m, ModelStats *Stats = nullptr) {
   // Find record length
   if (bpos==0) {
     int w=c4&0xffff, c=w&255, d=w>>8;
-    if (Stats && (*Stats).Record && ((*Stats).Record>>16)>2 &&
-          ((*Stats).Record>>16) != (U32)rlen[0]) {
-      rlen[0] = (*Stats).Record>>16;
+    if (Stats && (Stats->Wav)>2 && (Stats->Wav) != (U32)rlen[0]) {
+      rlen[0] = Stats->Wav;
       rcount[0]=rcount[1]=0;
     }
     else{
@@ -5099,8 +5202,10 @@ void recordModel(Mixer& m, ModelStats *Stats = nullptr) {
 
   m.set( (rlen[0]>2)*( (bpos<<7)|mxCtx ), 1024 );
   m.set( ((buf(rlen[0])^((U8)(c0<<(8-bpos))))>>4)|(min(0x1F,col/max(1,rlen[0]/32))<<4), 512 );
-  if (Stats)
-    (*Stats).Record = (min(0xFFFF,rlen[0])<<16)|min(0xFFFF,col);
+  if (Stats){
+    Stats->Wav = min(0xFFFF,rlen[0]);
+    Stats->Record = min(0xFFFF,col);
+  }
 }
 
 
@@ -6966,7 +7071,7 @@ void wavModel(Mixer& m, int info, ModelStats *Stats = nullptr) {
   cm.mix(m);
   if (level>=4){
     if (Stats)
-      Stats->Record = (w<<16)|(Stats->Record&0xFFFF);
+      Stats->Wav = w;
     recordModel(m, Stats);
   }
   col++;
@@ -7953,7 +8058,7 @@ bool exeModel::Predict(Mixer& m, bool Forced, ModelStats *Stats) {
   m.set(hash(State, bpos, Op.Code, Op.BytesRead)&0x1FFF, 8192);
   m.set(hash(State, (bpos<<2)|(c0&3), OpCategMask&CategoryMask, ((Op.Category==OP_GEN_BRANCH)<<2)|(((Op.Flags&fMODE)==fAM)<<1)|(Op.BytesRead>0))&0x1FFF, 8192);
   if (Stats)
-    (*Stats).x86_64 = (Valid?1:0)|(Context<<1)|(s<<9);
+    Stats->x86_64 = (Valid?1:0)|(Context<<1)|(s<<9);
   return Valid;
 }
 
@@ -8603,7 +8708,7 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
          ((StateBH[State]>>( 7-bpos))&0x01) |
          ((bpos)<<4);
   if (Stats)
-    (*Stats).XML = (s<<3)|State;
+    Stats->XML = (s<<3)|State;
 }
 
 
@@ -8715,9 +8820,9 @@ public:
     if(level>=4)dmcforest=new dmcForest();
 
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(1085, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer(1113, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
     #else
-      m=MixerFactory::CreateMixer( 835, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer( 863, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
     #endif //USE_WORD_MODEL
     }
 
@@ -8788,6 +8893,7 @@ int ContextModel::Predict(ModelStats *Stats){
     sparseModel(*m,matchlength,order);
     distanceModel(*m);
     recordModel(*m, Stats);
+    charGroupModel(*m, Stats);
     #ifdef USE_WORDMODEL
     wordModel(*m, Stats);
     #endif //USE_WORDMODEL
@@ -8896,12 +9002,12 @@ void Predictor::update() {
       int limit=0x3FF>>((blpos<0xFFF)*2);
       pr  = Text.APMs[0].p(pr0, (c0<<8)|(stats.Text.mask&0xF)|((stats.Misses&0xF)<<4), limit);
       pr1 = Text.APMs[1].p(pr0, hash(bpos, stats.Misses&3, buf(1), buf(2), stats.Text.mask>>4)&0xFFFF, limit);
-      pr2 = Text.APMs[2].p(pr0, hash(c0, stats.Match.byte, std::min<U32>(3, ilog2(stats.Match.length+1)))&0xFFFF, limit);
+      pr2 = Text.APMs[2].p(pr0, hash(c0, stats.Match.expectedByte, std::min<U32>(3, ilog2(stats.Match.length+1)))&0xFFFF, limit);
       pr3 = Text.APMs[3].p(pr0, hash(c0, buf(1), buf(2), stats.Text.firstLetter)&0xFFFF, limit);
 
       pr0 = (pr0+pr1+pr2+pr3+2)>>2;
 
-      pr1 = Text.APM1s[0].p(pr0, hash(stats.Match.byte, std::min<U32>(3, ilog2(stats.Match.length+1)), buf(1))&0xFFFF);
+      pr1 = Text.APM1s[0].p(pr0, hash(stats.Match.expectedByte, std::min<U32>(3, ilog2(stats.Match.length+1)), buf(1))&0xFFFF);
       pr2 = Text.APM1s[1].p(pr, hash(c0, buf(1), buf(2), buf(3))&0xFFFF, 6);
       pr3 = Text.APM1s[2].p(pr, hash(c0, buf(2), buf(3), buf(4))&0xFFFF, 6);
       
@@ -8929,7 +9035,7 @@ void Predictor::update() {
       int limit=0x3FF>>((blpos<0xFFF)*4);
       pr  = Image.Gray.APMs[0].p(pr0, (c0<<4)|(stats.Misses&0xF), limit);
       pr1 = Image.Gray.APMs[1].p(pr, (c0<<8)|stats.Image.ctx, limit);
-      pr2 = Image.Gray.APMs[2].p(pr0, bpos|(stats.Image.ctx&0xF8)|(stats.Match.byte<<8), limit);
+      pr2 = Image.Gray.APMs[2].p(pr0, bpos|(stats.Image.ctx&0xF8)|(stats.Match.expectedByte<<8), limit);
 
       pr0 = (2*pr0+pr1+pr2+2)>>2;
       pr = (pr+pr0+1)>>1;
