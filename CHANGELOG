@@ -1256,4 +1256,4 @@ paq8px_v159
 - Comments and cosmetic changes in ModelStats
 - Fixed a rare and low-impact overflow ("if (bestLen>=MinLen)") in matchModel
 - More cosmetic changes in matchModel
-- New model for ascii files / mixed files containing ascii fragments: charGroupModel
+- New model for ascii files files ascii fragments: charGroupModel
