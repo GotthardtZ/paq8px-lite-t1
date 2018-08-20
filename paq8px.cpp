@@ -4745,10 +4745,7 @@ static U64 g_ascii=0;
     else if(c=='{') g=28;
     else if(c=='}') g=29;
     else if(123<=c && c<=127)g=30;    // the rest of {|}~
-    else if(c>=128)g=31;
-    else {
-      printf("\n%d\n",c);assert(false);
-    }
+    else g=31;                        // c = 128..255
 
     if(!((g<=4) && g == (g_ascii&0x1f))) //repetition is allowed for groups 0..4
       g_ascii = ((g_ascii<<5) | g) & ((U64(1)<<60)-1); //keep last 12 groups (12x5=60 bits)
@@ -4764,7 +4761,7 @@ static U64 g_ascii=0;
     cm.set(hash((g_ascii>>15)&((1<<30)-1),buf(1),buf(2),buf(3)));
 
     if (Stats)
-      Stats->charGroup = g_ascii;
+      Stats->charGroup = last6;
   }
   cm.mix(m);
 }
