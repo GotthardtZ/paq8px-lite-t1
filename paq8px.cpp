@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "157"  //update version here before publishing your changes
+#define PROGVERSION  "158"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -1735,10 +1735,10 @@ inline U32 hash(U32 a, U32 b, U32 c=0xffffffff, U32 d=0xffffffff,
 #define PHI 0x9E3779B1 //2654435761
 
 // A hash function to diffuse a 32-bit input
-U32 hash(U32 x) {
+inline U32 hash(U32 x) {
   x++; // zeroes are common and mapped to zero
-  x = ((x >> 16) ^ x) * 0x45d9f3b;
-  x = ((x >> 16) ^ x) * 0x45d9f3b;
+  x = ((x >> 16) ^ x) * 0x85ebca6b;
+  x = ((x >> 13) ^ x) * 0xc2b2ae35;
   x = (x >> 16) ^ x;
   return x;
 }
@@ -1748,10 +1748,10 @@ U32 hash(U32 x) {
 //
 // Use this function repeatedly to combine all input values 
 // to be hashed to a final hash value.
-U32 combine(U32 seed, U32 x) {
+inline U32 combine(U32 seed, const U32 x) {
   seed+=(x+1)*PHI;
   seed+=seed<<10;
-  seed^=seed>6;
+  seed^=seed>>6;
   return seed;
 }
 
@@ -4518,18 +4518,19 @@ void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
 class MatchModel {
 private:
   enum Parameters : U32 {
-    MaxLen = 0xFFFF,    // longest allowed match
-    MaxExtend = 0,      // longest match expansion allowed // warning: larger value -> slowdown
-    MinLen1 = 9,        // default minimum required match length
-    MinLen2 = 7,        // first backup 
-    MinLen3 = 5,        // second backup  (must be at least 4)
-    NumCtxs = 5         // number of contexts used
+    MaxLen = 0xFFFF, // longest allowed match
+    MaxExtend = 0,   // longest match expansion allowed // warning: larger value -> slowdown
+    MinLen = 5,      // minimum required match length
+    StepSize = 2,    // additional minimum length increase per higher order hash
+    DeltaLen = 5,    // minimum length to switch to delta mode
+    NumCtxs = 3,     // number of contexts used
+    NumHashes = 3    // number of hashes used
   };
   Array<U32> Table;
   StateMap StateMaps[NumCtxs];
-  SmallStationaryContextMap SCM[2];
+  SmallStationaryContextMap SCM[3];
   StationaryMap Map;
-  U32 hash1, hash2, hash3;
+  U32 hashes[NumHashes];
   U32 ctx[NumCtxs];
   U32 length;    // length of match, or 0 if no match
   U32 index;     // points to next byte of match in buffer, 0 when there is no match
@@ -4540,75 +4541,47 @@ private:
     delta = false;
     if (length==0 && Bypass)
       Bypass = false; // can quit bypass mode on byte boundary only
-
     // update hashes
-    hash1 = hash(c4);
-    hash2 = ~hash1;
-    hash3 = (hash1>>16) | (hash1<<16);
-    for (U32 i = 5; i <= MinLen1; i++) // 9
-      hash1=combine(hash1,buffer(i));
-    for (U32 i = 5; i <= MinLen2; i++) // 7
-      hash2=combine(hash2,buffer(i)+2);
-    for (U32 i = 5; i <= MinLen3; i++) // 5
-      hash3=combine(hash3,buffer(i)+5);
-    hash1 &= mask;
-    hash2 &= mask;
-    hash3 &= mask;
-    
+    for (U32 i=0, minLen=MinLen+(NumHashes-1)*StepSize; i<NumHashes; i++, minLen-=StepSize) {
+      hashes[i] = hash(minLen);
+      for (U32 j=1; j<=minLen; j++)
+        hashes[i] = combine(hashes[i], buffer(j)<<i);
+      hashes[i]&=mask;
+    }
     // extend current match, if available
     if (length) {
       index++;
       if (length<MaxLen)
         length++;
     }
-    // or find a new match
-    // -> first let's try the longest sequence then fall back to shorter ones
-    else { 
-      const U32 baselen=MinLen3-1; // rebasing: length==1... means sequence true length is MinLen3...
-      index = Table[hash1];
-      if(index!=0) {
-        U32 i=1;
-        for (; i <= MinLen1; i++)
-          if(buffer[index-i]!=buffer(i)){index=0;break;}
-        if(index!=0) {
-          length=MinLen1-baselen; // 5
-//        for (; i <= MaxExtend; i++)
-//          if(buffer[index-i]!=buffer(i))break;else length++;
-        }
-      }
-      if(length==0) {
-        index = Table[hash2];
-        if(index!=0) {
-          U32 i=1;
-          for (; i <= MinLen2; i++)
-            if(buffer[index-i]!=buffer(i)){index=0;break;}
-          if(index!=0) {
-            length=MinLen2-baselen; // 3
-//          for (; i <= MaxExtend; i++)
-//            if(buffer[index-i]!=buffer(i))break;else length++;
+    // or find a new match, starting with the highest order hash and falling back to lower ones
+    else {
+      U32 minLen = MinLen+(NumHashes-1)*StepSize, bestLen = 0, bestIndex = 0;
+      for (U32 i=0; i<NumHashes && length<minLen; i++, minLen-=StepSize) {
+        index = Table[hashes[i]];
+        if (index>0) {
+          length = 0;
+          while (length<(minLen+MaxExtend) && buffer(length+1)==buffer[index-length-1])
+            length++;
+          if (length>bestLen) {
+            bestLen = length;
+            bestIndex = index;
           }
         }
       }
-      if(length==0) {
-        index = Table[hash3];
-        if(index!=0) {
-          U32 i=1;
-          for (; i <= MinLen3; i++)
-            if(buffer[index-i]!=buffer(i)){index=0;break;}
-          if(index!=0) {
-            length=MinLen3-baselen; // 1
-//          for (; i <= MaxExtend; i++)
-//            if(buffer[index-i]!=buffer(i))break;else length++;
-          }
-        }
+      if (bestLen>=minLen) {
+        length = bestLen-(MinLen-1); // rebase, a length of 1 actually means a length of MinLen
+        index = bestIndex;
       }
+      else
+        length = index = 0;
     }
-
     // update position information in hashtable
-    Table[hash1] = Table[hash2] = Table[hash3] = pos;
-
+    for (U32 i=0; i<NumHashes; i++)
+      Table[hashes[i]] = pos;
     SCM[0].set(buffer[index]);
-    SCM[1].set(pos);
+    SCM[1].set(buffer[index]);
+    SCM[2].set(pos);
     Map.set((buffer[index]<<8)|buffer(1));
     if (Stats)
       Stats->Match.byte = (length)?buffer[index]:0;
@@ -4618,76 +4591,75 @@ public:
   U16 BypassPrediction; // prediction for bypass mode
   MatchModel(const U32 Size, const bool AllowBypass = false) :
     Table(Size/sizeof(U32)),
-    StateMaps{ 56*256, 8*256*256+1, 256*256, 256, 256*256 },
-    SCM{ {8,8},{8,8} },
+    StateMaps{ 56*256, 8*256*256+1, 256*256 },
+    SCM{ {8,8}, {11,1}, {8,8} },
     Map{ 16 },
-    hash1 { 0 }, hash2 { 0 }, hash3 { 0 },
+    hashes{ 0 },
     ctx{ 0 },
     length(0),
     mask(Size/sizeof(U32)-1),
     delta(false),
     canBypass(AllowBypass),
     Bypass(false),
-    BypassPrediction(2047)
+    BypassPrediction(2048)
   {
     assert(ispowerof2(Size));
   }
   int Predict(Mixer& m, Buf& buffer, ModelStats *Stats = nullptr) {
     if (bpos==0)
       Update(buffer, Stats);
-    const int predicted_bit = (buffer[index]>>(7-bpos))&1;
-    const bool ismatch=((buffer[index]+256)>>(8-bpos))==c0;
+    else
+      SCM[1].set((bpos<<8)|(buffer[index]^U8(c0<<(8-bpos))));
+    const int expectedBit = (buffer[index]>>(7-bpos))&1;
+    const bool isMatch=((buffer[index]+256)>>(8-bpos))==c0;
     if (canBypass && Bypass) {
-      if (length>0 && !ismatch)
+      if (length>0 && !isMatch)
         length = 0;
     }
     else {
-      // these 3 contexts are matchmodel-specific
-      ctx[0] = ctx[1] = ctx[2] = 0; 
-      // these 2 contexts are general (8-bit images benefit from them the most)
-      // note: they are modeled by normalModel as well
-      ctx[3] = c0;                  // order 0 context
-      ctx[4] = c0 | (buffer(1)<<8); // order 1 context
+      for (U32 i=0; i<NumCtxs; i++)
+        ctx[i] = 0;
       if (length>0) {
-        if (buffer(1)==buffer[index-1] && ismatch) { // next bit matches the prediction?
+        if (buffer(1)==buffer[index-1] && isMatch) { // next bit matches the prediction?
           if (length<=16)
-            ctx[0] = (((length-1)<<1) | predicted_bit); // 0..31
+            ctx[0] = (length-1)*2 + expectedBit; // 0..31
           else
-            ctx[0] = (((min(length-1, 63)>>2)<<1) + predicted_bit + 24); // 32..55
+            ctx[0] = 24 + (min(length-1, 63)>>2)*2 + expectedBit; // 32..55
           ctx[0] = ((ctx[0]<<8) | c0);
           ctx[1] = (((buffer[index])<<11) | (bpos<<8) | buffer(1)) + 1;
-          const int sign=2*predicted_bit-1;
+          const int sign=2*expectedBit-1;
           m.add(sign*(min(length,32)<<5)); // +/- 32..1024
           m.add(sign*(ilog(length)<<2));   // +/-  0..1024
         }
         else { // we have a mismatch
-          delta = true; // switch to delta mode
+          delta = (length+MinLen)>DeltaLen;
           length = 0;
         }
       }
 
-      if(length==0) { // no match at all or delta mode
+      if (length==0) { // no match at all or delta mode
         m.add(0);
         m.add(0);
       }
 
-      if(delta)
+      if (delta)
         ctx[2] = (buffer[index]<<8) | c0;
 
       for (U32 i=0; i<NumCtxs; i++) {
-        const U32 c=ctx[i];
-        const U32 p=StateMaps[i].p(c);
-        if(c!=0)
+        const U32 c = ctx[i];
+        const U32 p = StateMaps[i].p(c);
+        if (c!=0)
           m.add((stretch(p)+1)>>1);
         else
           m.add(0);
       }
 
-      SCM[0].mix(m, 7, 1, 4);
-      SCM[1].mix(m, 5);
+      SCM[0].mix(m);
+      SCM[1].mix(m, 6);
+      SCM[2].mix(m, 5);
       Map.mix(m, 1, 4, 255);
     }
-    BypassPrediction = length==0 ? 2048 : (predicted_bit==0 ? 1 : 4095);
+    BypassPrediction = length==0 ? 2048 : (expectedBit==0 ? 1 : 4095);
     if (Stats)
       Stats->Match.length = length;
     return length;
@@ -5285,7 +5257,7 @@ void im24bitModel(Mixer& m, int info, ModelStats *Stats = nullptr, int alpha=0, 
         if (color>=stride) color=0;
       }
       else {
-        if (padding>0) color=stride+1;
+        if (padding>0) color=stride;
         else color=0;
       }
       if (isPNG) {
@@ -5652,7 +5624,7 @@ void im24bitModel(Mixer& m, int info, ModelStats *Stats = nullptr, int alpha=0, 
 //////////////////////////// im8bitModel /////////////////////////////////
 
 // Model for 8-bit image data
-void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
+void im8bitModel(Mixer& m, int w, ModelStats *Stats = nullptr, int gray = 0, int isPNG=0) {
   static const int nMaps = 57;
   static ContextMap cm(MEM*4, 49);
   static StationaryMap Map[nMaps] = { 12, 8, 8, 8, 8, 8, 8, 8,
@@ -5921,6 +5893,13 @@ void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
           ctx = min(0x1F,x/max(1,w/min(32,columns[0])))|( ( ((abs(W-N)*16>W+N)<<1)|(abs(N-NW)>8) )<<5 )|((W+N)&0x180);
 
         res = Clamp4(W+N-NW,W,NW,N,NE)-px;
+      }
+      if (Stats) {
+        Stats->Image.pixels.W = W;
+        Stats->Image.pixels.N = N;
+        Stats->Image.pixels.NN = NN;
+        Stats->Image.pixels.WW = WW;
+        Stats->Image.ctx = ctx>>gray;
       }
     }
   }
@@ -8186,7 +8165,7 @@ private:
   dmcModel dmcmodel1b;
   dmcModel dmcmodel2a; // models 1,2,3 have different threshold parameters and their 
   dmcModel dmcmodel2b; // predictions are emitted to the mixer
-    dmcModel dmcmodel3a;
+  dmcModel dmcmodel3a;
   dmcModel dmcmodel3b;
   // states of each model-pair:
   //   0: model (a) and (b) are both active, both are growing (initial state)
@@ -8637,6 +8616,7 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
 class normalModel { 
   ContextMap2 cm;
   RunContextMap rcm7, rcm9, rcm10;
+  StateMap StateMaps[2];
   U32 cxt[15]; // context hashes // note: cxt[0] is always 0
   void update_contexts(U8 B) {
     B++; 
@@ -8681,7 +8661,7 @@ class normalModel {
   }
 
 public:
-  normalModel(): cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM) {
+  normalModel(): cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), StateMaps{ 256, 256*256 } {
     memset(&cxt[0], 0, sizeof(cxt));
     if (options&OPTION_TRAINTXT) {
       Train("english.dic",3);
@@ -8696,6 +8676,8 @@ public:
     rcm7.mix(m);
     rcm9.mix(m);
     rcm10.mix(m);
+    m.add((stretch(StateMaps[0].p(c0))+1)>>1);
+    m.add((stretch(StateMaps[1].p(c0|(buf(1)<<8)))+1)>>1);
     return order;
   }
 };
@@ -8733,9 +8715,9 @@ public:
     if(level>=4)dmcforest=new dmcForest();
 
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(1083, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer(1085, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
     #else
-      m=MixerFactory::CreateMixer( 833, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer( 835, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
     #endif //USE_WORD_MODEL
     }
 
@@ -8786,12 +8768,12 @@ int ContextModel::Predict(ModelStats *Stats){
   // Test for special block types
   if (blocktype==IMAGE1) im1bitModel(*m, blockinfo);
   if (blocktype==IMAGE4) return im4bitModel(*m, blockinfo), m->p();
-  if (blocktype==IMAGE8) return im8bitModel(*m, blockinfo), m->p();
-  if (blocktype==IMAGE8GRAY) return im8bitModel(*m, blockinfo, 1), m->p(0,1);
+  if (blocktype==IMAGE8) return im8bitModel(*m, blockinfo, Stats), m->p();
+  if (blocktype==IMAGE8GRAY) return im8bitModel(*m, blockinfo, Stats, 1), m->p(0,1);
   if (blocktype==IMAGE24) return im24bitModel(*m, blockinfo, Stats), m->p(1,1);
   if (blocktype==IMAGE32) return im24bitModel(*m, blockinfo, Stats, 1), m->p();
-  if (blocktype==PNG8) return im8bitModel(*m, blockinfo, 0, 1), m->p();
-  if (blocktype==PNG8GRAY) return im8bitModel(*m, blockinfo, 1, 1), m->p(0,1);
+  if (blocktype==PNG8) return im8bitModel(*m, blockinfo, Stats, 0, 1), m->p();
+  if (blocktype==PNG8GRAY) return im8bitModel(*m, blockinfo, Stats, 1, 1), m->p(0,1);
   if (blocktype==PNG24) return im24bitModel(*m, blockinfo, Stats, 0, 1), m->p(1,1);
   if (blocktype==PNG32) return im24bitModel(*m, blockinfo, Stats, 1, 1), m->p();
   #ifdef USE_WAVMODEL
@@ -8858,8 +8840,13 @@ class Predictor {
     APM1 APM1s[3];
   } Text;
   struct {
-    APM<24> APMs[4];
-    APM1 APM1s[2];
+    struct {
+      APM<24> APMs[4];
+      APM1 APM1s[2];
+    } Color;
+    struct {
+      APM<24> APMs[3];
+    } Gray;
   } Image;
   struct {
     APM1 APM1s[7];
@@ -8874,8 +8861,11 @@ public:
 Predictor::Predictor() :
   pr(2048), 
   Text{ {0x10000, 0x10000, 0x10000, 0x10000}, {0x10000, 0x10000, 0x10000} },
-  Image{ {0x1000, 0x10000, 0x10000, 0x10000}, {0x10000, 0x10000} },
-  Generic{ {256, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000} }
+  Image{ 
+    {{0x1000, 0x10000, 0x10000, 0x10000}, {0x10000, 0x10000}}, // color
+    {{0x1000, 0x10000, 0x10000}} //gray
+  },
+  Generic{ {0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000} }
   {
   memset(&stats, 0, sizeof(ModelStats));
 }
@@ -8921,17 +8911,27 @@ void Predictor::update() {
     }
     case IMAGE24: case IMAGE32: {
       int limit=0x3FF>>((blpos<0xFFF)*4);
-      pr  = Image.APMs[0].p(pr0, (c0<<4)|(stats.Misses&0xF), limit);
-      pr1 = Image.APMs[1].p(pr0, hash(c0, stats.Image.pixels.W, stats.Image.pixels.WW)&0xFFFF, limit);
-      pr2 = Image.APMs[2].p(pr0, hash(c0, stats.Image.pixels.N, stats.Image.pixels.NN)&0xFFFF, limit);
-      pr3 = Image.APMs[3].p(pr0, (c0<<8)|stats.Image.ctx, limit);
+      pr  = Image.Color.APMs[0].p(pr0, (c0<<4)|(stats.Misses&0xF), limit);
+      pr1 = Image.Color.APMs[1].p(pr0, hash(c0, stats.Image.pixels.W, stats.Image.pixels.WW)&0xFFFF, limit);
+      pr2 = Image.Color.APMs[2].p(pr0, hash(c0, stats.Image.pixels.N, stats.Image.pixels.NN)&0xFFFF, limit);
+      pr3 = Image.Color.APMs[3].p(pr0, (c0<<8)|stats.Image.ctx, limit);
 
       pr0 = (pr0+pr1+pr2+pr3+2)>>2;
 
-      pr1 = Image.APM1s[0].p(pr, hash(c0, stats.Image.pixels.W, buf(1)-stats.Image.pixels.Wp1, stats.Image.plane)&0xFFFF);
-      pr2 = Image.APM1s[1].p(pr, hash(c0, stats.Image.pixels.N, buf(1)-stats.Image.pixels.Np1, stats.Image.plane)&0xFFFF);
+      pr1 = Image.Color.APM1s[0].p(pr, hash(c0, stats.Image.pixels.W, buf(1)-stats.Image.pixels.Wp1, stats.Image.plane)&0xFFFF);
+      pr2 = Image.Color.APM1s[1].p(pr, hash(c0, stats.Image.pixels.N, buf(1)-stats.Image.pixels.Np1, stats.Image.plane)&0xFFFF);
 
       pr=(pr*2+pr1*3+pr2*3+4)>>3;
+      pr = (pr+pr0+1)>>1;
+      break;
+    }
+    case IMAGE8GRAY: {
+      int limit=0x3FF>>((blpos<0xFFF)*4);
+      pr  = Image.Gray.APMs[0].p(pr0, (c0<<4)|(stats.Misses&0xF), limit);
+      pr1 = Image.Gray.APMs[1].p(pr, (c0<<8)|stats.Image.ctx, limit);
+      pr2 = Image.Gray.APMs[2].p(pr0, bpos|(stats.Image.ctx&0xF8)|(stats.Match.byte<<8), limit);
+
+      pr0 = (2*pr0+pr1+pr2+2)>>2;
       pr = (pr+pr0+1)>>1;
       break;
     }
@@ -9547,7 +9547,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
       }
       else if (wavtype){
         if (wavtype==1) {
-          if (p==16+wavlen && (buf1!=0x666d7420 || bswap(buf0)!=16)) wavlen=((bswap(buf0)+1)&(-2))+8, wavi*=(buf1==0x666d7420 && bswap(buf0)!=16);
+          if (p==16+wavlen && (buf1!=0x666d7420 || ((wavm=bswap(buf0)-16)&0xFFFFFFFD)!=0)) wavlen=((bswap(buf0)+1)&(-2))+8, wavi*=(buf1==0x666d7420 && (wavm&0xFFFFFFFD)!=0);
           else if (p==22+wavlen) wavch=bswap(buf0)&0xffff;
           else if (p==34+wavlen) wavbps=bswap(buf0)&0xffff;
           else if (p==40+wavlen+wavm && buf1!=0x64617461) wavm+=((bswap(buf0)+1)&(-2))+8,wavi=(wavm>0xfffff?0:wavi);
