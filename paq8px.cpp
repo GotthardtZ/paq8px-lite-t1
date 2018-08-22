@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "159"  //update version here before publishing your changes
+#define PROGVERSION  "160"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -625,6 +625,24 @@ public:
   virtual void blockwrite(U8 *ptr, U64 count) = 0;
   U32 get32(){return (getchar() << 24) | (getchar() << 16) | (getchar() << 8) | (getchar());}
   void put32(U32 x){putchar((x >> 24) & 255); putchar((x >> 16) & 255); putchar((x >> 8) & 255); putchar(x & 255);}
+  U64 getVLI(){
+    U64 i=0;
+    int k=0;
+    U8 B=0;
+    do {
+      B=getchar();
+      i|=U64((B&0x7F)<<k);
+      k+=7;
+    } while ((B>>7)>0);
+    return i;
+  }
+  void putVLI(U64 i) {
+    while (i>0x7F) {
+      putchar(0x80|(i&0x7F));
+      i>>=7;
+    }
+    putchar(U8(i));
+  }
   virtual void setpos(U64 newpos) = 0;
   virtual void setend() = 0;
   virtual U64 curpos() = 0;
@@ -1066,6 +1084,15 @@ inline U32 BitCount(U32 v) {
   v = ((v >> 8) + v) & 0x00ff00ff;
   v = ((v >> 16) + v) & 0x0000ffff;
   return v;
+}
+
+inline int VLICost(U64 n) {
+  int cost = 1;
+  while (n>0x7F) {
+    n>>=7;
+    cost++;
+  }
+  return cost;
 }
 
 // ilog2
@@ -1770,14 +1797,15 @@ inline U32 hash(U32 a, U32 b, U32 c=0xffffffff, U32 d=0xffffffff,
 
 // Magic number 2654435761 is the prime number closest to the 
 // golden ratio of 2^32 (2654435769)
-#define PHI 0x9E3779B1 //2654435761
+#define PHI UINT32_C(0x9E3779B1) //2654435761
 
 // A hash function to diffuse a 32-bit input
 inline U32 hash(U32 x) {
   x++; // zeroes are common and mapped to zero
-  x = ((x >> 16) ^ x) * 0x85ebca6b;
-  x = ((x >> 13) ^ x) * 0xc2b2ae35;
-  x = (x >> 16) ^ x;
+  x = ((x >> 17) ^ x) * UINT32_C(0xed5ad4bb);
+  x = ((x >> 11) ^ x) * UINT32_C(0xac4c1b51);
+  x = ((x >> 15) ^ x) * UINT32_C(0x31848bab);
+  x = (x >> 14) ^ x;
   return x;
 }
 
@@ -8525,7 +8553,7 @@ enum XMLState {
     (*Content).Type |= ISBN; \
 }
 
-void XMLModel(Mixer& m, ModelStats *Stats = NULL){
+void XMLModel(Mixer& m, ModelStats *Stats = nullptr){
   static ContextMap cm(MEM/4, 4);
   static XMLTagCache Cache;
   static U32 StateBH[8];
@@ -8800,9 +8828,8 @@ class ContextModel{
   MatchModel matchModel;
   Mixer *m;
   Blocktype next_blocktype, blocktype;
-  int blocksize, blockinfo;
-  void UpdateContexts(U8 B);
-  void Train(const char* Dictionary, int Iterations = 1);
+  int blocksize, blockinfo, bytesread;
+  bool readsize;
 public:
   bool Bypass;
   ContextModel() : jpegModel(0), dmcforest(0),
@@ -8812,7 +8839,7 @@ public:
     #endif //USE_TEXTMODEL
     matchModel(MEM*4, options&OPTION_FASTMODE),
 
-    next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0), Bypass(false) {
+    next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0), bytesread(0), readsize(false), Bypass(false) {
 
     if(level>=4)dmcforest=new dmcForest();
 
@@ -8836,17 +8863,34 @@ int ContextModel::Predict(ModelStats *Stats){
   if (bpos==0) {
     --blocksize;
     ++blpos;
-    if (blocksize==-1) next_blocktype=(Blocktype)buf(1); //got blocktype but don't switch (we don't have all the info yet)
-    if (blocksize==-5 && !hasInfo(next_blocktype)) {
-      blocksize=buf(4)<<24|buf(3)<<16|buf(2)<<8|buf(1);
-      if (hasRecursion(next_blocktype)) blocksize=0;
-      blpos=0;
+    if (blocksize==-1) {
+      next_blocktype=(Blocktype)buf(1); //got blocktype but don't switch (we don't have all the info yet)
+      bytesread=0;
+      readsize=true;
     }
-    if (blocksize==-9) {
-      blocksize=buf(8)<<24|buf(7)<<16|buf(6)<<8|buf(5);
-      blockinfo=buf(4)<<24|buf(3)<<16|buf(2)<<8|buf(1);
-      blpos=0;
+    else if (blocksize<0) {
+      if (readsize) {
+        U8 B=buf(1);
+        bytesread|=int(B&0x7F)<<((-blocksize-2)*7);
+        if ((B>>7)==0) {
+          readsize=false;
+          if (!hasInfo(next_blocktype)) {
+            blocksize=bytesread;
+            if (hasRecursion(next_blocktype))
+              blocksize=0;
+            blpos=0;
+          }
+          else
+            blocksize=-1;
+        }
+      }
+      else if (blocksize==-5) {
+        blocksize=bytesread;
+        blockinfo=buf(4)<<24|buf(3)<<16|buf(2)<<8|buf(1);
+        blpos=0;
+      }
     }
+
     if (blpos==0) blocktype=next_blocktype; //got all the info - switch to next blocktype
     if (blocksize==0) blocktype=DEFAULT;
     if (Stats)
@@ -8946,7 +8990,7 @@ class Predictor {
     struct {
       APM<24> APMs[4];
       APM1 APM1s[2];
-    } Color;
+    } Color, Palette;
     struct {
       APM<24> APMs[3];
     } Gray;
@@ -8966,6 +9010,7 @@ Predictor::Predictor() :
   Text{ {0x10000, 0x10000, 0x10000, 0x10000}, {0x10000, 0x10000, 0x10000} },
   Image{ 
     {{0x1000, 0x10000, 0x10000, 0x10000}, {0x10000, 0x10000}}, // color
+    {{0x1000, 0x10000, 0x10000, 0x10000}, {0x10000, 0x10000}}, // palette
     {{0x1000, 0x10000, 0x10000}} //gray
   },
   Generic{ {0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000} }
@@ -9035,6 +9080,22 @@ void Predictor::update() {
       pr2 = Image.Gray.APMs[2].p(pr0, bpos|(stats.Image.ctx&0xF8)|(stats.Match.expectedByte<<8), limit);
 
       pr0 = (2*pr0+pr1+pr2+2)>>2;
+      pr = (pr+pr0+1)>>1;
+      break;
+    }
+    case IMAGE8: {
+      int limit=0x3FF>>((blpos<0xFFF)*4);
+      pr  = Image.Palette.APMs[0].p(pr0, (c0<<4)|(stats.Misses&0xF), limit);
+      pr1 = Image.Palette.APMs[1].p(pr0, hash(c0, stats.Image.pixels.W, stats.Image.pixels.N)&0xFFFF, limit);
+      pr2 = Image.Palette.APMs[2].p(pr0, hash(c0, stats.Image.pixels.N, stats.Image.pixels.NN)&0xFFFF, limit);
+      pr3 = Image.Palette.APMs[3].p(pr0, hash(c0, stats.Image.pixels.W, stats.Image.pixels.WW)&0xFFFF, limit);
+
+      pr0 = (pr0+pr1+pr2+pr3+2)>>2;
+      
+      pr1 = Image.Palette.APM1s[0].p(pr0, hash(c0, stats.Match.expectedByte, stats.Image.pixels.N)&0xFFFF, 5);
+      pr2 = Image.Palette.APM1s[1].p(pr, hash(c0, stats.Image.pixels.W, stats.Image.pixels.N)&0xFFFF, 6);
+
+      pr = (pr*2+pr1+pr2+2)>>2;
       pr = (pr+pr0+1)>>1;
       break;
     }
@@ -9140,19 +9201,23 @@ public:
 
   void encode_blocksize(U64 blocksize) {
     //TODO: Large file support
-    compress((blocksize>>24)&0xFF);
-    compress((blocksize>>16)&0xFF);
-    compress((blocksize>>8)&0xFF);
-    compress((blocksize)&0xFF);
+    while (blocksize>0x7F) {
+      compress(0x80|(blocksize&0x7F));
+      blocksize>>=7;
+    }
+    compress(U8(blocksize));
   }
 
   U64 decode_blocksize() {
     //TODO: Large file support
     U64 blocksize=0;
-    blocksize =U64(decompress())<<24;
-    blocksize|=U64(decompress())<<16;
-    blocksize|=U64(decompress())<<8;
-    blocksize|=U64(decompress());
+    U8 B=0;
+    int i=0;
+    do {
+      B=decompress();
+      blocksize|=U64((B&0x7F)<<i);
+      i+=7;
+    } while ((B>>7)>0);
     return blocksize;
   }
 
@@ -10326,7 +10391,7 @@ U64 decode_eol(Encoder& en, U64 size, File *out, FMode mode, U64 &diffFound) {
 void encode_exe(File *in, File *out, U64 len, U64 begin) {
   const int BLOCK=0x10000;
   Array<U8> blk(BLOCK);
-  out->put32((U32)begin); //TODO: Large file support
+  out->putVLI(begin); //TODO: Large file support
 
   // Transform
   for (U64 offset=0; offset<len; offset+=BLOCK) {
@@ -10354,7 +10419,7 @@ U64 decode_exe(Encoder& en, U64 size, File *out, FMode mode, U64 &diffFound) {
   int begin, offset=6, a;
   U8 c[6];
   begin=(int)en.decode_blocksize(); //TODO: Large file support
-  size-=4;
+  size-=VLICost(U64(begin));
   for (int i=4; i>=0; i--) c[i]=en.decompress();  // Fill queue
 
   while (offset<(int)size+6) {
