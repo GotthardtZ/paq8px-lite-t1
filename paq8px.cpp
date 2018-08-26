@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "160"  //update version here before publishing your changes
+#define PROGVERSION  "161"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -2069,8 +2069,8 @@ class StationaryMap {
   U32 *cp;
 public:
   StationaryMap(int BitsOfContext, int InputBits = 8, int Rate = 0): Data(1ull<<(BitsOfContext+InputBits)), Context(0), Mask(1<<InputBits), bCount(1), B(1) {
-    assert(BitsOfContext<=16);
     assert(InputBits>0 && InputBits<=8);
+    assert(BitsOfContext+InputBits<=24);
     Reset(Rate);
     cp=&Data[0];
   }
@@ -4595,7 +4595,7 @@ private:
   Array<U32> Table;
   StateMap StateMaps[NumCtxs];
   SmallStationaryContextMap SCM[3];
-  StationaryMap Map;
+  StationaryMap Maps[2];
   U32 hashes[NumHashes];
   U32 ctx[NumCtxs];
   U32 length;    // rebased length of match (length=1 represents the smallest accepted match length), or 0 if no match
@@ -4650,22 +4650,24 @@ private:
     SCM[0].set(expectedByte);
     SCM[1].set(expectedByte);
     SCM[2].set(pos);
-    Map.set((expectedByte<<8)|buffer(1));
+    Maps[0].set((expectedByte<<8)|buffer(1));
+    Maps[1].set(hash(expectedByte, c0, buffer(1), buffer(2)));
     if (Stats)
       Stats->Match.expectedByte = (length>0) ? expectedByte : 0;
   }
 public:
   bool Bypass;
   U16 BypassPrediction; // prediction for bypass mode
-  MatchModel(const U32 Size, const bool AllowBypass = false) :
+  MatchModel(const U64 Size, const bool AllowBypass = false) :
     Table(Size/sizeof(U32)),
     StateMaps{ 56*256, 8*256*256+1, 256*256 },
     SCM{ {8,8}, {11,1}, {8,8} },
-    Map{ 16 },
+    Maps{ {16}, {20,1} },
     hashes{ 0 },
     ctx{ 0 },
     length(0),
     mask(Size/sizeof(U32)-1),
+    expectedByte(0),
     delta(false),
     canBypass(AllowBypass),
     Bypass(false),
@@ -4676,13 +4678,15 @@ public:
   int Predict(Mixer& m, Buf& buffer, ModelStats *Stats = nullptr) {
     if (bpos==0)
       Update(buffer, Stats);
-    else
+    else {
       SCM[1].set((bpos<<8)|(expectedByte^U8(c0<<(8-bpos))));
+      Maps[1].set(hash(expectedByte, c0, buffer(1), buffer(2)));
+    }
     const int expectedBit = (expectedByte>>(7-bpos))&1;
 
-    if(length>0) {
+    if (length>0) {
       const bool isMatch = bpos==0 ? buffer(1)==buffer[index-1] : ((expectedByte+256)>>(8-bpos))==c0; // next bit matches the prediction?
-      if(!isMatch) {
+      if (!isMatch) {
         delta = (length+MinLen)>DeltaLen;
         length = 0;
       }
@@ -4692,20 +4696,20 @@ public:
       for (U32 i=0; i<NumCtxs; i++)
         ctx[i] = 0;
       if (length>0) {
-          if (length<=16)
-            ctx[0] = (length-1)*2 + expectedBit; // 0..31
-          else
-            ctx[0] = 24 + (min(length-1, 63)>>2)*2 + expectedBit; // 32..55
-          ctx[0] = ((ctx[0]<<8) | c0);
-          ctx[1] = ((expectedByte<<11) | (bpos<<8) | buffer(1)) + 1;
-          const int sign = 2*expectedBit-1;
-          m.add(sign*(min(length,32)<<5)); // +/- 32..1024
-          m.add(sign*(ilog(length)<<2));   // +/-  0..1024
-        }
-        else { // no match at all or delta mode
-          m.add(0);
-          m.add(0);
-        }
+        if (length<=16)
+          ctx[0] = (length-1)*2 + expectedBit; // 0..31
+        else
+          ctx[0] = 24 + (min(length-1, 63)>>2)*2 + expectedBit; // 32..55
+        ctx[0] = ((ctx[0]<<8) | c0);
+        ctx[1] = ((expectedByte<<11) | (bpos<<8) | buffer(1)) + 1;
+        const int sign = 2*expectedBit-1;
+        m.add(sign*(min(length, 32)<<5)); // +/- 32..1024
+        m.add(sign*(ilog(length)<<2));   // +/-  0..1024
+      }
+      else { // no match at all or delta mode
+        m.add(0);
+        m.add(0);
+      }
 
       if (delta)
         ctx[2] = (expectedByte<<8) | c0;
@@ -4722,7 +4726,8 @@ public:
       SCM[0].mix(m);
       SCM[1].mix(m, 6);
       SCM[2].mix(m, 5);
-      Map.mix(m, 1, 4, 255);
+      Maps[0].mix(m, 1, 4, 255);
+      Maps[1].mix(m);
     }
     BypassPrediction = length==0 ? 2048 : (expectedBit==0 ? 1 : 4095);
     if (Stats)
@@ -4731,6 +4736,123 @@ public:
   }
 };
 
+class SparseMatchModel {
+private:
+  enum Parameters : U32 {
+    MaxLen    = 0xFFFF, // longest allowed match
+    MinLen    = 3,      // default minimum required match length
+    NumHashes = 2,      // number of hashes used
+  };
+  struct sparseConfig {
+    U32 offset    = 0;      // number of last input bytes to ignore when searching for a match
+    U32 stride    = 1;      // look for a match only every stride bytes after the offset
+    U32 deletions = 0;      // when a match is found, ignore these many initial post-match bytes, to model deletions
+    U32 minLen    = MinLen;
+    U32 bitMask   = 0xFF;   // match every byte according to this bit mask
+  };
+  const sparseConfig sparse[NumHashes] = { {0,1,0,5,0xDF}, {1,1,0,4} };
+  Array<U32> Table;
+  StationaryMap Maps[2];
+  U32 hashes[NumHashes];
+  U32 hashIndex;   // index of hash used to find current match
+  U32 length;      // rebased length of match (length=1 represents the smallest accepted match length), or 0 if no match
+  U32 index;       // points to next byte of match in buffer, 0 when there is no match
+  U32 mask;
+  U8 expectedByte; // prediction is based on this byte (buffer[index]), valid only when length>0
+  bool valid;
+  void Update(Buf& buffer, ModelStats *Stats = nullptr) {
+    // update sparse hashes
+    for (U32 i=0; i<NumHashes; i++) {
+      hashes[i] = (i+1)*PHI;
+      for (U32 j=0, k=sparse[i].offset+1; j<sparse[i].minLen; j++, k+=sparse[i].stride)
+        hashes[i] = combine(hashes[i], (buffer(k)&sparse[i].bitMask)<<i);
+      hashes[i]&=mask;
+    }
+    // extend current match, if available
+    if (length) {
+      index++;
+      if (length<MaxLen)
+        length++;
+    }
+    // or find a new match
+    else {     
+      for (U32 i=0; i<NumHashes; i++) {
+        index = Table[hashes[i]];
+        if (index>0) {
+          U32 offset = sparse[i].offset+1;
+          while (length<sparse[i].minLen && ((buffer(offset)^buffer[index-offset])&sparse[i].bitMask)==0) {
+            length++;
+            offset+=sparse[i].stride;
+          }
+          if (length>=sparse[i].minLen) {
+            length-=(sparse[i].minLen-1);
+            index+=sparse[i].deletions;
+            hashIndex = i;
+            break;
+          }
+        }
+        length = index = 0;
+      }
+    }
+    // update position information in hashtable
+    for (U32 i=0; i<NumHashes; i++)
+      Table[hashes[i]] = pos;
+    
+    expectedByte = buffer[index];
+    
+    valid = length>1; // only predict after at least one byte following the match
+    if (valid) {
+      Maps[0].set(hash(expectedByte, c0, buffer(1), buffer(2)));
+      Maps[1].set((expectedByte<<8)|buffer(1));
+    }
+  }
+public:
+  SparseMatchModel(const U64 Size, const bool AllowBypass = false) :
+    Table(Size/sizeof(U32)),
+    Maps{ {20, 1}, {17, 4} },
+    hashes{ 0 },
+    hashIndex(0),
+    length(0),
+    mask(Size/sizeof(U32)-1),
+    expectedByte(0),
+    valid(false)
+  {
+    assert(ispowerof2(Size));
+  }
+  int Predict(Mixer& m, Buf& buffer, ModelStats *Stats = nullptr) {
+    if (bpos==0)
+      Update(buffer, Stats);
+    else if (valid) {
+      Maps[0].set(hash(expectedByte, c0, buffer(1), buffer(2)));
+      if (bpos==4)
+        Maps[1].set(0x10000|((expectedByte^U8(c0<<4))<<8)|buffer(1));
+    }
+
+    // check if next bit matches the prediction, accounting for the required bitmask
+    if (length>0 && (((expectedByte^U8(c0<<(8-bpos)))&sparse[hashIndex].bitMask)>>(8-bpos))!=0)
+      length = 0;
+
+    if (valid) {
+      if (length>1 && ((sparse[hashIndex].bitMask>>(7-bpos))&1)>0) {
+        const int expectedBit = (expectedByte>>(7-bpos))&1;
+        const int sign = 2*expectedBit-1;
+        m.add(sign*(min(length-1, 64)<<4)); // +/- 16..1024
+        m.add(sign*(1<<min(length-2, 3))*min(length-1, 8)<<4); // +/- 16..1024
+        m.add(sign*512);
+      }
+      else {
+        m.add(0); m.add(0); m.add(0);
+      }
+
+      Maps[0].mix(m, 1, 2);
+      Maps[1].mix(m, 1, 2);
+    }
+    else
+      for (int i=0; i<7; i++, m.add(0));
+
+    return length;
+  }
+};
 
 //////////////////////////// charGroupModel /////////////////////////
 
@@ -8826,6 +8948,7 @@ class ContextModel{
   TextModel textModel;
   #endif //USE_TEXTMODEL
   MatchModel matchModel;
+  SparseMatchModel sparseMatchModel;
   Mixer *m;
   Blocktype next_blocktype, blocktype;
   int blocksize, blockinfo, bytesread;
@@ -8838,15 +8961,16 @@ public:
       textModel(MEM*16),
     #endif //USE_TEXTMODEL
     matchModel(MEM*4, options&OPTION_FASTMODE),
+    sparseMatchModel(MEM/2),
 
     next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0), bytesread(0), readsize(false), Bypass(false) {
 
     if(level>=4)dmcforest=new dmcForest();
 
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(1113, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer(1129, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
     #else
-      m=MixerFactory::CreateMixer( 863, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer( 879, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
     #endif //USE_WORD_MODEL
     }
 
@@ -8908,28 +9032,29 @@ int ContextModel::Predict(ModelStats *Stats){
     return matchModel.BypassPrediction;
   }
   matchlength=ilog(matchlength); // ilog of length of most recent match (0..255)
-  
+
   int order=normalmodel.mix(*m);
 
   // Test for special block types
   if (blocktype==IMAGE1) im1bitModel(*m, blockinfo);
   if (blocktype==IMAGE4) return im4bitModel(*m, blockinfo), m->p();
-  if (blocktype==IMAGE8) return im8bitModel(*m, blockinfo, Stats), m->p();
+  if (blocktype==IMAGE8) return im8bitModel(*m, blockinfo, Stats), m->p(0,1);
   if (blocktype==IMAGE8GRAY) return im8bitModel(*m, blockinfo, Stats, 1), m->p(0,1);
   if (blocktype==IMAGE24) return im24bitModel(*m, blockinfo, Stats), m->p(1,1);
-  if (blocktype==IMAGE32) return im24bitModel(*m, blockinfo, Stats, 1), m->p();
-  if (blocktype==PNG8) return im8bitModel(*m, blockinfo, Stats, 0, 1), m->p();
+  if (blocktype==IMAGE32) return im24bitModel(*m, blockinfo, Stats, 1), m->p(0,1);
+  if (blocktype==PNG8) return im8bitModel(*m, blockinfo, Stats, 0, 1), m->p(0,1);
   if (blocktype==PNG8GRAY) return im8bitModel(*m, blockinfo, Stats, 1, 1), m->p(0,1);
   if (blocktype==PNG24) return im24bitModel(*m, blockinfo, Stats, 0, 1), m->p(1,1);
-  if (blocktype==PNG32) return im24bitModel(*m, blockinfo, Stats, 1, 1), m->p();
+  if (blocktype==PNG32) return im24bitModel(*m, blockinfo, Stats, 1, 1), m->p(0,1);
   #ifdef USE_WAVMODEL
-  if (blocktype==AUDIO) return wavModel(*m, blockinfo, Stats), m->p();
+  if (blocktype==AUDIO) return wavModel(*m, blockinfo, Stats), m->p(0,1);
   #endif //USE_WAVMODEL
   if ((blocktype==JPEG || blocktype==HDR)) {
     if(jpegModel==nullptr)jpegModel=new JpegModel();
     if (jpegModel->jpegModel(*m)) return m->p(1,0);
   }
 
+  sparseMatchModel.Predict(*m, buf, Stats);
   if (level>=4 && blocktype!=IMAGE1) {
     sparseModel(*m,matchlength,order);
     distanceModel(*m);
@@ -9444,21 +9569,21 @@ bool IsGrayscalePalette(File *in, int n = 256, int isRGBA = 0){
     }
     if (!i) {
       res = 0x100|b;
-      order = 1-2*(b>0);
+      order = 1-2*(b>int(ilog2(n)/4));
       continue;
     }
-
     //"j" is the index of the current byte in this color entry
     int j = i%stride;
     if (!j){
       // load first component of this entry
-      res = (res&((b-(res&0xFF)==order)<<8));
+      int k = (b-(res&0xFF))*order;
+      res = res&((k>=0 && k<=8)<<8);
       res|=(res)?b:0;
     }
     else if (j==3)
       res&=((!b || (b==0xFF))*0x1FF); // alpha/attribute component must be zero or 0xFF
     else
-      res&=((b==(res&0xFF))<<9)-1;
+      res&=((b==(res&0xFF))*0x1FF);
   }
   in->setpos(offset);
   return (res>>8)>0;
@@ -9509,7 +9634,8 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
   int zbufpos=0,zzippos=-1, histogram[256]={0};
   int pdfim=0,pdfimw=0,pdfimh=0,pdfimb=0,pdfgray=0,pdfimp=0;
   int b64s=0,b64i=0,b64line=0,b64nl=0; // For base64 detection
-  int gif=0,gifa=0,gifi=0,gifw=0,gifc=0,gifb=0,gifplt=0,gifgray=0; // For GIF detection
+  int gif=0,gifa=0,gifi=0,gifw=0,gifc=0,gifb=0,gifplt=0; // For GIF detection
+  static int gifgray=0;
   int png=0, pngw=0, pngh=0, pngbps=0, pngtype=0, pnggray=0, lastchunk=0, nextchunk=0; // For PNG detection
   TextInfo text = {0};
   // For image detection
@@ -9984,18 +10110,20 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
     if (type==DEFAULT && dett==GIF && i==0) {
       dett=DEFAULT;
       if (c==0x2c || c==0x21) gif=2,gifi=2;
+      else gifgray=0;
     }
     if (!gif && (buf1&0xffff)==0x4749 && (buf0==0x46383961 || buf0==0x46383761)) gif=1,gifi=i+5;
     if (gif) {
       if (gif==1 && i==gifi) gif=2, gifi = i+5+(gifplt=(c&128)?(3*(2<<(c&7))):0);
-      if (gif==2 && gifplt && i==gifi-gifplt-2) gifgray = IsGrayscalePalette(in, gifplt/3), gifplt = 0;
+      if (gif==2 && gifplt && i==gifi-gifplt-3) gifgray = IsGrayscalePalette(in, gifplt/3), gifplt = 0;
       if (gif==2 && i==gifi) {
         if ((buf0&0xff0000)==0x210000) gif=5,gifi=i;
         else if ((buf0&0xff0000)==0x2c0000) gif=3,gifi=i;
         else gif=0;
       }
       if (gif==3 && i==gifi+6) gifw=(bswap(buf0)&0xffff);
-      if (gif==3 && i==gifi+7) gif=4,gifc=gifb=0,gifa=gifi=i+2+((c&128)?(3*(2<<(c&7))):0);
+      if (gif==3 && i==gifi+7) gif=4,gifc=gifb=0,gifa=gifi=i+2+(gifplt=((c&128)?(3*(2<<(c&7))):0));
+      if (gif==4 && gifplt) gifgray = IsGrayscalePalette(in, gifplt/3), gifplt = 0;
       if (gif==4 && i==gifi) {
         if (c>0 && gifb && gifc!=gifb) gifw=0;
         if (c>0) gifb=gifc,gifc=c,gifi+=c+1;
@@ -10811,8 +10939,24 @@ void encode_base64(File *in, File *out, U64 len64) {
   out->blockwrite(&ptr[0], olen);
 }
 
+#define LZW_TABLE_SIZE 9221
+
+#define lzw_find(k) {\
+  offset = ((k)*PHI)>>19; \
+  int stride = (offset>0)?LZW_TABLE_SIZE-offset:1; \
+  while (true){ \
+    if ((index=table[offset])<0){ index=-offset-1; break; } \
+    else if (dict[index]==int(k)){ break; } \
+    offset-=stride; \
+    if (offset<0) \
+      offset+=LZW_TABLE_SIZE; \
+  } \
+}
+
+#define lzw_reset { for (int i=0; i<LZW_TABLE_SIZE; table[i]=-1, i++); }
+
 int encode_gif(File *in, File *out, U64 len, int &hdrsize) {
-  int codesize=in->getchar(),diffpos=0,clearpos=0,bsize=0;
+  int codesize=in->getchar(),diffpos=0,clearpos=0,bsize=0,code,offset=0;
   U64 beginin=in->curpos(),beginout=out->curpos();
   Array<U8> output(4096);
   hdrsize=6;
@@ -10822,18 +10966,20 @@ int encode_gif(File *in, File *out, U64 len, int &hdrsize) {
   out->putchar(clearpos>>8);
   out->putchar(clearpos&255);
   out->putchar(codesize);
+  Array<int> table(LZW_TABLE_SIZE);  
   for (int phase=0; phase<2; phase++) {
     in->setpos(beginin);
     int bits=codesize+1,shift=0,buffer=0;
     int blocksize=0,maxcode=(1<<codesize)+1,last=-1;
     Array<int> dict(4096);
+    lzw_reset;
     bool end=false;
     while ((blocksize=in->getchar())>0 && in->curpos()-beginin<len && !end) {
       for (int i=0; i<blocksize; i++) {
         buffer|=in->getchar()<<shift;
         shift+=8;
         while (shift>=bits && !end) {
-          int code=buffer&((1<<bits)-1);
+          code=buffer&((1<<bits)-1);
           buffer>>=bits;
           shift-=bits;
           if (!bsize && code!=(1<<codesize)) {
@@ -10846,6 +10992,7 @@ int encode_gif(File *in, File *out, U64 len, int &hdrsize) {
               clearpos=69631-maxcode;
             }
             bits=codesize+1, maxcode=(1<<codesize)+1, last=-1;
+            lzw_reset;
           }
           else if (code==(1<<codesize)+1) end=true;
           else if (code>maxcode+1) return 0;
@@ -10862,16 +11009,15 @@ int encode_gif(File *in, File *out, U64 len, int &hdrsize) {
               if (++maxcode>=8191) return 0;
               if (maxcode<=4095)
               {
-                dict[maxcode]=(last<<8)+j;
-                if (phase==0) {
-                  bool diff=false;
-                  for (int m=(1<<codesize)+2;m<min(maxcode,4095);m++) if (dict[maxcode]==dict[m]) { diff=true; break; }
-                  if (diff) {
-                    hdrsize+=4;
-                    j=diffpos-size-(code==maxcode);
-                    out->put32(j);
-                    diffpos=size+(code==maxcode);
-                  }
+                int key=(last<<8)+j, index=-1;
+                lzw_find(key);
+                dict[maxcode]=key;
+                table[(index<0)?-index-1:offset]=maxcode;
+                if (phase==0 && index>0) {
+                  hdrsize+=4;
+                  j=diffpos-size-(code==maxcode);
+                  out->put32(j);
+                  diffpos=size+(code==maxcode);
                 }
               }
               if (maxcode>=((1<<bits)-1) && bits<12) bits++;
@@ -10895,7 +11041,7 @@ int encode_gif(File *in, File *out, U64 len, int &hdrsize) {
 
 #define gif_write_block(count) { output[0]=(count);\
 if (mode==FDECOMPRESS) out->blockwrite(&output[0], (count)+1);\
-else if (mode==FCOMPARE) for (int j=0; j<(count)+1; j++) if (output[j]!=out->getchar() && !diffFound) diffFound=outsize+j+1;\
+else if (mode==FCOMPARE) for (int j=0; j<(count)+1; j++) if (output[j]!=out->getchar() && !diffFound) { diffFound=outsize+j+1; return 1; } \
 outsize+=(count)+1; blocksize=0; }
 
 #define gif_write_code(c) { buffer+=(c)<<shift; shift+=bits;\
@@ -10911,8 +11057,10 @@ int decode_gif(File *in, U64 size, File *out, FMode mode, U64 &diffFound) {
   clearpos=(69631-clearpos)&0xffff;
   int codesize=in->getchar(),bits=codesize+1,shift=0,buffer=0,blocksize=0;
   if (diffcount>4096 || clearpos<=(1<<codesize)+2) return 1;
-  int maxcode=(1<<codesize)+1,input;
+  int maxcode=(1<<codesize)+1,input,code,offset=0;
   Array<int> dict(4096);
+  Array<int> table(LZW_TABLE_SIZE);
+  lzw_reset;
   for (int i=0; i<diffcount; i++) {
     diffpos[i]=in->getchar();
     diffpos[i]=(diffpos[i]<<8)+in->getchar();
@@ -10928,16 +11076,17 @@ int decode_gif(File *in, U64 size, File *out, FMode mode, U64 &diffFound) {
   if (diffcount==0 || diffpos[0]!=0) gif_write_code(1<<codesize) else curdiff++;
   while (size!=0 && (input=in->getchar())!=EOF) {
     size--;
-    int code=-1, key=(last<<8)+input;
-    for (int i=(1<<codesize)+2; i<=min(maxcode,4095); i++) if (dict[i]==key) code=i;
-    if (curdiff<diffcount && total-(int)size>diffpos[curdiff]) curdiff++,code=-1;
-    if (code==-1) {
+    int key=(last<<8)+input, index=(code=-1);
+    if (last<0) index=input; else lzw_find(key);
+    code = index;
+    if (curdiff<diffcount && total-(int)size>diffpos[curdiff]) curdiff++, code=-1;
+    if (code<0) {
       gif_write_code(last);
-      if (maxcode==clearpos) { gif_write_code(1<<codesize); bits=codesize+1, maxcode=(1<<codesize)+1; }
+      if (maxcode==clearpos) { gif_write_code(1<<codesize); bits=codesize+1, maxcode=(1<<codesize)+1; lzw_reset }
       else
       {
         ++maxcode;
-        if (maxcode<=4095) dict[maxcode]=key;
+        if (maxcode<=4095) { dict[maxcode]=key; table[(index<0)?-index-1:offset]=maxcode; }
         if (maxcode>=(1<<bits) && bits<12) bits++;
       }
       code=input;
