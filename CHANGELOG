@@ -1274,3 +1274,12 @@ paq8px_v161
 - Improved grayscale image detection routine
 - Fixed GIF grayscale detection, include processing of local color palettes
 - Fixed bug in number of total mixer inputs (present since v159)
+
+
+paq8px_v162
+2018.08.30
+- Improved SparseMatchModel
+- Improved 24/32bpp image model
+- Slightly improved MatchModel
+- Slightly improved exeModel
+- Levels <4 no longer skip using additional generic models
