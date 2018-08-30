@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "161"  //update version here before publishing your changes
+#define PROGVERSION  "162"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -1512,7 +1512,7 @@ public:
   virtual ~Mixer() {};
   virtual void update()=0;
   virtual void add(const int x)=0;
-  virtual void set(const int cx, const int range)=0;
+  virtual void set(const int cx, const int range, const int rate = DEFAULT_LEARNING_RATE)=0;
   virtual void reset()=0;
   virtual int p(const int shift0=0, const int shift1=0)=0;
 };
@@ -1582,11 +1582,13 @@ public:
   }
 
   // Set a context (call S times, sum of ranges <= M)
-  void set(const int cx, const int range) {
+  void set(const int cx, const int range, const int rate = DEFAULT_LEARNING_RATE) {
     assert(range>=0);
     assert(ncxt<S);
     assert(0<=cx && cx<range);
     assert(base+range<=M);
+    if (!(options&OPTION_ADAPTIVE))
+      rates[ncxt] = rate;
     cxt[ncxt++]=base+cx;
     base+=range;
   }
@@ -4651,7 +4653,7 @@ private:
     SCM[1].set(expectedByte);
     SCM[2].set(pos);
     Maps[0].set((expectedByte<<8)|buffer(1));
-    Maps[1].set(hash(expectedByte, c0, buffer(1), buffer(2)));
+    Maps[1].set(hash(expectedByte, c0, buffer(1), buffer(2), min(3,(int)ilog2(length+1))));
     if (Stats)
       Stats->Match.expectedByte = (length>0) ? expectedByte : 0;
   }
@@ -4662,7 +4664,7 @@ public:
     Table(Size/sizeof(U32)),
     StateMaps{ 56*256, 8*256*256+1, 256*256 },
     SCM{ {8,8}, {11,1}, {8,8} },
-    Maps{ {16}, {20,1} },
+    Maps{ {16}, {22,1} },
     hashes{ 0 },
     ctx{ 0 },
     length(0),
@@ -4680,7 +4682,7 @@ public:
       Update(buffer, Stats);
     else {
       SCM[1].set((bpos<<8)|(expectedByte^U8(c0<<(8-bpos))));
-      Maps[1].set(hash(expectedByte, c0, buffer(1), buffer(2)));
+      Maps[1].set(hash(expectedByte, c0, buffer(1), buffer(2), min(3,(int)ilog2(length+1))));
     }
     const int expectedBit = (expectedByte>>(7-bpos))&1;
 
@@ -4741,7 +4743,7 @@ private:
   enum Parameters : U32 {
     MaxLen    = 0xFFFF, // longest allowed match
     MinLen    = 3,      // default minimum required match length
-    NumHashes = 2,      // number of hashes used
+    NumHashes = 3,      // number of hashes used
   };
   struct sparseConfig {
     U32 offset    = 0;      // number of last input bytes to ignore when searching for a match
@@ -4750,7 +4752,7 @@ private:
     U32 minLen    = MinLen;
     U32 bitMask   = 0xFF;   // match every byte according to this bit mask
   };
-  const sparseConfig sparse[NumHashes] = { {0,1,0,5,0xDF}, {1,1,0,4} };
+  const sparseConfig sparse[NumHashes] = { {0,1,0,5,0xDF}, {1,1,0,4}, {0,2,0,4,0xDF} };
   Array<U32> Table;
   StationaryMap Maps[2];
   U32 hashes[NumHashes];
@@ -4802,14 +4804,14 @@ private:
     
     valid = length>1; // only predict after at least one byte following the match
     if (valid) {
-      Maps[0].set(hash(expectedByte, c0, buffer(1), buffer(2)));
+      Maps[0].set(hash(expectedByte, c0, buffer(1), buffer(2), ilog2(length+1)*NumHashes+hashIndex));
       Maps[1].set((expectedByte<<8)|buffer(1));
     }
   }
 public:
   SparseMatchModel(const U64 Size, const bool AllowBypass = false) :
     Table(Size/sizeof(U32)),
-    Maps{ {20, 1}, {17, 4} },
+    Maps{ {22, 1}, {17, 4} },
     hashes{ 0 },
     hashIndex(0),
     length(0),
@@ -4823,7 +4825,7 @@ public:
     if (bpos==0)
       Update(buffer, Stats);
     else if (valid) {
-      Maps[0].set(hash(expectedByte, c0, buffer(1), buffer(2)));
+      Maps[0].set(hash(expectedByte, c0, buffer(1), buffer(2), ilog2(length+1)*NumHashes+hashIndex));
       if (bpos==4)
         Maps[1].set(0x10000|((expectedByte^U8(c0<<4))<<8)|buffer(1));
     }
@@ -5450,24 +5452,24 @@ void im24bitModel(Mixer& m, int info, ModelStats *Stats = nullptr, int alpha=0, 
   static const int nMaps = 94;
   static const int nSCMaps = 59;
   static ContextMap cm(MEM*4, 45);
-  static SmallStationaryContextMap SCMap[nSCMaps] = { {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4},
-                                                      {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4},
-                                                      {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4},
-                                                      {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4},
-                                                      {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4},
-                                                      {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4},
-                                                      {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4}, {9,4},
-                                                      {9,4}, {9,4}, {0,8}};
-  static StationaryMap Map[nMaps] ={      8,      8,      8,      2,      0, {13,4}, {13,4}, {13,4}, {13,4}, {13,4},
-                                     {15,4}, {15,4}, {15,4}, {15,4}, {11,4}, {11,4}, {11,4}, {11,4}, { 9,4}, { 9,4},
-                                     { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4},
-                                     { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4},
-                                     { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4},
-                                     { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4},
-                                     { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4},
-                                     { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4},
-                                     { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4}, { 9,4},
-                                     { 9,4}, { 9,4}, { 9,4}, { 9,4}};
+  static SmallStationaryContextMap SCMap[nSCMaps] = { {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
+                                                      {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
+                                                      {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
+                                                      {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
+                                                      {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
+                                                      {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
+                                                      {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
+                                                      {11,1}, {11,1}, { 0,8}};
+  static StationaryMap Map[nMaps] ={      8,      8,      8,      2,      0, {15,1}, {15,1}, {15,1}, {15,1}, {15,1},
+                                     {17,1}, {17,1}, {17,1}, {17,1}, {13,1}, {13,1}, {13,1}, {13,1}, {11,1}, {11,1},
+                                     {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
+                                     {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
+                                     {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
+                                     {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
+                                     {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
+                                     {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
+                                     {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
+                                     {11,1}, {11,1}, {11,1}, {11,1}};
   static RingBuffer buffer(0x100000); // internal rotating buffer for (PNG unfiltered) pixel data
   static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
   static U8 WWp1, Wp1, p1, NWp1, Np1, NEp1, NNp1;
@@ -5683,173 +5685,173 @@ void im24bitModel(Mixer& m, int info, ModelStats *Stats = nullptr, int alpha=0, 
       }
     }
   }
-  if ((bpos==0 || bpos==4) && (x>0 || !isPNG)) {
-    U8 B=(c0<<(8-bpos)), lsb=(bpos>0);
+  if (x>0 || !isPNG) {
+    U8 B=(c0<<(8-bpos));
     int i=5;
 
-    Map[i++].set((((U8)(Clip(W+N-NW)-px-B))*2+lsb)|(LogMeanDiffQt(Clip(N+NE-NNE),Clip(N+NW-NNW))<<9));
-    Map[i++].set((((U8)(Clip(N*2-NN)-px-B))*2+lsb)|(LogMeanDiffQt(W,Clip(NW*2-NNW))<<9));
-    Map[i++].set((((U8)(Clip(W*2-WW)-px-B))*2+lsb)|(LogMeanDiffQt(N,Clip(NW*2-NWW))<<9));
-    Map[i++].set((((U8)(Clip(W+N-NW)-px-B))*2+lsb)|(LogMeanDiffQt(p1,Clip(Wp1+Np1-NWp1))<<9));
-    Map[i++].set((((U8)(Clip(W+N-NW)-px-B))*2+lsb)|(LogMeanDiffQt(p2,Clip(Wp2+Np2-NWp2))<<9));
-    Map[i++].set(hash(W-px-B,N-px-B)*2+lsb);
-    Map[i++].set(hash(W-px-B,WW-px-B)*2+lsb);
-    Map[i++].set(hash(N-px-B,NN-px-B)*2+lsb);
-    Map[i++].set(hash(Clip(N+NE-NNE)-px-B, Clip(N+NW-NNW)-px-B)*2+lsb);
-    Map[i++].set((min(color,stride-1)<<9)|(((U8)(Clip(N+p1-Np1)-px-B))*2+lsb));
-    Map[i++].set((min(color,stride-1)<<9)|(((U8)(Clip(N+p2-Np2)-px-B))*2+lsb));
-    Map[i++].set((min(color,stride-1)<<9)|(((U8)(Clip(W+p1-Wp1)-px-B))*2+lsb));
-    Map[i++].set((min(color,stride-1)<<9)|(((U8)(Clip(W+p2-Wp2)-px-B))*2+lsb));
-    Map[i++].set((Clamp4(N+p1-Np1,W,NW,N,NE)-px-B)*2+lsb);
-    Map[i++].set((Clamp4(N+p2-Np2,W,NW,N,NE)-px-B)*2+lsb);
+    Map[i++].set((((U8)(Clip(W+N-NW)-px-B))*8+bpos)|(LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))<<11));
+    Map[i++].set((((U8)(Clip(N*2-NN)-px-B))*8+bpos)|(LogMeanDiffQt(W, Clip(NW*2-NNW))<<11));
+    Map[i++].set((((U8)(Clip(W*2-WW)-px-B))*8+bpos)|(LogMeanDiffQt(N, Clip(NW*2-NWW))<<11));
+    Map[i++].set((((U8)(Clip(W+N-NW)-px-B))*8+bpos)|(LogMeanDiffQt(p1, Clip(Wp1+Np1-NWp1))<<11));
+    Map[i++].set((((U8)(Clip(W+N-NW)-px-B))*8+bpos)|(LogMeanDiffQt(p2, Clip(Wp2+Np2-NWp2))<<11));
+    Map[i++].set(hash(W-px-B, N-px-B)*8+bpos);
+    Map[i++].set(hash(W-px-B, WW-px-B)*8+bpos);
+    Map[i++].set(hash(N-px-B, NN-px-B)*8+bpos);
+    Map[i++].set(hash(Clip(N+NE-NNE)-px-B, Clip(N+NW-NNW)-px-B)*8+bpos);
+    Map[i++].set((min(color, stride-1)<<11)|(((U8)(Clip(N+p1-Np1)-px-B))*8+bpos));
+    Map[i++].set((min(color, stride-1)<<11)|(((U8)(Clip(N+p2-Np2)-px-B))*8+bpos));
+    Map[i++].set((min(color, stride-1)<<11)|(((U8)(Clip(W+p1-Wp1)-px-B))*8+bpos));
+    Map[i++].set((min(color, stride-1)<<11)|(((U8)(Clip(W+p2-Wp2)-px-B))*8+bpos));
+    Map[i++].set((Clamp4(N+p1-Np1, W, NW, N, NE)-px-B)*8+bpos);
+    Map[i++].set((Clamp4(N+p2-Np2, W, NW, N, NE)-px-B)*8+bpos);
 
-    Map[i++].set(((W+Clamp4(NE*3-NNE*3+buffer(w*3-stride),W,N,NE,NEE))/2-px-B)*2+lsb);
-    Map[i++].set((Clamp4((W+Clip(NE*2-NNE))/2,W,NW,N,NE)-px-B)*2+lsb);
-    Map[i++].set(((W+NEE)/2-px-B)*2+lsb);
-    Map[i++].set((Clip((WWW-4*WW+6*W+Clip(NE*4-NNE*6+buffer(w*3-stride)*4-buffer(w*4-stride)))/4)-px-B)*2+lsb);
-    Map[i++].set((Clip((-buffer(4*stride)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buffer(w*3-stride)*4-buffer(w*4-stride),N,NE,buffer(w-2*stride),buffer(w-3*stride)))/5)-px-B)*2+lsb);
-    Map[i++].set((Clip((-4*WW+15*W+10*Clip(NE*3-NNE*3+buffer(w*3-stride))-Clip(buffer(w-3*stride)*3-buffer(w*2-3*stride)*3+buffer(w*3-3*stride)))/20)-px-B)*2+lsb);
-    Map[i++].set((Clip((-3*WW+8*W+Clamp4(NEE*3-NNEE*3+buffer(w*3-stride*2),NE,NEE,buffer(w-3*stride),buffer(w-4*stride)))/6)-px-B)*2+lsb);
-    Map[i++].set((Clip((W+Clip(NE*2-NNE))/2+p1-(Wp1+Clip(NEp1*2-buffer(w*2-stride+1)))/2)-px-B)*2+lsb);
-    Map[i++].set((Clip((W+Clip(NE*2-NNE))/2+p2-(Wp2+Clip(NEp2*2-buffer(w*2-stride+2)))/2)-px-B)*2+lsb);
-    Map[i++].set((Clip((-3*WW+8*W+Clip(NEE*2-NNEE))/6 +p1-(-3*WWp1+8*Wp1+Clip(buffer(w-stride*2+1)*2-buffer(w*2-stride*2+1)))/6)-px-B)*2+lsb);
-    Map[i++].set((Clip((-3*WW+8*W+Clip(NEE*2-NNEE))/6 +p2-(-3*WWp2+8*Wp2+Clip(buffer(w-stride*2+2)*2-buffer(w*2-stride*2+2)))/6)-px-B)*2+lsb);
-    Map[i++].set((Clip((W+NEE)/2+p1-(Wp1+buffer(w-stride*2+1))/2)-px-B)*2+lsb);
-    Map[i++].set((Clip((W+NEE)/2+p2-(Wp2+buffer(w-stride*2+2))/2)-px-B)*2+lsb);
-    Map[i++].set((Clip((WW+Clip(NEE*2-NNEE))/2+p1-(WWp1+Clip(buffer(w-stride*2+1)*2-buffer(w*2-stride*2+1)))/2)-px-B)*2+lsb);
-    Map[i++].set((Clip((WW+Clip(NEE*2-NNEE))/2+p2-(WWp2+Clip(buffer(w-stride*2+2)*2-buffer(w*2-stride*2+2)))/2)-px-B)*2+lsb);
-    Map[i++].set((Clip(WW+NEE-N+p1-Clip(WWp1+buffer(w-stride*2+1)-Np1))-px-B)*2+lsb);
-    Map[i++].set((Clip(WW+NEE-N+p2-Clip(WWp2+buffer(w-stride*2+2)-Np2))-px-B)*2+lsb);
+    Map[i++].set(((W+Clamp4(NE*3-NNE*3+buffer(w*3-stride), W, N, NE, NEE))/2-px-B)*8+bpos);
+    Map[i++].set((Clamp4((W+Clip(NE*2-NNE))/2, W, NW, N, NE)-px-B)*8+bpos);
+    Map[i++].set(((W+NEE)/2-px-B)*8+bpos);
+    Map[i++].set((Clip((WWW-4*WW+6*W+Clip(NE*4-NNE*6+buffer(w*3-stride)*4-buffer(w*4-stride)))/4)-px-B)*8+bpos);
+    Map[i++].set((Clip((-buffer(4*stride)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buffer(w*3-stride)*4-buffer(w*4-stride), N, NE, buffer(w-2*stride), buffer(w-3*stride)))/5)-px-B)*8+bpos);
+    Map[i++].set((Clip((-4*WW+15*W+10*Clip(NE*3-NNE*3+buffer(w*3-stride))-Clip(buffer(w-3*stride)*3-buffer(w*2-3*stride)*3+buffer(w*3-3*stride)))/20)-px-B)*8+bpos);
+    Map[i++].set((Clip((-3*WW+8*W+Clamp4(NEE*3-NNEE*3+buffer(w*3-stride*2), NE, NEE, buffer(w-3*stride), buffer(w-4*stride)))/6)-px-B)*8+bpos);
+    Map[i++].set((Clip((W+Clip(NE*2-NNE))/2+p1-(Wp1+Clip(NEp1*2-buffer(w*2-stride+1)))/2)-px-B)*8+bpos);
+    Map[i++].set((Clip((W+Clip(NE*2-NNE))/2+p2-(Wp2+Clip(NEp2*2-buffer(w*2-stride+2)))/2)-px-B)*8+bpos);
+    Map[i++].set((Clip((-3*WW+8*W+Clip(NEE*2-NNEE))/6+p1-(-3*WWp1+8*Wp1+Clip(buffer(w-stride*2+1)*2-buffer(w*2-stride*2+1)))/6)-px-B)*8+bpos);
+    Map[i++].set((Clip((-3*WW+8*W+Clip(NEE*2-NNEE))/6+p2-(-3*WWp2+8*Wp2+Clip(buffer(w-stride*2+2)*2-buffer(w*2-stride*2+2)))/6)-px-B)*8+bpos);
+    Map[i++].set((Clip((W+NEE)/2+p1-(Wp1+buffer(w-stride*2+1))/2)-px-B)*8+bpos);
+    Map[i++].set((Clip((W+NEE)/2+p2-(Wp2+buffer(w-stride*2+2))/2)-px-B)*8+bpos);
+    Map[i++].set((Clip((WW+Clip(NEE*2-NNEE))/2+p1-(WWp1+Clip(buffer(w-stride*2+1)*2-buffer(w*2-stride*2+1)))/2)-px-B)*8+bpos);
+    Map[i++].set((Clip((WW+Clip(NEE*2-NNEE))/2+p2-(WWp2+Clip(buffer(w-stride*2+2)*2-buffer(w*2-stride*2+2)))/2)-px-B)*8+bpos);
+    Map[i++].set((Clip(WW+NEE-N+p1-Clip(WWp1+buffer(w-stride*2+1)-Np1))-px-B)*8+bpos);
+    Map[i++].set((Clip(WW+NEE-N+p2-Clip(WWp2+buffer(w-stride*2+2)-Np2))-px-B)*8+bpos);
 
-    Map[i++].set((Clip(W+N-NW)-px-B)*2+lsb);
-    Map[i++].set((Clip(W+N-NW+p1-Clip(Wp1+Np1-NWp1))-px-B)*2+lsb);
-    Map[i++].set((Clip(W+N-NW+p2-Clip(Wp2+Np2-NWp2))-px-B)*2+lsb);
-    Map[i++].set((Clip(W+NE-N)-px-B)*2+lsb);
-    Map[i++].set((Clip(N+NW-NNW)-px-B)*2+lsb);
-    Map[i++].set((Clip(N+NW-NNW+p1-Clip(Np1+NWp1-buffer(w*2+stride+1)))-px-B)*2+lsb);
-    Map[i++].set((Clip(N+NW-NNW+p2-Clip(Np2+NWp2-buffer(w*2+stride+2)))-px-B)*2+lsb);
-    Map[i++].set((Clip(N+NE-NNE)-px-B)*2+lsb);
-    Map[i++].set((Clip(N+NE-NNE+p1-Clip(Np1+NEp1-buffer(w*2-stride+1)))-px-B)*2+lsb);
-    Map[i++].set((Clip(N+NE-NNE+p2-Clip(Np2+NEp2-buffer(w*2-stride+2)))-px-B)*2+lsb);
-    Map[i++].set((Clip(N+NN-NNN)-px-B)*2+lsb);
-    Map[i++].set((Clip(N+NN-NNN+p1-Clip(Np1+NNp1-buffer(w*3+1)))-px-B)*2+lsb);
-    Map[i++].set((Clip(N+NN-NNN+p2-Clip(Np2+NNp2-buffer(w*3+2)))-px-B)*2+lsb);
-    Map[i++].set((Clip(W+WW-WWW)-px-B)*2+lsb);
-    Map[i++].set((Clip(W+WW-WWW+p1-Clip(Wp1+WWp1-buffer(stride*3+1)))-px-B)*2+lsb);
-    Map[i++].set((Clip(W+WW-WWW+p2-Clip(Wp2+WWp2-buffer(stride*3+2)))-px-B)*2+lsb);
-    Map[i++].set((Clip(W+NEE-NE)-px-B)*2+lsb);
-    Map[i++].set((Clip(W+NEE-NE+p1-Clip(Wp1+buffer(w-stride*2+1)-NEp1))-px-B)*2+lsb);
-    Map[i++].set((Clip(W+NEE-NE+p2-Clip(Wp2+buffer(w-stride*2+2)-NEp2))-px-B)*2+lsb);
-    Map[i++].set((Clip(NN+p1-NNp1)-px-B)*2+lsb);
-    Map[i++].set((Clip(NN+p2-NNp2)-px-B)*2+lsb);
-    Map[i++].set((Clip(NN+W-NNW)-px-B)*2+lsb);
-    Map[i++].set((Clip(NN+W-NNW+p1-Clip(NNp1+Wp1-buffer(w*2+stride+1)))-px-B)*2+lsb);
-    Map[i++].set((Clip(NN+W-NNW+p2-Clip(NNp2+Wp2-buffer(w*2+stride+2)))-px-B)*2+lsb);
-    Map[i++].set((Clip(NN+NW-buffer(w*3+stride))-px-B)*2+lsb);
-    Map[i++].set((Clip(NN+NW-buffer(w*3+stride)+p1-Clip(NNp1+NWp1-buffer(w*3+stride+1)))-px-B)*2+lsb);
-    Map[i++].set((Clip(NN+NW-buffer(w*3+stride)+p2-Clip(NNp2+NWp2-buffer(w*3+stride+2)))-px-B)*2+lsb);
-    Map[i++].set((Clip(NN+NE-buffer(w*3-stride))-px-B)*2+lsb);
-    Map[i++].set((Clip(NN+NE-buffer(w*3-stride)+p1-Clip(NNp1+NEp1-buffer(w*3-stride+1)))-px-B)*2+lsb);
-    Map[i++].set((Clip(NN+NE-buffer(w*3-stride)+p2-Clip(NNp2+NEp2-buffer(w*3-stride+2)))-px-B)*2+lsb);
-    Map[i++].set((Clip(NN+buffer(w*4)-buffer(w*6))-px-B)*2+lsb);
-    Map[i++].set((Clip(NN+buffer(w*4)-buffer(w*6)+p1-Clip(NNp1+buffer(w*4+1)-buffer(w*6+1)))-px-B)*2+lsb);
-    Map[i++].set((Clip(NN+buffer(w*4)-buffer(w*6)+p2-Clip(NNp2+buffer(w*4+2)-buffer(w*6+2)))-px-B)*2+lsb);
-    Map[i++].set((Clip(WW+p1-WWp1)-px-B)*2+lsb);
-    Map[i++].set((Clip(WW+p2-WWp2)-px-B)*2+lsb);
-    Map[i++].set((Clip(WW+buffer(stride*4)-buffer(stride*6))-px-B)*2+lsb);
-    Map[i++].set((Clip(WW+buffer(stride*4)-buffer(stride*6)+p1-Clip(WWp1+buffer(stride*4+1)-buffer(stride*6+1)))-px-B)*2+lsb);
-    Map[i++].set((Clip(WW+buffer(stride*4)-buffer(stride*6)+p2-Clip(WWp2+buffer(stride*4+2)-buffer(stride*6+2)))-px-B)*2+lsb);
+    Map[i++].set((Clip(W+N-NW)-px-B)*8+bpos);
+    Map[i++].set((Clip(W+N-NW+p1-Clip(Wp1+Np1-NWp1))-px-B)*8+bpos);
+    Map[i++].set((Clip(W+N-NW+p2-Clip(Wp2+Np2-NWp2))-px-B)*8+bpos);
+    Map[i++].set((Clip(W+NE-N)-px-B)*8+bpos);
+    Map[i++].set((Clip(N+NW-NNW)-px-B)*8+bpos);
+    Map[i++].set((Clip(N+NW-NNW+p1-Clip(Np1+NWp1-buffer(w*2+stride+1)))-px-B)*8+bpos);
+    Map[i++].set((Clip(N+NW-NNW+p2-Clip(Np2+NWp2-buffer(w*2+stride+2)))-px-B)*8+bpos);
+    Map[i++].set((Clip(N+NE-NNE)-px-B)*8+bpos);
+    Map[i++].set((Clip(N+NE-NNE+p1-Clip(Np1+NEp1-buffer(w*2-stride+1)))-px-B)*8+bpos);
+    Map[i++].set((Clip(N+NE-NNE+p2-Clip(Np2+NEp2-buffer(w*2-stride+2)))-px-B)*8+bpos);
+    Map[i++].set((Clip(N+NN-NNN)-px-B)*8+bpos);
+    Map[i++].set((Clip(N+NN-NNN+p1-Clip(Np1+NNp1-buffer(w*3+1)))-px-B)*8+bpos);
+    Map[i++].set((Clip(N+NN-NNN+p2-Clip(Np2+NNp2-buffer(w*3+2)))-px-B)*8+bpos);
+    Map[i++].set((Clip(W+WW-WWW)-px-B)*8+bpos);
+    Map[i++].set((Clip(W+WW-WWW+p1-Clip(Wp1+WWp1-buffer(stride*3+1)))-px-B)*8+bpos);
+    Map[i++].set((Clip(W+WW-WWW+p2-Clip(Wp2+WWp2-buffer(stride*3+2)))-px-B)*8+bpos);
+    Map[i++].set((Clip(W+NEE-NE)-px-B)*8+bpos);
+    Map[i++].set((Clip(W+NEE-NE+p1-Clip(Wp1+buffer(w-stride*2+1)-NEp1))-px-B)*8+bpos);
+    Map[i++].set((Clip(W+NEE-NE+p2-Clip(Wp2+buffer(w-stride*2+2)-NEp2))-px-B)*8+bpos);
+    Map[i++].set((Clip(NN+p1-NNp1)-px-B)*8+bpos);
+    Map[i++].set((Clip(NN+p2-NNp2)-px-B)*8+bpos);
+    Map[i++].set((Clip(NN+W-NNW)-px-B)*8+bpos);
+    Map[i++].set((Clip(NN+W-NNW+p1-Clip(NNp1+Wp1-buffer(w*2+stride+1)))-px-B)*8+bpos);
+    Map[i++].set((Clip(NN+W-NNW+p2-Clip(NNp2+Wp2-buffer(w*2+stride+2)))-px-B)*8+bpos);
+    Map[i++].set((Clip(NN+NW-buffer(w*3+stride))-px-B)*8+bpos);
+    Map[i++].set((Clip(NN+NW-buffer(w*3+stride)+p1-Clip(NNp1+NWp1-buffer(w*3+stride+1)))-px-B)*8+bpos);
+    Map[i++].set((Clip(NN+NW-buffer(w*3+stride)+p2-Clip(NNp2+NWp2-buffer(w*3+stride+2)))-px-B)*8+bpos);
+    Map[i++].set((Clip(NN+NE-buffer(w*3-stride))-px-B)*8+bpos);
+    Map[i++].set((Clip(NN+NE-buffer(w*3-stride)+p1-Clip(NNp1+NEp1-buffer(w*3-stride+1)))-px-B)*8+bpos);
+    Map[i++].set((Clip(NN+NE-buffer(w*3-stride)+p2-Clip(NNp2+NEp2-buffer(w*3-stride+2)))-px-B)*8+bpos);
+    Map[i++].set((Clip(NN+buffer(w*4)-buffer(w*6))-px-B)*8+bpos);
+    Map[i++].set((Clip(NN+buffer(w*4)-buffer(w*6)+p1-Clip(NNp1+buffer(w*4+1)-buffer(w*6+1)))-px-B)*8+bpos);
+    Map[i++].set((Clip(NN+buffer(w*4)-buffer(w*6)+p2-Clip(NNp2+buffer(w*4+2)-buffer(w*6+2)))-px-B)*8+bpos);
+    Map[i++].set((Clip(WW+p1-WWp1)-px-B)*8+bpos);
+    Map[i++].set((Clip(WW+p2-WWp2)-px-B)*8+bpos);
+    Map[i++].set((Clip(WW+buffer(stride*4)-buffer(stride*6))-px-B)*8+bpos);
+    Map[i++].set((Clip(WW+buffer(stride*4)-buffer(stride*6)+p1-Clip(WWp1+buffer(stride*4+1)-buffer(stride*6+1)))-px-B)*8+bpos);
+    Map[i++].set((Clip(WW+buffer(stride*4)-buffer(stride*6)+p2-Clip(WWp2+buffer(stride*4+2)-buffer(stride*6+2)))-px-B)*8+bpos);
 
-    Map[i++].set((Clip(N*2-NN+p1-Clip(Np1*2-NNp1))-px-B)*2+lsb);
-    Map[i++].set((Clip(N*2-NN+p2-Clip(Np2*2-NNp2))-px-B)*2+lsb);
-    Map[i++].set((Clip(W*2-WW+p1-Clip(Wp1*2-WWp1))-px-B)*2+lsb);
-    Map[i++].set((Clip(W*2-WW+p2-Clip(Wp2*2-WWp2))-px-B)*2+lsb);
-    Map[i++].set((Clip(N*3-NN*3+NNN)-px-B)*2+lsb);
-    Map[i++].set((Clamp4(N*3-NN*3+NNN,W,NW,N,NE)-px-B)*2+lsb);
-    Map[i++].set((Clamp4(W*3-WW*3+WWW,W,NW,N,NE)-px-B)*2+lsb);
-    Map[i++].set((Clamp4(N*2-NN,W,NW,N,NE)-px-B)*2+lsb);
-    Map[i++].set((Clip((buffer(w*5)-6*buffer(w*4)+15*NNN-20*NN+15*N+Clamp4(W*4-NWW*6+buffer(w*2+3*stride)*4-buffer(w*3+4*stride),W,NW,N,NN))/6)-px-B)*2+lsb);
-    Map[i++].set((Clip((buffer(w*3-3*stride)-4*NNEE+6*NE+Clip(W*4-NW*6+NNW*4-buffer(w*3+stride)))/4)-px-B)*2+lsb);
+    Map[i++].set((Clip(N*2-NN+p1-Clip(Np1*2-NNp1))-px-B)*8+bpos);
+    Map[i++].set((Clip(N*2-NN+p2-Clip(Np2*2-NNp2))-px-B)*8+bpos);
+    Map[i++].set((Clip(W*2-WW+p1-Clip(Wp1*2-WWp1))-px-B)*8+bpos);
+    Map[i++].set((Clip(W*2-WW+p2-Clip(Wp2*2-WWp2))-px-B)*8+bpos);
+    Map[i++].set((Clip(N*3-NN*3+NNN)-px-B)*8+bpos);
+    Map[i++].set((Clamp4(N*3-NN*3+NNN, W, NW, N, NE)-px-B)*8+bpos);
+    Map[i++].set((Clamp4(W*3-WW*3+WWW, W, NW, N, NE)-px-B)*8+bpos);
+    Map[i++].set((Clamp4(N*2-NN, W, NW, N, NE)-px-B)*8+bpos);
+    Map[i++].set((Clip((buffer(w*5)-6*buffer(w*4)+15*NNN-20*NN+15*N+Clamp4(W*4-NWW*6+buffer(w*2+3*stride)*4-buffer(w*3+4*stride), W, NW, N, NN))/6)-px-B)*8+bpos);
+    Map[i++].set((Clip((buffer(w*3-3*stride)-4*NNEE+6*NE+Clip(W*4-NW*6+NNW*4-buffer(w*3+stride)))/4)-px-B)*8+bpos);
 
-    Map[i++].set((Clip(((N+3*NW)/4)*3-((NNW+NNWW)/2)*3+(buffer(w*3+2*stride)*3+buffer(w*3+3*stride))/4)-px-B)*2+lsb);
-    Map[i++].set((Clip((W*2+NW)-(WW+2*NWW)+buffer(w+3*stride))-px-B)*2+lsb);
-    Map[i++].set(((Clip(W*2-NW)+Clip(W*2-NWW)+N+NE)/4-px-B)*2+lsb);
+    Map[i++].set((Clip(((N+3*NW)/4)*3-((NNW+NNWW)/2)*3+(buffer(w*3+2*stride)*3+buffer(w*3+3*stride))/4)-px-B)*8+bpos);
+    Map[i++].set((Clip((W*2+NW)-(WW+2*NWW)+buffer(w+3*stride))-px-B)*8+bpos);
+    Map[i++].set(((Clip(W*2-NW)+Clip(W*2-NWW)+N+NE)/4-px-B)*8+bpos);
 
-    Map[i++].set((buffer(w*6)-px-B)*2+lsb);
-    Map[i++].set(((buffer(w-4*stride)+buffer(w-6*stride))/2-px-B)*2+lsb);
-    Map[i++].set(((buffer(stride*6)+buffer(stride*4))/2-px-B)*2+lsb);
-    Map[i++].set((((W+N)*3-NW*2)/4-px-B)*2+lsb);
-    Map[i++].set((N-px-B)*2+lsb);
-    Map[i++].set((NN-px-B)*2+lsb);
+    Map[i++].set((buffer(w*6)-px-B)*8+bpos);
+    Map[i++].set(((buffer(w-4*stride)+buffer(w-6*stride))/2-px-B)*8+bpos);
+    Map[i++].set(((buffer(stride*6)+buffer(stride*4))/2-px-B)*8+bpos);
+    Map[i++].set((((W+N)*3-NW*2)/4-px-B)*8+bpos);
+    Map[i++].set((N-px-B)*8+bpos);
+    Map[i++].set((NN-px-B)*8+bpos);
 
     i=0;
-    SCMap[i++].set((N+p1-Np1-px-B)*2+lsb);
-    SCMap[i++].set((N+p2-Np2-px-B)*2+lsb);
-    SCMap[i++].set((W+p1-Wp1-px-B)*2+lsb);
-    SCMap[i++].set((W+p2-Wp2-px-B)*2+lsb);
-    SCMap[i++].set((NW+p1-NWp1-px-B)*2+lsb);
-    SCMap[i++].set((NW+p2-NWp2-px-B)*2+lsb);
-    SCMap[i++].set((NE+p1-NEp1-px-B)*2+lsb);
-    SCMap[i++].set((NE+p2-NEp2-px-B)*2+lsb);
-    SCMap[i++].set((NN+p1-NNp1-px-B)*2+lsb);
-    SCMap[i++].set((NN+p2-NNp2-px-B)*2+lsb);
-    SCMap[i++].set((WW+p1-WWp1-px-B)*2+lsb);
-    SCMap[i++].set((WW+p2-WWp2-px-B)*2+lsb);
-    SCMap[i++].set((W+N-NW-px-B)*2+lsb);
-    SCMap[i++].set((W+N-NW+p1-Wp1-Np1+NWp1-px-B)*2+lsb);
-    SCMap[i++].set((W+N-NW+p2-Wp2-Np2+NWp2-px-B)*2+lsb);
-    SCMap[i++].set((W+NE-N-px-B)*2+lsb);
-    SCMap[i++].set((W+NE-N+p1-Wp1-NEp1+Np1-px-B)*2+lsb);
-    SCMap[i++].set((W+NE-N+p2-Wp2-NEp2+Np2-px-B)*2+lsb);
-    SCMap[i++].set((W+NEE-NE-px-B)*2+lsb);
-    SCMap[i++].set((W+NEE-NE+p1-Wp1-buffer(w-stride*2+1)+NEp1-px-B)*2+lsb);
-    SCMap[i++].set((W+NEE-NE+p2-Wp2-buffer(w-stride*2+2)+NEp2-px-B)*2+lsb);
-    SCMap[i++].set((N+NN-NNN-px-B)*2+lsb);
-    SCMap[i++].set((N+NN-NNN+p1-Np1-NNp1+buffer(w*3+1)-px-B)*2+lsb);
-    SCMap[i++].set((N+NN-NNN+p2-Np2-NNp2+buffer(w*3+2)-px-B)*2+lsb);
-    SCMap[i++].set((N+NE-NNE-px-B)*2+lsb);
-    SCMap[i++].set((N+NE-NNE+p1-Np1-NEp1+buffer(w*2-stride+1)-px-B)*2+lsb);
-    SCMap[i++].set((N+NE-NNE+p2-Np2-NEp2+buffer(w*2-stride+2)-px-B)*2+lsb);
-    SCMap[i++].set((N+NW-NNW-px-B)*2+lsb);
-    SCMap[i++].set((N+NW-NNW+p1-Np1-NWp1+buffer(w*2+stride+1)-px-B)*2+lsb);
-    SCMap[i++].set((N+NW-NNW+p2-Np2-NWp2+buffer(w*2+stride+2)-px-B)*2+lsb);
-    SCMap[i++].set((NE+NW-NN-px-B)*2+lsb);
-    SCMap[i++].set((NE+NW-NN+p1-NEp1-NWp1+NNp1-px-B)*2+lsb);
-    SCMap[i++].set((NE+NW-NN+p2-NEp2-NWp2+NNp2-px-B)*2+lsb);
-    SCMap[i++].set((NW+W-NWW-px-B)*2+lsb);
-    SCMap[i++].set((NW+W-NWW+p1-NWp1-Wp1+buffer(w+stride*2+1)-px-B)*2+lsb);
-    SCMap[i++].set((NW+W-NWW+p2-NWp2-Wp2+buffer(w+stride*2+2)-px-B)*2+lsb);
-    SCMap[i++].set((W*2-WW-px-B)*2+lsb);
-    SCMap[i++].set((W*2-WW+p1-Wp1*2+WWp1-px-B)*2+lsb);
-    SCMap[i++].set((W*2-WW+p2-Wp2*2+WWp2-px-B)*2+lsb);
-    SCMap[i++].set((N*2-NN-px-B)*2+lsb);
-    SCMap[i++].set((N*2-NN+p1-Np1*2+NNp1-px-B)*2+lsb);
-    SCMap[i++].set((N*2-NN+p2-Np2*2+NNp2-px-B)*2+lsb);
-    SCMap[i++].set((NW*2-NNWW-px-B)*2+lsb);
-    SCMap[i++].set((NW*2-NNWW+p1-NWp1*2+buffer(w*2+stride*2+1)-px-B)*2+lsb);
-    SCMap[i++].set((NW*2-NNWW+p2-NWp2*2+buffer(w*2+stride*2+2)-px-B)*2+lsb);
-    SCMap[i++].set((NE*2-NNEE-px-B)*2+lsb);
-    SCMap[i++].set((NE*2-NNEE+p1-NEp1*2+buffer(w*2-stride*2+1)-px-B)*2+lsb);
-    SCMap[i++].set((NE*2-NNEE+p2-NEp2*2+buffer(w*2-stride*2+2)-px-B)*2+lsb);
-    SCMap[i++].set((N*3-NN*3+NNN+p1-Np1*3+NNp1*3-buffer(w*3+1)-px-B)*2+lsb);
-    SCMap[i++].set((N*3-NN*3+NNN+p2-Np2*3+NNp2*3-buffer(w*3+2)-px-B)*2+lsb);
-    SCMap[i++].set((N*3-NN*3+NNN-px-B)*2+lsb);
-    SCMap[i++].set(((W+NE*2-NNE)/2-px-B)*2+lsb);
-    SCMap[i++].set(((W+NE*3-NNE*3+buffer(w*3-stride))/2-px-B)*2+lsb);
-    SCMap[i++].set(((W+NE*2-NNE)/2+p1-(Wp1+NEp1*2-buffer(w*2-stride+1))/2-px-B)*2+lsb);
-    SCMap[i++].set(((W+NE*2-NNE)/2+p2-(Wp2+NEp2*2-buffer(w*2-stride+2))/2-px-B)*2+lsb);
-    SCMap[i++].set((NNE+NE-buffer(w*3-stride)-px-B)*2+lsb);
-    SCMap[i++].set((NNE+W-NN-px-B)*2+lsb);
-    SCMap[i++].set((NNW+W-NNWW-px-B)*2+lsb);
+    SCMap[i++].set((N+p1-Np1-px-B)*8+bpos);
+    SCMap[i++].set((N+p2-Np2-px-B)*8+bpos);
+    SCMap[i++].set((W+p1-Wp1-px-B)*8+bpos);
+    SCMap[i++].set((W+p2-Wp2-px-B)*8+bpos);
+    SCMap[i++].set((NW+p1-NWp1-px-B)*8+bpos);
+    SCMap[i++].set((NW+p2-NWp2-px-B)*8+bpos);
+    SCMap[i++].set((NE+p1-NEp1-px-B)*8+bpos);
+    SCMap[i++].set((NE+p2-NEp2-px-B)*8+bpos);
+    SCMap[i++].set((NN+p1-NNp1-px-B)*8+bpos);
+    SCMap[i++].set((NN+p2-NNp2-px-B)*8+bpos);
+    SCMap[i++].set((WW+p1-WWp1-px-B)*8+bpos);
+    SCMap[i++].set((WW+p2-WWp2-px-B)*8+bpos);
+    SCMap[i++].set((W+N-NW-px-B)*8+bpos);
+    SCMap[i++].set((W+N-NW+p1-Wp1-Np1+NWp1-px-B)*8+bpos);
+    SCMap[i++].set((W+N-NW+p2-Wp2-Np2+NWp2-px-B)*8+bpos);
+    SCMap[i++].set((W+NE-N-px-B)*8+bpos);
+    SCMap[i++].set((W+NE-N+p1-Wp1-NEp1+Np1-px-B)*8+bpos);
+    SCMap[i++].set((W+NE-N+p2-Wp2-NEp2+Np2-px-B)*8+bpos);
+    SCMap[i++].set((W+NEE-NE-px-B)*8+bpos);
+    SCMap[i++].set((W+NEE-NE+p1-Wp1-buffer(w-stride*2+1)+NEp1-px-B)*8+bpos);
+    SCMap[i++].set((W+NEE-NE+p2-Wp2-buffer(w-stride*2+2)+NEp2-px-B)*8+bpos);
+    SCMap[i++].set((N+NN-NNN-px-B)*8+bpos);
+    SCMap[i++].set((N+NN-NNN+p1-Np1-NNp1+buffer(w*3+1)-px-B)*8+bpos);
+    SCMap[i++].set((N+NN-NNN+p2-Np2-NNp2+buffer(w*3+2)-px-B)*8+bpos);
+    SCMap[i++].set((N+NE-NNE-px-B)*8+bpos);
+    SCMap[i++].set((N+NE-NNE+p1-Np1-NEp1+buffer(w*2-stride+1)-px-B)*8+bpos);
+    SCMap[i++].set((N+NE-NNE+p2-Np2-NEp2+buffer(w*2-stride+2)-px-B)*8+bpos);
+    SCMap[i++].set((N+NW-NNW-px-B)*8+bpos);
+    SCMap[i++].set((N+NW-NNW+p1-Np1-NWp1+buffer(w*2+stride+1)-px-B)*8+bpos);
+    SCMap[i++].set((N+NW-NNW+p2-Np2-NWp2+buffer(w*2+stride+2)-px-B)*8+bpos);
+    SCMap[i++].set((NE+NW-NN-px-B)*8+bpos);
+    SCMap[i++].set((NE+NW-NN+p1-NEp1-NWp1+NNp1-px-B)*8+bpos);
+    SCMap[i++].set((NE+NW-NN+p2-NEp2-NWp2+NNp2-px-B)*8+bpos);
+    SCMap[i++].set((NW+W-NWW-px-B)*8+bpos);
+    SCMap[i++].set((NW+W-NWW+p1-NWp1-Wp1+buffer(w+stride*2+1)-px-B)*8+bpos);
+    SCMap[i++].set((NW+W-NWW+p2-NWp2-Wp2+buffer(w+stride*2+2)-px-B)*8+bpos);
+    SCMap[i++].set((W*2-WW-px-B)*8+bpos);
+    SCMap[i++].set((W*2-WW+p1-Wp1*2+WWp1-px-B)*8+bpos);
+    SCMap[i++].set((W*2-WW+p2-Wp2*2+WWp2-px-B)*8+bpos);
+    SCMap[i++].set((N*2-NN-px-B)*8+bpos);
+    SCMap[i++].set((N*2-NN+p1-Np1*2+NNp1-px-B)*8+bpos);
+    SCMap[i++].set((N*2-NN+p2-Np2*2+NNp2-px-B)*8+bpos);
+    SCMap[i++].set((NW*2-NNWW-px-B)*8+bpos);
+    SCMap[i++].set((NW*2-NNWW+p1-NWp1*2+buffer(w*2+stride*2+1)-px-B)*8+bpos);
+    SCMap[i++].set((NW*2-NNWW+p2-NWp2*2+buffer(w*2+stride*2+2)-px-B)*8+bpos);
+    SCMap[i++].set((NE*2-NNEE-px-B)*8+bpos);
+    SCMap[i++].set((NE*2-NNEE+p1-NEp1*2+buffer(w*2-stride*2+1)-px-B)*8+bpos);
+    SCMap[i++].set((NE*2-NNEE+p2-NEp2*2+buffer(w*2-stride*2+2)-px-B)*8+bpos);
+    SCMap[i++].set((N*3-NN*3+NNN+p1-Np1*3+NNp1*3-buffer(w*3+1)-px-B)*8+bpos);
+    SCMap[i++].set((N*3-NN*3+NNN+p2-Np2*3+NNp2*3-buffer(w*3+2)-px-B)*8+bpos);
+    SCMap[i++].set((N*3-NN*3+NNN-px-B)*8+bpos);
+    SCMap[i++].set(((W+NE*2-NNE)/2-px-B)*8+bpos);
+    SCMap[i++].set(((W+NE*3-NNE*3+buffer(w*3-stride))/2-px-B)*8+bpos);
+    SCMap[i++].set(((W+NE*2-NNE)/2+p1-(Wp1+NEp1*2-buffer(w*2-stride+1))/2-px-B)*8+bpos);
+    SCMap[i++].set(((W+NE*2-NNE)/2+p2-(Wp2+NEp2*2-buffer(w*2-stride+2))/2-px-B)*8+bpos);
+    SCMap[i++].set((NNE+NE-buffer(w*3-stride)-px-B)*8+bpos);
+    SCMap[i++].set((NNE+W-NN-px-B)*8+bpos);
+    SCMap[i++].set((NNW+W-NNWW-px-B)*8+bpos);
   }
 
   // Predict next bit
   if (x>0 || !isPNG){
     cm.mix(m);
     for (int i=0;i<nMaps;i++)
-      Map[i].mix(m);
+      Map[i].mix(m,1,3);
     for (int i=0;i<nSCMaps;i++)
-      SCMap[i].mix(m,9);
+      SCMap[i].mix(m,9,1,3);
     static int col=0;
     if (++col>=stride*8) col=0;
     m.set(5, 6);
@@ -7782,9 +7784,9 @@ struct Instruction {
 
 #define MinRequired          8 // minimum required consecutive valid instructions to be considered as code
 
-class exeModel {
+class ExeModel {
 private:
-  static const int N1=8, N2=10;
+  static const int N1=10, N2=10;
   ContextMap2 cm;
   OpCache Cache;
   U32 StateBH[256];
@@ -7792,14 +7794,14 @@ private:
   Instruction Op;
   U32 TotalOps, OpMask, OpCategMask, Context, BrkPoint, BrkCtx;
   bool Valid;
-  inline bool IsInvalidX64Op(U8 Op) {
+  inline bool IsInvalidX64Op(const U8 Op) {
     for (int i=0; i<19; i++) {
       if (Op == InvalidX64Ops[i])
         return true;
     }
     return false;
   }
-  inline bool IsValidX64Prefix(U8 Prefix) {
+  inline bool IsValidX64Prefix(const U8 Prefix) {
     for (int i=0; i<8; i++) {
       if (Prefix == X64Prefixes[i])
         return true;
@@ -7892,17 +7894,17 @@ private:
     else
       ProcessMode(Op, State);
   }
-  void ApplyCodeAndSetFlag(Instruction &Op, U32 Flag = 0) {
-    Op.Data&=ClearCodeMask; \
-      Op.Data|=(Op.Code<<CodeShift)|Flag;
+  void ApplyCodeAndSetFlag(Instruction &Op, const U32 Flag = 0) {
+    Op.Data&=ClearCodeMask; 
+    Op.Data|=(Op.Code<<CodeShift)|Flag;
   }
-  inline U32 OpN(OpCache &Cache, U32 n) {
+  inline U32 OpN(OpCache &Cache, const U32 n) {
     return Cache.Op[ (Cache.Index-n)&(CacheSize-1) ];
   }
-  inline U32 OpNCateg(U32 &Mask, U32 n) {
+  inline U32 OpNCateg(U32 &Mask, const U32 n) {
     return ((Mask>>(CategoryShift*(n-1)))&CategoryMask);
   }
-  inline int pref(int i) { return (buf(i)==0x0f)+2*(buf(i)==0x66)+3*(buf(i)==0x67); }
+  inline int pref(const int i) { return (buf(i)==0x0f)+2*(buf(i)==0x66)+3*(buf(i)==0x67); }
   // Get context at buf(i) relevant to parsing 32-bit x86 code
   U32 execxt(int i, int x=0) {
     int prefix=0, opcode=0, modrm=0, sib=0;
@@ -7910,13 +7912,14 @@ private:
     if (i) prefix+=pref(i--);
     if (i) opcode+=buf(i--);
     if (i) modrm+=buf(i--)&(ModRM_mod|ModRM_rm);
-    if (i&&((modrm&ModRM_rm)==4)&&(modrm<ModRM_mod)) sib=buf(i)&SIB_scale;
+    if (i && ((modrm&ModRM_rm)==4) && (modrm<ModRM_mod)) sib=buf(i)&SIB_scale;
     return prefix|opcode<<4|modrm<<12|x<<20|sib<<(28-6);
   }
   void Update(U8 B, bool Forced = false);
   void Train();
 public:
-  exeModel() : cm(MEM*2, N1+N2), pState (Start), State( Start), TotalOps(0), OpMask(0), OpCategMask(0), Context(0), BrkPoint(0), BrkCtx(0), Valid(false) {
+  ExeModel(const U64 size) : cm(size, N1+N2), pState (Start), State( Start), TotalOps(0), OpMask(0), OpCategMask(0), Context(0), BrkPoint(0), BrkCtx(0), Valid(false) {
+    assert(ispowerof2(size));
     memset(&Cache, 0, sizeof(OpCache));
     memset(&Op, 0, sizeof(Instruction));
     memset(&StateBH, 0, sizeof(StateBH));
@@ -7925,7 +7928,7 @@ public:
   bool Predict(Mixer& m, bool Forced = false, ModelStats *Stats = nullptr);
 };
 
-void exeModel::Train() {
+void ExeModel::Train() {
   FileDisk f;
   printf("Pre-training x86/x64 model...");
   OpenFromMyFolder::myself(&f);
@@ -7943,7 +7946,7 @@ void exeModel::Train() {
   memset(&buf[0], 0, buf.size());
 }
 
-void exeModel::Update(U8 B, bool Forced) {
+void ExeModel::Update(U8 B, bool Forced) {
   pState = State;
   Op.Size++;
   switch (State) {
@@ -8181,7 +8184,7 @@ void exeModel::Update(U8 B, bool Forced) {
   }
 }
 
-bool exeModel::Predict(Mixer& m, bool Forced, ModelStats *Stats) {
+bool ExeModel::Predict(Mixer& m, bool Forced, ModelStats *Stats) {
   if (bpos==0)
     Update(buf(1), Forced);
 
@@ -8913,7 +8916,8 @@ class normalModel {
   }
 
 public:
-  normalModel(): cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), StateMaps{ 256, 256*256 } {
+  normalModel(const U64 size): cm(size, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), StateMaps{ 256, 256*256 } {
+    assert(ispowerof2(size));
     memset(&cxt[0], 0, sizeof(cxt));
     if (options&OPTION_TRAINTXT) {
       Train("english.dic",3);
@@ -8941,9 +8945,9 @@ public:
 
 class ContextModel{
   normalModel normalmodel;
-  exeModel exeModel1;
+  ExeModel exeModel;
   JpegModel *jpegModel;
-  dmcForest *dmcforest;
+  dmcForest dmcforest;
   #ifdef USE_TEXTMODEL
   TextModel textModel;
   #endif //USE_TEXTMODEL
@@ -8955,8 +8959,11 @@ class ContextModel{
   bool readsize;
 public:
   bool Bypass;
-  ContextModel() : jpegModel(0), dmcforest(0),
-
+  ContextModel() :
+    normalmodel(MEM*32),
+    exeModel(MEM*4),
+    jpegModel(0),
+    dmcforest(),
     #ifdef USE_TEXTMODEL
       textModel(MEM*16),
     #endif //USE_TEXTMODEL
@@ -8964,20 +8971,16 @@ public:
     sparseMatchModel(MEM/2),
 
     next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0), bytesread(0), readsize(false), Bypass(false) {
-
-    if(level>=4)dmcforest=new dmcForest();
-
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(1129, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer(1143, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/), 22);
     #else
-      m=MixerFactory::CreateMixer( 879, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/)*(level>=4), 7+15*(level>=4));
+      m=MixerFactory::CreateMixer( 893, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/), 22);
     #endif //USE_WORD_MODEL
     }
 
   ~ContextModel() {
     delete m;
     if(jpegModel) delete jpegModel;
-    if(dmcforest) delete dmcforest;
   }
   int Predict(ModelStats *Stats = nullptr);
 };
@@ -9050,12 +9053,12 @@ int ContextModel::Predict(ModelStats *Stats){
   if (blocktype==AUDIO) return wavModel(*m, blockinfo, Stats), m->p(0,1);
   #endif //USE_WAVMODEL
   if ((blocktype==JPEG || blocktype==HDR)) {
-    if(jpegModel==nullptr)jpegModel=new JpegModel();
+    if (jpegModel==nullptr) jpegModel=new JpegModel();
     if (jpegModel->jpegModel(*m)) return m->p(1,0);
   }
 
-  sparseMatchModel.Predict(*m, buf, Stats);
-  if (level>=4 && blocktype!=IMAGE1) {
+  if (blocktype!=IMAGE1) {
+    sparseMatchModel.Predict(*m, buf, Stats);
     sparseModel(*m,matchlength,order);
     distanceModel(*m);
     recordModel(*m, Stats);
@@ -9064,14 +9067,14 @@ int ContextModel::Predict(ModelStats *Stats){
     wordModel(*m, Stats);
     #endif //USE_WORDMODEL
     indirectModel(*m);
-    dmcforest->mix(*m);
+    dmcforest.mix(*m);
     nestModel(*m);
     XMLModel(*m, Stats);
     #ifdef USE_TEXTMODEL
     textModel.Predict(*m, buf, Stats);
     #endif //USE_TEXTMODEL
     if (blocktype!=TEXT && blocktype!=TEXT_EOL)
-      exeModel1.Predict(*m, blocktype==EXE, Stats);
+      exeModel.Predict(*m, blocktype==EXE, Stats);
   }
 
   order = order-2;
