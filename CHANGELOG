@@ -1257,3 +1257,29 @@ paq8px_v159
 - Fixed a rare and low-impact overflow ("if (bestLen>=MinLen)") in matchModel
 - More cosmetic changes in matchModel
 - New model for ascii files and files containing ascii fragments: charGroupModel
+
+
+paq8px_v160
+2018.08.22
+- Improved SSE stage for 8bpp color-indexed non-PNG images
+- Block size is now encoded with a variable-length integer coding scheme
+
+
+paq8px_v161
+2018.08.26
+- New SparseMatchModel
+- Slightly improved MatchModel
+- Tweaked mixer shifts for 8bpp images, 32bpp images and audio
+- Faster GIF transform (average 4.5x speedup)
+- Improved grayscale image detection routine
+- Fixed GIF grayscale detection, include processing of local color palettes
+- Fixed bug in number of total mixer inputs (present since v159)
+
+
+paq8px_v162
+2018.08.30
+- Improved SparseMatchModel
+- Improved 24/32bpp image model
+- Slightly improved MatchModel
+- Slightly improved exeModel
+- Levels <4 no longer skip using additional generic models
