@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "162"  //update version here before publishing your changes
+#define PROGVERSION  "163"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -332,7 +332,7 @@ private:
 };
 
 template<class T, const int Align> void Array<T,Align>::create(U64 requested_size) {
-  assert((Align&(Align-1))==0);
+  assert(ispowerof2(Align));
   used_size=reserved_size=requested_size;
   if (requested_size==0) {
     data=0;ptr=0;
@@ -977,7 +977,7 @@ struct ModelStats{
 
   //general shared information
   Blocktype blockType;  //used by wordModel, recordModel, SSE stage
-  U64 Misses;        //used by SSE stage
+  U64 Misses;           //used by SSE stage
 
   //matchModel
   struct {
@@ -1007,7 +1007,7 @@ struct ModelStats{
   U32 Record;        //unused
 
   //charGroupModel
-  U32 charGroup;     //unused
+  U64 charGroup;     //unused
 
   //wordModel
   //indirectModel
@@ -1790,6 +1790,15 @@ public:
 
 //////////////////////// Hash functions //////////////////////////
 
+// Some magic numbers for hash seed
+#define MAGIC1 0xcc9e2d51
+#define MAGIC2 0x1b873593
+#define MAGIC3 0xa136aaad
+#define MAGIC4 0x9f6d62d7
+#define MAGIC5 0x2c1b3c6d
+#define MAGIC6 0x297a2d39
+#define MAGIC7 0x119de1f3
+
 // Hash 2-5 ints.
 inline U32 hash(U32 a, U32 b, U32 c=0xffffffff, U32 d=0xffffffff,
     U32 e=0xffffffff) {
@@ -1823,6 +1832,21 @@ inline U32 combine(U32 seed, const U32 x) {
   return seed;
 }
 
+inline U32 combine(U32 seed, const U32 x1, const U32 x2) {
+  return combine(combine(seed,x1),x2);
+}
+
+inline U32 combine(U32 seed, const U32 x1, const U32 x2, const U32 x3) {
+  return combine(combine(combine(seed,x1),x2),x3);
+}
+
+inline U32 combine(U32 seed, const U32 x1, const U32 x2, const U32 x3, const U32 x4) {
+  return combine(combine(combine(combine(seed,x1),x2),x3),x4);
+}
+
+inline U32 combine(U32 seed, const U32 x1, const U32 x2, const U32 x3, const U32 x4, const U32 x5) {
+  return combine(combine(combine(combine(combine(seed,x1),x2),x3),x4),x5);
+}
 
 ///////////////////////////// BH ////////////////////////////////
 
@@ -2587,8 +2611,8 @@ class Word {
 public:
   U8 Letters[MAX_WORD_SIZE];
   U8 Start, End;
-  U32 Hash[4], Type, Language;
-  Word() : Start(0), End(0), Hash{0,0,0,0}, Type(0), Language(0) {
+  U32 Hash[2], Type, Language;
+  Word() : Start(0), End(0), Hash{0,0}, Type(0), Language(0) {
     memset(&Letters[0], 0, sizeof(U8)*MAX_WORD_SIZE);
   }
   bool operator==(const char *s) const {
@@ -2616,19 +2640,10 @@ public:
     return 0;
   }
   void GetHashes() {
-    Hash[0] = 0xc01dflu, Hash[1] = ~Hash[0];
-    for (int i=Start; i<=End; i++) {
-      U8 l = Letters[i];
-      Hash[0]^=hash(Hash[0], l, i);
-      Hash[1]^=hash(Hash[1],
-        ((l&0x80)==0)?l&0x5F:
-        ((l&0xC0)==0x80)?l&0x3F:
-        ((l&0xE0)==0xC0)?l&0x1F:
-        ((l&0xF0)==0xE0)?l&0xF:l&0x7
-      );
-    }
-    Hash[2] = (~Hash[0])^Hash[1];
-    Hash[3] = (~Hash[1])^Hash[0];
+    Hash[0] = MAGIC1;
+    for (int i=Start; i<=End; i++)
+      Hash[0]= combine(Hash[0], Letters[i]);
+    Hash[1] = Hash[0]; // placeholder for stem hash, will be overwritten after stemming
   }
   bool ChangeSuffix(const char *OldSuffix, const char *NewSuffix) {
     size_t len=strlen(OldSuffix);
@@ -3425,17 +3440,9 @@ public:
     return CharInArray(c, Vowels, NUM_VOWELS);
   }
   inline void Hash(Word *W) final {
-    W->Hash[2] = W->Hash[3] = 0xb0a710ad;
-    for (int i=W->Start; i<=W->End; i++) {
-      U8 l = W->Letters[i];
-      W->Hash[2]=W->Hash[2]*263*32 + l;
-      if (IsVowel(l))
-        W->Hash[3]=W->Hash[3]*997*8 + (l/4-22);
-      else if (l>='b' && l<='z')
-        W->Hash[3]=W->Hash[3]*271*32 + (l-97);
-      else
-        W->Hash[3]=W->Hash[3]*11*32 + l;
-    }
+    W->Hash[1] = MAGIC3;
+    for (int i=W->Start; i<=W->End; i++)
+      W->Hash[1]=combine(W->Hash[1],W->Letters[i]);
   }
   bool Stem(Word *W) {
     if (W->Length()<2) {
@@ -3846,17 +3853,9 @@ public:
     return CharInArray(c, Vowels, NUM_VOWELS);
   }
   inline void Hash(Word *W) final {
-    W->Hash[2] = W->Hash[3] = ~0xeff1cace;
-    for (int i=W->Start; i<=W->End; i++) {
-      U8 l = W->Letters[i];
-      W->Hash[2]=W->Hash[2]*251*32 + l;
-      if (IsVowel(l))
-        W->Hash[3]=W->Hash[3]*997*16 + l;
-      else if (l>='b' && l<='z')
-        W->Hash[3]=W->Hash[3]*271*32 + (l-97);
-      else
-        W->Hash[3]=W->Hash[3]*11*32 + l;
-    }
+    W->Hash[1] = MAGIC4;
+    for (int i=W->Start; i<=W->End; i++)
+      W->Hash[1]=combine(W->Hash[1],W->Letters[i]);
   }
   bool Stem(Word *W) {
     ConvertUTF8(W);
@@ -4036,17 +4035,9 @@ public:
     return CharInArray(c, Vowels, NUM_VOWELS);
   }
   inline void Hash(Word *W) final {
-    W->Hash[2] = W->Hash[3] = ~0xbea7ab1e;
-    for (int i=W->Start; i<=W->End; i++) {
-      U8 l = W->Letters[i];
-      W->Hash[2]=W->Hash[2]*263*32 + l;
-      if (IsVowel(l))
-        W->Hash[3]=W->Hash[3]*997*16 + l;
-      else if (l>='b' && l<='z')
-        W->Hash[3]=W->Hash[3]*251*32 + (l-97);
-      else
-        W->Hash[3]=W->Hash[3]*11*32 + l;
-    }
+    W->Hash[1] = MAGIC5;
+    for (int i=W->Start; i<=W->End; i++)
+      W->Hash[1]=combine(W->Hash[1],W->Letters[i]);
   }
   bool Stem(Word *W) {
     ConvertUTF8(W);
@@ -4090,7 +4081,7 @@ public:
 #ifdef USE_TEXTMODEL
 
 template <class T, const U32 Size> class Cache {
-  static_assert(Size>1 && (Size&(Size-1))==0, "Cache size must be a power of 2 bigger than 1");
+  static_assert(Size>1 && ispowerof2(Size), "Cache size must be a power of 2 bigger than 1");
 private:
   Array<T> Data;
   U32 Index;
@@ -4188,7 +4179,7 @@ private:
   void Update(Buf& buffer, ModelStats *Stats = nullptr);
   void SetContexts(Buf& buffer, ModelStats *Stats = nullptr);
 public:
-  TextModel(const U32 Size) : Map(Size, 26), Stemmers(Language::Count-1), Languages(Language::Count-1), WordPos(0x10000), State(Parse::Unknown), pState(State), Lang{ {0}, {0}, Language::Unknown, Language::Unknown }, Info{}, ParseCtx(0) {
+  TextModel(const U32 Size) : Map(Size, 27), Stemmers(Language::Count-1), Languages(Language::Count-1), WordPos(0x10000), State(Parse::Unknown), pState(State), Lang{ {0}, {0}, Language::Unknown, Language::Unknown }, Info{}, ParseCtx(0) {
     Stemmers[Language::English-1] = new EnglishStemmer();
     Stemmers[Language::French-1] = new FrenchStemmer();
     Stemmers[Language::German-1] = new GermanStemmer();
@@ -4248,18 +4239,18 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
   Info.masks[0]<<=2; Info.masks[1]<<=2; Info.masks[2]<<=4; Info.masks[3]<<=3;
   pState = State;
 
-  U8 c = buffer(1), pC=tolower(c);
+  U8 c = buffer(1), lc=tolower(c);
   BytePos[c] = pos;
-  if (c!=pC) {
-    c = pC;
+  if (c!=lc) {
+    c = lc;
     Info.lastUpper = 0, Info.maskUpper|=1;
   }
-  pC = buffer(2);
-  ParseCtx = hash(State=Parse::Unknown, pWord->Hash[1], c, (ilog2(Info.lastNewLine)+1)*(Info.lastNewLine*3>Info.prevNewLine), Info.masks[1]&0xFC);
+  U8 pC = buffer(2);
+  ParseCtx = hash(State=Parse::Unknown, pWord->Hash[0], c, (ilog2(Info.lastNewLine)+1)*(Info.lastNewLine*3>Info.prevNewLine), Info.masks[1]&0xFC);
 
   if ((c>='a' && c<='z') || c=='\'' || c=='-' || c>0x7F) {
     if (Info.wordLength[0]==0) {
-      // check for hyphenation with "+"
+      // check for hyphenation with "+" (book1 from Calgary)
       if (pC==NEW_LINE && ((Info.lastLetter==3 && buffer(3)=='+') || (Info.lastLetter==4 && buffer(3)==CARRIAGE_RETURN && buffer(4)=='+'))) {
         Info.wordLength[0] = Info.wordLength[1];
         for (int i=Language::Unknown; i<Language::Count; i++)
@@ -4293,7 +4284,7 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
     }
     (*cWord)+=c;
     cWord->GetHashes();
-    ParseCtx = hash(State=Parse::ReadingWord, cWord->Hash[1]);
+    ParseCtx = hash(State=Parse::ReadingWord, cWord->Hash[0]);
   }
   else {
     if (cWord->Length()>0) {
@@ -4329,9 +4320,11 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
       }
       #endif
       Lang.pId = Lang.Id;
-      pWord = &Words[Lang.Id](1), cWord = &Words[Lang.Id](0);
+      pWord = &Words[Lang.Id](1);
+      cWord = &Words[Lang.Id](0);
       memset(cWord, 0, sizeof(Word));
-      WordPos[pWord->Hash[1]&(WordPos.size()-1)] = pos;
+      cWord->GetHashes(); // not really necessary
+      WordPos[pWord->Hash[0]&(WordPos.size()-1)] = pos;
       if (cSegment->WordCount==0)
         memcpy(&cSegment->FirstWord, pWord, sizeof(Word));
       cSegment->WordCount++;
@@ -4360,7 +4353,7 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
     switch (c) {
       case '.': {
         if (Lang.Id!=Language::Unknown && Info.lastUpper==Info.wordLength[1] && Languages[Lang.Id-1]->IsAbbreviation(pWord)) {
-          ParseCtx = hash(State=Parse::WasAbbreviation, pWord->Hash[1]);
+          ParseCtx = hash(State=Parse::WasAbbreviation, pWord->Hash[0]);
           break;
         }
       }
@@ -4396,13 +4389,13 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
         if (Info.prevNewLine==1 || (Info.prevNewLine==2 && pC==CARRIAGE_RETURN))
           cParagraph = &Paragraphs.Next();
         else if ((Info.lastLetter==2 && pC=='+') || (Info.lastLetter==3 && pC==CARRIAGE_RETURN && buffer(3)=='+'))
-          ParseCtx = hash(Parse::ReadingWord, pWord->Hash[1]), State=Parse::PossibleHyphenation;
+          ParseCtx = hash(Parse::ReadingWord, pWord->Hash[0]), State=Parse::PossibleHyphenation;
       }
       case TAB: case CARRIAGE_RETURN: case SPACE: {
         Info.spaceCount++, Info.spaces|=1;
         Info.masks[1]+=3, Info.masks[3]+=5;
         if (c==SPACE && pState==Parse::WasAbbreviation) {
-          ParseCtx = hash(State=Parse::AfterAbbreviation, pWord->Hash[1]);
+          ParseCtx = hash(State=Parse::AfterAbbreviation, pWord->Hash[0]);
         }
         break;
       }
@@ -4487,8 +4480,7 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
 
 void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
   U8 c = buffer(1), lc = tolower(c), m2 = Info.masks[2]&0xF, column = min(0xFF, Info.lastNewLine);;
-  U16 w = ((State==Parse::ReadingWord)?cWord->Hash[1]:pWord->Hash[1])&0xFFFF;
-  U32 h = ((State==Parse::ReadingWord)?cWord->Hash[1]:pWord->Hash[2])*271+c;
+  U32 w = (State==Parse::ReadingWord)?cWord->Hash[0]:pWord->Hash[0];
   int i = State<<6;
 
   Map.set(ParseCtx);
@@ -4496,22 +4488,23 @@ void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
     (Info.lastUpper<Info.wordLength[0])|
     ((Info.lastDigit<Info.wordLength[0]+Info.wordGap)<<1)
   ));
-  Map.set(hash(i++, cWord->Hash[1], Words[Lang.pId](2).Hash[1], min(10,ilog2((U32)Info.numbers[0])),
+  Map.set(hash(i++, cWord->Hash[0], Words[Lang.pId](2).Hash[0], min(10,ilog2((U32)Info.numbers[0])),
     (Info.lastUpper<Info.lastLetter+Info.wordLength[1])|
     ((Info.lastLetter>3)<<1)|
     ((Info.lastLetter>0 && Info.wordLength[1]<3)<<2)
   ));
-  Map.set(hash(i++, cWord->Hash[1]&0xFFF, Info.masks[1]&0x3FF, Words[Lang.pId](3).Hash[2],
+  Map.set(hash(i++, cWord->Hash[0]&0xFFF, Info.masks[1]&0x3FF, Words[Lang.pId](3).Hash[1],
     (Info.lastDigit<Info.wordLength[0]+Info.wordGap)|
     ((Info.lastUpper<Info.lastLetter+Info.wordLength[1])<<1)|
     ((Info.spaces&0x7F)<<2)
   ));
-  Map.set(hash(i++, cWord->Hash[1], pWord->Hash[3], Words[Lang.pId](2).Hash[3]));
-  Map.set(hash(i++, h&0x7FFF, Words[Lang.pId](2).Hash[1]&0xFFF, Words[Lang.pId](3).Hash[1]&0xFFF));
-  Map.set(hash(i++, cWord->Hash[1], c, (cSentence->VerbIndex<cSentence->WordCount)?cSentence->lastVerb.Hash[1]:0));
-  Map.set(hash(i++, pWord->Hash[2], Info.masks[1]&0xFC, lc, Info.wordGap));
-  Map.set(hash(i++, (Info.lastLetter==0)?cWord->Hash[1]:pWord->Hash[1], c, cSegment->FirstWord.Hash[2], min(3,ilog2(cSegment->WordCount+1))));
-  Map.set(hash(i++, cWord->Hash[1], c, Segments(1).FirstWord.Hash[3]));
+  Map.set(hash(i++, cWord->Hash[0], pWord->Hash[1]));
+  Map.set(hash(i++, cWord->Hash[0], pWord->Hash[1], Words[Lang.pId](2).Hash[1]));
+  Map.set(hash(i++, w, Words[Lang.pId](2).Hash[0], Words[Lang.pId](3).Hash[0]));
+  Map.set(hash(i++, cWord->Hash[0], c, (cSentence->VerbIndex<cSentence->WordCount)?cSentence->lastVerb.Hash[0]:0));
+  Map.set(hash(i++, pWord->Hash[1], Info.masks[1]&0xFC, lc, Info.wordGap));
+  Map.set(hash(i++, (Info.lastLetter==0)?cWord->Hash[0]:pWord->Hash[0], c, cSegment->FirstWord.Hash[1], min(3,ilog2(cSegment->WordCount+1))));
+  Map.set(hash(i++, cWord->Hash[0], c, Segments(1).FirstWord.Hash[1]));
   Map.set(hash(i++, max(31,lc), Info.masks[1]&0xFFC, (Info.spaces&0xFE)|(Info.lastPunct<Info.lastLetter), (Info.maskUpper&0xFF)|(((0x100|Info.firstLetter)*(Info.wordLength[0]>1))<<8)));
   Map.set(hash(i++, column, min(7,ilog2(Info.lastUpper+1)), ilog2(Info.lastPunct+1)));
   Map.set(
@@ -4540,7 +4533,7 @@ void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
     Info.masks[3]&0x3F,
     min((max(Info.wordLength[0],3)-2)*(Info.wordLength[0]<8),3),
     Info.firstLetter*(Info.wordLength[0]<5),
-    w&0x3FF,
+    w,
     (c==buffer(2))|
     ((Info.masks[2]>0)<<1)|
     ((Info.lastPunct<Info.wordLength[0]+Info.wordGap)<<2)|
@@ -4549,11 +4542,11 @@ void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
     ((Info.lastPunct<2+Info.wordLength[0]+Info.wordGap+Info.wordLength[1])<<5)
   ));
   Map.set(hash(i++, w, c, Info.numHashes[1]));
-  Map.set(hash(i++, w, c, llog(pos-WordPos[w])>>1));
-  Map.set(hash(i++, w, c, Info.TopicDescriptor.Hash[1]&0x7FFF));
-  Map.set(hash(i++, Info.numLength[0], c, Info.TopicDescriptor.Hash[1]&0x7FFF));
+  Map.set(hash(i++, w, c, llog(pos-WordPos[w&(WordPos.size()-1)])>>1));
+  Map.set(hash(i++, w, c, Info.TopicDescriptor.Hash[0]));
+  Map.set(hash(i++, Info.numLength[0], c, Info.TopicDescriptor.Hash[0]));
   Map.set(hash(i++, (Info.lastLetter>0)?c:0x100, Info.masks[1]&0xFFC, Info.nestHash&0x7FF));
-  Map.set(hash(i++, w*17+c, Info.masks[3]&0x1FF,
+  Map.set(hash(i++, w, c, Info.masks[3]&0x1FF,
     ((cSentence->VerbIndex==0 && cSentence->lastVerb.Length()>0)<<6)|
     ((Info.wordLength[1]>3)<<5)|
     ((cSegment->WordCount==0)<<4)|
@@ -4562,13 +4555,13 @@ void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
     ((Info.lastUpper<Info.lastLetter+Info.wordLength[1])<<1)|
     (Info.lastUpper<Info.wordLength[0]+Info.wordGap+Info.wordLength[1])
   ));
-  Map.set(hash(i++, c, pWord->Hash[2], Info.firstLetter*(Info.wordLength[0]<6),
+  Map.set(hash(i++, c, pWord->Hash[1], Info.firstLetter*(Info.wordLength[0]<6),
     ((Info.lastPunct<Info.wordLength[0]+Info.wordGap)<<1)|
     (Info.lastPunct>=Info.lastLetter+Info.wordLength[1]+Info.wordGap)
   ));
-  Map.set(hash(i++, w*23+c, Words[Lang.pId](1+(Info.wordLength[0]==0)).Letters[Words[Lang.pId](1+(Info.wordLength[0]==0)).Start], Info.firstLetter*(Info.wordLength[0]<7)));
+  Map.set(hash(i++, w, c, Words[Lang.pId](1+(Info.wordLength[0]==0)).Letters[Words[Lang.pId](1+(Info.wordLength[0]==0)).Start], Info.firstLetter*(Info.wordLength[0]<7)));
   Map.set(hash(i++, column, Info.spaces&7, Info.nestHash&0x7FF));
-  Map.set(hash(i++, cWord->Hash[1], (Info.lastUpper<column)|((Info.lastUpper<Info.wordLength[0])<<1), min(5, Info.wordLength[0])));
+  Map.set(hash(i++, cWord->Hash[0], (Info.lastUpper<column)|((Info.lastUpper<Info.wordLength[0])<<1), min(5, Info.wordLength[0])));
 }
 
 #endif //USE_TEXTMODEL
@@ -4668,7 +4661,7 @@ public:
     hashes{ 0 },
     ctx{ 0 },
     length(0),
-    mask(Size/sizeof(U32)-1),
+    mask(U32(Size/sizeof(U32)-1)),
     expectedByte(0),
     delta(false),
     canBypass(AllowBypass),
@@ -4815,7 +4808,7 @@ public:
     hashes{ 0 },
     hashIndex(0),
     length(0),
-    mask(Size/sizeof(U32)-1),
+    mask(U32(Size/sizeof(U32)-1)),
     expectedByte(0),
     valid(false)
   {
@@ -4857,63 +4850,43 @@ public:
 };
 
 //////////////////////////// charGroupModel /////////////////////////
+//
+// modeling ascii character sequences
 
 void charGroupModel(Mixer& m, ModelStats *Stats = nullptr) {
 static ContextMap cm(MEM/2, 7);
-static U64 g_ascii=0;
+static U64 g_ascii_lo=0, g_ascii_hi=0; // group identifiers of 8+8 last characters
+//static U32 lastcollapsed=0; //unused at the moment
   if(bpos==0) {
-    
-    // modeling ascii character sequences
-    U8 c=buf(1);
-    U32 g=0; //group identifier: 0-31
-    if(c==0)g=0;
-    else if('0'<=c && c<='9')g=1;
-    else if('A'<=c && c<='Z')g=2;
-    else if('a'<=c && c<='z')g=3;
-    else if(c=='\n' || c=='\r')g=4;
-    else if(1<=c && c<=31)   g=5;
-    else if(c==' ') g=6;
-    else if(c=='!') g=7;
-    else if(c=='"') g=8;
-    else if(c=='%') g=9;
-    else if(c=='\'') g=10;
-    else if(c=='(') g=11;
-    else if(c==')') g=12;
-    else if(c==',') g=13;
-    else if(c=='-') g=14;
-    else if(c=='.') g=15;
-    else if(c=='/') g=16;
-    else if(32<=c && c<=47)  g=17;     // the rest of  !"#$%&'()*+,-./
-    else if(c==':') g=18;
-    else if(c==';') g=19;
-    else if(c=='<') g=20;
-    else if(c=='>') g=21;
-    else if(c=='?') g=22;
-    else if(58<=c && c<=64)  g=23;    // the rest of :;<=>?@
-    else if(c=='[') g=24;
-    else if(c==']') g=25;
-    else if(c=='_') g=26;
-    else if(91<=c && c<=96)  g=27;    // the rest of [\]^_`
-    else if(c=='{') g=28;
-    else if(c=='}') g=29;
-    else if(123<=c && c<=127)g=30;    // the rest of {|}~
-    else g=31;                        // c = 128..255
 
-    if(!((g<=4) && g == (g_ascii&0x1f))) //repetition is allowed for groups 0..4
-      g_ascii = ((g_ascii<<5) | g) & ((U64(1)<<60)-1); //keep last 12 groups (12x5=60 bits)
+    U32 c=buf(1);
+    U32 g=c; // group identifier
+         if('0'<=c && c<='9') g='0'; //all digits are in one group
+    else if('A'<=c && c<='Z') g='A'; //all uppercase letters are in one group
+    else if('a'<=c && c<='z') g='a'; //all lowercase letters are in one group
+    else if(c>=128) g=128;
 
-    U32 last6 = g_ascii & ((1<<30)-1); //keep last 6 groups (6x5=30 bits)
+    const bool to_be_collapsed = (g=='0' || g=='A' || g=='a') && g == (g_ascii_lo&0xff);
+    if(!to_be_collapsed) {
+      g_ascii_hi <<= 8;
+      g_ascii_hi  |= g_ascii_lo>>(64-8);
+      g_ascii_lo <<= 8;
+      g_ascii_lo  |= g;
+      //lastcollapsed=c;
+    } //else lastcollapsed=combine(lastcollapsed,c);
 
-    cm.set(last6); //last 6 groups
-    cm.set(hash(U32(g_ascii),U32(g_ascii>>32))); //last 12 groups
-    cm.set(g_ascii & ((1<<20)-1)); //last 4 groups
-    cm.set(g_ascii & ((1<<10)-1)); //last 2 groups
-    cm.set(hash((g_ascii>>5) &((1<<30)-1),buf(1)));
-    cm.set(hash((g_ascii>>10)&((1<<30)-1),buf(1),buf(2)));
-    cm.set(hash((g_ascii>>15)&((1<<30)-1),buf(1),buf(2),buf(3)));
+    U32 i=to_be_collapsed;
+    cm.set(combine( (++i), U32(g_ascii_lo),U32(g_ascii_lo>>32),U32(g_ascii_hi) )); // last 12 groups
+    cm.set(combine( (++i), U32(g_ascii_lo),U32(g_ascii_lo>>32) ));                 // last 8 groups
+    cm.set(combine( (++i), U32(g_ascii_lo),U32(g_ascii_lo>>32)&0xffff ));          // last 6 groups
+    cm.set(combine( (++i), U32(g_ascii_lo) ));                                     // last 4 groups
+    cm.set(combine( (++i), U32(g_ascii_lo&0xffff) ));                              // last 2 groups
+
+    cm.set(combine( (++i), (c<<8) | (buf(2)<<16)               , U32(g_ascii_lo),U32(g_ascii_lo>>32)&0xffffff )); // last 7 groups + last 2 chars
+    cm.set(combine( (++i), (c<<8) | (buf(2)<<16) | (buf(3)<<24), U32(g_ascii_lo),U32(g_ascii_lo>>32)&0xff ));     // last 5 groups + last 3 chars
 
     if (Stats)
-      Stats->charGroup = last6;
+      Stats->charGroup = g_ascii_lo; //group identifiers of the last 8 characters
   }
   cm.mix(m);
 }
@@ -4925,29 +4898,26 @@ static U64 g_ascii=0;
 
 #ifdef USE_WORDMODEL
 
-static U32 frstchar=0, spafdo=0, spaces=0, spacecount=0, words=0, wordcount=0,wordlen=0,wordlen1=0;
 void wordModel(Mixer& m, ModelStats *Stats = nullptr) {
+  static U32 frstchar=0, spafdo=0, spaces=0, spacecount=0, words=0, wordcount=0,wordlen=0,wordlen1=0;
   static U32 word0=0, word1=0, word2=0, word3=0, word4=0, word5=0;  // hashes
   static U32 xword0=0,xword1=0,xword2=0,cword0=0,ccword=0;
   static U32 number0=0, number1=0;  // hashes
-  static U32 text0=0;  // hash stream of letters
+  static U32 text0=0;  // uninterrupted stream of letters
   static U32 wrdhsh=0, lastLetter=0, firstLetter=0, lastUpper=0, lastDigit=0, wordGap=0;
-  static ContextMap cm(MEM*16, 50);
+  //static U32 capitalization=0; //unused at this moment
+  static ContextMap cm(MEM*16, 49);
   static int nl1=-3, nl=-2, w=0;  // previous, current newline position
   static U32 mask=0, mask2=0, f4=0;
   static Array<int> wpos(0x10000);  // last position of word
-  static Array<Word> StemWords(4);
-  static Word *cWord=&StemWords[0], *pWord=&StemWords[3];
-  static EnglishStemmer StemmerEN;
-  static int StemIndex=0;
 
   if (bpos==0) {
     bool end_of_sentence=false;
 
     if (spaces&0x80000000) --spacecount;
     if (words&0x80000000) --wordcount;
-    spaces=spaces*2;
-    words=words*2;
+    spaces<<=1;
+    words<<=1;
     lastUpper=min(lastUpper+1,63);
     lastLetter=min(lastLetter+1,63);
     mask2<<=2;
@@ -4958,42 +4928,32 @@ void wordModel(Mixer& m, ModelStats *Stats = nullptr) {
     int pC=buf(2);
     if (pC>='A' && pC<='Z') pC+='a'-'A';
 
-    if ((c>='a' && c<='z') || c=='\'' || c=='-' || c>127)
-      (*cWord)+=c;
-    else if ((*cWord).Length()>0){
-      StemmerEN.Stem(cWord);
-      cWord->GetHashes();
-      StemIndex=(StemIndex+1)&3;
-      pWord=cWord;
-      cWord=&StemWords[StemIndex];
-      memset(cWord, 0, sizeof(Word));
-    }
-
-    if ((c>='a' && c<='z') || c==1 || c==2 ||(c>=128 &&(c!=3))) {
-      if (!wordlen){
-        // model hyphenation with "+"
-        if ((lastLetter==3 && (c4&0xFFFF00)==0x2B0A00) || (lastLetter==4 && (c4&0xFFFFFF00)==0x2B0D0A00)){
+    if ((c>='a' && c<='z') || c==1 || c==2 || (c>=128 &&(c!=3))) {
+      if (wordlen==0){
+        // model hyphenation with "+" (book1 from Calgary)
+        if (pC==NEW_LINE && ((lastLetter==3 && buf(3)=='+') || (lastLetter==4 && buf(3)==CARRIAGE_RETURN && buf(4)=='+'))) {
           word0 = word1;
           wordlen = wordlen1;
-          if (c<128){
-            StemIndex=(StemIndex-1)&3;
-            cWord=pWord;
-            pWord=&StemWords[(StemIndex-1)&3];
-            memset(cWord, 0, sizeof(Word));
-            for (U32 i=0;i<=wordlen;i++)
-              (*cWord)+=buf(wordlen-i+1+(lastLetter-1)*(i!=wordlen));
-          }
         }
-        else{
+        else {
           wordGap = lastLetter;
           firstLetter = c;
           wrdhsh = 0;
+          //capitalization info is unused at this moment
+          //capitalization<<=4;
+          //if(lastUpper==0)capitalization|=8; // single upper (1000), (single lower: 0000)
         }
+      }
+      else {
+        //capitalization info is unused at this moment
+        //capitalization|=4; // flag: more than 1 char in word0
+        //if(lastUpper==0)capitalization|=2; //AAAA (1110) or aaaA (0111) or AaaA (1111)
+        //else capitalization|=1;            //aaAa (0111) or AaAa (1111) or aaaa (0101) or Aaaa (1101)
       }
       lastLetter=0;
       ++words, ++wordcount;
       word0^=hash(word0, c,0);
-      text0=text0*997*16+c;
+      text0=(text0<<6)+(c-'a'+1);
       wordlen++;
       wordlen=min(wordlen,45);
       end_of_sentence=false;
@@ -5026,8 +4986,8 @@ void wordModel(Mixer& m, ModelStats *Stats = nullptr) {
       }
       if ((c4&0xFFFF)==0x3D3D) xword1=word1,xword2=word2; // ==
       if ((c4&0xFFFF)==0x2727) xword1=word1,xword2=word2; // ''
-      if (c==32 || c==10) { ++spaces, ++spacecount; if (c==10 ) nl1=nl, nl=pos-1;}
-      else if (c=='.' || c=='!' || c=='?' || c==',' || c==';' || c==':') spafdo=0,ccword=c,mask2+=3;
+      if (c==32 || c==10) { ++spaces, ++spacecount; if (c==10 ) {nl1=nl; nl=pos-1;}}
+      else if (c=='.' || c=='!' || c=='?' || c==',' || c==';' || c==':') {spafdo=0;ccword=c;mask2+=3;}
       else { ++spafdo; spafdo=min(63,spafdo); }
     }
     lastDigit=min(0xFF,lastDigit+1);
@@ -5037,7 +4997,8 @@ void wordModel(Mixer& m, ModelStats *Stats = nullptr) {
     }
     else if (number0) {
       number1=number0;
-      number0=0,ccword=0;
+      number0=0;
+      ccword=0;
     }
 
     U32 col=min(255, pos-nl);
@@ -5047,7 +5008,7 @@ void wordModel(Mixer& m, ModelStats *Stats = nullptr) {
     cm.set(hash(513,spafdo, spaces,ccword));
     cm.set(hash(514,frstchar, c));
     cm.set(hash(515,col, frstchar, (lastUpper<col)*4+(mask2&3)));
-    cm.set(hash(516,spaces, (words&255)));
+    cm.set(hash(516,spaces, words&255));
     cm.set(hash(256,number0, word2));
     cm.set(hash(257,number0, word1));
     cm.set(hash(258,number1, c,ccword));
@@ -5064,25 +5025,24 @@ void wordModel(Mixer& m, ModelStats *Stats = nullptr) {
     U32 d=c4&0xf0ff;
     cm.set(hash(522,d,frstchar,ccword));
     
-    h=word0*271+b1;
-    cm.set(hash(262,h, 0));
+    cm.set(hash(262,word0, b1, 0));
     cm.set(hash(263,word0, 0));
-    cm.set(hash(264,h, word1));
+    cm.set(hash(264,word0, b1, word1));
     cm.set(hash(265,word0, word1));
-    cm.set(hash(266,h, word1,word2,lastUpper<wordlen));
-    cm.set(hash(268,text0&0xfffff, 0));
+    cm.set(hash(266,word0, word1, word2,b1));
+    cm.set(hash(268,text0, 0));
     cm.set(hash(269,word0, xword0));
     cm.set(hash(270,word0, xword1));
     cm.set(hash(271,word0, xword2));
     cm.set(hash(272,frstchar, xword2));
     cm.set(hash(273,word0, cword0));
     cm.set(hash(274,number0, cword0));
-    cm.set(hash(275,h, word2));
-    cm.set(hash(276,h, word3));
-    cm.set(hash(277,h, word4));
-    cm.set(hash(278,h, word5));
-    cm.set(hash(279,h, word1,word3));
-    cm.set(hash(280,h, word2,word3));
+    cm.set(hash(275,word0, b1, word2));
+    cm.set(hash(276,word0, b1, word3));
+    cm.set(hash(277,word0, b1, word4));
+    cm.set(hash(278,word0, b1, word5));
+    cm.set(hash(279,word0, b1, word1, word3));
+    cm.set(hash(280,word0, b1, word2, word3));
     if (end_of_sentence) {
       word5=word4;
       word4=word3;
@@ -5098,19 +5058,18 @@ void wordModel(Mixer& m, ModelStats *Stats = nullptr) {
     cm.set(hash(282,b1,llog(blpos-wpos[w])>>2));
 
     if(b1=='.' || b1=='!' || b1=='?' || b1=='/'|| b1==')'|| b1=='}') f4=(f4&0xfffffff0)+2;
-    if (b1==32) --b1;
-    f4=f4*16+(b1>>4);
-    cm.set(f4&0x00000fff);
+    f4=(f4<<4) | (b1==' ' ? 0 : b1>>4);
+    cm.set(f4&0xfff);
     cm.set(f4);
 
     int fl = 0;
-    if ((c4&0xff) != 0) {
-      if (isalpha(c4&0xff)) fl = 1;
-      else if (ispunct(c4&0xff)) fl = 2;
-      else if (isspace(c4&0xff)) fl = 3;
-      else if ((c4&0xff) == 0xff) fl = 4;
-      else if ((c4&0xff) < 16) fl = 5;
-      else if ((c4&0xff) < 64) fl = 6;
+    if (b1 != 0) {
+      if (isalpha(b1)) fl = 1;
+      else if (ispunct(b1)) fl = 2;
+      else if (isspace(b1)) fl = 3;
+      else if ((b1) == 0xff) fl = 4;
+      else if ((b1) < 16) fl = 5;
+      else if ((b1) < 64) fl = 6;
       else fl = 7;
     }
     mask = (mask<<3)|fl;
@@ -5120,7 +5079,7 @@ void wordModel(Mixer& m, ModelStats *Stats = nullptr) {
     cm.set(hash(531,mask,buf(2),buf(3)));
     cm.set(hash(532,mask&0x1ff,f4&0x00fff0));
 
-    cm.set(hash(h, llog(wordGap), mask&0x1FF,
+    cm.set(hash(word0, b1, llog(wordGap), mask&0x1FF,
       ((wordlen1 > 3)<<6)|
       ((wordlen > 0)<<5)|
       ((spafdo == wordlen + 2)<<4)|
@@ -5131,7 +5090,6 @@ void wordModel(Mixer& m, ModelStats *Stats = nullptr) {
     ));
     cm.set(hash(col,wordlen1,above&0x5F,c4&0x5F));
     cm.set(hash( mask2&0x3F, wrdhsh&0xFFF, (0x100|firstLetter)*(wordlen<6),(wordGap>4)*2+(wordlen1>5)) );
-    cm.set(hash((*pWord).Hash[2], h));
   }
   cm.mix(m);
 }
@@ -8370,9 +8328,9 @@ public:
 
       ++top;
 
-      U32 const target=(t.size()-65280);
+      const U32 target=U32(t.size()-65280);
       double const rate=double(top-65280)/double(target);
-      threshold=threshold_start+(threshold_end-threshold_start)*rate;
+      threshold=U32(threshold_start+(threshold_end-threshold_start)*rate);
     }
 
     if(y==0) curr=t[curr].nx0;
@@ -8972,9 +8930,9 @@ public:
 
     next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0), bytesread(0), readsize(false), Bypass(false) {
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(1143, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/), 22);
+      m=MixerFactory::CreateMixer(1145, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/), 22);
     #else
-      m=MixerFactory::CreateMixer( 893, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/), 22);
+      m=MixerFactory::CreateMixer( 900, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/), 22);
     #endif //USE_WORD_MODEL
     }
 
@@ -10233,7 +10191,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
      ) {
         text.misses|=1;
         text.missCount++;
-        int length = i-text.start-1;
+        int length = int(i-text.start-1);
         if ((length<MIN_TEXT_SIZE || (png || pdfimw || cdi || soi || pgm || rgbi || tga || gif || b64s))){
           text = {0};
           text.start = i+1;
@@ -10247,7 +10205,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
   }
   if (n-text.start>=MIN_TEXT_SIZE){
     in->setpos(start + text.start);
-    detd = n-text.start;
+    detd = int(n-text.start);
     return (text.needsEolTransform)?TEXT_EOL:TEXT;
   }
   return type;
