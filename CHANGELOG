@@ -1283,3 +1283,13 @@ paq8px_v162
 - Slightly improved MatchModel
 - Slightly improved exeModel
 - Levels <4 no longer skip using additional generic models
+
+
+paq8px_v163
+2018.09.01
+- Simplified hashing in class Word and in the Stemmer classes
+- Simplified and improved charGroupModel
+- Simplified some contexts in TextModel
+- Moved a context from wordModel to TextModel
+- Minor changes in wordModel
+- Eliminated some compiler warnings
