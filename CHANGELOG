@@ -1293,3 +1293,8 @@ paq8px_v163
 - Moved a context from wordModel to TextModel
 - Minor changes in wordModel
 - Eliminated some compiler warnings
+
+
+paq8px_v164
+2018.09.03
+- Improved 24/32bpp image model (thank you Sebastian Lehmann)
