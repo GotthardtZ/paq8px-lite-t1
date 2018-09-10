@@ -1298,3 +1298,8 @@ paq8px_v163
 paq8px_v164
 2018.09.03
 - Improved 24/32bpp image model (thank you Sebastian Lehmann)
+
+
+paq8px_v165
+2018.09.10
+- Improved 8bpp grayscale image model
