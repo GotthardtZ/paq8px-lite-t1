@@ -1303,3 +1303,14 @@ paq8px_v164
 paq8px_v165
 2018.09.10
 - Improved 8bpp grayscale image model
+
+
+paq8px_v166
+2018.09.16
+- Slightly improved models:
+ - MatchModel
+ - SparseMatchModel
+ - recordModel
+ - 8bpp color-indexed image model
+ - 4bpp image model
+- Reduced memory usage for the StationaryMap and SmallStationaryContextMap classes
