@@ -1314,3 +1314,17 @@ paq8px_v166
  - 8bpp color-indexed image model
  - 4bpp image model
 - Reduced memory usage for the StationaryMap and SmallStationaryContextMap classes
+
+
+paq8px_v167
+2018.09.22
+- Fixes and improvements in dmcModel
+  - dmcModel is now large memory aware: maximized the number of DMC nodes (size of state graph < 2 GB)
+  - Fixed a bug present since v145: DMC state graph reset should occur at bpos==0
+  - Increased precision of c0,c1 counts in DMCNode (4+8 bits-> 6+10 bits)
+  - Modified (simplified) calculation of threshold growth
+- Improvements in dmcForest
+  - In dmcForest 10 dmcModels are used for mixing (instead of 6)
+  - 2 of the models are now never reset, 8 models are combined pairwise (4+4) to enhance stability
+  - Simplified the combination of the dmcModels
+  - Decreased memory usage (on compression level -9 that is 4302 MB -> 4010 MB when no special models in use)

@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "166"  //update version here before publishing your changes
+#define PROGVERSION  "167"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -8502,66 +8502,71 @@ void indirectModel(Mixer& m) {
 // - Instead of floats we use fixed point arithmetic.
 // - The threshold for cloning a state increases gradually as memory is used up.
 // - For probability estimation each state maintains both a 0,1 count ("c0" and "c1") 
-//   and a bit history ("state"). The bit history is mapped to a probability adaptively using 
-//   a StateMap. The two computed probabilities are emitted to the Mixer to be combined.
-// - All counts are updated adaptively.
-// - The "dmcModel" is used in "dmcForest". See below.
-
-#define MINDMCNODES (65280)
+//   and a bit history ("state"). The 0,1 counts are updated adaptively favoring newer events.
+//   The bit history state is mapped to a probability adaptively using a StateMap.
+// - The predictions of multiple "dmcModel"s are combined and stiblilized in "dmcForest". See below.
 
 struct DMCNode { // 12 bytes
-private:
   // c0,c1: adaptive counts of zeroes and ones; 
-  //   fixed point numbers with 4 integer and 8 fractional bits, i.e. scaling factor=256;
-  //   thus the counts 0.0 .. 15.996 are represented by 0 .. 4095
+  //        fixed point numbers with 6 integer and 10 fractional bits, i.e. scaling factor = 1024;
+  //        thus the values 0 .. 65535 represent real counts of 0.0 .. 63.999
+  // nx0, nx1: indexes of next DMC nodes in the state graph
   // state: bit history state - as in a contextmap
-  U32 state_c0_c1;  // 8 + 12 + 12 = 32 bits
 public:
-  U32 nx0,nx1;     //indexes of next DMC nodes in the state graph
-  U8   get_state() const   {return state_c0_c1>>24;}
-  void set_state(U8 state) {state_c0_c1=(state_c0_c1 & 0x00FFFFFF)|(state<<24);}
-  U32  get_c0() const      {return (state_c0_c1>>12) & 0xFFF;}
-  void set_c0(U32 c0)      {assert(c0<4096);state_c0_c1=(state_c0_c1 &0xFF000FFF) | (c0<<12);}
-  U32  get_c1() const      {return state_c0_c1 & 0xFFF;}
-  void set_c1(U32 c1)      {assert(c1<4096);state_c0_c1=(state_c0_c1 &0xFFFFF000) | c1;}
+  U16 c0, c1;
+private:
+  U32 _nx0, _nx1; // packed: their higher 28 bits are nx0, nx1; the lower 4+4 bits give the bit history state byte
+
+public:
+  U8   get_state() const         {return U8(((_nx0&0xf)<<4) | (_nx1&0xf));}
+  void set_state(const U8 state) {_nx0=(_nx0&0xfffffff0) | (state>>4); _nx1=(_nx1&0xfffffff0) | (state&0xf);}
+  U32  get_nx0() const           {return _nx0>>4;}
+  void set_nx0(const U32 nx0)    {assert((nx0>>28)==0);_nx0=(_nx0&0xf) | (nx0<<4);}
+  U32  get_nx1() const           {return _nx1>>4;}
+  void set_nx1(const U32 nx1)    {assert((nx1>>28)==0);_nx1=(_nx1&0xf) | (nx1<<4);}
 };
+
+#define DMC_NODES_BASE (255*256) // = 65280
+#define DMC_NODES_MAX  ((U64(1)<<31)/sizeof(DMCNode)) // = 178 956 970
 
 class dmcModel {
 private:
   Array<DMCNode> t;     // state graph
-  StateMap sm;
+  StateMap sm;          // statemap for bit history states
   U32 top, curr;        // index of first unallocated node (i.e. number of allocated nodes); index of current node
-  U32 threshold;        // cloning threshold parameter: fixed point number as c0,c1
-  U32 threshold_start;
-  U32 threshold_end;    
+  U32 threshold;        // cloning threshold parameter: fixed point number like c0,c1
+  U32 threshold_fine;   // "threshold" scaled by 11 bits used for increasing the threshold in finer steps
+  U32 extra;            // this value is used for approximating stategraph maturity level when the state graph is already full 
+                        // this is the number of skipped cloning events when the counts were already large enough (>1.0)
 
   // helper function: adaptively increment a counter
   U32 increment_counter (const U32 x, const U32 increment) const { // x is a fixed point number as c0,c1 ; "increment"  is 0 or 1
-    return (((x<<4)-x)>>4)+(increment<<8); // x * (1-1/16) + increment
+    return (((x<<6)-x)>>6)+(increment<<10); // x * (1-1/64) + increment
   }
-  
+
 public: 
-  dmcModel(U32 mem, U32 th_start, U32 th_end) : t(mem+MINDMCNODES), sm() {resetstategraph(th_start, th_end);}
+  dmcModel(const U64 dmc_nodes, const U32 th_start) : t(min(dmc_nodes+DMC_NODES_BASE,DMC_NODES_MAX)), sm() {resetstategraph(th_start);}
 
   // Initialize the state graph to a bytewise order 1 model
   // See an explanation of the initial structure in:
   // http://wing.comp.nus.edu.sg/~junping/docs/njp-icita2005.pdf
-  void resetstategraph(U32 th_start, U32 th_end) {
-    top=curr=0;
-    threshold=threshold_start=th_start;
-    threshold_end=th_end;
+  void resetstategraph(const U32 th_start) {
+    assert(((t.size()-1)>>28)==0); // the top 4 bits must be unused by nx0 and nx1 for storing the 4+4 bits of the bit history state byte
+    top=curr=extra=0;
+    threshold=th_start;
+    threshold_fine=th_start<<11;
     for (int j=0; j<256; ++j) { //256 trees
       for (int i=0; i<255; ++i) { //255 nodes in each tree
         if (i<127) { //internal tree nodes
-          t[top].nx0=top+i+1; // left node 
-          t[top].nx1=top+i+2; // right node
+          t[top].set_nx0(top+i+1); // left node 
+          t[top].set_nx1(top+i+2); // right node
         }
         else { // 128 leaf nodes - they each references a root node of tree(i)
-          t[top].nx0=(i-127)*255; // left node -> root of tree 0,1,2,3,... 
-          t[top].nx1=(i+1)*255;   // right node -> root of tree 128,129,...
+          int linked_tree_root=(i-127)*2*255;
+          t[top].set_nx0(linked_tree_root);     // left node  -> root of tree 0,2,4... 
+          t[top].set_nx1(linked_tree_root+255); // right node -> root of tree 1,3,5...
         }
-        t[top].set_c0(128); //0.5
-        t[top].set_c1(128); //0.5
+        t[top].c0=t[top].c1 = th_start<1024 ? 2048 : 512; // 2.0  0.5
         t[top].set_state(0);
         top++;
       }
@@ -8571,174 +8576,139 @@ public:
   //update stategraph
   void update() {
 
-    U32 c0=t[curr].get_c0();
-    U32 c1=t[curr].get_c1();
+    U32 c0=t[curr].c0;
+    U32 c1=t[curr].c1;
     const U32 n = y ==0 ? c0 : c1;
 
     // update counts, state
-    t[curr].set_c0(increment_counter(c0,1-y));
-    t[curr].set_c1(increment_counter(c1,y));
+    t[curr].c0=increment_counter(c0,1-y);
+    t[curr].c1=increment_counter(c1,y);
     t[curr].set_state(nex(t[curr].get_state(), y));
 
     // clone next state when threshold is reached
-    const U32 next = y==0 ? t[curr].nx0 : t[curr].nx1;
-    c0=t[next].get_c0();
-    c1=t[next].get_c1();
-    const U32 nn=c0+c1;
-    if(n>threshold && nn>n+threshold && top<t.size()) {
-      U32 c0_top=c0*n/nn;
-      U32 c1_top=c1*n/nn;
-      assert(c0>=c0_top);
-      assert(c1>=c1_top);
-      c0-=c0_top;
-      c1-=c1_top;
+    if(n>threshold) {
 
-      t[top].set_c0(c0_top);
-      t[top].set_c1(c1_top);
-      t[next].set_c0(c0);
-      t[next].set_c1(c1);
+      const U32 next = y==0 ? t[curr].get_nx0() : t[curr].get_nx1();
+      c0=t[next].c0;
+      c1=t[next].c1;
+      const U32 nn=c0+c1;
 
-      t[top].nx0=t[next].nx0;
-      t[top].nx1=t[next].nx1;
-      t[top].set_state(t[next].get_state());
-      if(y==0) t[curr].nx0=top;
-      else t[curr].nx1=top;
+      if(nn>n+threshold) {
+        if(top!=t.size()) { // state graph is not yet full, let's clone
+          U32 c0_top=U64(c0)*U64(n)/U64(nn);
+          U32 c1_top=U64(c1)*U64(n)/U64(nn);
+          assert(c0>=c0_top);
+          assert(c1>=c1_top);
+          c0-=c0_top;
+          c1-=c1_top;
 
-      ++top;
+          t[top].c0=c0_top;
+          t[top].c1=c1_top;
+          t[next].c0=c0;
+          t[next].c1=c1;
 
-      const U32 target=U32(t.size()-65280);
-      double const rate=double(top-65280)/double(target);
-      threshold=U32(threshold_start+(threshold_end-threshold_start)*rate);
+          t[top].set_nx0(t[next].get_nx0());
+          t[top].set_nx1(t[next].get_nx1());
+          t[top].set_state(t[next].get_state());
+          if(y==0) t[curr].set_nx0(top);
+          else t[curr].set_nx1(top);
+
+          ++top;
+
+          if(threshold<8*1024)threshold=(++threshold_fine)>>11;
+        }
+        else // state graph was full
+          extra += nn>>10;
+      }
     }
 
-    if(y==0) curr=t[curr].nx0;
-    else     curr=t[curr].nx1;
+    if(y==0) curr=t[curr].get_nx0();
+    else     curr=t[curr].get_nx1();
   }
 
-  bool isfull() const {return top==t.size() && bpos==1;}
+  bool isfull() const {return extra>>7 > U32(t.size());}
   int pr1() const {
-    const U32 n0=t[curr].get_c0()+1;
-    const U32 n1=t[curr].get_c1()+1;
+    const U32 n0=t[curr].c0+1;
+    const U32 n1=t[curr].c1+1;
     return (n1<<12)/(n0+n1);
   }
-  int pr2() {return sm.p(t[curr].get_state(),256);}
+  int pr2() {
+    const U8 state=t[curr].get_state();
+    return sm.p(state,256); // 64-512 are all fine
+  }
+  int st() {
+    update();
+    return stretch(pr1()) + stretch(pr2()); // average the predictions for stability
+  }
 };
 
 // This class solves two problems of the DMC model
 // 1) The DMC model is a memory hungry algorithm. In theory it works best when it can clone
-//    nodes forever. But memory is a limited resource. When the state graph is full you can't
-//    clone nodes anymore. You can either i) reset the model (the state graph) and start over
+//    nodes forever. But when the state graph is full you can't clone nodes anymore. 
+//    You can either i) reset the model (the state graph) and start over
 //    or ii) you can keep updating the counts forever in the already fixed state graph. Both
 //    choices are troublesome: i) resetting the model degrades the predictive power significantly
 //    until the graph becomes large enough again and ii) a fixed structure can't adapt anymore.
 //    To solve this issue:
-//    Two models with the same parameters work in tandem. Always both models are updated but
-//    only one model (the larger, mature one) is active (predicts) at any time. When one model
-//    needs resetting the other one feeds the mixer with predictions until the first one
-//    becomes mature (nearly full) again.
-//    Disadvantages: with the same memory requirements we have just half of the number of nodes
-//    in each model. Also keeping two models updated at all times requires 2x as much
-//    calculations as updating one model only.
-//    Advantage: stable and better compression - even with reduced number of nodes.
+//    Ten models with different parameters work in tandem. Only eight of the ten models
+//    are reset periodically. Due to their different cloning threshold parameters and 
+//    different state graph sizes they are reset at different points in time. 
+//    The remaining two models (having the highest threshold and largest stategraph) are
+//    never reset and are beneficial for semi-stationary files.
 // 2) The DMC model is sensitive to the cloning threshold parameter. Some files prefer
 //    a smaller threshold other files prefer a larger threshold.
 //    The difference in terms of compression is significant.
-//    To solve this issue:
-//    Three models with different thresholds are used and their predictions are emitted to 
-//    the mixer. This way the model with the better threshold will be favored naturally.
-//    Disadvantage: same as in 1) just the available number of nodes is 1/3 of the 
-//    one-model case.
-//    Advantage: same as in 1).
+//    To solve this issue DMC models with different thresholds are used and their 
+//    predictions are combined.
+//
+//    Disadvantages: with the same memory requirements we have less number of nodes
+//    in each model. Also keeping more models updated at all times requires more
+//    calculations and more memory access than updating one model only.
+//    Advantage: more stable and better compression - even with reduced number of nodes.
+//
+// Further notes: 
+//    Extremely small initial threshold parameters (i) help the state graph become large faster
+//    and model longer input bit sequences sooner. Moreover (ii) when using a small threshold 
+//    parameter the split counts c0 and c1 will be small after cloning, and after updating them
+//    with 0 and 1 the prediction p=c1/(c0+c1) will be biased towards these latest events.
 
 class dmcForest {
 private:
-  dmcModel dmcmodel1a; // models a and b have similar parameters and work in tandem
-  dmcModel dmcmodel1b;
-  dmcModel dmcmodel2a; // models 1,2,3 have different threshold parameters and their 
-  dmcModel dmcmodel2b; // predictions are emitted to the mixer
-  dmcModel dmcmodel3a;
-  dmcModel dmcmodel3b;
-  // states of each model-pair:
-  //   0: model (a) and (b) are both active, both are growing (initial state)
-  //   1: model (a) is full and active, model (b) is reset and growing
-  //   2: model (b) is full and active, model (a) is reset and growing
-  int model1_state=0; 
-  int model2_state=0; 
-  int model3_state=0; 
+  const U32 MODELS = 10; // 8 fast and 2 slow models
+  U32 dmcparams [10] = {2,32, 64,4, 128,8, 256,16, 1024,1536};
+  U64 dmcmem [10]    = {6,10, 11,7,  12,8,  13, 9,    2,   2};
+  Array<dmcModel*> dmcmodels;
 public:
-  dmcForest():dmcmodel1a(MEM*4/9,20,1800),dmcmodel1b(MEM*4/9,1,1800),dmcmodel2a(MEM*4/9,30,1800),dmcmodel2b(MEM*4/9,4,1800),dmcmodel3a(MEM*4/9,256,1800),dmcmodel3b(MEM*4/9,128,1800){}
-  void mix(Mixer& m) {
+  dmcForest():dmcmodels(MODELS) {
+    for(int i=MODELS-1;i>=0;i--) 
+      dmcmodels[i]=new dmcModel(MEM/dmcmem[i],dmcparams[i]);
+  }
+  ~dmcForest() {
+    for(int i=MODELS-1;i>=0;i--)
+      delete dmcmodels[i];
+  }
 
-    int pr11=0,pr12=0,pr21=0,pr22=0,pr31=0,pr32=0;
-
-    dmcmodel1a.update();
-    dmcmodel1b.update();
-    switch(model1_state) {
-    case 0:
-      pr11=(dmcmodel1a.pr1()+dmcmodel1b.pr1()+1)>>1;
-      pr12=(dmcmodel1a.pr2()+dmcmodel1b.pr2()+1)>>1;
-      if(dmcmodel1a.isfull()){dmcmodel1b.resetstategraph(256,1800);model1_state++;}
-      break;
-    case 1:
-      pr11=dmcmodel1a.pr1();
-      pr12=dmcmodel1a.pr2();
-      if(dmcmodel1b.isfull()){dmcmodel1a.resetstategraph(256,1800);model1_state++;}
-      break;
-    case 2:
-      pr11=dmcmodel1b.pr1();
-      pr12=dmcmodel1b.pr2();
-      if(dmcmodel1a.isfull()){dmcmodel1b.resetstategraph(256,1800);model1_state--;}
-      break;
+  // update and predict
+  void mix(Mixer &m) {
+    int i=MODELS;
+    // the slow models predict individually
+    m.add(dmcmodels[--i]->st()>>3);
+    m.add(dmcmodels[--i]->st()>>3);
+    // the fast models are combined for better stability
+    while(i>0) {
+      const int pr1=dmcmodels[--i]->st();
+      const int pr2=dmcmodels[--i]->st();
+      m.add((pr1+pr2)>>4);
     }
 
-    dmcmodel2a.update();
-    dmcmodel2b.update();
-    switch(model2_state) {
-    case 0:
-      pr21=(dmcmodel2a.pr1()+dmcmodel2b.pr1()+1)>>1;
-      pr22=(dmcmodel2a.pr2()+dmcmodel2b.pr2()+1)>>1;
-      if(dmcmodel2a.isfull()){dmcmodel2b.resetstategraph(512,1800);model2_state++;} 
-      break;
-    case 1:
-      pr21=dmcmodel2a.pr1();
-      pr22=dmcmodel2a.pr2();
-      if(dmcmodel2b.isfull()){dmcmodel2a.resetstategraph(512,1800);model2_state++;}
-      break;
-    case 2:
-      pr21=dmcmodel2b.pr1();
-      pr22=dmcmodel2b.pr2();
-      if(dmcmodel2a.isfull()){dmcmodel2b.resetstategraph(512,1800);model2_state--;}
-      break;
-    }
-
-    dmcmodel3a.update();
-    dmcmodel3b.update();
-    switch(model3_state) {
-    case 0:
-      pr31=(dmcmodel3a.pr1()+dmcmodel3b.pr1()+1)>>1;
-      pr32=(dmcmodel3a.pr2()+dmcmodel3b.pr2()+1)>>1;
-      if(dmcmodel3a.isfull()){dmcmodel3b.resetstategraph(768,1800);model3_state++;}
-      break;
-    case 1:
-      pr31=dmcmodel3a.pr1();
-      pr32=dmcmodel3a.pr2();
-      if(dmcmodel3b.isfull()){dmcmodel3a.resetstategraph(768,1800);model3_state++;}
-      break;
-    case 2:
-      pr31=dmcmodel3b.pr1();
-      pr32=dmcmodel3b.pr2();
-      if(dmcmodel3a.isfull()){dmcmodel3b.resetstategraph(768,1800);model3_state--;}
-      break;
-    }
-    m.add(stretch(pr11)>>2);
-    m.add(stretch(pr12)>>2);
-    m.add(stretch(pr21)>>2);
-    m.add(stretch(pr22)>>2);
-    m.add(stretch(pr31)>>2);
-    m.add(stretch(pr32)>>2);
+    // reset models when their structure can't adapt anymore
+    // the two slow models are never reset
+    if(bpos==0)
+      for(int i=MODELS-3;i>=0;i--) 
+        if(dmcmodels[i]->isfull())
+          dmcmodels[i]->resetstategraph(dmcparams[i]);
   }
 };
-
 
 void nestModel(Mixer& m)
 {
