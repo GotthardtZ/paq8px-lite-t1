@@ -1328,3 +1328,18 @@ paq8px_v167
   - 2 of the models are now never reset, 8 models are combined pairwise (4+4) to enhance stability
   - Simplified the combination of the dmcModels
   - Decreased memory usage (on compression level -9 that is 4302 MB -> 4010 MB when no special models in use)
+
+
+paq8px_v168
+2018.10.17
+- Improvements (hashing):
+  - New hash functionality with 64-bit hashes in ContextMap, ContextMap2, BH, RunContextMap, StationaryMap
+  - Affected models and classes: Word, Stemmer(s), TextModel, MatchModel, SparseMatchModel, CharGroupModel, WordModel, recordModel, SparseModel, distanceModel, im24bitModel, im8bitModel, JpegModel, exeModel, indirectModel, nestModel, XMLModel, normalModel
+  - Word class: if a word remains untouched after stemming its hash also remains the same
+  - Word class: words from different languages have equal hashes if the words are the same
+- Cosmetic changes:
+  - Cosmetic changes and/or small speed enhancements in classes: Array, Mixer, StateMap, APM, charGroupModel, wordModel, recordModel, im24bitModel, Predictor
+  - Issue compiler error to prevent building with unsafe floating point optimizations
+  - Eliminated the remaining "if (level>=4)" references
+  - Slightly decreased memory use (distanceModel, SSE stage)
+  - Updated help screen to reflect the current default memory use per compression level.
