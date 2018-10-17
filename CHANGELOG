@@ -1339,7 +1339,7 @@ paq8px_v168
   - Word class: words from different languages have equal hashes if the words are the same
 - Cosmetic changes:
   - Cosmetic changes and/or small speed enhancements in classes: Array, Mixer, StateMap, APM, charGroupModel, wordModel, recordModel, im24bitModel, Predictor
-  - Issue compiler error to prevent building with unsafe floating point optimitations
+  - Issue compiler error to prevent building with unsafe floating point optimizations
   - Eliminated the remaining "if (level>=4)" references
   - Slightly decreased memory use (distanceModel, SSE stage)
   - Updated help screen to reflect the current default memory use per compression level.
