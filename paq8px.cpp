@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "168"  //update version here before publishing your changes
+#define PROGVERSION  "169"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -56,6 +56,12 @@
 // vc++: /fp:fast
 #if defined(__FAST_MATH__) || defined(_M_FP_FAST) // gcc vc++
 #error Avoid using aggressive floating-point compiler optimization flags
+#endif
+
+#if defined(_MSC_VER)
+#define ALWAYS_INLINE inline __forceinline
+#else
+#define ALWAYS_INLINE inline __attribute__((always_inline))
 #endif
 
 //////////////////////// Includes /////////////////////////////////////////
@@ -1833,12 +1839,12 @@ public:
 // - Keep the necessary number of MSBs after a (combination of) 
 //   multiplicative hash(es)
 
-static inline __attribute__((always_inline)) 
+static ALWAYS_INLINE 
 U32 finalize32(const U32 hash, const int hashbits) {
   assert(0<hashbits && hashbits<=32);
   return hash>>(32-hashbits);
 }
-static inline __attribute__((always_inline)) 
+static ALWAYS_INLINE 
 U32 finalize64(const U64 hash, const int hashbits) {
   assert(0<hashbits && hashbits<=32);
   return U32(hash>>(64-hashbits));
@@ -1846,7 +1852,7 @@ U32 finalize64(const U64 hash, const int hashbits) {
 
 // Get the next MSBs (8 or 6 bits) following "hasbits" for checksum
 // Remark: the result must be cast/masked to the proper checksum size (U8, U16) by the caller
-static inline __attribute__((always_inline)) 
+static ALWAYS_INLINE 
 U64 checksum64(const U64 hash, const int hashbits, const int checksumbits) {
   return hash>>(64-hashbits-checksumbits); 
 }
@@ -1856,56 +1862,56 @@ U64 checksum64(const U64 hash, const int hashbits, const int checksumbits) {
 //
 // - Hash 1-13 64-bit (usually small) integers
 
-static inline __attribute__((always_inline)) 
+static ALWAYS_INLINE 
 U64 hash64(const U64 x0) {
   return (x0+1)*PHI64;
 }
-static inline __attribute__((always_inline)) 
+static ALWAYS_INLINE 
 U64 hash64(const U64 x0, const U64 x1) {
   return (x0+1)*PHI64   + (x1+1)*MUL64_1;
 }
-static inline __attribute__((always_inline)) 
+static ALWAYS_INLINE 
 U64 hash64(const U64 x0, const U64 x1, const U64 x2) {
   return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2;
 }
-static inline __attribute__((always_inline)) 
+static ALWAYS_INLINE 
 U64 hash64(const U64 x0, const U64 x1, const U64 x2, const U64 x3) {
   return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
          (x3+1)*MUL64_3;
 }
-static inline __attribute__((always_inline)) 
+static ALWAYS_INLINE 
 U64 hash64(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4) {
   return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
          (x3+1)*MUL64_3 + (x4+1)*MUL64_4;
 }
-static inline __attribute__((always_inline)) 
+static ALWAYS_INLINE 
 U64 hash64(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
                   const U64 x5) {
   return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
          (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5;
 }
-static inline __attribute__((always_inline)) 
+static ALWAYS_INLINE 
 U64 hash64(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
                   const U64 x5, const U64 x6) {
   return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
          (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5 +
          (x6+1)*MUL64_6;
 }
-static inline __attribute__((always_inline)) 
+static ALWAYS_INLINE 
 U64 hash64(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
                   const U64 x5, const U64 x6, const U64 x7) {
   return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
          (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5 +
          (x6+1)*MUL64_6 + (x7+1)*MUL64_7;
 }
-static inline __attribute__((always_inline)) 
+static ALWAYS_INLINE 
 U64 hash64(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
                   const U64 x5, const U64 x6, const U64 x7, const U64 x8) {
   return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
          (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5 +
          (x6+1)*MUL64_6 + (x7+1)*MUL64_7 + (x8+1)*MUL64_8;
 }
-static inline __attribute__((always_inline)) 
+static ALWAYS_INLINE 
 U64 hash64(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
                   const U64 x5, const U64 x6, const U64 x7, const U64 x8, const U64 x9) {
   return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
@@ -1913,7 +1919,7 @@ U64 hash64(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
          (x6+1)*MUL64_6 + (x7+1)*MUL64_7 + (x8+1)*MUL64_8 +
          (x9+1)*MUL64_9;
 }
-static inline __attribute__((always_inline)) 
+static ALWAYS_INLINE 
 U64 hash64(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
                   const U64 x5, const U64 x6, const U64 x7, const U64 x8, const U64 x9,
                   const U64 x10) {
@@ -1922,7 +1928,7 @@ U64 hash64(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
          (x6+1)*MUL64_6 + (x7+1)*MUL64_7 + (x8+1)*MUL64_8 +
          (x9+1)*MUL64_9 + (x10+1)*MUL64_10;
 }
-static inline __attribute__((always_inline)) 
+static ALWAYS_INLINE 
 U64 hash64(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
                   const U64 x5, const U64 x6, const U64 x7, const U64 x8, const U64 x9,
                   const U64 x10,const U64 x11) {
@@ -1931,7 +1937,7 @@ U64 hash64(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
          (x6+1)*MUL64_6 + (x7+1)*MUL64_7 + (x8+1)*MUL64_8 +
          (x9+1)*MUL64_9 + (x10+1)*MUL64_10 + (x11+1)*MUL64_11;
 }
-static inline __attribute__((always_inline)) 
+static ALWAYS_INLINE 
 U64 hash64(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
                   const U64 x5, const U64 x6, const U64 x7, const U64 x8, const U64 x9,
                   const U64 x10,const U64 x11,const U64 x12) {
@@ -1947,7 +1953,7 @@ U64 hash64(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
 
 // Call this function repeatedly for string hashing, or to combine 
 // a hash value and a (non-hash) value, or two hash values
-static inline __attribute__((always_inline)) 
+static ALWAYS_INLINE 
 U64 combine64(const U64 seed, const U64 x) {
   return hash64(seed+x);
 }
@@ -3376,7 +3382,7 @@ private:
     return (W->Type&English::AdjectiveSuperlative)>0;
   }
   //Search for the longest among the suffixes, 's' or 's or ' and remove if found.
-  //Exaples: Children’s toys / Vice presidents' duties
+  //Examples: Children's toys / Vice presidents' duties
   bool Step0(Word *W) {
     for (int i=0; i<NUM_SUFFIXES_STEP0; i++) {
       if (W->EndsWith(SuffixesStep0[i])) {
@@ -5419,13 +5425,13 @@ void recordModel(Mixer& m, ModelStats *Stats = nullptr) {
   static U8 N=0, NN=0, NNN=0, NNNN=0;
   static int prevTransition = 0, nTransition = 0; // position of the last padding transition
   static int col = 0, mxCtx = 0;
-  static ContextMap cm(32768, 3), cn(32768/2, 3), co(32768*2, 3), cp(MEM*2, 8); // cm,cn,co: memory pressure is advantageous
+  static ContextMap cm(32768, 3), cn(32768/2, 3), co(32768*2, 3), cp(MEM*2, 10); // cm,cn,co: memory pressure is advantageous
   static const int nMaps = 3;
   static StationaryMap Maps[nMaps] ={ 10,10,{11,1} };
   static SmallStationaryContextMap sMap(11, 1);
   static bool MayBeImg24b = false;
   static dBASE dbase {};
-  static IndirectContext<U16> iCtx(16);
+  static IndirectContext<U16> iCtx(16), iCtx2(16);
 
   // Find record length
   if (bpos==0) {
@@ -5519,6 +5525,7 @@ void recordModel(Mixer& m, ModelStats *Stats = nullptr) {
     col=pos%rlen[0];
     N = buf(rlen[0]), NN = buf(rlen[0]*2), NNN = buf(rlen[0]*3), NNNN = buf(rlen[0]*4);
     iCtx+=c, iCtx=(c<<8)|N;
+    iCtx2+=c, iCtx2=(buf(rlen[0]-1)<<8)|N;
     /*
     Consider record structures that include fixed-length strings.
     These usually contain the text followed by either spaces or 0's,
@@ -5577,6 +5584,8 @@ void recordModel(Mixer& m, ModelStats *Stats = nullptr) {
     cp.set64(hash64(++i, (N&0xF8)|((NN&0xF8)<<8)|(col<<16) ));
 
     cp.set64(hash64(++i, col, iCtx()));
+    cp.set64(hash64(++i, col, iCtx2()));
+    cp.set64(hash64(++i, col, iCtx()&0xFF, iCtx2()&0xFF));
 
     int k=0x300;
     if (MayBeImg24b)
@@ -5723,7 +5732,7 @@ void im24bitModel(Mixer& m, int info, ModelStats *Stats = nullptr, int alpha=0, 
                                                       {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
                                                       {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
                                                       {11,1}, {11,1}, { 0,8} };
-  static StationaryMap Map[nMaps] ={      8,      8,      8,      2,      0, {15,1}, {15,1}, {15,1}, {15,1}, {15,1},
+  static StationaryMap Map[nMaps] = {     8,      8,      8,      2,      0, {15,1}, {15,1}, {15,1}, {15,1}, {15,1},
                                      {17,1}, {17,1}, {17,1}, {17,1}, {13,1}, {13,1}, {13,1}, {13,1}, {11,1}, {11,1},
                                      {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
                                      {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
@@ -8583,11 +8592,12 @@ bool ExeModel::Predict(Mixer& m, bool Forced, ModelStats *Stats) {
 // 1 or 2 byte context.
 
 void indirectModel(Mixer& m) {
-  static ContextMap cm(MEM, 12);
+  static ContextMap cm(MEM, 15);
   static Array<U32> t1(256);
   static Array<U16> t2(0x10000);
   static Array<U16> t3(0x8000);
   static Array<U16> t4(0x8000);
+  static IndirectContext<U32> iCtx(16);
 
   if (bpos==0) {
     U32 d=c4&0xffff, c=d&255, d2=(buf(1)&31)+32*(buf(2)&31)+1024*(buf(3)&31);
@@ -8604,12 +8614,18 @@ void indirectModel(Mixer& m) {
     const U32 t0=d|t2[d]<<16;
     const U32 ta=d2|t3[d2]<<16;
     const U32 tc=d3|t4[d3]<<16;
+    const U8 pc=tolower(U8(c4>>8));
+    iCtx+=(c=tolower(c)), iCtx=(pc<<8)|c;
+    const U32 ctx0=iCtx(), mask=(U8(t1[c])==U8(t2[d]))|
+                               ((U8(t1[c])==U8(t3[d2]))<<1)|
+                               ((U8(t1[c])==U8(t4[d3]))<<2)|
+                               ((U8(t1[c])==U8(ctx0))<<3);
     U64 i=0;
     cm.set64(hash64(++i,t));
     cm.set64(hash64(++i,t0));
     cm.set64(hash64(++i,ta));
     cm.set64(hash64(++i,tc));
-    cm.set64(hash64(++i,t&0xff00));
+    cm.set64(hash64(++i,t&0xff00, mask));
     cm.set64(hash64(++i,t0&0xff0000));
     cm.set64(hash64(++i,ta&0xff0000));
     cm.set64(hash64(++i,tc&0xff0000));
@@ -8617,6 +8633,9 @@ void indirectModel(Mixer& m) {
     cm.set64(hash64(++i,t0&0xffffff));
     cm.set64(hash64(++i,ta&0xffffff));
     cm.set64(hash64(++i,tc&0xffffff));
+    cm.set64(hash64(++i, ctx0&0xff, c));
+    cm.set64(hash64(++i, ctx0&0xffff));
+    cm.set64(hash64(++i, ctx0&0x7f7fff));
   }
   cm.mix(m);
 }
@@ -9313,9 +9332,9 @@ public:
 
     next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0), bytesread(0), readsize(false), Bypass(false) {
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(1160, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/), 22);
+      m=MixerFactory::CreateMixer(1185, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/), 22);
     #else
-      m=MixerFactory::CreateMixer( 915, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/), 22);
+      m=MixerFactory::CreateMixer( 940, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/), 22);
     #endif //USE_WORD_MODEL
     }
 
@@ -9485,7 +9504,7 @@ Predictor::Predictor() :
     {{0x1000, 0x10000, 0x10000, 0x10000}, {0x10000, 0x10000}}, // palette
     {{0x1000, 0x10000, 0x10000}} //gray
   },
-  Generic{ {0x100, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000} }
+  Generic{ {0x2000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000} }
   {
     memset(&stats, 0, sizeof(ModelStats));
   }
@@ -9573,7 +9592,7 @@ void Predictor::update() {
       break;
     }
     default: {
-      pr  = Generic.APM1s[0].p(pr0, c0);
+      pr  = Generic.APM1s[0].p(pr0, (std::min<U32>(3, ilog2(stats.Match.length+1))<<11)|(c0<<3)|(stats.Misses&0x7));
       const U16 ctx1 = c0 | buf(1)<<8;
       const U16 ctx2 = c0 ^ finalize64(hash64(c4&0xffff),16);
       const U16 ctx3 = c0 ^ finalize64(hash64(c4&0xffffff),16);
@@ -9583,7 +9602,7 @@ void Predictor::update() {
 
       pr0 = (pr0+pr1+pr2+pr3+2)>>2;
 
-      pr1 = Generic.APM1s[4].p(pr, ctx1);
+      pr1 = Generic.APM1s[4].p(pr, (stats.Match.expectedByte<<8)|buf(1));
       pr2 = Generic.APM1s[5].p(pr, ctx2);
       pr3 = Generic.APM1s[6].p(pr, ctx3);
 
