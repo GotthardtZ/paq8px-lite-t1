@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "169"  //update version here before publishing your changes
+#define PROGVERSION  "169a"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -24,6 +24,8 @@
 #define USE_TEXTMODEL
 #define USE_WORDMODEL
 
+// PNM image variants (PPM, PGM, PBM) are currently not supported - no image model is designed to handle them
+#undef USE_PNM
 
 //////////////////////// Debug options /////////////////////////////////////
 
@@ -32,7 +34,7 @@
 #include <assert.h>
 
 
-//////////////////////// Target OS /////////////////////////////////////////
+//////////////////////// Target OS/Compiler ////////////////////////////////
 
 #if defined(_WIN32) || defined(_MSC_VER)
 #ifndef WINDOWS
@@ -52,17 +54,20 @@
 
 // Floating point operations need IEEE compliance
 // Do not use compiler optimization options such as the following:
-// gcc: -ffast-math (and -Ofast, -funsafe-math-optimizations, -fno-rounding-math)
+// gcc : -ffast-math (and -Ofast, -funsafe-math-optimizations, -fno-rounding-math)
 // vc++: /fp:fast
 #if defined(__FAST_MATH__) || defined(_M_FP_FAST) // gcc vc++
 #error Avoid using aggressive floating-point compiler optimization flags
 #endif
 
 #if defined(_MSC_VER)
-#define ALWAYS_INLINE inline __forceinline
-#else
+#define ALWAYS_INLINE  __forceinline
+#elif defined(__GNUC__)
 #define ALWAYS_INLINE inline __attribute__((always_inline))
+#else 
+#define ALWAYS_INLINE inline
 #endif
+
 
 //////////////////////// Includes /////////////////////////////////////////
 
@@ -926,7 +931,7 @@ public:
 // buf(i) returns i'th byte back from pos (i>0) with wrap (no out of bounds)
 // buf.size() returns n.
 
-int pos=0;  // Number of input bytes in buf (not wrapped), must be masked when used for indexing
+int pos=0;  // Number of input bytes in buf (not wrapped), will be masked when used for indexing
 
 class Buf {
   Array<U8> b;
@@ -967,6 +972,7 @@ typedef enum {DEFAULT=0, FILECONTAINER, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE
 inline bool hasRecursion(Blocktype ft) { return ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft== FILECONTAINER; }
 inline bool hasInfo(Blocktype ft) { return ft==IMAGE1 || ft==IMAGE4 || ft==IMAGE8 || ft==IMAGE8GRAY || ft==IMAGE24 || ft==IMAGE32 || ft==AUDIO || ft==PNG8 || ft==PNG8GRAY || ft==PNG24 || ft==PNG32; }
 inline bool hasTransform(Blocktype ft) { return ft==IMAGE24 || ft==IMAGE32 || ft==EXE || ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft==TEXT_EOL; }
+inline bool isPNG(Blocktype ft) { return ft==PNG8 || ft==PNG8GRAY || ft==PNG24 || ft==PNG32; }
 
 int level=0; //this value will be overwritten at the beginning of compression/decompression
 #define MEM (U64(65536)<<level)
@@ -3219,7 +3225,7 @@ private:
   };
   const U32 TypesExceptions1[NUM_EXCEPTIONS1]={
     English::Noun|English::Plural,
-    English::Noun|English::Plural,
+    English::Noun|English::Plural|English::Verb,
     English::PresentParticiple,
     English::PresentParticiple,
     English::PresentParticiple,
@@ -4428,8 +4434,8 @@ private:
     Word TopicDescriptor; // last word before ':'
   } Info;
   U64 ParseCtx;       // state of parser + relevant features used as a context (hash) 
-  void Update(Buf& buffer, ModelStats *Stats = nullptr);
-  void SetContexts(Buf& buffer, ModelStats *Stats = nullptr);
+  void Update(Buf& buffer, ModelStats *Stats);
+  void SetContexts(Buf& buffer, ModelStats *Stats);
 public:
   TextModel(const U32 Size) : Map(Size, 27), Stemmers(Language::Count-1), Languages(Language::Count-1), WordPos(0x10000), State(Parse::Unknown), pState(State), Lang{ {0}, {0}, Language::Unknown, Language::Unknown }, Info{}, ParseCtx(0) {
     Stemmers[Language::English-1] = new EnglishStemmer();
@@ -4451,7 +4457,7 @@ public:
       delete Languages[i];
     }
   }
-  void Predict(Mixer& mixer, Buf& buffer, ModelStats *Stats = nullptr) {
+  void Predict(Mixer& mixer, Buf& buffer, ModelStats *Stats) {
     if (bpos==0) {
       Update(buffer, Stats);
       SetContexts(buffer, Stats);
@@ -4725,17 +4731,16 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
   else
     Info.UTF8Remaining = (leadingBitsSet!=1)?(c!=0xC0 && c!=0xC1 && c<0xF5)?(leadingBitsSet-(leadingBitsSet>0)):-1:0;
   Info.maskPunct = (BytePos[',']>BytePos['.'])|((BytePos[',']>BytePos['!'])<<1)|((BytePos[',']>BytePos['?'])<<2)|((BytePos[',']>BytePos[':'])<<3)|((BytePos[',']>BytePos[';'])<<4);
-  if (Stats) {
-    Stats->Text.state = State;
-    Stats->Text.lastPunct = std::min<U32>(0x1F, Info.lastPunct);
-    Stats->Text.wordLength = std::min<U32>(0xF, Info.wordLength[0]);
-    Stats->Text.boolmask = (Info.lastDigit<Info.wordLength[0]+Info.wordGap)|
-                          ((Info.lastUpper<Info.lastLetter+Info.wordLength[1])<<1)|
-                          ((Info.lastPunct<Info.wordLength[0]+Info.wordGap)<<2)|
-                          ((Info.lastUpper<Info.wordLength[0])<<3);
-    Stats->Text.firstLetter = Info.firstLetter;
-    Stats->Text.mask = Info.masks[1]&0xFF;
-  }
+
+  Stats->Text.state = State;
+  Stats->Text.lastPunct = std::min<U32>(0x1F, Info.lastPunct);
+  Stats->Text.wordLength = std::min<U32>(0xF, Info.wordLength[0]);
+  Stats->Text.boolmask = (Info.lastDigit<Info.wordLength[0]+Info.wordGap)|
+                        ((Info.lastUpper<Info.lastLetter+Info.wordLength[1])<<1)|
+                        ((Info.lastPunct<Info.wordLength[0]+Info.wordGap)<<2)|
+                        ((Info.lastUpper<Info.wordLength[0])<<3);
+  Stats->Text.firstLetter = Info.firstLetter;
+  Stats->Text.mask = Info.masks[1]&0xFF;
 }
 
 void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
@@ -4862,7 +4867,7 @@ private:
   U8 expectedByte; // prediction is based on this byte (buffer[index]), valid only when length>0
   bool delta;
   bool canBypass;
-  void Update(Buf& buffer, ModelStats *Stats = nullptr) {
+  void Update(Buf& buffer, ModelStats *Stats) {
     delta = false;
     if (length==0 && Bypass)
       Bypass = false; // can quit bypass mode on byte boundary only
@@ -4912,8 +4917,8 @@ private:
     Maps[0].set_direct((expectedByte<<8)|buffer(1));
     Maps[1].set64(hash64(expectedByte, c0, buffer(1), buffer(2), min(3,(int)ilog2(length+1))));
     Maps[2].set_direct(iCtx());
-    if (Stats)
-      Stats->Match.expectedByte = (length>0) ? expectedByte : 0;
+
+    Stats->Match.expectedByte = (length>0) ? expectedByte : 0;
   }
 public:
   bool Bypass;
@@ -4937,7 +4942,7 @@ public:
   {
     assert(ispowerof2(Size));
   }
-  int Predict(Mixer& m, Buf& buffer, ModelStats *Stats = nullptr) {
+  int Predict(Mixer& m, Buf& buffer, ModelStats *Stats) {
     if (bpos==0)
       Update(buffer, Stats);
     else {
@@ -4996,8 +5001,8 @@ public:
       Maps[2].mix(m);
     }
     BypassPrediction = length==0 ? 2048 : (expectedBit==0 ? 1 : 4095);
-    if (Stats)
-      Stats->Match.length = length;
+
+    Stats->Match.length = length;
     return length;
   }
 };
@@ -5029,7 +5034,7 @@ private:
   const int hashbits;
   U8 expectedByte; // prediction is based on this byte (buffer[index]), valid only when length>0
   bool valid;
-  void Update(Buf& buffer, ModelStats *Stats = nullptr) {
+  void Update(Buf& buffer, ModelStats *Stats) {
     // update sparse hashes
     for (U32 i=0; i<NumHashes; i++) {
       U64 hash = 0;
@@ -5095,7 +5100,7 @@ public:
   {
     assert(ispowerof2(Size));
   }
-  int Predict(Mixer& m, Buf& buffer, ModelStats *Stats = nullptr) {
+  int Predict(Mixer& m, Buf& buffer, ModelStats *Stats) {
     if (bpos==0)
       Update(buffer, Stats);
     else if (valid) {
@@ -5137,7 +5142,7 @@ public:
 //
 // modeling ascii character sequences
 
-void charGroupModel(Mixer& m, ModelStats *Stats = nullptr) {
+void charGroupModel(Mixer& m, ModelStats *Stats) {
 static ContextMap cm(MEM/2, 7);
 static U64 g_ascii_lo=0, g_ascii_hi=0; // group identifiers of 8+8 last characters
   if(bpos==0) {
@@ -5166,8 +5171,7 @@ static U64 g_ascii_lo=0, g_ascii_hi=0; // group identifiers of 8+8 last characte
     cm.set64(hash64( (++i), g_ascii_lo&0x00ffffffffffffff, c4&0x0000ffff )); // last 7 groups + last 2 chars
     cm.set64(hash64( (++i), g_ascii_lo&0x000000ffffffffff, c4&0x00ffffff )); // last 5 groups + last 3 chars
 
-    if (Stats)
-      Stats->charGroup = g_ascii_lo; //group identifiers of the last 8 characters
+    Stats->charGroup = g_ascii_lo; //group identifiers of the last 8 characters
   }
   cm.mix(m);
 }
@@ -5179,7 +5183,7 @@ static U64 g_ascii_lo=0, g_ascii_hi=0; // group identifiers of 8+8 last characte
 
 #ifdef USE_WORDMODEL
 
-void wordModel(Mixer& m, ModelStats *Stats = nullptr) {
+void wordModel(Mixer& m, ModelStats *Stats) {
   static U32 frstchar=0, spafdo=0, spaces=0, spacecount=0, words=0, wordcount=0,wordlen=0,wordlen1=0;
   static U64 word0=0, word1=0, word2=0, word3=0, word4=0, word5=0;  // hashes
   static U64 xword0=0,xword1=0,xword2=0,cword0=0,ccword=0; // hashes
@@ -5264,7 +5268,7 @@ void wordModel(Mixer& m, ModelStats *Stats = nullptr) {
         ccword=0;
         word0=0;
         wordlen=0;
-        if((c=='.'||c=='!'||c=='?' ||c=='}' ||c==')') && buf(2)!=10 && (Stats && (Stats->blockType==TEXT || Stats->blockType==TEXT_EOL))) end_of_sentence=true;
+        if((c=='.'||c=='!'||c=='?' ||c=='}' ||c==')') && buf(2)!=10 && (Stats->blockType==TEXT || Stats->blockType==TEXT_EOL)) end_of_sentence=true;
       }
       if ((c4&0xFFFF)==0x3D3D) xword1=word1,xword2=word2; // ==
       if ((c4&0xFFFF)==0x2727) xword1=word1,xword2=word2; // ''
@@ -5416,7 +5420,7 @@ struct dBASE {
   int Start, End;
 };
 
-void recordModel(Mixer& m, ModelStats *Stats = nullptr) {
+void recordModel(Mixer& m, ModelStats *Stats) {
   static Array<int> cpos1(256) , cpos2(256), cpos3(256), cpos4(256);
   static Array<int> wpos1(256*256); // buf(1..2) -> last position
   static int rlen[3] = {2,0,0}; // run length and 2 candidates
@@ -5436,7 +5440,7 @@ void recordModel(Mixer& m, ModelStats *Stats = nullptr) {
   // Find record length
   if (bpos==0) {
     int w=c4&0xffff, c=w&255, d=w>>8;
-    if (Stats && (Stats->Wav)>2 && (Stats->Wav) != (U32)rlen[0]) {
+    if ((Stats->Wav)>2 && (Stats->Wav) != (U32)rlen[0]) {
       rlen[0] = Stats->Wav;
       rcount[0]=rcount[1]=0;
     }
@@ -5444,7 +5448,7 @@ void recordModel(Mixer& m, ModelStats *Stats = nullptr) {
       // detect dBASE tables
       if (blpos==0 || (dbase.Version>0 && blpos>=dbase.End))
         dbase.Version = 0;
-      else if (dbase.Version==0 && (Stats && Stats->blockType==DEFAULT) && blpos>=31){
+      else if (dbase.Version==0 && Stats->blockType==DEFAULT && blpos>=31){
         U8 b = buf(32);
         if ( ((b&7)==3 || (b&7)==4 || (b>>4)==3 || b==0xF5) &&
              ((b=buf(30))>0 && b<13) &&
@@ -5618,10 +5622,9 @@ void recordModel(Mixer& m, ModelStats *Stats = nullptr) {
 
   m.set( (rlen[0]>2)*( (bpos<<7)|mxCtx ), 1024 );
   m.set( ((N^B)>>4)|(min(0x1F,col/max(1,rlen[0]/32))<<4), 512 );
-  if (Stats){
-    Stats->Wav = min(0xFFFF,rlen[0]);
-    Stats->Record = min(0xFFFF,col);
-  }
+
+  Stats->Wav = min(0xFFFF,rlen[0]);
+  Stats->Record = min(0xFFFF,col);
 }
 
 
@@ -5717,7 +5720,7 @@ inline U8 Paeth(U8 W, U8 N, U8 NW){
 
 // Model for filtered (PNG) or unfiltered 24/32-bit image data
 
-void im24bitModel(Mixer& m, int info, ModelStats *Stats = nullptr, int alpha=0, int isPNG=0) {
+void im24bitModel(Mixer& m, int info, ModelStats *Stats, int alpha=0, int isPNG=0) {
   static const int nMaps0 = 18;
   static const int nMaps1 = 76;
   static const int nOLS = 6;
@@ -6118,16 +6121,15 @@ void im24bitModel(Mixer& m, int info, ModelStats *Stats = nullptr, int alpha=0, 
       Map[i++].set_direct((N&0xC0)|((NN&0xC0)>>2)|((NE&0xC0)>>4)|(NEE>>6));
       Map[i++].set_direct(buf(1+(isPNG && x<2)));
       Map[i++].set_direct(min(color, stride-1));
-      if (Stats) {
-        Stats->Image.plane = std::min<int>(color, stride-1);
-        Stats->Image.pixels.W = W;
-        Stats->Image.pixels.N = N;
-        Stats->Image.pixels.NN = NN;
-        Stats->Image.pixels.WW = WW;
-        Stats->Image.pixels.Wp1 = Wp1;
-        Stats->Image.pixels.Np1 = Np1;
-        Stats->Image.ctx = ctx[0]>>3;
-      }
+
+      Stats->Image.plane = std::min<int>(color, stride-1);
+      Stats->Image.pixels.W = W;
+      Stats->Image.pixels.N = N;
+      Stats->Image.pixels.NN = NN;
+      Stats->Image.pixels.WW = WW;
+      Stats->Image.pixels.Wp1 = Wp1;
+      Stats->Image.pixels.Np1 = Np1;
+      Stats->Image.ctx = ctx[0]>>3;
     }
   }
   if (x>0 || !isPNG) {
@@ -6189,7 +6191,7 @@ void im24bitModel(Mixer& m, int info, ModelStats *Stats = nullptr, int alpha=0, 
 //////////////////////////// im8bitModel /////////////////////////////////
 
 // Model for 8-bit image data
-void im8bitModel(Mixer& m, int w, ModelStats *Stats = nullptr, int gray = 0, int isPNG=0) {
+void im8bitModel(Mixer& m, int w, ModelStats *Stats, int gray = 0, int isPNG=0) {
   static const int nOLS = 5;
   static const int nMaps0 = 2;
   static const int nMaps1 = 55;
@@ -6505,13 +6507,12 @@ void im8bitModel(Mixer& m, int w, ModelStats *Stats = nullptr, int gray = 0, int
 
         res = Clamp4(W+N-NW,W,NW,N,NE)-px;
       }
-      if (Stats) {
-        Stats->Image.pixels.W = W;
-        Stats->Image.pixels.N = N;
-        Stats->Image.pixels.NN = NN;
-        Stats->Image.pixels.WW = WW;
-        Stats->Image.ctx = ctx>>gray;
-      }
+
+      Stats->Image.pixels.W = W;
+      Stats->Image.pixels.N = N;
+      Stats->Image.pixels.NN = NN;
+      Stats->Image.pixels.WW = WW;
+      Stats->Image.ctx = ctx>>gray;
     }
   }
   U8 B=(c0<<(8-bpos));
@@ -6757,7 +6758,7 @@ private:
       //   xx is the first 2 extra bits, and the last 2 bits are 1 (since
       //   this never occurs in a valid RS code).
     int cpos=0;  // position in cbuf
-    int rs1;  // last RS code
+    int rs1=0;  // last RS code
     int rstpos=0,rstlen=0; // reset position
     int ssum=0, ssum1=0, ssum2=0, ssum3=0;
       // sum of S in RS codes in block and sum of S in first component
@@ -7448,7 +7449,7 @@ inline int X2(int i) {
 #define F_(k,l,chn)(F[2*(49*(k)+l)+chn])
 #define L_(i,k)(L[49*(i)+k])
 
-void wavModel(Mixer& m, int info, ModelStats *Stats = nullptr) {
+void wavModel(Mixer& m, int info, ModelStats *Stats) {
   static int col=0;
   static Array<int> pr{3*2}; // [3][2]
   static Array<int> counter{2};
@@ -7591,8 +7592,8 @@ void wavModel(Mixer& m, int info, ModelStats *Stats = nullptr) {
   scm6.mix(m);
   scm7.mix(m);
   cm.mix(m);
-  if (Stats)
-    Stats->Wav = w;
+
+  Stats->Wav = w;
   col++;
   if(col==w*8)col=0;
   m.set(ch+4*ilog2(col&(bits-1)), 4*8);
@@ -8286,7 +8287,7 @@ private:
     if (i && ((modrm&ModRM_rm)==4) && (modrm<ModRM_mod)) sib=buf(i)&SIB_scale;
     return prefix|opcode<<4|modrm<<12|x<<20|sib<<(28-6);
   }
-  void Update(U8 B, bool Forced = false);
+  void Update(U8 B, bool Forced);
   void Train();
 public:
   ExeModel(const U64 size) : cm(size, N1+N2), pState (Start), State( Start), TotalOps(0), OpMask(0), OpCategMask(0), Context(0), BrkCtx(0), Valid(false) {
@@ -8296,7 +8297,7 @@ public:
     memset(&StateBH, 0, sizeof(StateBH));
     if (options&OPTION_TRAINEXE) Train();
   }
-  bool Predict(Mixer& m, bool Forced = false, ModelStats *Stats = nullptr);
+  bool Predict(Mixer& m, bool Forced, ModelStats *Stats);
 };
 
 void ExeModel::Train() {
@@ -8305,7 +8306,7 @@ void ExeModel::Train() {
   OpenFromMyFolder::myself(&f);
   int i=0;
   do {
-    Update(buf(1));
+    Update(buf(1),false);
     if (Valid)
       cm.Train(i);
     buf[pos++]=i;
@@ -8581,8 +8582,8 @@ bool ExeModel::Predict(Mixer& m, bool Forced, ModelStats *Stats) {
   m.set(finalize64(hash64(Op.Code, State, OpN(Cache, 1)&CodeMask),13), 8192);
   m.set(finalize64(hash64(State, bpos, Op.Code, Op.BytesRead),13), 8192);
   m.set(finalize64(hash64(State, (bpos<<2)|(c0&3), OpCategMask&CategoryMask, ((Op.Category==OP_GEN_BRANCH)<<2)|(((Op.Flags&fMODE)==fAM)<<1)|(Op.BytesRead>0)),13), 8192);
-  if (Stats)
-    Stats->x86_64 = (Valid?1:0)|(Context<<1)|(s<<9);
+
+  Stats->x86_64 = (Valid?1:0)|(Context<<1)|(s<<9);
   return Valid;
 }
 
@@ -9035,7 +9036,7 @@ enum XMLState {
     (*Content).Type |= ISBN; \
 }
 
-void XMLModel(Mixer& m, ModelStats *Stats = nullptr){
+void XMLModel(Mixer& m, ModelStats *Stats){
   static ContextMap cm(MEM/4, 4);
   static XMLTagCache Cache;
   static U32 StateBH[8];
@@ -9215,8 +9216,8 @@ void XMLModel(Mixer& m, ModelStats *Stats = nullptr){
          ((StateBH[State]>>(14-bpos))&0x02) |
          ((StateBH[State]>>( 7-bpos))&0x01) |
          ((bpos)<<4);
-  if (Stats)
-    Stats->XML = (s<<3)|State;
+
+  Stats->XML = (s<<3)|State;
 }
 
 
@@ -9325,7 +9326,7 @@ public:
     jpegModel(0),
     dmcforest(),
     #ifdef USE_TEXTMODEL
-      textModel(MEM*16),
+    textModel(MEM*16),
     #endif //USE_TEXTMODEL
     matchModel(MEM*4, options&OPTION_FASTMODE),
     sparseMatchModel(MEM/2),
@@ -9342,7 +9343,7 @@ public:
     delete m;
     if(jpegModel) delete jpegModel;
   }
-  int Predict(ModelStats *Stats = nullptr);
+  int Predict(ModelStats *Stats);
 };
 
 int ContextModel::Predict(ModelStats *Stats){
@@ -9380,8 +9381,8 @@ int ContextModel::Predict(ModelStats *Stats){
 
     if (blpos==0) blocktype=next_blocktype; //got all the info - switch to next blocktype
     if (blocksize==0) blocktype=DEFAULT;
-    if (Stats)
-      Stats->blockType = blocktype;
+
+    Stats->blockType = blocktype;
   }
 
   m->update();
@@ -9959,19 +9960,66 @@ bool IsGrayscalePalette(File *in, int n = 256, int isRGBA = 0){
   return (res>>8)>0;
 }
 
-#define MIN_TEXT_SIZE 0x400 //1KB
-#define MAX_TEXT_MISSES 2 //number of misses in last 32 bytes before resetting
-struct TextInfo {
+
+#define TEXT_MIN_SIZE 1500   // size of minimum allowed text block (in bytes)
+#define TEXT_MAX_MISSES 2    // threshold: max allowed number of invalid UTF8 sequences seen recently before reporting "fail"
+#define TEXT_ADAPT_RATE 256  // smaller (like 32) = illegal sequences are allowed to come more often, larger (like 1024) = more rigorous detection
+
+struct TextParserStateInfo {
   U64 start;
-  U32 lastSpace;
-  U32 lastNL;
-  U32 wordLength;
-  U32 misses;
-  U32 missCount;
-  U32 zeroRun;
-  U32 spaceRun;
-  bool isLetter, isUTF8, needsEolTransform, seenNL;
+  U64 end;           // position of last char with a valid UTF8 state: marks the end of the detected TEXT block
+  U32 invalidCount;  // adaptive count of invalid UTF8 sequences seen recently
+  U32 EOLType;       // 0: none or CR-only;   1: CRLF-only (applicable to EOL transform);   2: mixed or LF-only
+  U32 UTF8State;     // state of utf8 parser; 0: valid;  12: invalid;  any other value: yet uncertain (more bytes must be read)
+  void reset(U64 startpos) {
+    start=startpos;
+    end=startpos-1;
+    invalidCount=0;
+    EOLType=0;
+    UTF8State=0;
+  }
+  U64 validlength(){return end - start + 1;}
 };
+
+
+#ifdef USE_PNM
+#define NON_TEXT (png || pdfimw || cdi || soi || pgm || rgbi || tga || gif || b64s)
+#else
+#define NON_TEXT (png || pdfimw || cdi || soi ||        rgbi || tga || gif || b64s)
+#endif // USE_PNM
+
+
+// UTF8 validator
+// Based on: http://bjoern.hoehrmann.de/utf-8/decoder/dfa/
+// Control caracters (0x00-0x1f) and 0x7f are not allowed (except for 0/tab/cr/lf)
+
+#define UTF8_ACCEPT 0
+#define UTF8_REJECT 12
+
+static const U8 utf8_state_table[] = {
+  // byte -> character class
+  // character_class = utf8_state_table[byte]
+  1,1,1,1,1,1,1,1,1,0,0,1,1,0,1,1,  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 00..1f  
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, // 20..3f
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, // 40..5f
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1, // 60..7f
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9, // 80..9f
+  7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,  7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7, // a0..bf
+  8,8,2,2,2,2,2,2,2,2,2,2,2,2,2,2,  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, // c0..df
+ 10,3,3,3,3,3,3,3,3,3,3,3,3,4,3,3, 11,6,6,6,5,8,8,8,8,8,8,8,8,8,8,8, // e0..ff
+  // validating automaton
+  // new_state = utf8_state_table[256*old_state + character_class]
+   0,12,24,36,60,96,84,12,12,12,48,72, // state  0-11
+  12,12,12,12,12,12,12,12,12,12,12,12, // state 12-23
+  12, 0,12,12,12,12,12, 0,12, 0,12,12, // state 24-35
+  12,24,12,12,12,12,12,24,12,24,12,12, // state 36-47
+  12,12,12,12,12,12,12,24,12,12,12,12, // state 48-59
+  12,24,12,12,12,12,12,12,12,24,12,12, // state 60-71
+  12,12,12,12,12,12,12,36,12,36,12,12, // state 72-83
+  12,36,12,12,12,12,12,36,12,36,12,12, // state 84-95
+  12,36,12,12,12,12,12,12,12,12,12,12  // state 96-108
+};
+
 
 // Detect blocks
 Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
@@ -9996,8 +10044,11 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
   int bmp=0,imgbpp=0,bmpx=0,bmpy=0,bmpof=0,bmps=0,hdrless=0;  // For BMP detection
   int rgbi=0,rgbx=0,rgby=0;  // For RGB detection
   int tga=0,tgax=0,tgay=0,tgaz=0,tgat=0,tgaid=0,tgamap=0;  // For TGA detection
+  // ascii images are currently not supported
+#ifdef USE_PNM
   int pgm=0,pgmcomment=0,pgmw=0,pgmh=0,pgm_ptr=0,pgmc=0,pgmn=0,pamatr=0,pamd=0;  // For PBM, PGM, PPM, PAM detection
   char pgm_buf[32];
+#endif //  USE_PNM
   int cdi=0,cda=0,cdm=0;  // For CD sectors detection
   U32 cdf=0;
   unsigned char zbuf[256+32] = {0}, zin[1<<16] = {0}, zout[1<<16] = {0}; // For ZLIB stream detection
@@ -10007,13 +10058,14 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
   int gif=0,gifa=0,gifi=0,gifw=0,gifc=0,gifb=0,gifplt=0; // For GIF detection
   static int gifgray=0;
   int png=0, pngw=0, pngh=0, pngbps=0, pngtype=0, pnggray=0, lastchunk=0, nextchunk=0; // For PNG detection
-  TextInfo text = {0};
+  TextParserStateInfo text;
   // For image detection
   static int deth=0,detd=0;  // detected header/data size in bytes
   static Blocktype dett;  // detected block type
   if (deth) {in->setpos(start+deth);deth=0;return dett;}
   else if (detd) {in->setpos(start+min(blocksize, (U64)detd));detd=0;return DEFAULT;}
-
+  
+  text.reset(0);
   for (int i=0; i<n; ++i) {
     int c=in->getchar();
     if (c==EOF) return (Blocktype)(-1);
@@ -10358,13 +10410,14 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
       }
     }
 
+#ifdef USE_PNM
     // Detect .pbm .pgm .ppm .pam image
-    if ((buf0&0xfff0ff)==0x50300a) { //"P0"
-      pgmn=(buf0&0xf00)>>8;
-      if ((pgmn>=4 && pgmn<=6) || pgmn==7) pgm=i,pgm_ptr=pgmw=pgmh=pgmc=pgmcomment=pamatr=pamd=0;
+    if ((buf0&0xfff0ff)==0x50300a) { //"Px" + line feed, where "x" shall be a number
+      pgmn=(buf0&0xf00)>>8; // extract "x"
+      if ((pgmn>=4 && pgmn<=6) || pgmn==7) pgm=i,pgm_ptr=pgmw=pgmh=pgmc=pgmcomment=pamatr=pamd=0; // "P4", "P5", "P6", "P7"
     }
     if (pgm) {
-      if (i-pgm==1 && c==0x23) pgmcomment=1; //pgm comment
+      if (i-pgm==1 && c==0x23) pgmcomment=1; // # (pgm comment)
       if (!pgmcomment && pgm_ptr) {
         int s=0;
         if (pgmn==7) {
@@ -10384,7 +10437,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
         else if (c==0x0a && !pgmc && pgmn!=4) s=3;
         if (s) {
           pgm_buf[pgm_ptr++]=0;
-          int v=atoi(pgm_buf);
+          int v=atoi(pgm_buf); // parse pixel value
           if (s==1) pgmw=v; else if (s==2) pgmh=v; else if (s==3) pgmc=v; else if (s==4) pamd=v;
           if (v==0 || (s==3 && v>255)) pgm=0; else pgm_ptr=0;
         }
@@ -10397,6 +10450,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
       if (pgmw && pgmh && pgmc && (pgmn==6 || (pgmn==7 && pamd==3 && pamatr==6))) IMG_DET(IMAGE24,pgm-2,i-pgm+3,pgmw*3,pgmh);
       if (pgmw && pgmh && pgmc && (pgmn==7 && pamd==4 && pamatr==6)) IMG_DET(IMAGE32,pgm-2,i-pgm+3,pgmw*4,pgmh);
     }
+#endif // USE_PNM
 
     // Detect .rgb image
     if ((buf0&0xffff)==0x01da) rgbi=i,rgbx=rgby=0;
@@ -10541,7 +10595,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
     if (b64s==0 && buf0==0x73653634 && ((buf1&0xffffff)==0x206261 || (buf1&0xffffff)==0x204261)) b64s=1,b64i=i-6; //' base64' ' Base64'
     if (b64s==0 && ((buf1==0x3b626173 && buf0==0x6536342c) || (buf1==0x215b4344 && buf0==0x4154415b))) b64s=3,b64i=i+1; // ';base64,' '![CDATA['
     if (b64s>0) {
-      if (b64s==1 && buf0==0x0d0a0d0a) b64s=((i-b64i>=128)?0:2),b64i=i+1,b64line=0;
+      if (b64s==1 && buf0==0x0d0a0d0a) b64i=i+1,b64line=0,b64s=2;
       else if (b64s==2 && (buf0&0xffff)==0x0d0a && b64line==0) b64line=i+1-b64i,b64nl=i;
       else if (b64s==2 && (buf0&0xffff)==0x0d0a && b64line>0 && (buf0&0xffffff)!=0x3d0d0a) {
          if (i-b64nl<b64line && buf0!=0x0d0a0d0a) i-=1,b64s=5;
@@ -10555,68 +10609,48 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
       if (b64s==3 && i>=b64i && !(isalnum(c) || c=='+' || c=='/' || c=='=')) b64s=4;
       if ((b64s==4 && i-b64i>128) || (b64s==5 && i-b64i>512 && i-b64i<(1<<27))) return in->setpos(start+b64i),detd=i-b64i,BASE64;
       if (b64s>3) b64s=0;
+      if (b64s==1 && i-b64i>=128)b64s=0; // detect false positives after 128 bytes
     }
 
-    // detect text
-    text.isLetter = tolower(c)!=toupper(c);
-    text.isUTF8 = ((c!=0xC0 && c!=0xC1 && c<0xF5) && (
-        (c<0x80) ||
-        // possible 1st byte of UTF8 sequence
-        ((buf0&0xC000)!=0xC000 && ((c&0xE0)==0xC0 || (c&0xF0)==0xE0 || (c&0xF8)==0xF0)) ||
-        // possible 2nd byte of UTF8 sequence
-        ((buf0&0xE0C0)==0xC080 && (buf0&0xFE00)!=0xC000) || (buf0&0xF0C0)==0xE080 || ((buf0&0xF8C0)==0xF080 && ((buf0>>8)&0xFF)<0xF5) ||
-        // possible 3rd byte of UTF8 sequence
-        (buf0&0xF0C0C0)==0xE08080 || ((buf0&0xF8C0C0)==0xF08080 && ((buf0>>16)&0xFF)<0xF5) ||
-        // possible 4th byte of UTF8 sequence
-        ((buf0&0xF8C0C0C0)==0xF0808080 && (buf0>>24)<0xF5)
-    ));
-    text.lastNL = (c==NEW_LINE || c==CARRIAGE_RETURN)?0:text.lastNL+1;
-    if (c==SPACE || c==TAB){
-      text.lastSpace = 0;
-      text.spaceRun++;
+
+    // Detect text
+    // This is different from the above detection routines: it's a negative detection (it detects a failure)
+    U32 t = utf8_state_table[c];
+    text.UTF8State = utf8_state_table[256 + text.UTF8State + t];
+    if(text.UTF8State == UTF8_ACCEPT) { // proper end of a valid utf8 sequence
+      if (c==NEW_LINE) {
+        if (((buf0>>8)&0xff) != CARRIAGE_RETURN)
+          text.EOLType=2; // mixed or LF-only
+        else 
+          if (text.EOLType==0)text.EOLType=1; // CRLF-only
+      }
+      text.invalidCount=text.invalidCount*(TEXT_ADAPT_RATE-1)/TEXT_ADAPT_RATE;
+      if(text.invalidCount==0)
+        text.end=i; // a possible end of block position
     }
-    else{
-      text.lastSpace++;
-      text.spaceRun = 0;
-    }
-    text.wordLength = (text.isLetter)?text.wordLength+1:0;
-    text.missCount-=text.misses>>31;
-    text.misses<<=1;
-    text.zeroRun=(!c && text.zeroRun<32)?text.zeroRun+1:0;
-    if (c==NEW_LINE){
-      if (!text.seenNL)
-        text.needsEolTransform = true;
-      text.seenNL = true;
-      text.needsEolTransform&=U8(buf0>>8)==CARRIAGE_RETURN;
-    }
-    if ((c<SPACE && c!=TAB && (text.zeroRun<2 || text.zeroRun>8) && text.lastNL!=0) || 
-        ((buf0&0xFF00)==(CARRIAGE_RETURN<<8) && c!=NEW_LINE) ||
-        (text.spaceRun>8 && text.lastNL>256) ||
-        (!text.isLetter && !text.isUTF8 && (
-          text.lastNL>128 ||
-		      text.lastSpace > std::max<U32>({ text.lastNL, text.wordLength*8, 64u }) ||
-          text.wordLength>32)
-        )
-     ) {
-        text.misses|=1;
-        text.missCount++;
-        int length = int(i-text.start-1);
-        if ((length<MIN_TEXT_SIZE || (png || pdfimw || cdi || soi || pgm || rgbi || tga || gif || b64s))){
-          text = {0};
-          text.start = i+1;
-        }
-        else if (text.missCount>MAX_TEXT_MISSES) {
-          in->setpos(start + text.start);
-          detd = length;
-          return (text.needsEolTransform)?TEXT_EOL:TEXT;
-        }
+    else
+    if(text.UTF8State == UTF8_REJECT) { // illegal state
+      text.invalidCount = text.invalidCount*(TEXT_ADAPT_RATE-1)/TEXT_ADAPT_RATE + TEXT_ADAPT_RATE;
+      text.UTF8State = UTF8_ACCEPT; // reset state
+      if (text.validlength()<TEXT_MIN_SIZE || NON_TEXT) {
+        text.reset(i+1); // it's not text (or not long enough) - start over
+      }
+      else if (text.invalidCount >= TEXT_MAX_MISSES*TEXT_ADAPT_RATE) {
+        in->setpos(start + text.start);
+        detd = int(text.validlength());
+        return (text.EOLType==1)?TEXT_EOL:TEXT;
+      }
     }
   }
-  if (n-text.start>=MIN_TEXT_SIZE){
+   
+  // After nothing is detected, the last block still may be TEXT
+  // At this point text.start properly indicates the start position of a valid TEXT block
+  if (n-text.start >= TEXT_MIN_SIZE) {
     in->setpos(start + text.start);
     detd = int(n-text.start);
-    return (text.needsEolTransform)?TEXT_EOL:TEXT;
+    return (text.EOLType==1)?TEXT_EOL:TEXT;
   }
+  
   return type;
 }
 
@@ -11612,10 +11646,10 @@ void compressRecursive(File *in, const U64 blocksize, Encoder &en, String &blstr
       blstr_sub+=U64(blnum);
       blnum++;
 
-      printf(" %-11s | %-16s |%10" PRIu64 " bytes [%" PRIu64 " - %" PRIu64 "]",blstr_sub.c_str(),typenames[(type==ZLIB && (info>>24)>=PNG8)?info>>24:type],len,begin,detected_end-1);
+      printf(" %-11s | %-16s |%10" PRIu64 " bytes [%" PRIu64 " - %" PRIu64 "]",blstr_sub.c_str(),typenames[(type==ZLIB && isPNG(Blocktype(info>>24)))?info>>24:type],len,begin,detected_end-1);
       if (type==AUDIO) printf(" (%s)", audiotypes[info%4]);
-      else if (type==IMAGE1 || type==IMAGE4 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32 || (type==ZLIB && (info>>24)>=PNG8)) printf(" (width: %d)", (type==ZLIB)?(info&0xFFFFFF):info);
-      else if (hasRecursion(type) && (info>>24) > 0) printf(" (%s)",typenames[info>>24]);
+      else if (type==IMAGE1 || type==IMAGE4 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32 || (type==ZLIB && isPNG(Blocktype(info>>24)))) printf(" (width: %d)", (type==ZLIB)?(info&0xFFFFFF):info);
+      else if (hasRecursion(type) && (info>>24)!=DEFAULT) printf(" (%s)",typenames[info>>24]);
       else if (type==CD) printf(" (mode%d/form%d)", info==1?1:2, info!=3?1:2);
       printf("\n");
       transform_encode_block(type, in, len, en, info, blstr_sub, recursion_level, p1, p2, begin);

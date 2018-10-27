@@ -1344,9 +1344,20 @@ paq8px_v168
   - Slightly decreased memory use (distanceModel, SSE stage)
   - Updated help screen to reflect the current default memory use per compression level.
 
+
 paq8px_v169
 2018.10.21
 - Slightly improved models:
  - recordModel
  - indirectModel
 - Slightly improved generic SSE stage
+
+
+paq8px_v169a
+2018.10.27
+- Fixed an uninitialized variable in jpegModel (in certain conditions it would "halt" at 100% and never stop during decompression/testing)
+- Disabled detection of PNM images (PPM, PGM, PBM)
+- New "text" / "text - eol" detection (with a utf8 validating automaton)
+- Minor fix in base64 detection (in case of a false positive detection "b64s" did not reset); it was probably harmless
+- In EnglishStemmer "skies" is now also a verb form
+- Other cosmetic changes
