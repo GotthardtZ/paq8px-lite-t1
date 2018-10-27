@@ -1358,6 +1358,6 @@ paq8px_v169a
 - Fixed an uninitialized variable in jpegModel (in certain conditions it would "halt" at 100% and never stop during decompression/testing)
 - Disabled detection of PNM images (PPM, PGM, PBM)
 - New "text" / "text - eol" detection (with a utf8 validating automaton)
-- Minor fix in base64 detection (in case of a fase positiv detection "b64s" did not reset); it was probably harmless
+- Minor fix in base64 detection (in case of a false positive detection "b64s" did not reset); it was probably harmless
 - In EnglishStemmer "skies" is now also a verb form
 - Other cosmetic changes
