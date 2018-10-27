@@ -1343,3 +1343,10 @@ paq8px_v168
   - Eliminated the remaining "if (level>=4)" references
   - Slightly decreased memory use (distanceModel, SSE stage)
   - Updated help screen to reflect the current default memory use per compression level.
+
+paq8px_v169
+2018.10.21
+- Slightly improved models:
+ - recordModel
+ - indirectModel
+- Slightly improved generic SSE stage
