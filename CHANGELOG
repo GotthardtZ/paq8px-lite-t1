@@ -1361,3 +1361,12 @@ paq8px_v169a
 - Minor fix in base64 detection (in case of a false positive detection "b64s" did not reset); it was probably harmless
 - In EnglishStemmer "skies" is now also a verb form
 - Other cosmetic changes
+
+
+paq8px_v169b
+2018.10.31
+- Restored and enhanced detection of PNM images
+- Enhanced segmentation (regarding generic textual blocks)
+  Now small stand-alone text blocks are also detected as text
+  A first block was never detected as text when followed by a non-DEFAULT block (was always "DEFAULT") - fixed
+  Text detection is moved out of detect(): any other models are detected properly *then* the text detection is applied for DEFAULT blocks
