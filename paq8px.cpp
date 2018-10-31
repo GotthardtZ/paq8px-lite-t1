@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "169a"  //update version here before publishing your changes
+#define PROGVERSION  "169b"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -23,9 +23,6 @@
 #define USE_WAVMODEL
 #define USE_TEXTMODEL
 #define USE_WORDMODEL
-
-// PNM image variants (PPM, PGM, PBM) are currently not supported - no image model is designed to handle them
-#undef USE_PNM
 
 //////////////////////// Debug options /////////////////////////////////////
 
@@ -987,6 +984,7 @@ U8 options=0;
 #define OPTION_ADAPTIVE 16
 #define OPTION_SKIPRGB 32
 #define OPTION_FASTMODE 64
+#define OPTION_FORCEPNM_IN_TEXT 128
 
 
 // Information shared by models
@@ -9966,27 +9964,50 @@ bool IsGrayscalePalette(File *in, int n = 256, int isRGBA = 0){
 #define TEXT_ADAPT_RATE 256  // smaller (like 32) = illegal sequences are allowed to come more often, larger (like 1024) = more rigorous detection
 
 struct TextParserStateInfo {
-  U64 start;
-  U64 end;           // position of last char with a valid UTF8 state: marks the end of the detected TEXT block
-  U32 invalidCount;  // adaptive count of invalid UTF8 sequences seen recently
-  U32 EOLType;       // 0: none or CR-only;   1: CRLF-only (applicable to EOL transform);   2: mixed or LF-only
-  U32 UTF8State;     // state of utf8 parser; 0: valid;  12: invalid;  any other value: yet uncertain (more bytes must be read)
+  Array<U64> _start;
+  Array<U64> _end;      // position of last char with a valid UTF8 state: marks the end of the detected TEXT block
+  Array<U32> _EOLType;  // 0: none or CR-only;   1: CRLF-only (applicable to EOL transform);   2: mixed or LF-only
+  U32 invalidCount;     // adaptive count of invalid UTF8 sequences seen recently
+  U32 UTF8State;        // state of utf8 parser; 0: valid;  12: invalid;  any other value: yet uncertain (more bytes must be read)
+  TextParserStateInfo(): _start(0), _end(0), _EOLType(0) {}
   void reset(U64 startpos) {
-    start=startpos;
-    end=startpos-1;
+    _start.resize(1);
+    _end.resize(1);
+    _start[0]=startpos;
+    _end[0]=startpos-1;
+    _EOLType.resize(1);
+    _EOLType[0]=0;
     invalidCount=0;
-    EOLType=0;
     UTF8State=0;
   }
-  U64 validlength(){return end - start + 1;}
-};
-
-
-#ifdef USE_PNM
-#define NON_TEXT (png || pdfimw || cdi || soi || pgm || rgbi || tga || gif || b64s)
-#else
-#define NON_TEXT (png || pdfimw || cdi || soi ||        rgbi || tga || gif || b64s)
-#endif // USE_PNM
+  U64 start(){return _start[_start.size()-1];}
+  U64 end(){return _end[_end.size()-1];}
+  void setend(U64 end){_end[_end.size()-1]=end;}
+  U32 EOLType(){return _EOLType[_EOLType.size()-1];}
+  void setEOLType(U32 EOLType){_EOLType[_EOLType.size()-1]=EOLType;}
+  U64 validlength(){return end() - start() + 1;}
+  void next(U64 startpos) {
+    _start.push_back(startpos);
+    _end.push_back(startpos-1);
+    _EOLType.push_back(0);
+    invalidCount=0;
+    UTF8State=0;
+  }
+  void removefirst() {
+    if(_start.size()==1)
+      reset(0);
+    else {
+      for(int i=0;i<_start.size()-1;i++){
+        _start[i]=_start[i+1];
+        _end[i]=_end[i+1];
+        _EOLType[i]=_EOLType[i+1];
+      }
+      _start.pop_back();
+      _end.pop_back();
+      _EOLType.pop_back();
+    }
+  }
+} textparser;
 
 
 // UTF8 validator
@@ -10045,10 +10066,8 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
   int rgbi=0,rgbx=0,rgby=0;  // For RGB detection
   int tga=0,tgax=0,tgay=0,tgaz=0,tgat=0,tgaid=0,tgamap=0;  // For TGA detection
   // ascii images are currently not supported
-#ifdef USE_PNM
-  int pgm=0,pgmcomment=0,pgmw=0,pgmh=0,pgm_ptr=0,pgmc=0,pgmn=0,pamatr=0,pamd=0;  // For PBM, PGM, PPM, PAM detection
+  int pgm=0,pgmcomment=0,pgmw=0,pgmh=0,pgm_ptr=0,pgmc=0,pgmn=0,pamatr=0,pamd=0,pgmdata=0,pgmdatasize=0;  // For PBM, PGM, PPM, PAM detection
   char pgm_buf[32];
-#endif //  USE_PNM
   int cdi=0,cda=0,cdm=0;  // For CD sectors detection
   U32 cdf=0;
   unsigned char zbuf[256+32] = {0}, zin[1<<16] = {0}, zout[1<<16] = {0}; // For ZLIB stream detection
@@ -10058,14 +10077,13 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
   int gif=0,gifa=0,gifi=0,gifw=0,gifc=0,gifb=0,gifplt=0; // For GIF detection
   static int gifgray=0;
   int png=0, pngw=0, pngh=0, pngbps=0, pngtype=0, pnggray=0, lastchunk=0, nextchunk=0; // For PNG detection
-  TextParserStateInfo text;
   // For image detection
   static int deth=0,detd=0;  // detected header/data size in bytes
   static Blocktype dett;  // detected block type
   if (deth) {in->setpos(start+deth);deth=0;return dett;}
   else if (detd) {in->setpos(start+min(blocksize, (U64)detd));detd=0;return DEFAULT;}
   
-  text.reset(0);
+  textparser.reset(0);
   for (int i=0; i<n; ++i) {
     int c=in->getchar();
     if (c==EOF) return (Blocktype)(-1);
@@ -10194,7 +10212,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
     }
     #endif //USE_ZLIB
 
-    if (i-pdfimp>1024) pdfim=pdfimw=pdfimh=pdfimb=pdfgray=0;
+    if (i-pdfimp>1024) pdfim=pdfimw=pdfimh=pdfimb=pdfgray=0; // fail
     if (pdfim>1 && !(isspace(c) || isdigit(c))) pdfim=1;
     if (pdfim==2 && isdigit(c)) pdfimw=pdfimw*10+(c-'0');
     if (pdfim==3 && isdigit(c)) pdfimh=pdfimh*10+(c-'0');
@@ -10410,47 +10428,59 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
       }
     }
 
-#ifdef USE_PNM
-    // Detect .pbm .pgm .ppm .pam image
+    // Detect binary .pbm .pgm .ppm .pam images
     if ((buf0&0xfff0ff)==0x50300a) { //"Px" + line feed, where "x" shall be a number
       pgmn=(buf0&0xf00)>>8; // extract "x"
-      if ((pgmn>=4 && pgmn<=6) || pgmn==7) pgm=i,pgm_ptr=pgmw=pgmh=pgmc=pgmcomment=pamatr=pamd=0; // "P4", "P5", "P6", "P7"
+      if ((pgmn>=4 && pgmn<=6) || pgmn==7) pgm=i,pgm_ptr=pgmw=pgmh=pgmc=pgmcomment=pamatr=pamd=pgmdata=pgmdatasize=0; // "P4" (pbm), "P5" (pgm), "P6" (ppm), "P7" (pam)
     }
     if (pgm) {
-      if (i-pgm==1 && c==0x23) pgmcomment=1; // # (pgm comment)
-      if (!pgmcomment && pgm_ptr) {
-        int s=0;
-        if (pgmn==7) {
-           if ((buf1&0xdfdf)==0x5749 && (buf0&0xdfdfdfff)==0x44544820) pgm_ptr=0, pamatr=1; // WIDTH
-           if ((buf1&0xdfdfdf)==0x484549 && (buf0&0xdfdfdfff)==0x47485420) pgm_ptr=0, pamatr=2; // HEIGHT
-           if ((buf1&0xdfdfdf)==0x4d4158 && (buf0&0xdfdfdfff)==0x56414c20) pgm_ptr=0, pamatr=3; // MAXVAL
-           if ((buf1&0xdfdf)==0x4445 && (buf0&0xdfdfdfff)==0x50544820) pgm_ptr=0, pamatr=4; // DEPTH
-           if ((buf2&0xdf)==0x54 && (buf1&0xdfdfdfdf)==0x55504c54 && (buf0&0xdfdfdfff)==0x59504520) pgm_ptr=0, pamatr=5; // TUPLTYPE
-           if ((buf1&0xdfdfdf)==0x454e44 && (buf0&0xdfdfdfff)==0x4844520a) pgm_ptr=0, pamatr=6; // ENDHDR
-           if (c==0x0a) {
-             if (pamatr==0) pgm=0;
-             else if (pamatr<5) s=pamatr;
-             if (pamatr!=6) pamatr=0;
-           }
-        } else if (c==0x20 && !pgmw) s=1;
-        else if (c==0x0a && !pgmh) s=2;
-        else if (c==0x0a && !pgmc && pgmn!=4) s=3;
-        if (s) {
-          pgm_buf[pgm_ptr++]=0;
-          int v=atoi(pgm_buf); // parse pixel value
-          if (s==1) pgmw=v; else if (s==2) pgmh=v; else if (s==3) pgmc=v; else if (s==4) pamd=v;
-          if (v==0 || (s==3 && v>255)) pgm=0; else pgm_ptr=0;
+      if (pgmdata==0) { // parse header
+        if (i-pgm==1 && c==0x23) pgmcomment=1; // # (pgm comment)
+        if (!pgmcomment && pgm_ptr) {
+          int s=0;
+          if (pgmn==7) {
+             if ((buf1&0xdfdf)==0x5749 && (buf0&0xdfdfdfff)==0x44544820) pgm_ptr=0, pamatr=1; // WIDTH
+             if ((buf1&0xdfdfdf)==0x484549 && (buf0&0xdfdfdfff)==0x47485420) pgm_ptr=0, pamatr=2; // HEIGHT
+             if ((buf1&0xdfdfdf)==0x4d4158 && (buf0&0xdfdfdfff)==0x56414c20) pgm_ptr=0, pamatr=3; // MAXVAL
+             if ((buf1&0xdfdf)==0x4445 && (buf0&0xdfdfdfff)==0x50544820) pgm_ptr=0, pamatr=4; // DEPTH
+             if ((buf2&0xdf)==0x54 && (buf1&0xdfdfdfdf)==0x55504c54 && (buf0&0xdfdfdfff)==0x59504520) pgm_ptr=0, pamatr=5; // TUPLTYPE
+             if ((buf1&0xdfdfdf)==0x454e44 && (buf0&0xdfdfdfff)==0x4844520a) pgm_ptr=0, pamatr=6; // ENDHDR
+             if (c==0x0a) {
+               if (pamatr==0) pgm=0;
+               else if (pamatr<5) s=pamatr;
+               if (pamatr!=6) pamatr=0;
+             }
+          } else if (c==0x20 && !pgmw) s=1;
+          else if (c==0x0a && !pgmh) s=2;
+          else if (c==0x0a && !pgmc && pgmn!=4) s=3;
+          if (s) {
+            pgm_buf[pgm_ptr++]=0;
+            int v=atoi(pgm_buf); // parse width/height/depth/maxval value
+            if (s==1) pgmw=v; else if (s==2) pgmh=v; else if (s==3) pgmc=v; else if (s==4) pamd=v;
+            if (v==0 || (s==3 && v>255)) pgm=0; else pgm_ptr=0;
+          }
         }
+        if (!pgmcomment) pgm_buf[pgm_ptr++]=c;
+        if (pgm_ptr>=32) pgm=0;
+        if (pgmcomment && c==0x0a) pgmcomment=0;
+        if (pgmw && pgmh && !pgmc && pgmn==4) {pgmdata=i;pgmdatasize=(pgmw+7)/8*pgmh;}
+        if (pgmw && pgmh && pgmc && (pgmn==5 || (pgmn==7 && pamd==1 && pamatr==6))) {pgmdata=i;pgmdatasize=pgmw*pgmh;}
+        if (pgmw && pgmh && pgmc && (pgmn==6 || (pgmn==7 && pamd==3 && pamatr==6))) {pgmdata=i;pgmdatasize=pgmw*3*pgmh;}
+        if (pgmw && pgmh && pgmc && (pgmn==7 && pamd==4 && pamatr==6)) {pgmdata=i;pgmdatasize=pgmw*4*pgmh;}
       }
-      if (!pgmcomment) pgm_buf[pgm_ptr++]=c;
-      if (pgm_ptr>=32) pgm=0;
-      if (pgmcomment && c==0x0a) pgmcomment=0;
-      if (pgmw && pgmh && !pgmc && pgmn==4) IMG_DET(IMAGE1,pgm-2,i-pgm+3,(pgmw+7)/8,pgmh);
-      if (pgmw && pgmh && pgmc && (pgmn==5 || (pgmn==7 && pamd==1 && pamatr==6))) IMG_DET(IMAGE8GRAY,pgm-2,i-pgm+3,pgmw,pgmh);
-      if (pgmw && pgmh && pgmc && (pgmn==6 || (pgmn==7 && pamd==3 && pamatr==6))) IMG_DET(IMAGE24,pgm-2,i-pgm+3,pgmw*3,pgmh);
-      if (pgmw && pgmh && pgmc && (pgmn==7 && pamd==4 && pamatr==6)) IMG_DET(IMAGE32,pgm-2,i-pgm+3,pgmw*4,pgmh);
+      else { // pixel data
+        if(textparser.start()==U32(i) ||                     // for any sign of non-text data in pixel area
+           (pgm-2==0 && blocksize-pgmdatasize==i) || // or the image is the whole file/block
+           (options&OPTION_FORCEPNM_IN_TEXT))        // or forced detection  -> finish (success)
+        {
+          if (pgmw && pgmh && !pgmc && pgmn==4) IMG_DET(IMAGE1,pgm-2,pgmdata-pgm+3,(pgmw+7)/8,pgmh);
+          if (pgmw && pgmh && pgmc && (pgmn==5 || (pgmn==7 && pamd==1 && pamatr==6))) IMG_DET(IMAGE8GRAY,pgm-2,pgmdata-pgm+3,pgmw,pgmh);
+          if (pgmw && pgmh && pgmc && (pgmn==6 || (pgmn==7 && pamd==3 && pamatr==6))) IMG_DET(IMAGE24,pgm-2,pgmdata-pgm+3,pgmw*3,pgmh);
+          if (pgmw && pgmh && pgmc && (pgmn==7 && pamd==4 && pamatr==6)) IMG_DET(IMAGE32,pgm-2,pgmdata-pgm+3,pgmw*4,pgmh);
+        }
+        else if((--pgmdatasize)==0)pgm=0; // all data was probably text in pixel area: fail
+      }
     }
-#endif // USE_PNM
 
     // Detect .rgb image
     if ((buf0&0xffff)==0x01da) rgbi=i,rgbx=rgby=0;
@@ -10616,41 +10646,33 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
     // Detect text
     // This is different from the above detection routines: it's a negative detection (it detects a failure)
     U32 t = utf8_state_table[c];
-    text.UTF8State = utf8_state_table[256 + text.UTF8State + t];
-    if(text.UTF8State == UTF8_ACCEPT) { // proper end of a valid utf8 sequence
+    textparser.UTF8State = utf8_state_table[256 + textparser.UTF8State + t];
+    if(textparser.UTF8State == UTF8_ACCEPT) { // proper end of a valid utf8 sequence
       if (c==NEW_LINE) {
         if (((buf0>>8)&0xff) != CARRIAGE_RETURN)
-          text.EOLType=2; // mixed or LF-only
+          textparser.setEOLType(2); // mixed or LF-only
         else 
-          if (text.EOLType==0)text.EOLType=1; // CRLF-only
+          if (textparser.EOLType()==0)textparser.setEOLType(1); // CRLF-only
       }
-      text.invalidCount=text.invalidCount*(TEXT_ADAPT_RATE-1)/TEXT_ADAPT_RATE;
-      if(text.invalidCount==0)
-        text.end=i; // a possible end of block position
+      textparser.invalidCount=textparser.invalidCount*(TEXT_ADAPT_RATE-1)/TEXT_ADAPT_RATE;
+      if(textparser.invalidCount==0)
+        textparser.setend(i); // a possible end of block position
     }
     else
-    if(text.UTF8State == UTF8_REJECT) { // illegal state
-      text.invalidCount = text.invalidCount*(TEXT_ADAPT_RATE-1)/TEXT_ADAPT_RATE + TEXT_ADAPT_RATE;
-      text.UTF8State = UTF8_ACCEPT; // reset state
-      if (text.validlength()<TEXT_MIN_SIZE || NON_TEXT) {
-        text.reset(i+1); // it's not text (or not long enough) - start over
+    if(textparser.UTF8State == UTF8_REJECT) { // illegal state
+      textparser.invalidCount = textparser.invalidCount*(TEXT_ADAPT_RATE-1)/TEXT_ADAPT_RATE + TEXT_ADAPT_RATE;
+      textparser.UTF8State = UTF8_ACCEPT; // reset state
+      if (textparser.validlength()<TEXT_MIN_SIZE) {
+        textparser.reset(i+1); // it's not text (or not long enough) - start over
       }
-      else if (text.invalidCount >= TEXT_MAX_MISSES*TEXT_ADAPT_RATE) {
-        in->setpos(start + text.start);
-        detd = int(text.validlength());
-        return (text.EOLType==1)?TEXT_EOL:TEXT;
+      else if (textparser.invalidCount >= TEXT_MAX_MISSES*TEXT_ADAPT_RATE) {
+        if (textparser.validlength()<TEXT_MIN_SIZE)
+          textparser.reset(i+1); // it's not text (or not long enough) - start over
+        else // Commit text block validation
+          textparser.next(i+1);
       }
     }
   }
-   
-  // After nothing is detected, the last block still may be TEXT
-  // At this point text.start properly indicates the start position of a valid TEXT block
-  if (n-text.start >= TEXT_MIN_SIZE) {
-    in->setpos(start + text.start);
-    detd = int(n-text.start);
-    return (text.EOLType==1)?TEXT_EOL:TEXT;
-  }
-  
   return type;
 }
 
@@ -11626,16 +11648,52 @@ void compressRecursive(File *in, const U64 blocksize, Encoder &en, String &blstr
   float pscale=blocksize>0?(p2-p1)/blocksize:0;
 
   // Transform and test in blocks
+  U64 nextblock_start;
+  U64 textstart;
+  U64 textend;
+  Blocktype nextblock_type;
+  Blocktype nextblock_type_bak;
   U64 bytes_to_go=blocksize;
   while (bytes_to_go>0) {
-    Blocktype nextType=detect(in, bytes_to_go, type, info);
-    U64 detected_end=in->curpos();
-    in->setpos(begin);
-    if (detected_end>block_end) {  // if a detection reports a larger size than the actual block size, fall back
-      detected_end=begin+1;
-      type=DEFAULT;
+    if(type==TEXT || type==TEXT_EOL) { // it was a split block in the previous iteration: TEXT -> DEFAULT -> ...
+      nextblock_type=nextblock_type_bak;
+      nextblock_start=textend+1;
     }
-    U64 len=detected_end-begin;
+    else {
+      nextblock_type=detect(in, bytes_to_go, type, info);
+      nextblock_start=in->curpos();
+      in->setpos(begin);
+    }
+
+    // override (any) next block detection by a preceding text block
+    textstart=begin+textparser._start[0];
+    textend=begin+textparser._end[0];
+    if(textend>nextblock_start-1)textend=nextblock_start-1;
+    if(type==DEFAULT && textstart<textend) { // only DEFAULT blocks may be overridden
+      if(textstart==begin && textend == nextblock_start-1) { // whole first block is text
+        type=(textparser._EOLType[0]==1)?TEXT_EOL:TEXT; // DEFAULT -> TEXT
+      }
+      else if (textend - textstart + 1 >= TEXT_MIN_SIZE) { // we have one (or more) large enough text portion that splits DEFAULT
+        if (textstart != begin) { // text is not the first block 
+          nextblock_start=textstart; // first block is still DEFAULT
+          nextblock_type_bak=nextblock_type;
+          nextblock_type=(textparser._EOLType[0]==1)?TEXT_EOL:TEXT; //next block is text
+          textparser.removefirst();
+        } else {
+          type=(textparser._EOLType[0]==1)?TEXT_EOL:TEXT; // first block is text
+          nextblock_type=DEFAULT;     // next block is DEFAULT
+          nextblock_start=textend+1; 
+        }
+      }
+      // no text block is found, still DEFAULT
+    }
+
+    if (nextblock_start>block_end) {  // if a detection reports a larger size than the actual block size, fall back
+      nextblock_start=begin+1;
+      type=nextblock_type=DEFAULT;
+    }
+
+    U64 len=nextblock_start-begin;
     if (len>0) {
       en.set_status_range(p1,p2=p1+pscale*len);
 
@@ -11646,7 +11704,7 @@ void compressRecursive(File *in, const U64 blocksize, Encoder &en, String &blstr
       blstr_sub+=U64(blnum);
       blnum++;
 
-      printf(" %-11s | %-16s |%10" PRIu64 " bytes [%" PRIu64 " - %" PRIu64 "]",blstr_sub.c_str(),typenames[(type==ZLIB && isPNG(Blocktype(info>>24)))?info>>24:type],len,begin,detected_end-1);
+      printf(" %-11s | %-16s |%10" PRIu64 " bytes [%" PRIu64 " - %" PRIu64 "]",blstr_sub.c_str(),typenames[(type==ZLIB && isPNG(Blocktype(info>>24)))?info>>24:type],len,begin,nextblock_start-1);
       if (type==AUDIO) printf(" (%s)", audiotypes[info%4]);
       else if (type==IMAGE1 || type==IMAGE4 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32 || (type==ZLIB && isPNG(Blocktype(info>>24)))) printf(" (width: %d)", (type==ZLIB)?(info&0xFFFFFF):info);
       else if (hasRecursion(type) && (info>>24)!=DEFAULT) printf(" (%s)",typenames[info>>24]);
@@ -11656,8 +11714,8 @@ void compressRecursive(File *in, const U64 blocksize, Encoder &en, String &blstr
       p1=p2;
       bytes_to_go-=len;
     }
-    type=nextType;
-    begin=detected_end;
+    type=nextblock_type;
+    begin=nextblock_start;
   }
 }
 
@@ -11939,6 +11997,7 @@ int main(int argc, char** argv) {
               case 'A': options |= OPTION_ADAPTIVE; break;
               case 'S': options |= OPTION_SKIPRGB; break;
               case 'F': options |= OPTION_FASTMODE; break;
+              case 'P': options |= OPTION_FORCEPNM_IN_TEXT; break;
               default: {printf("Invalid compression switch: %c",argv[1][j]); quit();}
             }
           }
@@ -12204,7 +12263,8 @@ int main(int argc, char** argv) {
       printf(" Adaptive   (a) = %s\n",options&OPTION_ADAPTIVE ? "On  (Adaptive learning rate)" : "Off");
       printf(" Skip RGB   (s) = %s\n",options&OPTION_SKIPRGB  ? "On  (Skip the color transform, just reorder the RGB channels)" : "Off");
       printf(" Fast mode  (f) = %s\n",options&OPTION_FASTMODE ? "On  (Bypass modeling and mixing on long matches)" : "Off");
-      printf(" File mode      = %s\n",options & OPTION_MULTIPLE_FILE_MODE ? "Multiple": "Single");
+      printf(" Force PNM  (p) = %s\n",options&OPTION_FORCEPNM_IN_TEXT ? "On  (Force PNM detection in textual data)" : "Off"); //this is a compression-only option, but we put/get it for reproducibility
+      printf(" File mode      = %s\n",options&OPTION_MULTIPLE_FILE_MODE ? "Multiple": "Single");
     }
     printf("\n");
 
