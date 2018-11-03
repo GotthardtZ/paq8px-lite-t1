@@ -1370,3 +1370,12 @@ paq8px_v169b
   Now small stand-alone text blocks are also detected as text
   A first block was never detected as text when followed by a non-DEFAULT block (was always "DEFAULT") - fixed
   Text detection is moved out of detect(): any other models are detected properly *then* the text detection is applied for DEFAULT blocks
+
+
+paq8px_v170
+2018.11.03
+- Slightly improved models:
+ - recordModel
+ - SparseMatchModel
+ - normalModel
+- Improved StateMap initialization
