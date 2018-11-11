@@ -1379,3 +1379,11 @@ paq8px_v170
  - SparseMatchModel
  - normalModel
 - Improved StateMap initialization
+
+
+paq8px_v171
+2018.11.11
+- Slightly improved models:
+ - SparseMatchModel
+ - 4bpp image model
+- New generic mixer context

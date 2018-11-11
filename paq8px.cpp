@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "170"  //update version here before publishing your changes
+#define PROGVERSION  "171"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -2859,6 +2859,41 @@ public:
   }
 };
 
+class MTFList{
+private:
+  int Root, Index;
+  Array<int, 16> Previous;
+  Array<int, 16> Next;
+public:
+  MTFList(const U16 n): Root(0), Index(0), Previous(n), Next(n) {
+    assert(n>0);
+    for (int i=0;i<n;i++) {
+      Previous[i] = i-1;
+      Next[i] = i+1;
+    }
+    Next[n-1] = -1;
+  }
+  inline int GetFirst(){
+    return Index=Root;
+  }
+  inline int GetNext(){
+    if(Index>=0){Index=Next[Index];return Index;}
+    return Index; //-1
+  }
+  inline void MoveToFront(int i){
+    assert(i>=0 && i<Previous.size());
+    if ((Index=i)==Root) return;
+    int p=Previous[Index];
+    int n=Next[Index];
+    if(p>=0)Next[p] = Next[Index];
+    if(n>=0)Previous[n] = Previous[Index];
+    Previous[Root] = Index;
+    Next[Index] = Root;
+    Root=Index;
+    Previous[Root]=-1;
+  }
+};
+
 //////////////////////////// Text modelling /////////////////////////
 
 #define TAB 0x09
@@ -5030,11 +5065,12 @@ private:
     U32 minLen    = MinLen;
     U32 bitMask   = 0xFF;   // match every byte according to this bit mask
   };
-  const sparseConfig sparse[NumHashes] = { {0,1,0,5,0xDF}, {0,1,0,5,0x5F}, {1,1,0,4}, {0,2,0,4,0xDF} };
+  const sparseConfig sparse[NumHashes] = { {0,1,0,5,0xDF}, {1,1,0,4}, {0,2,0,4,0xDF}, {0,1,0,5,0x0F} };
   Array<U32> Table;
   StationaryMap Maps[4];
   IndirectContext<U8> iCtx8;
   IndirectContext<U16> iCtx16;
+  MTFList list;
   U32 hashes[NumHashes];
   U32 hashIndex;   // index of hash used to find current match
   U32 length;      // rebased length of match (length=1 represents the smallest accepted match length), or 0 if no match
@@ -5059,7 +5095,7 @@ private:
     }
     // or find a new match
     else {     
-      for (U32 i=0; i<NumHashes; i++) {
+      for (int i=list.GetFirst(); i>=0; i=list.GetNext()) {
         index = Table[hashes[i]];
         if (index>0) {
           U32 offset = sparse[i].offset+1;
@@ -5071,6 +5107,7 @@ private:
             length-=(sparse[i].minLen-1);
             index+=sparse[i].deletions;
             hashIndex = i;
+            list.MoveToFront(i);
             break;
           }
         }
@@ -5099,6 +5136,7 @@ public:
     Maps{ {22, 1}, {17, 4}, {8, 1}, {19,1} },
     iCtx8{19,1},
     iCtx16{16},
+    list(NumHashes),
     hashes{ 0 },
     hashIndex(0),
     length(0),
@@ -5110,10 +5148,10 @@ public:
     assert(ispowerof2(Size));
   }
   int Predict(Mixer& m, Buf& buffer, ModelStats *Stats) {
+    const U8 B = c0<<(8-bpos);
     if (bpos==0)
       Update(buffer, Stats);
     else if (valid) {
-      U8 B = c0<<(8-bpos);
       Maps[0].set(hash(expectedByte, c0, buffer(1), buffer(2), ilog2(length+1)*NumHashes+hashIndex));
       if (bpos==4)
         Maps[1].set_direct(0x10000|((expectedByte^U8(c0<<4))<<8)|buffer(1));
@@ -5123,7 +5161,7 @@ public:
     }
 
     // check if next bit matches the prediction, accounting for the required bitmask
-    if (length>0 && (((expectedByte^U8(c0<<(8-bpos)))&sparse[hashIndex].bitMask)>>(8-bpos))!=0)
+    if (length>0 && (((expectedByte^B)&sparse[hashIndex].bitMask)>>(8-bpos))!=0)
       length = 0;
 
     if (valid) {
@@ -5142,6 +5180,8 @@ public:
     }
     else
       for (int i=0; i<11; i++, m.add(0));
+
+    m.set((hashIndex<<6)|(bpos<<3)|min(7, length), 256);
 
     return length;
   }
@@ -5605,7 +5645,7 @@ void recordModel(Mixer& m, ModelStats *Stats) {
     cp.set(hash(++i, col, iCtx[1]()));
     cp.set(hash(++i, col, iCtx[0]()&0xFF, iCtx[1]()&0xFF));
 
-    cp.set(hash(++i, iCtx[2]()));  
+    cp.set(hash(++i, iCtx[2]()));
     cp.set(hash(++i, iCtx[3]()));
     cp.set(hash(++i, iCtx[1]()&0xFF, iCtx[3]()&0xFF));
 
@@ -6590,9 +6630,10 @@ void im8bitModel(Mixer& m, int w, ModelStats *Stats, int gray = 0, int isPNG=0) 
 */
 void im4bitModel(Mixer& m, int w) {
   static HashTable<16> t(MEM/2);
-  const int S=13; // number of contexts
+  const int S=14; // number of contexts
   static U8* cp[S]; // context pointers
   static StateMap sm[S];
+  static StateMap map(16);
   static U8 WW=0, W=0, NWW=0, NW=0, N=0, NE=0, NEE=0, NNWW = 0, NNW=0, NN=0, NNE=0, NNEE=0;
   static int col=0, line=0, run=0, prevColor=0, px=0;
   if (!cp[0]){
@@ -6603,30 +6644,30 @@ void im4bitModel(Mixer& m, int w) {
     *cp[i]=nex(*cp[i],y); //update hashtable item priorities using predicted counts
 
   if (bpos==0 || bpos==4){
-      WW=W; NWW=NW; NW=N; N=NE; NE=NEE; NNWW=NWW; NNW=NN; NN=NNE; NNE=NNEE;
-      if (bpos==0)
-        {W=c4&0xF; NEE=buf(w-1)>>4; NNEE=buf(w*2-1)>>4;}
-      else
-        {W=c0&0xF; NEE=buf(w-1)&0xF; NNEE=buf(w*2-1)&0xF;}
-      run=(W!=WW || col==0)?(prevColor=WW,0):min(0xFFF,run+1);
-      px=1; //partial pixel (4 bits) with a leading "1"
-      U64 i=0; cp[i]=t[hash(i,W,NW,N)];
-          i++; cp[i]=t[hash(i,N, min(0xFFF, col/8))];
-          i++; cp[i]=t[hash(i,W,NW,N,NN,NE)];
-          i++; cp[i]=t[hash(i,W, N, NE+NNE*16, NEE+NNEE*16)];
-          i++; cp[i]=t[hash(i,W, N, NW+NNW*16, NWW+NNWW*16)];
-          i++; cp[i]=t[hash(i,W, ilog2(run+1), prevColor, col/max(1,w/2) )];
-          i++; cp[i]=t[hash(i,NE, min(0x3FF, (col+line)/max(1,w*8)))];
-          i++; cp[i]=t[hash(i,NW, (col-line)/max(1,w*8))];
-          i++; cp[i]=t[hash(i,WW*16+W,NN*16+N,NNWW*16+NW)];
-          i++; cp[i]=t[hash(i,N,NN)];
-          i++; cp[i]=t[hash(i,W,WW)];
-          i++; cp[i]=t[hash(i,W,NE)];
-          i++; cp[i]=t[-1];
-      assert(i==S-1);
-
-      col++;
-      if(col==w*2){col=0;line++;}
+    WW=W; NWW=NW; NW=N; N=NE; NE=NEE; NNWW=NWW; NNW=NN; NN=NNE; NNE=NNEE;
+    if (bpos==0)
+      {W=c4&0xF; NEE=buf(w-1)>>4; NNEE=buf(w*2-1)>>4;}
+    else
+      {W=c0&0xF; NEE=buf(w-1)&0xF; NNEE=buf(w*2-1)&0xF;}
+    run=(W!=WW || col==0)?(prevColor=WW,0):min(0xFFF,run+1);
+    px=1; //partial pixel (4 bits) with a leading "1"
+    U64 i=0; cp[i]=t[hash(i,W,NW,N)];
+        i++; cp[i]=t[hash(i,N, min(0xFFF, col/8))];
+        i++; cp[i]=t[hash(i,W,NW,N,NN,NE)];
+        i++; cp[i]=t[hash(i,W, N, NE+NNE*16, NEE+NNEE*16)];
+        i++; cp[i]=t[hash(i,W, N, NW+NNW*16, NWW+NNWW*16)];
+        i++; cp[i]=t[hash(i,W, ilog2(run+1), prevColor, col/max(1,w/2) )];
+        i++; cp[i]=t[hash(i,NE, min(0x3FF, (col+line)/max(1,w*8)))];
+        i++; cp[i]=t[hash(i,NW, (col-line)/max(1,w*8))];
+        i++; cp[i]=t[hash(i,WW*16+W,NN*16+N,NNWW*16+NW)];
+        i++; cp[i]=t[hash(i,N,NN)];
+        i++; cp[i]=t[hash(i,W,WW)];
+        i++; cp[i]=t[hash(i,W,NE)];
+        i++; cp[i]=t[hash(i,WW,NN,NEE)];
+        i++; cp[i]=t[-1];
+    assert(i==S-1);
+    col++;
+    if(col==w*2){col=0;line++;}
   }
   else{
     px+=px+y;
@@ -6636,8 +6677,16 @@ void im4bitModel(Mixer& m, int w) {
   }
 
   // predict
-  for (int i=0; i<S; i++)
-    m.add(stretch(sm[i].p(*cp[i])));
+  for (int i=0; i<S; i++) {
+    const U8 s = *cp[i];
+    const int n0=-!nex(s, 2), n1=-!nex(s, 3);
+    const int p1 = sm[i].p(s);
+    const int st = stretch(p1)>>1;
+    m.add(st);
+    m.add((p1-2047)>>2);
+    m.add(st*abs(n1-n0));
+  }
+  m.add(stretch(map.p(px))>>1);
 
   m.set((W<<4) | px, 256);
   m.set(min(31,col/max(1,w/16)) | (N<<5), 512);
@@ -9361,9 +9410,9 @@ public:
 
     next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0), bytesread(0), readsize(false), Bypass(false) {
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(1221, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/), 22);
+      m=MixerFactory::CreateMixer(1221, 4160+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/+256/*sparseMatchModel*/), 24);
     #else
-      m=MixerFactory::CreateMixer( 976, 4096+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/), 22);
+      m=MixerFactory::CreateMixer( 976, 4160+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/+256/*sparseMatchModel*/), 24);
     #endif //USE_WORD_MODEL
     }
 
@@ -9425,7 +9474,8 @@ int ContextModel::Predict(ModelStats *Stats){
   }
   matchlength=ilog(matchlength); // ilog of length of most recent match (0..255)
 
-  int order=normalmodel.mix(*m);
+  int order=max(0, normalmodel.mix(*m)-3);
+  m->set((order<<3)|bpos, 64);
 
   // Test for special block types
   if (blocktype==IMAGE1) im1bitModel(*m, blockinfo);
@@ -9449,6 +9499,22 @@ int ContextModel::Predict(ModelStats *Stats){
     if (jpegModel->jpegModel(*m)) return m->p(1,0);
   }
 
+  U32 c1=buf(1), c2=buf(2), c3=buf(3), c;
+
+  m->set(8+(c1 | (bpos>5)<<8 |  ( ((c0&((1<<bpos)-1))==0) || (c0==((2<<bpos)-1)) )<<9), 8+1024);
+  m->set(c0, 256);
+  m->set(order | ((c4>>6)&3)<<3 | (bpos==0)<<5 | (c1==c2)<<6 | (blocktype==EXE)<<7, 256);
+  m->set(c2, 256);
+  m->set(c3, 256);
+  m->set(matchlength, 256);
+  if (bpos!=0)
+  {
+    c=c0<<(8-bpos); if (bpos==1)c|=c3>>1;
+    c=min(bpos,5)<<8 | c1>>5 | (c2>>5)<<3 | (c&192);
+  }
+  else c=c3>>7 | (c4>>31)<<1 | (c2>>6)<<2 | (c1&240);
+  m->set(c, 1536);
+
   if (blocktype!=IMAGE1) {
     sparseMatchModel.Predict(*m, buf, Stats);
     sparseModel(*m,matchlength,order);
@@ -9469,25 +9535,6 @@ int ContextModel::Predict(ModelStats *Stats){
       exeModel.Predict(*m, blocktype==EXE, Stats);
   }
 
-  order = order-3;
-  if (order<0) order=0;
-
-  U32 c1=buf(1), c2=buf(2), c3=buf(3), c;
-
-  m->set(8+(c1 | (bpos>5)<<8 |  ( ((c0&((1<<bpos)-1))==0) || (c0==((2<<bpos)-1)) )<<9), 8+1024);
-  m->set(c0, 256);
-  m->set(order | ((c4>>6)&3)<<3 | (bpos==0)<<5 | (c1==c2)<<6 | (blocktype==EXE)<<7, 256);
-  m->set(c2, 256);
-  m->set(c3, 256);
-  m->set(matchlength, 256);
-
-  if (bpos!=0)
-  {
-    c=c0<<(8-bpos); if (bpos==1)c|=c3>>1;
-    c=min(bpos,5)<<8 | c1>>5 | (c2>>5)<<3 | (c&192);
-  }
-  else c=c3>>7 | (c4>>31)<<1 | (c2>>6)<<2 | (c1&240);
-  m->set(c, 1536);
   int pr=m->p(1,1);
   return pr;
 }
@@ -11029,39 +11076,7 @@ U64 decode_exe(Encoder& en, U64 size, File *out, FMode mode, U64 &diffFound) {
 }
 
 #ifdef USE_ZLIB
-class zLibMTF{
-private:
-  int Root, Index;
-  Array<int, 16> Previous;
-  Array<int, 16> Next;
-public:
-  zLibMTF(): Root(0), Index(0), Previous(81), Next(81) {
-    for (int i=0;i<81;i++) {
-      Previous[i] = i-1;
-      Next[i] = i+1;
-    }
-    Next[80] = -1;
-  }
-  inline int GetFirst(){
-    return Index=Root;
-  }
-  inline int GetNext(){
-    if(Index>=0){Index=Next[Index];return Index;}
-    return Index; //-1
-  }
-  inline void MoveToFront(int i){
-    assert(i>=0 && i<=80);
-    if ((Index=i)==Root) return;
-    int p=Previous[Index];
-    int n=Next[Index];
-    if(p>=0)Next[p] = Next[Index];
-    if(n>=0)Previous[n] = Previous[Index];
-    Previous[Root] = Index;
-    Next[Index] = Root;
-    Root=Index;
-    Previous[Root]=-1;
-  }
-} MTF;
+MTFList  MTF(81);
 
 int encode_zlib(File *in, File *out, U64 len, int &hdrsize) {
   const int BLOCK=1<<16, LIMIT=128;
