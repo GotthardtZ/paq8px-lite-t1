@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "171"  //update version here before publishing your changes
+#define PROGVERSION  "172"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -2859,6 +2859,8 @@ public:
   }
 };
 
+////////////////////////////// Move-to-Front list //////////////////////////////
+
 class MTFList{
 private:
   int Root, Index;
@@ -2867,29 +2869,28 @@ private:
 public:
   MTFList(const U16 n): Root(0), Index(0), Previous(n), Next(n) {
     assert(n>0);
-    for (int i=0;i<n;i++) {
+    for (int i=0; i<n; i++) {
       Previous[i] = i-1;
       Next[i] = i+1;
     }
     Next[n-1] = -1;
   }
-  inline int GetFirst(){
+  inline int GetFirst() {
     return Index=Root;
   }
-  inline int GetNext(){
-    if(Index>=0){Index=Next[Index];return Index;}
-    return Index; //-1
+  inline int GetNext() {
+    if (Index>=0) Index = Next[Index];
+    return Index;
   }
-  inline void MoveToFront(int i){
+  inline void MoveToFront(const int i) {
     assert(i>=0 && i<Previous.size());
     if ((Index=i)==Root) return;
-    int p=Previous[Index];
-    int n=Next[Index];
-    if(p>=0)Next[p] = Next[Index];
-    if(n>=0)Previous[n] = Previous[Index];
+    const int p=Previous[Index], n=Next[Index];
+    if (p>=0) Next[p] = Next[Index];
+    if (n>=0) Previous[n] = Previous[Index];
     Previous[Root] = Index;
     Next[Index] = Root;
-    Root=Index;
+    Root = Index;
     Previous[Root]=-1;
   }
 };
@@ -4413,7 +4414,36 @@ public:
   (25/02/2018) v139: Uses 26 contexts
   (27/02/2018) v140: Sets 6 mixer contexts
   (12/05/2018) v142: Sets 7 mixer contexts
+  (02/12/2018) v172: Sets 8 mixer contexts
 */
+
+const U8 AsciiGroupC0[254] ={
+  0, 10,
+  0, 1, 10, 10,
+  0, 4, 2, 3, 10, 10, 10, 10,
+  0, 0, 5, 4, 2, 2, 3, 3, 10, 10, 10, 10, 10, 10, 10, 10,
+  0, 0, 0, 0, 5, 5, 9, 4, 2, 2, 2, 2, 3, 3, 3, 3, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
+  0, 0, 0, 0, 0, 0, 0, 0, 5, 8, 8, 5, 9, 9, 6, 5, 2, 2, 2, 2, 2, 2, 2, 8, 3, 3, 3, 3, 3, 3, 3, 8, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 8, 8, 8, 8, 8, 5, 5, 9, 9, 9, 9, 9, 7, 8, 5, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 8, 8, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 8, 8, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10
+};
+const U8 AsciiGroup[128] = {
+  0,  5,  5,  5,  5,  5,  5,  5,
+  5,  5,  4,  5,  5,  4,  5,  5,
+  5,  5,  5,  5,  5,  5,  5,  5,
+  5,  5,  5,  5,  5,  5,  5,  5,
+  6,  7,  8, 17, 17,  9, 17, 10,
+  11, 12, 17, 17, 13, 14, 15, 16,
+  1,  1,  1,  1,  1,  1,  1,  1,
+  1,  1, 18, 19, 20, 23, 21, 22,
+  23,  2,  2,  2,  2,  2,  2,  2,
+  2,  2,  2,  2,  2,  2,  2,  2,
+  2,  2,  2,  2,  2,  2,  2,  2,
+  2,  2,  2, 24, 27, 25, 27, 26,
+  27,  3,  3,  3,  3,  3,  3,  3,
+  3,  3,  3,  3,  3,  3,  3,  3,
+  3,  3,  3,  3,  3,  3,  3,  3,
+  3,  3,  3, 28, 30, 29, 30, 30
+};
 
 class TextModel {
 private:
@@ -4468,7 +4498,7 @@ private:
     U32 maskPunct;    // mask of relative position of last comma related to other punctuation
     U32 nestHash;     // hash representing current nesting state
     U32 lastNest;     // distance to last nesting character
-    U32 masks[4],
+    U32 masks[5],
         wordLength[2];
     int UTF8Remaining;// remaining bytes for current UTF8-encoded Unicode code point (-1 if invalid byte found)
     U8 firstLetter;   // first letter of current word
@@ -4506,7 +4536,9 @@ public:
       Update(buffer, Stats);
       SetContexts(buffer, Stats);
     }
+    const U8 grp = (bpos>0)?AsciiGroupC0[(1<<bpos)-2+(c0&((1<<bpos)-1))]:0;
     Map.mix(mixer);
+
     mixer.set(finalize64(hash((Lang.Id!=Language::Unknown)?1+Stemmers[Lang.Id-1]->IsVowel(buffer(1)):0, Info.masks[1]&0xFF, c0),11), 2048);
     mixer.set(finalize64(hash(ilog2(Info.wordLength[0]+1), c0,
       (Info.lastDigit<Info.wordLength[0]+Info.wordGap)|
@@ -4514,20 +4546,21 @@ public:
       ((Info.lastPunct<Info.wordLength[0]+Info.wordGap)<<2)|
       ((Info.lastUpper<Info.wordLength[0])<<3)
     ),11), 2048);
-    mixer.set(finalize64(hash(Info.masks[1]&0x3FF, Info.lastUpper<Info.wordLength[0], Info.lastUpper<Info.lastLetter+Info.wordLength[1]),11), 2048);
-    mixer.set(finalize64(hash(Info.spaces&0x1FF,
+    mixer.set(finalize64(hash(Info.masks[1]&0x3FF, grp, Info.lastUpper<Info.wordLength[0], Info.lastUpper<Info.lastLetter+Info.wordLength[1]),12), 4096);
+    mixer.set(finalize64(hash(Info.spaces&0x1FF, grp,
       (Info.lastUpper<Info.wordLength[0])|
       ((Info.lastUpper<Info.lastLetter+Info.wordLength[1])<<1)|
       ((Info.lastPunct<Info.lastLetter)<<2)|
       ((Info.lastPunct<Info.wordLength[0]+Info.wordGap)<<3)|
       ((Info.lastPunct<Info.lastLetter+Info.wordLength[1]+Info.wordGap)<<4)
-    ),11), 2048);
+    ),12), 4096);
     mixer.set(finalize64(hash(Info.firstLetter*(Info.wordLength[0]<4), min(6, Info.wordLength[0]), c0),11), 2048);
     mixer.set(finalize64(hash((*pWord)[0], (*pWord)(0), min(4, Info.wordLength[0]), Info.lastPunct<Info.lastLetter),11), 2048);
-    mixer.set(finalize64(hash(min(4, Info.wordLength[0]), c0,
+    mixer.set(finalize64(hash(min(4, Info.wordLength[0]), grp,
       Info.lastUpper<Info.wordLength[0],
       (Info.nestHash>0)?Info.nestHash&0xFF:0x100|(Info.firstLetter*(Info.wordLength[0]>0 && Info.wordLength[0]<4))
     ),12), 4096);
+    mixer.set(finalize64(hash(grp, Info.masks[4]&0x1F, (Info.masks[4]>>5)&0x1F), 13), 8192);
   }
 };
 
@@ -4538,10 +4571,12 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
   Info.lastPunct  = min(0x3F, Info.lastPunct+1);
   Info.lastNewLine++; Info.prevNewLine++; Info.lastNest++;
   Info.spaceCount-=(Info.spaces>>31); Info.spaces<<=1;
-  Info.masks[0]<<=2; Info.masks[1]<<=2; Info.masks[2]<<=4; Info.masks[3]<<=3;
+  Info.masks[0]<<=2; Info.masks[1]<<=2; Info.masks[2]<<=4; Info.masks[3]<<=3, Info.masks[4]<<=5;
   pState = State;
 
-  U8 c = buffer(1), lc = tolower(c);
+  U8 c = buffer(1), lc = tolower(c), g = (c<0x80)?AsciiGroup[c]:31;
+  Info.masks[4]|=g;
+
   BytePos[c] = pos;
   if (c!=lc) {
     c = lc;
@@ -5181,7 +5216,7 @@ public:
     else
       for (int i=0; i<11; i++, m.add(0));
 
-    m.set((hashIndex<<6)|(bpos<<3)|min(7, length), 256);
+    m.set((hashIndex<<6)|(bpos<<3)|min(7, length), NumHashes*64);
 
     return length;
   }
@@ -9410,9 +9445,9 @@ public:
 
     next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0), bytesread(0), readsize(false), Bypass(false) {
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(1221, 4160+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/+256/*sparseMatchModel*/), 24);
+      m=MixerFactory::CreateMixer(1221, 4160+(1536/*recordModel*/+27648/*exeModel*/+28672/*textModel*/+256/*sparseMatchModel*/), 25);
     #else
-      m=MixerFactory::CreateMixer( 976, 4160+(1536/*recordModel*/+27648/*exeModel*/+16384/*textModel*/+256/*sparseMatchModel*/), 24);
+      m=MixerFactory::CreateMixer( 976, 4160+(1536/*recordModel*/+27648/*exeModel*/+28672/*textModel*/+256/*sparseMatchModel*/), 25);
     #endif //USE_WORD_MODEL
     }
 

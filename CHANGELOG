@@ -1387,3 +1387,8 @@ paq8px_v171
  - SparseMatchModel
  - 4bpp image model
 - New generic mixer context
+
+
+paq8px_v172
+2018.12.02
+- Slightly improved TextModel
