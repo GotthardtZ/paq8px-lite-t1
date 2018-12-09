@@ -1392,3 +1392,10 @@ paq8px_v171
 paq8px_v172
 2018.12.02
 - Slightly improved TextModel
+
+
+paq8px_v173
+2018.12.09
+- Slightly improved models:
+ - recordModel
+ - TextModel

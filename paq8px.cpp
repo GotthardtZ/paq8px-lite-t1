@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "172"  //update version here before publishing your changes
+#define PROGVERSION  "173"  //update version here before publishing your changes
 #define PROGYEAR     "2018"
 
 
@@ -1057,6 +1057,7 @@ U32 c8=0; // Another 4 bytes (buf(8)..buf(5))
 int bpos=0; // bits in c0 (0 to 7)
 Buf buf;  // Rotating input queue set by Predictor
 int blpos=0; // Relative position in block
+U8 grp0; // Quantized partial byte as ASCII group
 
 #define CacheSize 32
 
@@ -4536,7 +4537,6 @@ public:
       Update(buffer, Stats);
       SetContexts(buffer, Stats);
     }
-    const U8 grp = (bpos>0)?AsciiGroupC0[(1<<bpos)-2+(c0&((1<<bpos)-1))]:0;
     Map.mix(mixer);
 
     mixer.set(finalize64(hash((Lang.Id!=Language::Unknown)?1+Stemmers[Lang.Id-1]->IsVowel(buffer(1)):0, Info.masks[1]&0xFF, c0),11), 2048);
@@ -4546,8 +4546,8 @@ public:
       ((Info.lastPunct<Info.wordLength[0]+Info.wordGap)<<2)|
       ((Info.lastUpper<Info.wordLength[0])<<3)
     ),11), 2048);
-    mixer.set(finalize64(hash(Info.masks[1]&0x3FF, grp, Info.lastUpper<Info.wordLength[0], Info.lastUpper<Info.lastLetter+Info.wordLength[1]),12), 4096);
-    mixer.set(finalize64(hash(Info.spaces&0x1FF, grp,
+    mixer.set(finalize64(hash(Info.masks[1]&0x3FF, grp0, Info.lastUpper<Info.wordLength[0], Info.lastUpper<Info.lastLetter+Info.wordLength[1]),12), 4096);
+    mixer.set(finalize64(hash(Info.spaces&0x1FF, grp0,
       (Info.lastUpper<Info.wordLength[0])|
       ((Info.lastUpper<Info.lastLetter+Info.wordLength[1])<<1)|
       ((Info.lastPunct<Info.lastLetter)<<2)|
@@ -4556,11 +4556,11 @@ public:
     ),12), 4096);
     mixer.set(finalize64(hash(Info.firstLetter*(Info.wordLength[0]<4), min(6, Info.wordLength[0]), c0),11), 2048);
     mixer.set(finalize64(hash((*pWord)[0], (*pWord)(0), min(4, Info.wordLength[0]), Info.lastPunct<Info.lastLetter),11), 2048);
-    mixer.set(finalize64(hash(min(4, Info.wordLength[0]), grp,
+    mixer.set(finalize64(hash(min(4, Info.wordLength[0]), grp0,
       Info.lastUpper<Info.wordLength[0],
       (Info.nestHash>0)?Info.nestHash&0xFF:0x100|(Info.firstLetter*(Info.wordLength[0]>0 && Info.wordLength[0]<4))
     ),12), 4096);
-    mixer.set(finalize64(hash(grp, Info.masks[4]&0x1F, (Info.masks[4]>>5)&0x1F), 13), 8192);
+    mixer.set(finalize64(hash(grp0, Info.masks[4]&0x1F, (Info.masks[4]>>5)&0x1F), 13), 8192);
   }
 };
 
@@ -4571,11 +4571,12 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
   Info.lastPunct  = min(0x3F, Info.lastPunct+1);
   Info.lastNewLine++; Info.prevNewLine++; Info.lastNest++;
   Info.spaceCount-=(Info.spaces>>31); Info.spaces<<=1;
-  Info.masks[0]<<=2; Info.masks[1]<<=2; Info.masks[2]<<=4; Info.masks[3]<<=3, Info.masks[4]<<=5;
+  Info.masks[0]<<=2; Info.masks[1]<<=2; Info.masks[2]<<=4; Info.masks[3]<<=3;
   pState = State;
 
   U8 c = buffer(1), lc = tolower(c), g = (c<0x80)?AsciiGroup[c]:31;
-  Info.masks[4]|=g;
+  if (g>4 || g!=(Info.masks[4]&0x1F))
+    Info.masks[4]<<=5, Info.masks[4]|=g;
 
   BytePos[c] = pos;
   if (c!=lc) {
@@ -5512,8 +5513,8 @@ void recordModel(Mixer& m, ModelStats *Stats) {
   static U8 padding = 0; // detected padding byte
   static U8 N=0, NN=0, NNN=0, NNNN=0, WxNW=0;
   static int prevTransition = 0, nTransition = 0; // position of the last padding transition
-  static int col = 0, mxCtx = 0;
-  static ContextMap cm(32768, 3), cn(32768/2, 3), co(32768*2, 3), cp(MEM*2, 15); // cm,cn,co: memory pressure is advantageous
+  static int col = 0, mxCtx = 0, x = 0;
+  static ContextMap cm(32768, 3), cn(32768/2, 3), co(32768*2, 3), cp(MEM*2, 16); // cm,cn,co: memory pressure is advantageous
   static const int nMaps = 3;
   static StationaryMap Maps[nMaps] ={ 10,10,{11,1} };
   static SmallStationaryContextMap sMap[3]{ {11, 1}, {3, 1}, {19,1} };
@@ -5612,6 +5613,7 @@ void recordModel(Mixer& m, ModelStats *Stats) {
 
     assert(rlen[0]>0);
     col=pos%rlen[0];
+    x = min(0x1F,col/max(1,rlen[0]/32));
     N = buf(rlen[0]), NN = buf(rlen[0]*2), NNN = buf(rlen[0]*3), NNNN = buf(rlen[0]*4);
     for (int i=0; i<nIndCtxs-1; iCtx[i]+=c, i++);
     iCtx[0]=(c<<8)|N;
@@ -5675,6 +5677,7 @@ void recordModel(Mixer& m, ModelStats *Stats) {
 
     cp.set(hash(++i, N|((NN&0xF0)<<4)|((NNN&0xE0)<<7)|((NNNN&0xE0)<<10)|((col/max(1,rlen[0]/16))<<18)));
     cp.set(hash(++i, (N&0xF8)|((NN&0xF8)<<8)|(col<<16)));
+    cp.set(hash(++i, N, NN));
 
     cp.set(hash(++i, col, iCtx[0]()));
     cp.set(hash(++i, col, iCtx[1]()));
@@ -5722,7 +5725,8 @@ void recordModel(Mixer& m, ModelStats *Stats) {
   sMap[2].mix(m, 5, 1, 2);
 
   m.set( (rlen[0]>2)*( (bpos<<7)|mxCtx ), 1024 );
-  m.set( ((N^B)>>4)|(min(0x1F,col/max(1,rlen[0]/32))<<4), 512 );
+  m.set( ((N^B)>>4)|(x<<4), 512 );
+  m.set( (grp0<<5)|x, 11*32);
 
   Stats->Wav = min(0xFFFF,rlen[0]);
   Stats->Record = min(0xFFFF,col);
@@ -9445,9 +9449,9 @@ public:
 
     next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0), bytesread(0), readsize(false), Bypass(false) {
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(1221, 4160+(1536/*recordModel*/+27648/*exeModel*/+28672/*textModel*/+256/*sparseMatchModel*/), 25);
+      m=MixerFactory::CreateMixer(1226, 4160+(1888/*recordModel*/+27648/*exeModel*/+28672/*textModel*/+256/*sparseMatchModel*/), 26);
     #else
-      m=MixerFactory::CreateMixer( 976, 4160+(1536/*recordModel*/+27648/*exeModel*/+28672/*textModel*/+256/*sparseMatchModel*/), 25);
+      m=MixerFactory::CreateMixer( 981, 4160+(1888/*recordModel*/+27648/*exeModel*/+28672/*textModel*/+256/*sparseMatchModel*/), 26);
     #endif //USE_WORD_MODEL
     }
 
@@ -9632,6 +9636,7 @@ void Predictor::update() {
     c0=1;
   }
   bpos=(bpos+1)&7;
+  grp0 = (bpos>0)?AsciiGroupC0[(1<<bpos)-2+(c0&((1<<bpos)-1))]:0;
 
   int pr0=contextModel.Predict(&stats);
   if (contextModel.Bypass) {
