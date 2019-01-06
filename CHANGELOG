@@ -1399,3 +1399,13 @@ paq8px_v173
 - Slightly improved models:
  - recordModel
  - TextModel
+
+
+paq8px_v174
+2019.01.06
+- Additional mixer context for the following models:
+ - SparseMatchModel
+ - 8bpp images, both grayscale and indexed color
+ - 24/32bpp images
+- Slightly improved recordModel
+- New RLE transform, currently used only on 8bpp Targa images

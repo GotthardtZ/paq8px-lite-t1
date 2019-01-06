@@ -8,8 +8,8 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "173"  //update version here before publishing your changes
-#define PROGYEAR     "2018"
+#define PROGVERSION  "174"  //update version here before publishing your changes
+#define PROGYEAR     "2019"
 
 
 //////////////////////// Build options /////////////////////////////////////
@@ -964,11 +964,11 @@ public:
 
 /////////////////////// Global context /////////////////////////
 
-typedef enum {DEFAULT=0, FILECONTAINER, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF, PNG8, PNG8GRAY, PNG24, PNG32, TEXT, TEXT_EOL} Blocktype;
+typedef enum {DEFAULT=0, FILECONTAINER, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF, PNG8, PNG8GRAY, PNG24, PNG32, TEXT, TEXT_EOL, RLE} Blocktype;
 
-inline bool hasRecursion(Blocktype ft) { return ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft== FILECONTAINER; }
+inline bool hasRecursion(Blocktype ft) { return ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft==RLE || ft== FILECONTAINER; }
 inline bool hasInfo(Blocktype ft) { return ft==IMAGE1 || ft==IMAGE4 || ft==IMAGE8 || ft==IMAGE8GRAY || ft==IMAGE24 || ft==IMAGE32 || ft==AUDIO || ft==PNG8 || ft==PNG8GRAY || ft==PNG24 || ft==PNG32; }
-inline bool hasTransform(Blocktype ft) { return ft==IMAGE24 || ft==IMAGE32 || ft==EXE || ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft==TEXT_EOL; }
+inline bool hasTransform(Blocktype ft) { return ft==IMAGE24 || ft==IMAGE32 || ft==EXE || ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft==TEXT_EOL || ft==RLE; }
 inline bool isPNG(Blocktype ft) { return ft==PNG8 || ft==PNG8GRAY || ft==PNG24 || ft==PNG32; }
 
 int level=0; //this value will be overwritten at the beginning of compression/decompression
@@ -1638,11 +1638,11 @@ public:
     else {  // S=1 context
       int dp;
       if(simd==SIMD_NONE)
-        dp=dot_product_simd_none(&tx[0], &wx[0], nx)>>(8+shift1);
+        dp=dot_product_simd_none(&tx[0], &wx[cxt[0]*N], nx)>>(8+shift1);
       if(simd==SIMD_SSE2)
-        dp=dot_product_simd_sse2(&tx[0], &wx[0], nx)>>(8+shift1);
+        dp=dot_product_simd_sse2(&tx[0], &wx[cxt[0]*N], nx)>>(8+shift1);
       if(simd==SIMD_AVX2)
-        dp=dot_product_simd_avx2(&tx[0], &wx[0], nx)>>(8+shift1);
+        dp=dot_product_simd_avx2(&tx[0], &wx[cxt[0]*N], nx)>>(8+shift1);
       return pr[0]=squash(dp);
     }
   }
@@ -2241,6 +2241,44 @@ public:
       bCount=B=0;
   }
 };
+
+
+class IndirectMap {
+  Array<U8> Data;
+  StateMap Map;
+  const int mask, maskbits, stride;
+  int Context, bCount, bTotal, B;
+  U8 *cp;
+public:
+  IndirectMap(int BitsOfContext, int InputBits = 8): Data((1ull<<BitsOfContext)*((1ull<<InputBits)-1)), mask((1<<BitsOfContext)-1), maskbits(BitsOfContext), stride((1<<InputBits)-1), Context(0), bCount(0), bTotal(InputBits), B(0) {
+    assert(InputBits>0 && InputBits<=8);
+    assert(BitsOfContext+InputBits<=24);
+    cp=&Data[0];
+  }
+  void set_direct(const U32 ctx) {
+    Context = (ctx&mask)*stride;
+    bCount=B=0;
+  }
+  void set(const U64 ctx) {
+    Context = (finalize64(ctx,maskbits)&mask)*stride;
+    bCount=B=0;
+  }
+  void mix(Mixer& m, const int Multiplier = 1, const int Divisor = 4, const U16 Limit = 1023) {
+    // update
+    *cp = nex(*cp, y);
+    // predict
+    B+=(y && B>0);
+    cp=&Data[Context+B];
+    const U8 state = *cp;
+    const int p1 = Map.p(state, Limit);
+    m.add((stretch(p1)*Multiplier)/Divisor);
+    m.add(((p1-2048)*Multiplier)/(Divisor*2));
+    bCount++; B+=B+1;
+    if (bCount==bTotal)
+      bCount=B=0;
+  }
+};
+
 
 // Context map for large contexts.  Most modeling uses this type of context
 // map.  It includes a built in RunContextMap to predict the last byte seen
@@ -5026,7 +5064,7 @@ public:
     if (bpos==0)
       Update(buffer, Stats);
     else {
-      U8 B = c0<<(8-bpos);
+      const U8 B = c0<<(8-bpos);
       SCM[1].set((bpos<<8)|(expectedByte^B));
       Maps[1].set(hash(expectedByte, c0, buffer(1), buffer(2), min(3,(int)ilog2(length+1))));
       iCtx+=y, iCtx=(bpos<<16)|(buffer(1)<<8)|(expectedByte^B);
@@ -5218,6 +5256,7 @@ public:
       for (int i=0; i<11; i++, m.add(0));
 
     m.set((hashIndex<<6)|(bpos<<3)|min(7, length), NumHashes*64);
+    m.set((hashIndex<<11)|(min(7, ilog2(length+1))<<8)|(c0^(expectedByte>>(8-bpos))), NumHashes*2048);
 
     return length;
   }
@@ -5515,9 +5554,10 @@ void recordModel(Mixer& m, ModelStats *Stats) {
   static int prevTransition = 0, nTransition = 0; // position of the last padding transition
   static int col = 0, mxCtx = 0, x = 0;
   static ContextMap cm(32768, 3), cn(32768/2, 3), co(32768*2, 3), cp(MEM*2, 16); // cm,cn,co: memory pressure is advantageous
-  static const int nMaps = 3;
-  static StationaryMap Maps[nMaps] ={ 10,10,{11,1} };
+  static const int nMaps = 6;
+  static StationaryMap Maps[nMaps]{ 10,10,8,8,8,{11,1} };
   static SmallStationaryContextMap sMap[3]{ {11, 1}, {3, 1}, {19,1} };
+  static IndirectMap iMap[3]{ 8,8,8 };
   static bool MayBeImg24b = false;
   static dBASE dbase {};
   static const int nIndCtxs = 5;
@@ -5696,6 +5736,12 @@ void recordModel(Mixer& m, ModelStats *Stats) {
     else
       Maps[0].set_direct(Clip(c*2-d)|k);
     Maps[1].set_direct(Clip(c+N-buf(rlen[0]+1))|k);
+    Maps[2].set_direct(Clip(N+NN-NNN));
+    Maps[3].set_direct(Clip(N*2-NN));
+    Maps[4].set_direct(Clip(N*3-NN*3+NNN));
+    iMap[0].set_direct(N+NN-NNN);
+    iMap[1].set_direct(N*2-NN);
+    iMap[2].set_direct(N*3-NN*3+NNN);
 
     // update last context positions
     cpos4[c]=cpos3[c];
@@ -5709,7 +5755,7 @@ void recordModel(Mixer& m, ModelStats *Stats) {
   U8 B = c0<<(8-bpos);
   U32 ctx = (N^B)|(bpos<<8);
   iCtx[nIndCtxs-1]+=y, iCtx[nIndCtxs-1]=ctx;
-  Maps[2].set_direct(ctx);
+  Maps[nMaps-1].set_direct(ctx);
   sMap[0].set(ctx);
   sMap[1].set(iCtx[nIndCtxs-1]());
   sMap[2].set((ctx<<8)|WxNW);
@@ -5720,6 +5766,8 @@ void recordModel(Mixer& m, ModelStats *Stats) {
   cp.mix(m);
   for (int i=0;i<nMaps;i++)
     Maps[i].mix(m, 1, 3);
+  for (int i=0;i<3;i++)
+    iMap[i].mix(m, 1, 3, 255);
   sMap[0].mix(m, 6, 1, 3);
   sMap[1].mix(m, 6, 1, 3);
   sMap[2].mix(m, 5, 1, 2);
@@ -6286,6 +6334,7 @@ void im24bitModel(Mixer& m, int info, ModelStats *Stats, int alpha=0, int isPNG=
     m.set(finalize64(hash(ctx[0], column[0]/8),13), 8192);
     m.set(finalize64(hash(LogQt(N,5), LogMeanDiffQt(N,NN,3), c0),13), 8192);
     m.set(finalize64(hash(LogQt(W,5), LogMeanDiffQt(W,WW,3), c0),13), 8192);
+    m.set(min(255,(x+line)/32), 256);
   }
   else{
     m.add(-2048+((filter>>(7-bpos))&1)*4096);
@@ -6653,6 +6702,7 @@ void im8bitModel(Mixer& m, int w, ModelStats *Stats, int gray = 0, int isPNG=0) 
     m.set( ((abs((int)(W-N))>4)<<9)|((abs((int)(N-NE))>4)<<8)|((abs((int)(W-NW))>4)<<7)|((W>N)<<6)|((N>NE)<<5)|((W>NW)<<4)|((W>WW)<<3)|((N>NN)<<2)|((NW>NNWW)<<1)|(NE>NNEE), 1024 );
     m.set(min(63,column[0]), 64);
     m.set(min(127,column[1]), 128);
+    m.set( min(255,(x+line)/32), 256);
   }
   else{
     m.add( -2048+((filter>>(7-bpos))&1)*4096 );
@@ -9449,9 +9499,9 @@ public:
 
     next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0), bytesread(0), readsize(false), Bypass(false) {
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(1226, 4160+(1888/*recordModel*/+27648/*exeModel*/+28672/*textModel*/+256/*sparseMatchModel*/), 26);
+      m=MixerFactory::CreateMixer(1238, 4160+(1888/*recordModel*/+27648/*exeModel*/+28672/*textModel*/+8448/*sparseMatchModel*/), 27);
     #else
-      m=MixerFactory::CreateMixer( 981, 4160+(1888/*recordModel*/+27648/*exeModel*/+28672/*textModel*/+256/*sparseMatchModel*/), 26);
+      m=MixerFactory::CreateMixer( 993, 4160+(1888/*recordModel*/+27648/*exeModel*/+28672/*textModel*/+8448/*sparseMatchModel*/), 27);
     #endif //USE_WORD_MODEL
     }
 
@@ -9660,7 +9710,7 @@ void Predictor::update() {
       pr1 = Text.APM1s[0].p(pr0, finalize64(hash(stats.Match.expectedByte, std::min<U32>(3, ilog2(stats.Match.length+1)), c4&0xff),16));
       pr2 = Text.APM1s[1].p(pr, finalize64(hash(c0, c4&0x00ffffff),16), 6);
       pr3 = Text.APM1s[2].p(pr, finalize64(hash(c0, c4&0xffffff00),16), 6);
-      
+
       pr = (pr+pr1+pr2+pr3+2)>>2;
       pr = (pr+pr0+1)>>1;
       break;
@@ -9699,7 +9749,7 @@ void Predictor::update() {
       pr3 = Image.Palette.APMs[3].p(pr0, finalize64(hash(c0 | stats.Image.pixels.W<<8 | stats.Image.pixels.WW<<16),16), limit);
 
       pr0 = (pr0+pr1+pr2+pr3+2)>>2;
-      
+
       pr1 = Image.Palette.APM1s[0].p(pr0, finalize64(hash(c0 | stats.Match.expectedByte<<8 | stats.Image.pixels.N<<16),16), 5);
       pr2 = Image.Palette.APM1s[1].p(pr , finalize64(hash(c0 | stats.Image.pixels.W<<8     | stats.Image.pixels.N<<16),16), 6);
 
@@ -10657,9 +10707,9 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
     }
 
     // Detect .tga image (8-bit 256 colors or 24-bit uncompressed)
-    if ((buf1&0xFFFFFF)==0x00010100 && (buf0&0xFFFFFFC7)==0x00000100 && (c==16 || c==24 || c==32)) tga=i,tgax=tgay,tgaz=8,tgat=1,tgaid=buf1>>24,tgamap=c/8;
+    if ((buf1&0xFFF7FF)==0x00010100 && (buf0&0xFFFFFFC7)==0x00000100 && (c==16 || c==24 || c==32)) tga=i,tgax=tgay,tgaz=8,tgat=(buf1>>8)&0xF,tgaid=buf1>>24,tgamap=c/8;
     else if ((buf1&0xFFFFFF)==0x00000200 && buf0==0x00000000) tga=i,tgax=tgay,tgaz=24,tgat=2;
-    else if ((buf1&0xFFFFFF)==0x00000300 && buf0==0x00000000) tga=i,tgax=tgay,tgaz=8,tgat=3;
+    else if ((buf1&0xFFF7FF)==0x00000300 && buf0==0x00000000) tga=i,tgax=tgay,tgaz=8,tgat=(buf1>>8)&0xF;
     if (tga) {
       if (i-tga==8) tga=(buf1==0?tga:0),tgax=(bswap(buf0)&0xffff),tgay=(bswap(buf0)>>16);
       else if (i-tga==10) {
@@ -10667,11 +10717,43 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
           tgaz=32;
         if ((tgaz<<8)==(int)(buf0&0xFFD7) && tgax && tgay) {
           if (tgat==1){
-            in->setpos(start+tga+11);
+            in->setpos(start+tga+11+tgaid);
             IMG_DET( (IsGrayscalePalette(in))?IMAGE8GRAY:IMAGE8,tga-7,18+tgaid+256*tgamap,tgax,tgay);
           }
           else if (tgat==2) IMG_DET((tgaz==24)?IMAGE24:IMAGE32,tga-7,18+tgaid,tgax*(tgaz>>3),tgay);
           else if (tgat==3) IMG_DET(IMAGE8GRAY,tga-7,18+tgaid,tgax,tgay);
+          else if (tgat==9 || tgat==11) {
+            in->setpos(start+tga+11+tgaid);
+            if (tgat==9) {
+              info=(IsGrayscalePalette(in)?IMAGE8GRAY:IMAGE8)<<24;
+              in->setpos(start+tga+11+tgaid+256*tgamap);
+            }
+            else
+              info=IMAGE8GRAY<<24;
+            info|=tgax;
+            // now detect compressed image data size
+            detd=0;
+            int c=in->getchar(), b=0, total=tgax*tgay, line=0;
+            while (total>0 && c>=0 && (++detd, b=in->getchar())>=0){
+              if (c==0x80) { c=b; continue; }
+              else if (c>0x7F) {
+                total-=(c=(c&0x7F)+1); line+=c;
+                c=in->getchar();
+                detd++;
+              }
+              else {
+                in->setpos(in->curpos()+c); 
+                detd+=++c; total-=c; line+=c;
+                c=in->getchar();
+              }
+              if (line>tgax) break;
+              else line%=tgax;
+            }
+            if (total==0) {
+              in->setpos(start+tga+11+tgaid+256*tgamap);
+              return dett=RLE;
+            }
+          }
         }
         tga=0;
       }
@@ -11047,6 +11129,105 @@ U64 decode_eol(Encoder& en, U64 size, File *out, FMode mode, U64 &diffFound) {
       en.print_status();
   }
   return count;
+}
+
+void encode_rle(File *in, File *out, U64 size, int info, int &hdrsize) {
+  U8 b, c = in->getchar();
+  int i = 1, maxBlockSize = info&0xFFFFFF;
+  out->putVLI(maxBlockSize);
+  hdrsize=VLICost(maxBlockSize);
+  while (i<(int)size) {
+    b = in->getchar(), i++;
+    if (c==0x80) { c = b; continue; }
+    else if (c>0x7F) {
+      for (int j=0; j<=(c&0x7F); j++) out->putchar(b);
+      c = in->getchar(), i++;
+    }
+    else {
+      for (int j=0; j<=c; j++, i++) { out->putchar(b), b = in->getchar(); }
+      c = b;
+    }
+  }
+}
+
+#define rleOutputRun { \
+  while (run > 128) { \
+    *outPtr++ = 0xFF, *outPtr++ = byte; \
+    run-=128; \
+  } \
+  *outPtr++ = (U8)(0x80|(run-1)), *outPtr++ = byte; \
+}
+
+U64 decode_rle(File *in, U64 size, File *out, FMode mode, U64 &diffFound) {
+  U8 inBuffer[0x10000]={0};
+  U8 outBuffer[0x10200]={0};
+  U64 pos = 0;
+  int maxBlockSize = (int)in->getVLI();
+  enum { BASE, LITERAL, RUN, LITERAL_RUN } state;
+  do {
+    U64 remaining = in->blockread(&inBuffer[0], maxBlockSize);
+    U8 *inPtr = (U8*)inBuffer;
+    U8 *outPtr= (U8*)outBuffer;
+    U8 *lastLiteral = nullptr;
+    state = BASE;
+    while (remaining>0){
+      U8 byte = *inPtr++, loop = 0;
+      int run = 1;
+      for (remaining--; remaining>0 && byte==*inPtr; remaining--, run++, inPtr++);
+      do {
+        loop = 0;
+        switch (state) {
+          case BASE: case RUN: {
+            if (run>1) {
+              state = RUN;
+              rleOutputRun;
+            }
+            else {
+              lastLiteral = outPtr;
+              *outPtr++ = 0, *outPtr++ = byte;
+              state = LITERAL;
+            }
+            break;
+          }
+          case LITERAL: {
+            if (run>1) {
+              state = LITERAL_RUN;
+              rleOutputRun;
+            }
+            else {
+              if (++(*lastLiteral)==127)
+                state = BASE;
+              *outPtr++ = byte;
+            }
+            break;
+          }
+          case LITERAL_RUN: {
+            if (outPtr[-2]==0x81 && *lastLiteral<(125)) {
+              state = (((*lastLiteral)+=2)==127)?BASE:LITERAL;
+              outPtr[-2] = outPtr[-1];
+            }
+            else
+              state = RUN;
+            loop = 1;
+          }
+        }
+      } while (loop);
+    }
+
+    U64 length = outPtr-(U8*)(&outBuffer[0]);
+    if (mode==FDECOMPRESS)
+      out->blockwrite(&outBuffer[0], length);
+    else if (mode==FCOMPARE) {
+      for (int j=0; j<(int)length; ++j) {
+        if (outBuffer[j]!=out->getchar() && !diffFound) {
+          diffFound = pos+j+1;
+          break; 
+        }
+      }
+    }
+    pos+=length;
+  } while (!in->eof() && !diffFound);
+  return pos;
 }
 
 // EXE transform: <encoded-size> <begin> <block>...
@@ -11652,6 +11833,7 @@ U64 decode_func(Blocktype type, Encoder &en, File *tmp, U64 len, int info, File 
   #endif //USE_ZLIB
   else if (type==BASE64) return decode_base64(tmp, out, mode, diffFound);
   else if (type==GIF) return decode_gif(tmp, len, out, mode, diffFound);
+  else if (type==RLE) return decode_rle(tmp, len, out, mode, diffFound);
   else assert(false);
   return 0;
 }
@@ -11667,6 +11849,7 @@ U64 encode_func(Blocktype type, File *in, File *tmp, U64 len, int info, int &hdr
   #endif //USE_ZLIB
   else if (type==BASE64) encode_base64(in, tmp, len);
   else if (type==GIF) return encode_gif(in, tmp, len, hdrsize)?0:1;
+  else if (type==RLE) encode_rle(in, tmp, len, info, hdrsize);
   else assert(false);
   return 0;
 }
@@ -11719,8 +11902,8 @@ void transform_encode_block(Blocktype type, File *in, U64 len, Encoder &en, int 
 }
 
 void compressRecursive(File *in, const U64 blocksize, Encoder &en, String &blstr, int recursion_level, float p1, float p2) {
-  static const char* typenames[22]={"default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
-    "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif", "png-8b", "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol"};
+  static const char* typenames[23]={"default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
+    "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif", "png-8b", "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol", "rle"};
   static const char* audiotypes[4]={"8b-mono", "8b-stereo", "16b-mono","16b-stereo"};
   Blocktype type=DEFAULT;
   int blnum=0, info=0;  // image width or audio type
