@@ -1409,3 +1409,9 @@ paq8px_v174
  - 24/32bpp images
 - Slightly improved recordModel
 - New RLE transform, currently used only on 8bpp Targa images
+
+
+paq8px_v175
+2019.01.08
+- New linearPredictionModel
+- Bug fix in Targa image detection
