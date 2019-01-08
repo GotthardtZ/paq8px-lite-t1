@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "174"  //update version here before publishing your changes
+#define PROGVERSION  "175"  //update version here before publishing your changes
 #define PROGYEAR     "2019"
 
 
@@ -2770,7 +2770,7 @@ class OLS {
   static constexpr F ftol = 1E-8;
   static constexpr F sub = F(int64_t(!hasZeroMean)<<(8*sizeof(T)-1));
 private:
-  int n, kmax, km/*, index*/;
+  int n, kmax, km, index;
   F lambda, nu;
   F *x, *w, *b;
   F **mCovariance, **mCholesky;
@@ -2816,7 +2816,7 @@ private:
   }
 public:
   OLS(int n, int kmax=1, F lambda=0.998, F nu=0.001) : n(n), kmax(kmax), lambda(lambda), nu(nu) {
-    km = /*index =*/ 0;
+    km = index = 0;
     x = new F[n], w = new F[n], b = new F[n];
     mCovariance = new F*[n], mCholesky = new F*[n];
     for (int i=0; i<n; i++) {
@@ -2834,10 +2834,10 @@ public:
     }
     delete[] mCovariance, delete[] mCholesky;
   }
-/*void Add(const T val) {
+  void Add(const T val) {
     if (index<n)
       x[index++] = F(val)-sub;
-  }*/
+  }
   F Predict(const T **p) {
     F sum = 0.;
     for (int i=0; i<n; i++)
@@ -2845,8 +2845,8 @@ public:
     return sum+sub;
   }
   F Predict() {
-    //assert(index==n);
-    //index = 0;
+    assert(index==n);
+    index = 0;
     F sum = 0.;
     for (int i=0; i<n; i++)
       sum += w[i] * x[i];
@@ -5766,7 +5766,7 @@ void recordModel(Mixer& m, ModelStats *Stats) {
   cp.mix(m);
   for (int i=0;i<nMaps;i++)
     Maps[i].mix(m, 1, 3);
-  for (int i=0;i<3;i++)
+  for (int i=0; i<3; i++)
     iMap[i].mix(m, 1, 3, 255);
   sMap[0].mix(m, 6, 1, 3);
   sMap[1].mix(m, 6, 1, 3);
@@ -5780,6 +5780,33 @@ void recordModel(Mixer& m, ModelStats *Stats) {
   Stats->Record = min(0xFFFF,col);
 }
 
+void linearPredictionModel(Mixer& m) {
+  static const int nOLS=3, nLnrPrd=nOLS+2;
+  static SmallStationaryContextMap sMap[nLnrPrd]{ {11,1},{11,1},{11,1},{11,1},{11,1} };
+  static OLS<double, U8> ols[nOLS]{ {32, 4, 0.995}, {32, 4, 0.995}, {32, 4, 0.995} };
+  static U8 prd[nLnrPrd]{ 0 };
+
+  if (bpos==0) {
+    const U8 W=buf(1), WW=buf(2), WWW=buf(3);
+    int i=0;
+    for (; i<nOLS; i++)
+      ols[i].Update(W);
+    for (i=1; i<=32; i++) {
+      ols[0].Add(buf(i));
+      ols[1].Add(buf(i*2-1));
+      ols[2].Add(buf(i*2));
+    }
+    for (i=0; i<nOLS; i++)
+      prd[i]=Clip(floor(ols[i].Predict()));
+    prd[i++]=Clip(W*2-WW);
+    prd[i  ]=Clip(W*3-WW*3+WWW);
+  }
+  const U8 B=c0<<(8-bpos);
+  for (int i=0; i<nLnrPrd; i++) {
+    sMap[i].set((prd[i]-B)*8+bpos);
+    sMap[i].mix(m, 6, 1, 2);
+  }
+}
 
 //////////////////////////// sparseModel ///////////////////////
 
@@ -9499,9 +9526,9 @@ public:
 
     next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0), bytesread(0), readsize(false), Bypass(false) {
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(1238, 4160+(1888/*recordModel*/+27648/*exeModel*/+28672/*textModel*/+8448/*sparseMatchModel*/), 27);
+      m=MixerFactory::CreateMixer(1248, 4160+(1888/*recordModel*/+27648/*exeModel*/+28672/*textModel*/+8448/*sparseMatchModel*/), 27);
     #else
-      m=MixerFactory::CreateMixer( 993, 4160+(1888/*recordModel*/+27648/*exeModel*/+28672/*textModel*/+8448/*sparseMatchModel*/), 27);
+      m=MixerFactory::CreateMixer( 1003, 4160+(1888/*recordModel*/+27648/*exeModel*/+28672/*textModel*/+8448/*sparseMatchModel*/), 27);
     #endif //USE_WORD_MODEL
     }
 
@@ -9580,6 +9607,7 @@ int ContextModel::Predict(ModelStats *Stats){
   #ifdef USE_WAVMODEL
   if (blocktype==AUDIO) {
     recordModel(*m, Stats);
+    if ((blockinfo&2)==0) linearPredictionModel(*m);
     return wavModel(*m, blockinfo, Stats), m->p(0,1);
   }
   #endif //USE_WAVMODEL
@@ -9620,8 +9648,10 @@ int ContextModel::Predict(ModelStats *Stats){
     #ifdef USE_TEXTMODEL
     textModel.Predict(*m, buf, Stats);
     #endif //USE_TEXTMODEL
-    if (blocktype!=TEXT && blocktype!=TEXT_EOL)
+    if (blocktype!=TEXT && blocktype!=TEXT_EOL){
+      linearPredictionModel(*m);
       exeModel.Predict(*m, blocktype==EXE, Stats);
+    }
   }
 
   int pr=m->p(1,1);
@@ -10332,7 +10362,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
       }
       if (ret) {
         // Verify valid stream and determine stream length
-        U64 savedpos=in->curpos();
+        const U64 savedpos=in->curpos();
         strm.zalloc=Z_NULL; strm.zfree=Z_NULL; strm.opaque=Z_NULL;
         strm.next_in=Z_NULL; strm.avail_in=0; strm.total_in=strm.total_out=0;
         if (zlib_inflateInit(&strm,zh)==Z_OK) {
@@ -10398,7 +10428,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
       if (p==8 && (buf1!=0xffffff00 || ((buf0&0xff)!=1 && (buf0&0xff)!=2))) cdi=0;
       else if (p==16 && i+2336<n) {
         U8 data[2352];
-        U64 savedpos=in->curpos();
+        const U64 savedpos=in->curpos();
         in->setpos(start+i-23);
         in->blockread(data, 2352);
         in->setpos(savedpos);
@@ -10497,7 +10527,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
     // Detect .mod file header
     if ((buf0==0x4d2e4b2e || buf0==0x3643484e || buf0==0x3843484e  // M.K. 6CHN 8CHN
        || buf0==0x464c5434 || buf0==0x464c5438) && (buf1&0xc0c0c0c0)==0 && i>=1083) {
-      U64 savedpos=in->curpos();
+      const U64 savedpos=in->curpos();
       const int chn=((buf0>>24)==0x36?6:(((buf0>>24)==0x38 || (buf0&0xff)==0x38)?8:4));
       int len=0; // total length of samples
       int numpat=1; // number of patterns
@@ -10523,7 +10553,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
       if (p==4) s3mno=bswap(buf0)&0xffff,s3mni=(bswap(buf0)>>16);
       else if (p==16 && (((buf1>>16)&0xff)!=0x13 || buf0!=0x5343524d)) s3mi=0;
       else if (p==16) {
-        U64 savedpos=in->curpos();
+        const U64 savedpos=in->curpos();
         int b[31],sam_start=(1<<16),sam_end=0,ok=1;
         for (int j=0;j<s3mni;j++) {
           in->setpos(start+s3mi-31+0x60+s3mno+j*2);
@@ -10667,7 +10697,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
 
     // Detect .tiff file header (2/8/24 bit color, not compressed).
     if (buf1==0x49492a00 && n>i+(int)bswap(buf0)) {
-      U64 savedpos=in->curpos();
+      const U64 savedpos=in->curpos();
       in->setpos(start+i+ (U64)bswap(buf0)-7);
 
       // read directory
@@ -10715,7 +10745,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
       else if (i-tga==10) {
         if ((buf0&0xFFF7)==32<<8)
           tgaz=32;
-        if ((tgaz<<8)==(int)(buf0&0xFFD7) && tgax && tgay) {
+        if ((tgaz<<8)==(int)(buf0&0xFFD7) && tgax && tgay && U32(tgax*tgay)<0xFFFFFFF) {
           if (tgat==1){
             in->setpos(start+tga+11+tgaid);
             IMG_DET( (IsGrayscalePalette(in))?IMAGE8GRAY:IMAGE8,tga-7,18+tgaid+256*tgamap,tgax,tgay);
@@ -10723,6 +10753,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
           else if (tgat==2) IMG_DET((tgaz==24)?IMAGE24:IMAGE32,tga-7,18+tgaid,tgax*(tgaz>>3),tgay);
           else if (tgat==3) IMG_DET(IMAGE8GRAY,tga-7,18+tgaid,tgax,tgay);
           else if (tgat==9 || tgat==11) {
+            const U64 savedpos=in->curpos();
             in->setpos(start+tga+11+tgaid);
             if (tgat==9) {
               info=(IsGrayscalePalette(in)?IMAGE8GRAY:IMAGE8)<<24;
@@ -10747,12 +10778,14 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
                 c=in->getchar();
               }
               if (line>tgax) break;
-              else line%=tgax;
+              else if (line==tgax) line=0;
             }
             if (total==0) {
               in->setpos(start+tga+11+tgaid+256*tgamap);
               return dett=RLE;
             }
+            else
+              in->setpos(savedpos);
           }
         }
         tga=0;
