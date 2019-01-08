@@ -8492,7 +8492,7 @@ public:
 
 void ExeModel::Train() {
   FileDisk f;
-  printf("Pre-training x86/x64 model...");
+  printf("Pre-training x86/x64 model...", fflush(stdout));
   OpenFromMyFolder::myself(&f);
   int i=0;
   do {
@@ -8502,7 +8502,7 @@ void ExeModel::Train() {
     buf[pos++]=i;
     blpos++;
   } while ((i=f.getchar())!=EOF);
-  printf(" done [%d bytes]\n",pos-1);
+  printf(" done [%d bytes]\n",pos-1, fflush(stdout));
   f.close();
   pos=blpos=0;
   memset(&buf[0], 0, buf.size());
@@ -9440,7 +9440,7 @@ class normalModel {
 
   void Train(const char* Dictionary, int Iterations) {
     FileDisk f;
-    printf("Pre-training main model...");
+    printf("Pre-training main model...", fflush(stdout));
     OpenFromMyFolder::anotherfile(&f, Dictionary);
     int i;
     while (Iterations-->0) {
@@ -9458,7 +9458,7 @@ class normalModel {
         update_contexts(i);
       } while ((i=f.getchar())!=EOF);
     }
-    printf(" done [%s, %d bytes]\n", Dictionary, pos);
+    printf(" done [%s, %d bytes]\n", Dictionary, pos, fflush(stdout));
     f.close();
     pos = 0;
     memset(&buf[0], 0, buf.size());
@@ -11840,7 +11840,7 @@ void direct_encode_block(Blocktype type, File *in, U64 len, Encoder &en, int inf
     en.compress((info>>8)&0xFF);
     en.compress((info)&0xFF);
   }
-  printf("Compressing...\n");
+  printf("Compressing...\n", fflush(stdout));
   for (U64 j=0; j<len; ++j) {
     if ((j&0xfff)==0) en.print_status(j, len);
     en.compress(in->getchar());
@@ -11922,6 +11922,7 @@ void transform_encode_block(Blocktype type, File *in, U64 len, Encoder &en, int 
         direct_encode_block(type, &tmp, tmpsize, en, hasInfo(type)?info:-1);
       }
     }
+	fflush(stdout);
     tmp.close();
   } else {
     direct_encode_block(type, in, len, en, hasInfo(type)?info:-1);
@@ -12005,6 +12006,7 @@ void compressRecursive(File *in, const U64 blocksize, Encoder &en, String &blstr
       else if (hasRecursion(type) && (info>>24)!=DEFAULT) printf(" (%s)",typenames[info>>24]);
       else if (type==CD) printf(" (mode%d/form%d)", info==1?1:2, info!=3?1:2);
       printf("\n");
+	  fflush(stdout);
       transform_encode_block(type, in, len, en, info, blstr_sub, recursion_level, p1, p2, begin);
       p1=p2;
       bytes_to_go-=len;
@@ -12028,7 +12030,7 @@ void compressfile(const char* filename, U64 filesize, Encoder& en, bool verbose)
 
   FileDisk in;
   in.open(filename, true);
-  printf("Block segmentation:\n");
+  printf("Block segmentation:\n", fflush(stdout));
   String blstr;
   compressRecursive(&in, filesize, en, blstr, 0, 0.0f, 1.0f);
   in.close();
@@ -12038,6 +12040,7 @@ void compressfile(const char* filename, U64 filesize, Encoder& en, bool verbose)
     printf("File size to encode   : 4\n"); //This string must be long enough. "Compressing ..." is still on screen, we need to overwrite it.
     printf("File input size       : %" PRIu64 "\n",filesize);
     printf("File compressed size  : %" PRIu64 "\n",en.size()-start);
+	fflush(stdout);
   }
 }
 
@@ -12098,13 +12101,14 @@ void decompressfile(const char* filename, FMode fmode, Encoder& en) {
     printf("Extracting");
   }
   printf(" %s %" PRIu64 " bytes -> ", filename, filesize);
-
+  fflush(stdout);
   // Decompress/Compare
   U64 r=decompressRecursive(&f, filesize, en, fmode, 0);
   if (fmode==FCOMPARE && !r && f.getchar()!=EOF) printf("file is longer\n");
   else if (fmode==FCOMPARE && r) printf("differ at %" PRIu64 "\n",r-1);
   else if (fmode==FCOMPARE) printf("identical\n");
   else printf("done   \n");
+  fflush(stdout);
   f.close();
 }
 
