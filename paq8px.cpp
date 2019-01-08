@@ -901,7 +901,6 @@ static bool isoutputdirected()
   return !isatty(fileno(stdout));
 #endif
 }
-static bool to_screen=!isoutputdirected();
 
 //////////////////////////// rnd ///////////////////////////////
 
@@ -9884,12 +9883,10 @@ public:
 
   void set_status_range(float perc1, float perc2) { p1=perc1; p2=perc2; }
   void print_status(U64 n, U64 size) {
-    if (to_screen)
-      printf("%6.2f%%\b\b\b\b\b\b\b", (p1+(p2-p1)*n/(size+1))*100), fflush(stdout);
+    printf("%6.2f%%\n", (p1+(p2-p1)*n/(size+1))*100), fflush(stdout);
   }
   void print_status() {
-    if (to_screen)
-      printf("%6.2f%%\b\b\b\b\b\b\b", float(size())/(p2+1)*100), fflush(stdout);
+      printf("%6.2f%%\n", float(size())/(p2+1)*100), fflush(stdout);
   }
 };
 
@@ -11810,14 +11807,11 @@ void direct_encode_block(Blocktype type, File *in, U64 len, Encoder &en, int inf
     en.compress((info>>8)&0xFF);
     en.compress((info)&0xFF);
   }
-  if (to_screen)
-    printf("Compressing... ");
+  printf("Compressing...\n");
   for (U64 j=0; j<len; ++j) {
     if ((j&0xfff)==0) en.print_status(j, len);
     en.compress(in->getchar());
   }
-  if (to_screen)
-    printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
 }
 
 void compressRecursive(File *in, U64 blocksize, Encoder &en, String &blstr, int recursion_level, float p1, float p2);
