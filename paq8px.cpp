@@ -9913,10 +9913,10 @@ public:
 
   void set_status_range(float perc1, float perc2) { p1=perc1; p2=perc2; }
   void print_status(U64 n, U64 size) {
-    printf("%6.2f%%\n", (p1+(p2-p1)*n/(size+1))*100), fflush(stdout);
+    printf("\r%6.2f%%", (p1+(p2-p1)*n/(size+1))*100), fflush(stdout);
   }
   void print_status() {
-      printf("%6.2f%%\n", float(size())/(p2+1)*100), fflush(stdout);
+      printf("\r%6.2f%%", float(size())/(p2+1)*100), fflush(stdout);
   }
 };
 
@@ -12000,7 +12000,7 @@ void compressRecursive(File *in, const U64 blocksize, Encoder &en, String &blstr
       blstr_sub+=U64(blnum);
       blnum++;
 
-      printf(" %-11s | %-16s |%10" PRIu64 " bytes [%" PRIu64 " - %" PRIu64 "]",blstr_sub.c_str(),typenames[(type==ZLIB && isPNG(Blocktype(info>>24)))?info>>24:type],len,begin,nextblock_start-1);
+      printf("\n %-11s | %-16s |%10" PRIu64 " bytes [%" PRIu64 " - %" PRIu64 "]",blstr_sub.c_str(),typenames[(type==ZLIB && isPNG(Blocktype(info>>24)))?info>>24:type],len,begin,nextblock_start-1);
       if (type==AUDIO) printf(" (%s)", audiotypes[info%4]);
       else if (type==IMAGE1 || type==IMAGE4 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32 || (type==ZLIB && isPNG(Blocktype(info>>24)))) printf(" (width: %d)", (type==ZLIB)?(info&0xFFFFFF):info);
       else if (hasRecursion(type) && (info>>24)!=DEFAULT) printf(" (%s)",typenames[info>>24]);
