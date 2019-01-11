@@ -1415,3 +1415,8 @@ paq8px_v175
 2019.01.08
 - New linearPredictionModel
 - Bug fix in Targa image detection
+
+
+paq8px_v176
+2019.01.11
+- New audio8bModel, for 8bps mono and stereo
