@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "175"  //update version here before publishing your changes
+#define PROGVERSION  "176"  //update version here before publishing your changes
 #define PROGYEAR     "2019"
 
 
@@ -2837,6 +2837,10 @@ public:
   void Add(const T val) {
     if (index<n)
       x[index++] = F(val)-sub;
+  }
+  void AddFloat(const F val) {
+    if (index<n)
+      x[index++] = val-sub;
   }
   F Predict(const T **p) {
     F sum = 0.;
@@ -7636,6 +7640,116 @@ inline int X2(int i) {
   }
 }
 
+inline int signedClip8(const int i) {
+  return max(-128, min(127, i));
+}
+
+void audio8bModel(Mixer& m, int info, ModelStats *Stats) {
+  static const int nOLS=8, nLnrPrd=nOLS+3;
+  static SmallStationaryContextMap sMap1b[nLnrPrd][3]{
+    {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}},
+    {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}},
+    {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}}
+  };
+  static OLS<double, int8_t> ols[nOLS][2]{
+    {{128, 24, 0.9975}, {128, 24, 0.9975}},
+    {{90, 32, 0.9965}, {90, 32, 0.9965}},
+    {{90, 32, 0.996}, {90, 32, 0.996}},
+    {{90, 32, 0.995}, {90, 32, 0.995}},
+    {{90, 32, 0.995}, {90, 32, 0.995}},
+    {{90, 32, 0.9985}, {90, 32, 0.9985}},
+    {{28, 4, 0.98}, {28, 4, 0.98}},
+    {{28, 4, 0.992}, {28, 4, 0.992}}
+  };
+  static int prd[nLnrPrd][2][2]{ 0 }, residuals[nLnrPrd][2]{ 0 };
+  static int stereo=0, ch=0;
+  static U32 mask=0, errLog=0, mxCtx=0;
+
+  const int8_t B = c0<<(8-bpos);
+  if (bpos==0) {
+    if (blpos==0) {
+      assert((info&2)==0);
+      stereo = (info&1);
+      mask = 0;
+      Stats->Wav = stereo+1;
+      wmode=info;
+    }
+    ch=(stereo)?blpos&1:0;
+    const int8_t s = int(((info&4)>0)?buf(1)^128:buf(1))-128;
+    const int pCh = ch^stereo;
+    int i = 0;
+    for (errLog=0; i<nOLS; i++) {
+      ols[i][pCh].Update(s);
+      residuals[i][pCh] = s-prd[i][pCh][0];
+      const U32 absResidual = (U32)abs(residuals[i][pCh]);
+      mask+=mask+(absResidual>4);
+      errLog+=SQR(absResidual);
+    }
+    for (; i<nLnrPrd; i++)
+      residuals[i][pCh] = s-prd[i][pCh][0];
+    errLog = min(0xF, ilog2(errLog));
+    mxCtx = ilog2(min(0x1F, BitCount(mask)))*2+ch;
+
+    int k1=90, k2=k1-12*stereo;
+    for (int j=(i=1); j<=k1; j++, i+=1<<((j>8)+(j>16)+(j>64))) ols[1][ch].Add(X1(i));
+    for (int j=(i=1); j<=k2; j++, i+=1<<((j>5)+(j>10)+(j>17)+(j>26)+(j>37))) ols[2][ch].Add(X1(i));
+    for (int j=(i=1); j<=k2; j++, i+=1<<((j>3)+(j>7)+(j>14)+(j>20)+(j>33)+(j>49))) ols[3][ch].Add(X1(i));
+    for (int j=(i=1); j<=k2; j++, i+=1+(j>4)+(j>8)) ols[4][ch].Add(X1(i));
+    for (int j=(i=1); j<=k1; j++, i+=2+((j>3)+(j>9)+(j>19)+(j>36)+(j>61))) ols[5][ch].Add(X1(i));
+    if (stereo) {
+      for (i=1; i<=k1-k2; i++) {
+        const double s = (double)X2(i);
+        ols[2][ch].AddFloat(s);
+        ols[3][ch].AddFloat(s);
+        ols[4][ch].AddFloat(s);
+      }
+    }
+    k1=28, k2=k1-6*stereo;
+    for (i=1; i<=k2; i++) {
+      const double s = (double)X1(i);
+      ols[0][ch].AddFloat(s);
+      ols[6][ch].AddFloat(s);
+      ols[7][ch].AddFloat(s);
+    }
+    for (; i<=96; i++) ols[0][ch].Add(X1(i));
+    if (stereo) {
+      for (i=1; i<=k1-k2; i++) {
+        const double s = (double)X2(i);
+        ols[0][ch].AddFloat(s);
+        ols[6][ch].AddFloat(s);
+        ols[7][ch].AddFloat(s);
+      }
+      for (; i<=32; i++) ols[0][ch].Add(X2(i));
+    }
+    else
+      for (; i<=128; i++) ols[0][ch].Add(X1(i));
+
+    for (i=0; i<nOLS; i++) {
+      prd[i][ch][0] = signedClip8(floor(ols[i][ch].Predict()));
+      prd[i][ch][1] = signedClip8(prd[i][ch][0]+residuals[i][pCh]);
+    }
+    prd[i++][ch][0] = signedClip8(X1(1)*2-X1(2));
+    prd[i++][ch][0] = signedClip8(X1(1)*3-X1(2)*3+X1(3));
+    prd[i  ][ch][0] = signedClip8(X1(1)*4-X1(2)*6+X1(3)*4-X1(4));
+    for (i=nOLS; i<nLnrPrd; i++)
+      prd[i][ch][1] = signedClip8(prd[i][ch][0]+residuals[i][pCh]);
+  }
+  for (int i=0; i<nLnrPrd; i++) {
+    const U32 ctx = (prd[i][ch][0]-B)*8+bpos;
+    sMap1b[i][0].set(ctx);
+    sMap1b[i][1].set(ctx);
+    sMap1b[i][2].set((prd[i][ch][1]-B)*8+bpos);
+    sMap1b[i][0].mix(m, 6, 1, 2<<(i>=nOLS));
+    sMap1b[i][1].mix(m, 9, 1, 2<<(i>=nOLS));
+    sMap1b[i][2].mix(m);
+  }
+  m.set((errLog<<8)|c0, 4096);
+  m.set((U8(mask)<<3)|(ch<<2)|(bpos>>1), 2048);
+  m.set((mxCtx<<7)|(buf(1)>>1), 1280);
+  m.set((errLog<<4)|(ch<<3)|bpos, 256);
+  m.set(mxCtx, 10);
+}
+
 #define pr_(i,chn)(pr[2*(i)+chn])
 #define F_(k,l,chn)(F[2*(49*(k)+l)+chn])
 #define L_(i,k)(L[49*(i)+k])
@@ -9607,8 +9721,8 @@ int ContextModel::Predict(ModelStats *Stats){
   #ifdef USE_WAVMODEL
   if (blocktype==AUDIO) {
     recordModel(*m, Stats);
-    if ((blockinfo&2)==0) linearPredictionModel(*m);
-    return wavModel(*m, blockinfo, Stats), m->p(0,1);
+    if ((blockinfo&2)==0) return audio8bModel(*m, blockinfo, Stats), m->p(1,0);
+    else return wavModel(*m, blockinfo, Stats), m->p(0,1);
   }
   #endif //USE_WAVMODEL
   if ((blocktype==JPEG || blocktype==HDR)) {
