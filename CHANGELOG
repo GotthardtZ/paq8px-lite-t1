@@ -1420,3 +1420,9 @@ paq8px_v175
 paq8px_v176
 2019.01.11
 - New audio8bModel, for 8bps mono and stereo
+
+
+paq8px_v177
+2019.01.12
+- New LZW transform for Tiff images
+- Slightly tweaked audio8bModel

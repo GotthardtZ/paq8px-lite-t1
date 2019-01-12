@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "176"  //update version here before publishing your changes
+#define PROGVERSION  "177"  //update version here before publishing your changes
 #define PROGYEAR     "2019"
 
 
@@ -963,11 +963,11 @@ public:
 
 /////////////////////// Global context /////////////////////////
 
-typedef enum {DEFAULT=0, FILECONTAINER, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF, PNG8, PNG8GRAY, PNG24, PNG32, TEXT, TEXT_EOL, RLE} Blocktype;
+typedef enum {DEFAULT=0, FILECONTAINER, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF, PNG8, PNG8GRAY, PNG24, PNG32, TEXT, TEXT_EOL, RLE, LZW} Blocktype;
 
-inline bool hasRecursion(Blocktype ft) { return ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft==RLE || ft== FILECONTAINER; }
+inline bool hasRecursion(Blocktype ft) { return ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft==RLE || ft==LZW || ft== FILECONTAINER; }
 inline bool hasInfo(Blocktype ft) { return ft==IMAGE1 || ft==IMAGE4 || ft==IMAGE8 || ft==IMAGE8GRAY || ft==IMAGE24 || ft==IMAGE32 || ft==AUDIO || ft==PNG8 || ft==PNG8GRAY || ft==PNG24 || ft==PNG32; }
-inline bool hasTransform(Blocktype ft) { return ft==IMAGE24 || ft==IMAGE32 || ft==EXE || ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft==TEXT_EOL || ft==RLE; }
+inline bool hasTransform(Blocktype ft) { return ft==IMAGE24 || ft==IMAGE32 || ft==EXE || ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft==TEXT_EOL || ft==RLE || ft==LZW; }
 inline bool isPNG(Blocktype ft) { return ft==PNG8 || ft==PNG8GRAY || ft==PNG24 || ft==PNG32; }
 
 int level=0; //this value will be overwritten at the beginning of compression/decompression
@@ -1014,6 +1014,8 @@ struct ModelStats{
 
   //wavModel
   U32 Wav;           //used by recordModel
+
+  U8 Audio;
 
   //jpegModel
   //sparseModel
@@ -7652,13 +7654,13 @@ void audio8bModel(Mixer& m, int info, ModelStats *Stats) {
   };
   static OLS<double, int8_t> ols[nOLS][2]{
     {{128, 24, 0.9975}, {128, 24, 0.9975}},
-    {{90, 32, 0.9965}, {90, 32, 0.9965}},
-    {{90, 32, 0.996}, {90, 32, 0.996}},
+    {{90, 30, 0.9965}, {90, 30, 0.9965}},
+    {{90, 31, 0.996}, {90, 31, 0.996}},
     {{90, 32, 0.995}, {90, 32, 0.995}},
-    {{90, 32, 0.995}, {90, 32, 0.995}},
-    {{90, 32, 0.9985}, {90, 32, 0.9985}},
+    {{90, 33, 0.995}, {90, 33, 0.995}},
+    {{90, 34, 0.9985}, {90, 34, 0.9985}},
     {{28, 4, 0.98}, {28, 4, 0.98}},
-    {{28, 4, 0.992}, {28, 4, 0.992}}
+    {{28, 3, 0.992}, {28, 3, 0.992}}
   };
   static int prd[nLnrPrd][2][2]{ 0 }, residuals[nLnrPrd][2]{ 0 };
   static int stereo=0, ch=0;
@@ -7687,7 +7689,7 @@ void audio8bModel(Mixer& m, int info, ModelStats *Stats) {
     for (; i<nLnrPrd; i++)
       residuals[i][pCh] = s-prd[i][pCh][0];
     errLog = min(0xF, ilog2(errLog));
-    mxCtx = ilog2(min(0x1F, BitCount(mask)))*2+ch;
+    Stats->Audio = mxCtx = ilog2(min(0x1F, BitCount(mask)))*2+ch;
 
     int k1=90, k2=k1-12*stereo;
     for (int j=(i=1); j<=k1; j++, i+=1<<((j>8)+(j>16)+(j>64))) ols[1][ch].Add(X1(i));
@@ -7738,9 +7740,9 @@ void audio8bModel(Mixer& m, int info, ModelStats *Stats) {
     sMap1b[i][0].set(ctx);
     sMap1b[i][1].set(ctx);
     sMap1b[i][2].set((prd[i][ch][1]-B)*8+bpos);
-    sMap1b[i][0].mix(m, 6, 1, 2<<(i>=nOLS));
-    sMap1b[i][1].mix(m, 9, 1, 2<<(i>=nOLS));
-    sMap1b[i][2].mix(m);
+    sMap1b[i][0].mix(m, 6, 1, 2+(i>=nOLS));
+    sMap1b[i][1].mix(m, 9, 1, 2+(i>=nOLS));
+    sMap1b[i][2].mix(m, 7, 1, 3);
   }
   m.set((errLog<<8)|c0, 4096);
   m.set((U8(mask)<<3)|(ch<<2)|(bpos>>1), 2048);
@@ -9720,7 +9722,7 @@ int ContextModel::Predict(ModelStats *Stats){
   #ifdef USE_WAVMODEL
   if (blocktype==AUDIO) {
     recordModel(*m, Stats);
-    if ((blockinfo&2)==0) return audio8bModel(*m, blockinfo, Stats), m->p(1,0);
+    if ((blockinfo&2)==0) return audio8bModel(*m, blockinfo, Stats), m->p(1,1);
     else return wavModel(*m, blockinfo, Stats), m->p(0,1);
   }
   #endif //USE_WAVMODEL
@@ -10813,7 +10815,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
 
       // read directory
       int dirsize=in->getchar();
-      int tifx=0,tify=0,tifz=0,tifzb=0,tifc=0,tifofs=0,tifofval=0,b[12];
+      int tifx=0,tify=0,tifz=0,tifzb=0,tifc=0,tifofs=0,tifofval=0,tifsize=0,b[12];
       if (in->getchar()==0) {
         for (int i=0; i<dirsize; i++) {
           for (int j=0; j<12; j++) b[j]=in->getchar();
@@ -10829,19 +10831,30 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
             else if (tag==259) tifc=tagval; // 1 = no compression
             else if (tag==273 && tagfmt==4) tifofs=tagval,tifofval=(taglen<=1);
             else if (tag==277) tifz=tagval; // components per pixel
+            else if (tag==279 && taglen==1) tifsize=tagval;
           }
         }
       }
-      if (tifx && tify && tifzb && (tifz==1 || tifz==3) && (tifc==1) && (tifofs && tifofs+i<n)) {
+      if (tifx && tify && tifzb && (tifz==1 || tifz==3) && ((tifc==1) || (tifc==5/*LZW*/ && tifsize>0)) && (tifofs && tifofs+i<n)) {
         if (!tifofval) {
           in->setpos(start+i+tifofs-7);
           for (int j=0; j<4; j++) b[j]=in->getchar();
           tifofs=b[0]+(b[1]<<8)+(b[2]<<16)+(b[3]<<24);
         }
         if (tifofs && tifofs<(1<<18) && tifofs+i<n) {
-          if (tifz==1 && tifzb==1) IMG_DET(IMAGE1,i-7,tifofs,((tifx-1)>>3)+1,tify);
-          else if (tifz==1 && tifzb==8) IMG_DET(IMAGE8,i-7,tifofs,tifx,tify);
-          else if (tifz==3 && tifzb==8) IMG_DET(IMAGE24,i-7,tifofs,tifx*3,tify);
+          if (tifc==1) {
+            if (tifz==1 && tifzb==1) IMG_DET(IMAGE1,i-7,tifofs,((tifx-1)>>3)+1,tify);
+            else if (tifz==1 && tifzb==8) IMG_DET(IMAGE8,i-7,tifofs,tifx,tify);
+            else if (tifz==3 && tifzb==8) IMG_DET(IMAGE24,i-7,tifofs,tifx*3,tify);
+          }
+          else if (tifc==5 && tifsize>0) {
+            tifx=((tifx+8-tifzb)/(9-tifzb))*tifz;
+            info=tifz*tifzb;
+            info=(((info==1)?IMAGE1:((info==8)?IMAGE8:IMAGE24))<<24)|tifx;
+            detd=tifsize;
+            in->setpos(start+i-7+tifofs);
+            return dett=LZW;
+          }
         }
       }
       in->setpos(savedpos);
@@ -11371,6 +11384,151 @@ U64 decode_rle(File *in, U64 size, File *out, FMode mode, U64 &diffFound) {
     }
     pos+=length;
   } while (!in->eof() && !diffFound);
+  return pos;
+}
+
+struct LZWentry{
+  int16_t prefix;
+  int16_t suffix;
+};
+
+#define LZW_RESET_CODE 256
+#define LZW_EOF_CODE   257
+
+class LZWDictionary{
+private:
+  const static int32_t HashSize = 9221;
+  LZWentry dictionary[4096];
+  int16_t table[HashSize];
+  uint8_t buffer[4096];
+public:
+  int32_t index;
+  LZWDictionary(): index(0){ reset(); }
+  void reset(){
+    memset(&dictionary, 0xFF, sizeof(dictionary));
+    memset(&table, 0xFF, sizeof(table));
+    for (int32_t i=0; i<256; i++){
+      table[-findEntry(-1, i)-1] = (int16_t)i;
+      dictionary[i].suffix = i;
+    }
+    index = 258; //2 extra codes, one for resetting the dictionary and one for signaling EOF
+  }
+  int32_t findEntry(const int32_t prefix, const int32_t suffix){
+    int32_t i = finalize32(hash(prefix, suffix), 13);
+    int32_t offset = (i>0)?HashSize-i:1;
+    while (true){
+      if (table[i]<0) //free slot?
+        return -i-1;
+      else if (dictionary[table[i]].prefix==prefix && dictionary[table[i]].suffix==suffix) //is it the entry we want?
+        return table[i];
+      i-=offset;
+      if (i<0)
+        i+=HashSize;
+    }
+  }
+  void addEntry(const int32_t prefix, const int32_t suffix, const int32_t offset = -1){
+    if (prefix==-1 || prefix>=index || index>4095 || offset>=0)
+      return;
+    dictionary[index].prefix = prefix;
+    dictionary[index].suffix = suffix;
+    table[-offset-1] = index;
+    index+=(index<4096);
+  }
+  int32_t dumpEntry(File *f, int32_t code){
+    int32_t n = 4095;
+    while (code>256 && n>=0){
+      buffer[n] = uint8_t(dictionary[code].suffix);
+      n--;
+      code = dictionary[code].prefix;
+    }
+    buffer[n] = uint8_t(code);
+    f->blockwrite(&buffer[n], 4096-n);
+    return code;
+  }
+};
+
+int encode_lzw(File *in, File *out, U64 size, int &hdrsize) {
+  LZWDictionary dic;
+  int32_t parent=-1, code=0, buffer=0, bitsPerCode=9, bitsUsed=0;
+  bool done = false;
+  while (!done) {
+    buffer = in->getchar();
+    if (buffer<0) { return 0; }
+    for (int32_t j=0; j<8; j++ ) {
+      code+=code+((buffer>>(7-j))&1), bitsUsed++;
+      if (bitsUsed>=bitsPerCode) {
+        if (code==LZW_EOF_CODE){ done=true; break; }
+        else if (code==LZW_RESET_CODE){
+          dic.reset();
+          parent=-1; bitsPerCode=9;
+        }
+        else{
+          if (code<dic.index){
+            if (parent!=-1)
+              dic.addEntry(parent, dic.dumpEntry(out, code));
+            else
+              out->putchar(code);
+          }
+          else if (code==dic.index){
+            int32_t a = dic.dumpEntry(out, parent);
+            out->putchar(a);
+            dic.addEntry(parent,a);
+          }
+          else return 0;
+          parent = code;
+        }
+        bitsUsed=0; code=0;
+        if ((1<<bitsPerCode)==dic.index+1 && dic.index<4096)
+          bitsPerCode++;
+      }
+    }
+  }
+  return 1;
+}
+
+inline void writeCode(File *f, const FMode mode, int32_t *buffer, U64 *pos, int32_t *bitsUsed, const int32_t bitsPerCode, const int32_t code, U64 *diffFound){
+  *buffer<<=bitsPerCode; *buffer|=code;
+  (*bitsUsed)+=bitsPerCode;
+  while ((*bitsUsed)>7) {
+    const uint8_t B = *buffer>>(*bitsUsed-=8);
+    (*pos)++;
+    if (mode==FDECOMPRESS) f->putchar(B);
+    else if (mode==FCOMPARE && B!=f->getchar()) *diffFound=*pos;
+  }
+}
+
+U64 decode_lzw(File *in, U64 size, File *out, FMode mode, U64 &diffFound) {
+  LZWDictionary dic;
+  U64 pos=0;
+  int32_t parent=-1, code=0, buffer=0, bitsPerCode=9, bitsUsed=0;
+  writeCode(out, mode, &buffer, &pos, &bitsUsed, bitsPerCode, LZW_RESET_CODE, &diffFound);
+  while ((code=in->getchar())>=0 && diffFound==0) {
+    int32_t index = dic.findEntry(parent, code);
+    if (index<0){ // entry not found
+      writeCode(out, mode, &buffer, &pos, &bitsUsed, bitsPerCode, parent, &diffFound);
+      if (dic.index>4092){
+        writeCode(out, mode, &buffer, &pos, &bitsUsed, bitsPerCode, LZW_RESET_CODE, &diffFound);
+        dic.reset();
+        bitsPerCode = 9;
+      }
+      else{
+        dic.addEntry(parent, code, index);
+        if (dic.index>=(1<<bitsPerCode))
+          bitsPerCode++;
+      }
+      parent = code;
+    }
+    else
+      parent = index;
+  }
+  if (parent>=0)
+    writeCode(out, mode, &buffer, &pos, &bitsUsed, bitsPerCode, parent, &diffFound);
+  writeCode(out, mode, &buffer, &pos, &bitsUsed, bitsPerCode, LZW_EOF_CODE, &diffFound);
+  if (bitsUsed>0) { // flush buffer
+    pos++;
+    if (mode==FDECOMPRESS) out->putchar(uint8_t(buffer));
+    else if (mode==FCOMPARE && uint8_t(buffer)!=out->getchar()) diffFound=pos;
+  }
   return pos;
 }
 
@@ -11975,6 +12133,7 @@ U64 decode_func(Blocktype type, Encoder &en, File *tmp, U64 len, int info, File 
   else if (type==BASE64) return decode_base64(tmp, out, mode, diffFound);
   else if (type==GIF) return decode_gif(tmp, len, out, mode, diffFound);
   else if (type==RLE) return decode_rle(tmp, len, out, mode, diffFound);
+  else if (type==LZW) return decode_lzw(tmp, len, out, mode, diffFound);
   else assert(false);
   return 0;
 }
@@ -11991,6 +12150,7 @@ U64 encode_func(Blocktype type, File *in, File *tmp, U64 len, int info, int &hdr
   else if (type==BASE64) encode_base64(in, tmp, len);
   else if (type==GIF) return encode_gif(in, tmp, len, hdrsize)?0:1;
   else if (type==RLE) encode_rle(in, tmp, len, info, hdrsize);
+  else if (type==LZW) return encode_lzw(in, tmp, len, hdrsize)?0:1;
   else assert(false);
   return 0;
 }
@@ -12044,8 +12204,8 @@ void transform_encode_block(Blocktype type, File *in, U64 len, Encoder &en, int 
 }
 
 void compressRecursive(File *in, const U64 blocksize, Encoder &en, String &blstr, int recursion_level, float p1, float p2) {
-  static const char* typenames[23]={"default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
-    "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif", "png-8b", "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol", "rle"};
+  static const char* typenames[24]={"default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
+    "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif", "png-8b", "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol", "rle", "lzw"};
   static const char* audiotypes[4]={"8b-mono", "8b-stereo", "16b-mono","16b-stereo"};
   Blocktype type=DEFAULT;
   int blnum=0, info=0;  // image width or audio type
