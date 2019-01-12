@@ -10855,7 +10855,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
             info=tifz*tifzb;
             info=(((info==1)?IMAGE1:((info==8)?IMAGE8:IMAGE24))<<24)|tifx;
             detd=tifsize;
-            in->setpos(start+tifofs);
+            in->setpos(start+i-7+tifofs);
             return dett=LZW;
           }
         }
