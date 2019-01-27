@@ -1426,3 +1426,12 @@ paq8px_v177
 2019.01.12
 - New LZW transform for Tiff images
 - Slightly tweaked audio8bModel
+
+
+paq8px_v178
+2019.01.27
+- Slightly improved models:
+ - TextModel, now using word embeddings for english text
+ - 8bpp image model now predicts from previous frames (mostly for GIF images)
+ - jpegModel now also predicts from previous frames (MJPEG videos)
+ - exeModel
