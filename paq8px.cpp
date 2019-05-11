@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "178"  //update version here before publishing your changes
+#define PROGVERSION  "179"  //update version here before publishing your changes
 #define PROGYEAR     "2019"
 
 
@@ -933,7 +933,7 @@ int pos=0;  // Number of input bytes in buf (not wrapped), will be masked when u
 class Buf {
   Array<U8> b;
 public:
-  Buf(U64 size=0): b(size) {ispowerof2(size);}
+  Buf(U64 size=0): b(size) {assert(ispowerof2(size));}
   void setsize(U64 newsize) {
     if (newsize==0) return;
     assert(newsize>0 && ispowerof2(newsize));
@@ -947,6 +947,26 @@ public:
   }
   U64 size() const {
     return b.size();
+  }
+};
+
+template <class T> class RingBuffer {
+  Array<T> b;
+  U32 offset;
+public:
+  RingBuffer(const int size=0): b(size), offset(0) {assert(ispowerof2(size));}
+  void Fill(const T B) {
+    memset(&b[0], B, b.size());
+  }
+  void Add(const T B){
+    b[offset&(b.size()-1)] = B;
+    offset++;
+  }
+  T& operator[](const int i) {
+    return b[i&(b.size()-1)];
+  }
+  T operator()(const int i) const {
+    return b[(offset-i)&(b.size()-1)];
   }
 };
 
@@ -964,11 +984,11 @@ public:
 
 /////////////////////// Global context /////////////////////////
 
-typedef enum {DEFAULT=0, FILECONTAINER, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF, PNG8, PNG8GRAY, PNG24, PNG32, TEXT, TEXT_EOL, RLE, LZW} Blocktype;
+typedef enum {DEFAULT=0, FILECONTAINER, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, AUDIO_LE, EXE, CD, ZLIB, BASE64, GIF, PNG8, PNG8GRAY, PNG24, PNG32, TEXT, TEXT_EOL, RLE, LZW} Blocktype;
 
 inline bool hasRecursion(Blocktype ft) { return ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft==RLE || ft==LZW || ft== FILECONTAINER; }
-inline bool hasInfo(Blocktype ft) { return ft==IMAGE1 || ft==IMAGE4 || ft==IMAGE8 || ft==IMAGE8GRAY || ft==IMAGE24 || ft==IMAGE32 || ft==AUDIO || ft==PNG8 || ft==PNG8GRAY || ft==PNG24 || ft==PNG32; }
-inline bool hasTransform(Blocktype ft) { return ft==IMAGE24 || ft==IMAGE32 || ft==EXE || ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft==TEXT_EOL || ft==RLE || ft==LZW; }
+inline bool hasInfo(Blocktype ft) { return ft==IMAGE1 || ft==IMAGE4 || ft==IMAGE8 || ft==IMAGE8GRAY || ft==IMAGE24 || ft==IMAGE32 || ft==AUDIO || ft==AUDIO_LE || ft==PNG8 || ft==PNG8GRAY || ft==PNG24 || ft==PNG32; }
+inline bool hasTransform(Blocktype ft) { return ft==IMAGE24 || ft==IMAGE32 || ft==AUDIO_LE || ft==EXE || ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft==TEXT_EOL || ft==RLE || ft==LZW; }
 inline bool isPNG(Blocktype ft) { return ft==PNG8 || ft==PNG8GRAY || ft==PNG24 || ft==PNG32; }
 
 int level=0; //this value will be overwritten at the beginning of compression/decompression
@@ -1015,7 +1035,6 @@ struct ModelStats{
 
   //wavModel
   U32 Wav;           //used by recordModel
-
   U8 Audio;
 
   //jpegModel
@@ -1141,6 +1160,11 @@ inline U32 ilog2(U32 x) {
   return BitCount(x >> 1);
 }
 #endif
+
+inline float rsqrt(const float x) {
+  float r = _mm_cvtss_f32(_mm_rsqrt_ss(_mm_set_ss(x)));
+  return (0.5f * (r + 1.0f/(x * r)));
+}
 
 ///////////////////////// state table ////////////////////////
 
@@ -2801,7 +2825,6 @@ private:
     }
     return 0;
   }
-
   void Solve() {
     for (int i=0; i<n; i++) {
       F sum = b[i];
@@ -2858,17 +2881,108 @@ public:
       sum += w[i] * x[i];
     return sum+sub;
   }
-  void Update(const T val) {
+  inline void Update(const T val) {
+#ifdef __GNUC__
+    if (chosen_simd==SIMD_AVX2)
+      UpdateAVX2(val);
+    else
+#endif
+      UpdateUnrolled(val);
+  }
+#ifdef __GNUC__
+  __attribute__ ((target ("avx2")))
+#endif
+  void UpdateAVX2(const T val) {
+    F mul = 1.0-lambda;
     for (int j=0; j<n; j++)
       for (int i=0; i<n; i++)
-        mCovariance[j][i] = lambda * mCovariance[j][i] + (1.0 - lambda) * (x[j] * x[i]);
+        mCovariance[j][i] = lambda * mCovariance[j][i] + mul * (x[j] * x[i]);
+    mul*=(F(val)-sub);
     for (int i=0; i<n; i++)
-      b[i] = lambda * b[i] + (1.0 - lambda) * (x[i] * (F(val)-sub));
+      b[i] = lambda * b[i] + mul * x[i];
     km++;
     if (km>=kmax) {
       if (!Factor()) Solve();
       km = 0;
     }
+  }
+  void UpdateUnrolled(const T val) {
+    F mul = 1.0-lambda;
+    int l = n-(n&3), i=0;
+    for (int j=0; j<n; j++) {
+    for (i=0; i<l; i+=4) {
+      mCovariance[j][i]   = lambda * mCovariance[j][i  ] + mul * (x[j] * x[i  ]);
+      mCovariance[j][i+1] = lambda * mCovariance[j][i+1] + mul * (x[j] * x[i+1]);
+      mCovariance[j][i+2] = lambda * mCovariance[j][i+2] + mul * (x[j] * x[i+2]);
+      mCovariance[j][i+3] = lambda * mCovariance[j][i+3] + mul * (x[j] * x[i+3]);
+    }
+    for (; i<n; i++)
+      mCovariance[j][i] = lambda * mCovariance[j][i] + mul * (x[j] * x[i]);
+    }
+    mul*=(F(val)-sub);
+    for (i=0; i<l; i+=4) {
+      b[i  ] = lambda * b[i  ] + mul * x[i  ];
+      b[i+1] = lambda * b[i+1] + mul * x[i+1];
+      b[i+2] = lambda * b[i+2] + mul * x[i+2];
+      b[i+3] = lambda * b[i+3] + mul * x[i+3];
+    }
+    for (; i<n; i++)
+      b[i] = lambda * b[i] + mul * x[i];
+    km++;
+    if (km>=kmax) {
+      if (!Factor()) Solve();
+      km = 0;
+    }
+  }
+};
+
+///////////////// Least Mean Squares predictor /////////////////
+
+template <typename F, typename T>
+class LMS {
+private:
+  F *weights, *eg, *buffer;
+  F rates[2];
+  F rho, complement, eps, prediction;
+  int S, D;
+public:
+  LMS(const int S, const int D, const F lRate, const F rRate, const F rho = 0.95, const F eps = 1e-3) : rates{ lRate, rRate }, rho(rho), complement(1. - rho), eps(eps), prediction(0.), S(S), D(D) {
+    assert(S>0 && D>0);
+    weights = new F[S+D], eg = new F[S+D], buffer = new F[S+D];
+    Reset();
+  }
+  ~LMS() {
+    delete weights, delete eg, delete buffer;
+  }
+  F Predict(const T sample)
+  {
+    memmove(&buffer[S+1], &buffer[S], (D-1) * sizeof(F));
+    buffer[S] = sample;
+    prediction = 0.;
+    for (int i=0; i<S+D; i++)
+      prediction+= weights[i] * buffer[i];
+    return prediction;
+  }
+  void Update(const T sample)
+  {
+    const F error = sample - prediction;
+    int i=0;
+    for (; i<S; i++) {
+      const F gradient = error * buffer[i];
+      eg[i] = rho * eg[i] + complement * (gradient * gradient);
+      weights[i]+= (rates[0] * gradient * rsqrt(eg[i] + eps));
+    }
+    for (; i<S+D; i++) {
+      const F gradient = error * buffer[i];
+      eg[i] = rho * eg[i] + complement * (gradient * gradient);
+      weights[i]+= (rates[1] * gradient * rsqrt(eg[i] + eps));
+    }
+    memmove(&buffer[1], &buffer[0], (S-1) * sizeof(F));
+    buffer[0] = sample;
+  }
+  void Reset() {
+    for (int i=0; i<S+D; i++)
+      weights[i] = eg[i] = buffer[i] = 0.;
   }
 };
 
@@ -6081,23 +6195,6 @@ inline int sqrbuf(int i) {
   return buf(i)*buf(i);
 }
 
-class RingBuffer {
-  Array<U8> b;
-  U32 offset;
-public:
-  RingBuffer(const int i=0): b(i), offset(0) {}
-  void Fill(const U8 B) {
-    memset(&b[0], B, b.size());
-  }
-  void Add(const U8 B){
-    b[offset&(b.size()-1)] = B;
-    offset++;
-  }
-  int operator()(const int i) const {
-    return b[(offset-i)&(b.size()-1)];
-  }
-};
-
 inline U8 Paeth(U8 W, U8 N, U8 NW){
   int p = W+N-NW;
   int pW=abs(p-(int)W), pN=abs(p-(int)N), pNW=abs(p-(int)NW);
@@ -6133,7 +6230,7 @@ void im24bitModel(Mixer& m, int info, ModelStats *Stats, int alpha=0, int isPNG=
                                      {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
                                      {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
                                      {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1} };
-  static RingBuffer buffer(0x100000); // internal rotating buffer for (PNG unfiltered) pixel data
+  static RingBuffer<U8> buffer(0x100000); // internal rotating buffer for (PNG unfiltered) pixel data
   //pixel neighborhood
   static U8 WWWWWW, WWWWW, WWWW, WWW, WW, W;
   static U8 NWWWW, NWWW, NWW, NW, N, NE, NEE, NEEE, NEEEE;
@@ -6594,11 +6691,11 @@ void im8bitModel(Mixer& m, int w, ModelStats *Stats, int gray = 0, int isPNG=0) 
                                      {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
                                      {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
                                      {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1},
-                                     {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1}};
+                                     {11,1}, {11,1}, {11,1}, {11,1}, {11,1}, {11,1} };
   static SmallStationaryContextMap pltMap[nPltMaps] = { {11,1},{11,1},{11,1},{11,1} };
   static IndirectMap sceneMap[5]{ {8}, {8}, {22,1}, {11,1}, {11,1} };
   static IndirectContext<U8> iCtx[nPltMaps] = { 16, 16, 16, 16 };
-  static RingBuffer buffer(0x100000); // internal rotating buffer for (PNG unfiltered) pixel data
+  static RingBuffer<U8> buffer(0x100000); // internal rotating buffer for (PNG unfiltered) pixel data
   static Array<short> jumps(0x8000);
   //pixel neighborhood
   static U8 WWWWWW, WWWWW, WWWW, WWW, WW, W;
@@ -7847,7 +7944,7 @@ public:
 
 #ifdef USE_WAVMODEL
 
-static int S,D;
+static int S;
 static int wmode;
 
 inline int s2(int i) { return int(short(buf(i)+256*buf(i-1))); }
@@ -7885,12 +7982,17 @@ inline int signedClip8(const int i) {
   return max(-128, min(127, i));
 }
 
+inline int signedClip16(const int i) {
+  return max(-32768, min(32767, i));
+}
+
 void audio8bModel(Mixer& m, int info, ModelStats *Stats) {
-  static const int nOLS=8, nLnrPrd=nOLS+3;
+  static const int nOLS=8, nLMS=3, nLnrPrd=nOLS+nLMS+3;
   static SmallStationaryContextMap sMap1b[nLnrPrd][3]{
     {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}},
     {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}},
-    {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}}
+    {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}},
+    {{11,1}, {11,1}, {11,1}}, {{11,1}, {11,1}, {11,1}}
   };
   static OLS<double, int8_t> ols[nOLS][2]{
     {{128, 24, 0.9975}, {128, 24, 0.9975}},
@@ -7901,6 +8003,11 @@ void audio8bModel(Mixer& m, int info, ModelStats *Stats) {
     {{90, 34, 0.9985}, {90, 34, 0.9985}},
     {{28, 4, 0.98}, {28, 4, 0.98}},
     {{28, 3, 0.992}, {28, 3, 0.992}}
+  };
+  static LMS<float, int8_t> lms[nLMS][2]{
+    {{1280, 640, 3e-5, 2e-5}, {1280, 640, 3e-5, 2e-5}},
+    {{640, 64, 8e-5, 1e-5}, {640, 64, 8e-5, 1e-5}},
+    {{2450, 8, 1.6e-5, 1e-6}, {2450, 8, 1.6e-5, 1e-6}}
   };
   static int prd[nLnrPrd][2][2]{ 0 }, residuals[nLnrPrd][2]{ 0 };
   static int stereo=0, ch=0;
@@ -7914,6 +8021,8 @@ void audio8bModel(Mixer& m, int info, ModelStats *Stats) {
       mask = 0;
       Stats->Wav = stereo+1;
       wmode=info;
+      for (int i=0; i<nLMS; i++)
+        lms[i][0].Reset(), lms[i][1].Reset();
     }
     ch=(stereo)?blpos&1:0;
     const int8_t s = int(((info&4)>0)?buf(1)^128:buf(1))-128;
@@ -7926,6 +8035,8 @@ void audio8bModel(Mixer& m, int info, ModelStats *Stats) {
       mask+=mask+(absResidual>4);
       errLog+=SQR(absResidual);
     }
+    for (int j=0; j<nLMS; j++)
+      lms[j][pCh].Update(s);
     for (; i<nLnrPrd; i++)
       residuals[i][pCh] = s-prd[i][pCh][0];
     errLog = min(0xF, ilog2(errLog));
@@ -7965,14 +8076,14 @@ void audio8bModel(Mixer& m, int info, ModelStats *Stats) {
     else
       for (; i<=128; i++) ols[0][ch].Add(X1(i));
 
-    for (i=0; i<nOLS; i++) {
+    for (i=0; i<nOLS; i++)
       prd[i][ch][0] = signedClip8(floor(ols[i][ch].Predict()));
-      prd[i][ch][1] = signedClip8(prd[i][ch][0]+residuals[i][pCh]);
-    }
+    for (; i<nOLS+nLMS; i++)
+      prd[i][ch][0] = signedClip8(floor(lms[i-nOLS][ch].Predict(s)));
     prd[i++][ch][0] = signedClip8(X1(1)*2-X1(2));
     prd[i++][ch][0] = signedClip8(X1(1)*3-X1(2)*3+X1(3));
     prd[i  ][ch][0] = signedClip8(X1(1)*4-X1(2)*6+X1(3)*4-X1(4));
-    for (i=nOLS; i<nLnrPrd; i++)
+    for (i=0; i<nLnrPrd; i++)
       prd[i][ch][1] = signedClip8(prd[i][ch][0]+residuals[i][pCh]);
   }
   for (int i=0; i<nLnrPrd; i++) {
@@ -7991,162 +8102,133 @@ void audio8bModel(Mixer& m, int info, ModelStats *Stats) {
   m.set(mxCtx, 10);
 }
 
-#define pr_(i,chn)(pr[2*(i)+chn])
-#define F_(k,l,chn)(F[2*(49*(k)+l)+chn])
-#define L_(i,k)(L[49*(i)+k])
+void audio16bModel(Mixer& m, int info, ModelStats *Stats) {
+  static const int nOLS=8, nLMS=3, nLnrPrd=nOLS+nLMS+3;
+  static SmallStationaryContextMap sMap1b[nLnrPrd][4]{
+    {{17,1},{17,1},{17,1},{17,1}}, {{17,1},{17,1},{17,1},{17,1}}, {{17,1},{17,1},{17,1},{17,1}}, {{17,1},{17,1},{17,1},{17,1}},
+    {{17,1},{17,1},{17,1},{17,1}}, {{17,1},{17,1},{17,1},{17,1}}, {{17,1},{17,1},{17,1},{17,1}}, {{17,1},{17,1},{17,1},{17,1}},
+    {{17,1},{17,1},{17,1},{17,1}}, {{17,1},{17,1},{17,1},{17,1}}, {{17,1},{17,1},{17,1},{17,1}}, {{17,1},{17,1},{17,1},{17,1}},
+    {{17,1},{17,1},{17,1},{17,1}}, {{17,1},{17,1},{17,1},{17,1}}
+  };
+  static OLS<double, int16_t> ols[nOLS][2]{
+    {{128, 24, 0.9975}, {128, 24, 0.9975}},
+    {{90, 30, 0.997}, {90, 30, 0.997}},
+    {{90, 31, 0.996}, {90, 31, 0.996}},
+    {{90, 32, 0.995}, {90, 32, 0.995}},
+    {{90, 33, 0.995}, {90, 33, 0.995}},
+    {{90, 34, 0.9985}, {90, 34, 0.9985}},
+    {{28, 4, 0.98}, {28, 4, 0.98}},
+    {{32, 3, 0.992}, {32, 3, 0.992}}
+  };
+  static LMS<float, int16_t> lms[nLMS][2]{
+    {{1280, 640, 5e-5, 5e-5}, {1280, 640, 5e-5, 5e-5}},
+    {{640, 64, 7e-5, 1e-5}, {640, 64, 7e-5, 1e-5}},
+    {{2450, 8, 2e-5, 2e-6}, {2450, 8, 2e-5, 2e-6}}
+  };
+  static int prd[nLnrPrd][2][2]{ 0 }, residuals[nLnrPrd][2]{ 0 };
+  static int stereo=0, ch=0, lsb=0;
+  static U32 mask=0, errLog=0, mxCtx=0;
+  static int16_t sample = 0;
+  info|=4;  // comment this line if skipping the endianness transform
 
-void wavModel(Mixer& m, int info, ModelStats *Stats) {
-  static int col=0;
-  static Array<int> pr{3*2}; // [3][2]
-  static Array<int> counter{2};
-  static Array<double> F{49*49*2}; //[49][49][2]
-  static Array<double> L{49*49}; //[49][49]
-  static const double a=0.996,a2=1.0/a;
-  static SmallStationaryContextMap scm1(8,8), scm2(8,8), scm3(8,8), scm4(8,8), scm5(8,8), scm6(8,8), scm7(8,8);
-  static ContextMap cm(MEM*4, 11);
-  static int bits, channels, w, ch;
-  static int z1, z2, z3, z4, z5, z6, z7;
+  if (bpos==0) {
+    if (blpos==0) {
+      assert((info&2)==0);
+      stereo = (info&1);
+      lsb = (info<4);
+      mask = 0;
+      Stats->Wav = (stereo+1)*2;
+      wmode=info;
+      for (int i=0; i<nLMS; i++)
+        lms[i][0].Reset(), lms[i][1].Reset();
+    }
+    else {
+      ch=(stereo)?(blpos&2)>>1:0;
+      lsb=(blpos&1)^(info<4);
+      if ((blpos&1)==0) {
+        sample = (info<4)?s2(2):t2(2);
+        const int pCh = ch^stereo;
+        int i = 0;
+        for (errLog=0; i<nOLS; i++) {
+          ols[i][pCh].Update(sample);
+          residuals[i][pCh] = sample-prd[i][pCh][0];
+          const U32 absResidual = (U32)abs(residuals[i][pCh]);
+          mask+=mask+(absResidual>128);
+          errLog+=SQR(absResidual>>6);
+        }
+        for (int j=0; j<nLMS; j++)
+          lms[j][pCh].Update(sample);
+        for (; i<nLnrPrd; i++)
+          residuals[i][pCh] = sample-prd[i][pCh][0];
+        errLog = min(0xF, ilog2(errLog));
 
-  int j, k, l, i = 0;
-  long double sum;
+        if (stereo) {
+          for (int i=0; i<=24; i++) ols[0][ch].Add(X2(i));
+          for (int i=0; i<=104; i++) ols[0][ch].Add(X1(i));
+        }
+        else
+          for (int i=0; i<=128; i++) ols[0][ch].Add(X1(i));
 
-  if (bpos==0 && blpos==0) {
-    bits=((info%4)/2)*8+8;
-    channels=info%2+1;
-    w=channels*(bits>>3);
-    wmode=info;
-    z1=z2=z3=z4=z5=z6=z7=0;
-    if (channels==1) {S=48;D=0;} else {S=36;D=12;}
-    for (k=0; k<=S+D; k++)
-      for (l=0; l<=S+D; l++) {
-        L_(k,l)=0.0;
-        for (int chn=0; chn<channels; chn++)
-          F_(k,l,chn)=0.0;
+        int k1=90, k2=k1-12*stereo;
+        for (int j=(i=1); j<=k1; j++, i+=1<<((j>16)+(j>32)+(j>64))) ols[1][ch].Add(X1(i));
+        for (int j=(i=1); j<=k2; j++, i+=1<<((j>5)+(j>10)+(j>17)+(j>26)+(j>37))) ols[2][ch].Add(X1(i));       
+        for (int j=(i=1); j<=k2; j++, i+=1<<((j>3)+(j>7)+(j>14)+(j>20)+(j>33)+(j>49))) ols[3][ch].Add(X1(i));
+        for (int j=(i=1); j<=k2; j++, i+=1+(j>4)+(j>8)) ols[4][ch].Add(X1(i));
+        for (int j=(i=1); j<=k1; j++, i+=2+((j>3)+(j>9)+(j>19)+(j>36)+(j>61))) ols[5][ch].Add(X1(i));
+
+        if (stereo) {
+          for (i=1; i<=k1-k2; i++) {
+            const double s = (double)X2(i);
+            ols[2][ch].AddFloat(s);
+            ols[3][ch].AddFloat(s);
+            ols[4][ch].AddFloat(s);
+          }
+        }
+
+        k1=28, k2=k1-6*stereo;
+        for (i=1; i<=k2; i++) ols[6][ch].Add(X1(i));
+        for (i=1; i<=k1-k2; i++) ols[6][ch].Add(X2(i));
+
+        k1=32, k2=k1-8*stereo;
+        for (i=1; i<=k2; i++) ols[7][ch].Add(X1(i));
+        for (i=1; i<=k1-k2; i++) ols[7][ch].Add(X2(i));
+
+        for (i=0; i<nOLS; i++)
+          prd[i][ch][0] = signedClip16(floor(ols[i][ch].Predict()));
+        for (; i<nOLS+nLMS; i++)
+          prd[i][ch][0] = signedClip16(floor(lms[i-nOLS][ch].Predict(sample)));
+        prd[i++][ch][0] = signedClip16(X1(1)*2-X1(2));
+        prd[i++][ch][0] = signedClip16(X1(1)*3-X1(2)*3+X1(3));
+        prd[i  ][ch][0] = signedClip16(X1(1)*4-X1(2)*6+X1(3)*4-X1(4));
+        for (i=0; i<nLnrPrd; i++)
+          prd[i][ch][1] = signedClip16(prd[i][ch][0]+residuals[i][pCh]);
       }
-    for (int chn=0; chn<channels; chn++) {
-      F_(1,0,chn)=1.0;
-      counter[chn]=pr_(2,chn)=pr_(1,chn)=pr_(0,chn)=0;
+      Stats->Audio = 0x80|(mxCtx = ilog2(min(0x1F, BitCount(mask)))*4+ch*2+lsb);
     }
   }
-  // Select previous samples and predicted sample as context
-  if (bpos==0 && blpos>=w) {
-    ch=blpos%w;
-    const int msb=ch%(bits>>3);
-    const int chn=ch/(bits>>3);
-    if (msb==0) {
-      z1=X1(1);z2=X1(2);z3=X1(3);z4=X1(4);z5=X1(5);
-      k=X1(1);
-      const int mS=min(S,counter[chn]-1);
-      const int mD=min(D,counter[chn]);
-      for (l=0; l<=mS; l++) { F_(0,l,chn)*=a; F_(0,l,chn)+=X1(l+1)*k; }
-      for (l=1; l<=mD; l++) { F_(0,l+S,chn)*=a; F_(0,l+S,chn)+=X2(l+1)*k; }
-      if (channels==2) {
-        k=X2(2);
-        for (l=1; l<=mD; l++) { F_(S+1,l+S,chn)*=a; F_(S+1,l+S,chn)+=X2(l+1)*k; }
-        for (l=1; l<=mS; l++) { F_(l,S+1,chn)*=a; F_(l,S+1,chn)+=X1(l+1)*k; }
-        z6=X2(1)+X1(1)-X2(2);
-        z7=X2(1);
-      } else {
-        z6=2*X1(1)-X1(2);
-        z7=X1(1);
-      }
 
-      if (channels==1) for (k=1; k<=S+D; k++) for (l=k; l<=S+D; l++) F_(k,l,chn)=(F_(k-1,l-1,chn)-X1(k)*X1(l))*a2;
-      else for (k=1; k<=S+D; k++) if (k!=S+1) for (l=k; l<=S+D; l++) if (l!=S+1) F_(k,l,chn)=(F_(k-1,l-1,chn)-(k-1<=S?X1(k):X2(k-S))*(l-1<=S?X1(l):X2(l-S)))*a2;
-      for (i=1; i<=S+D; i++) {
-          sum=F_(i,i,chn);
-          for (k=1; k<i; k++) sum-=L_(i,k)*L_(i,k);
-          sum=floor(sum+0.5);
-          sum=1.0/sum;
-          if (sum>0.0) {
-            L_(i,i)=sqrt(sum);
-            for (j=(i+1); j<=S+D; j++) {
-              sum=F_(i,j,chn);
-              for (k=1; k<i; k++) sum-=L_(j,k)*L_(i,k);
-              sum=floor(sum+0.5);
-              L_(j,i)=sum*L_(i,i);
-            }
-          } else break;
-      }
-      if (i>S+D && counter[chn]>S+1) {
-        for (k=1; k<=S+D; k++) {
-          F_(k,0,chn)=F_(0,k,chn);
-          for (j=1; j<k; j++) F_(k,0,chn)-=L_(k,j)*F_(j,0,chn);
-          F_(k,0,chn)*=L_(k,k);
-        }
-        for (k=S+D; k>0; k--) {
-          for (j=k+1; j<=S+D; j++) F_(k,0,chn)-=L_(j,k)*F_(j,0,chn);
-          F_(k,0,chn)*=L_(k,k);
-        }
-      }
-      sum=0.0;
-      for (l=1; l<=S+D; l++) sum+=F_(l,0,chn)*(l<=S?X1(l):X2(l-S));
-      pr_(2,chn)=pr_(1,chn);
-      pr_(1,chn)=pr_(0,chn);
-      pr_(0,chn)=int(floor(sum));
-      counter[chn]++;
-    }
-    const int y1=pr_(0,chn), y2=pr_(1,chn), y3=pr_(2,chn);
-    int x1=buf(1), x2=buf(2), x3=buf(3);
-    if (wmode==4 || wmode==5) {x1^=128; x2^=128;}
-    if (bits==8) {x1-=128; x2-=128;}
-    const int t=((bits==8) || ((!msb)^(wmode<6)));
-    i=ch<<4;
-    if ((msb)^(wmode<6)) {
-      cm.set(hash(++i, y1&0xff));
-      cm.set(hash(++i, y1&0xff, ((z1-y2+z2-y3)>>1)&0xff));
-      cm.set(hash(++i, x1, y1&0xff));
-      cm.set(hash(++i, x1, x2>>3, x3));
-      if (bits==8)
-        cm.set(hash(++i, y1&0xFE, ilog2(abs((int)(z1-y2)))*2+(z1>y2) ));
-      else
-        cm.set(hash(++i, (y1+z1-y2)&0xff));
-      cm.set(hash(++i, x1));
-      cm.set(hash(++i, x1, x2));
-      cm.set(hash(++i, z1&0xff));
-      cm.set(hash(++i, (z1*2-z2)&0xff));
-      cm.set(hash(++i, z6&0xff));
-      cm.set(hash(++i, y1&0xFF, ((z1-y2+z2-y3)/(bits>>3))&0xFF ));
-    } else {
-      cm.set(hash(++i, (y1-x1+z1-y2)>>8));
-      cm.set(hash(++i, (y1-x1)>>8));
-      cm.set(hash(++i, (y1-x1+z1*2-y2*2-z2+y3)>>8));
-      cm.set(hash(++i, (y1-x1)>>8, (z1-y2+z2-y3)>>9));
-      cm.set(hash(++i, z1>>12));
-      cm.set(hash(++i, x1));
-      cm.set(hash(++i, x1>>7, x2, x3>>7));
-      cm.set(hash(++i, z1>>8));
-      cm.set(hash(++i, (z1*2-z2)>>8));
-      cm.set(hash(++i, y1>>8));
-      cm.set(hash(++i, (y1-x1)>>6 ));
-    }
-    scm1.set(t*ch);
-    scm2.set(t*((z1-x1+y1)>>9)&0xff);
-    scm3.set(t*((z1*2-z2-x1+y1)>>8)&0xff);
-    scm4.set(t*((z1*3-z2*3+z3-x1)>>7)&0xff);
-    scm5.set(t*((z1+z7-x1+y1*2)>>10)&0xff);
-    scm6.set(t*((z1*4-z2*6+z3*4-z4-x1)>>7)&0xff);
-    scm7.set(t*((z1*5-z2*10+z3*10-z4*5+z5-x1+y1)>>9)&0xff);
+  const int16_t B = int16_t( (info<4)? (lsb)?U8(c0<<(8-bpos)):(c0<<(16-bpos))|buf(1) : (lsb)?(buf(1)<<8)|U8(c0<<(8-bpos)):c0<<(16-bpos) );
+
+  for (int i=0; i<nLnrPrd; i++) {
+    const U32 ctx0 = U16(prd[i][ch][0]-B);
+    const U32 ctx1 = U16(prd[i][ch][1]-B);
+
+    sMap1b[i][0].set( (lsb<<16)|(bpos<<13)|(ctx0>>(3<<(!lsb))) );
+    sMap1b[i][1].set( (lsb<<16)|(bpos<<13)|(ctx0>>((!lsb)+(3<<(!lsb)))) );
+    sMap1b[i][2].set( (lsb<<16)|(bpos<<13)|(ctx0>>((!lsb)*2+(3<<(!lsb)))) );
+    sMap1b[i][3].set( (lsb<<16)|(bpos<<13)|(ctx1>>((!lsb)+(3<<(!lsb)))) );
+
+    sMap1b[i][0].mix(m, 7, 1, 2+(i>=nOLS));
+    sMap1b[i][1].mix(m, 10, 1, 2+(i>=nOLS));
+    sMap1b[i][2].mix(m, 6, 1, 3+(i>=nOLS));
+    sMap1b[i][3].mix(m, 6, 1, 2+(i>=nOLS));
   }
 
-  // Predict next bit
-  scm1.mix(m);
-  scm2.mix(m);
-  scm3.mix(m);
-  scm4.mix(m);
-  scm5.mix(m);
-  scm6.mix(m);
-  scm7.mix(m);
-  cm.mix(m);
-
-  Stats->Wav = w;
-  col++;
-  if(col==w*8)col=0;
-  m.set(ch+4*ilog2(col&(bits-1)), 4*8);
-  m.set(col%bits<8, 2);
-  m.set(col%bits, bits);
-  m.set(col, w*8);
-  m.set(c0, 256);
+  m.set((errLog<<9)|(lsb<<8)|c0, 8192);
+  m.set((U8(mask)<<4)|(ch<<3)|(lsb<<2)|(bpos>>1), 4096);
+  m.set((mxCtx<<7)|(buf(1)>>1), 2560);
+  m.set((errLog<<4)|(ch<<3)|(lsb<<2)|(bpos>>1), 256);
+  m.set(mxCtx, 20);
 }
 
 #endif //USE_WAVMODEL
@@ -9851,7 +9933,6 @@ public:
   }
 };
 
-
 //////////////////////////// contextModel //////////////////////
 
 // This combines all the context models with a Mixer.
@@ -9882,7 +9963,6 @@ public:
     #endif //USE_TEXTMODEL
     matchModel(MEM*4, options&OPTION_FASTMODE),
     sparseMatchModel(MEM),
-
     next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0), bytesread(0), readsize(false), Bypass(false) {
     #ifdef USE_WORDMODEL
       m=MixerFactory::CreateMixer(1257, 4160+(1888/*recordModel*/+27648/*exeModel*/+30720/*textModel*/+8448/*sparseMatchModel*/), 28);
@@ -9964,10 +10044,10 @@ int ContextModel::Predict(ModelStats *Stats){
   if (blocktype==PNG24) return im24bitModel(*m, blockinfo, Stats, 0, 1), m->p(1,1);
   if (blocktype==PNG32) return im24bitModel(*m, blockinfo, Stats, 1, 1), m->p(0,1);
   #ifdef USE_WAVMODEL
-  if (blocktype==AUDIO) {
+  if (blocktype==AUDIO || blocktype==AUDIO_LE) {
     recordModel(*m, Stats);
     if ((blockinfo&2)==0) return audio8bModel(*m, blockinfo, Stats), m->p(1,1);
-    else return wavModel(*m, blockinfo, Stats), m->p(0,1);
+    else return audio16bModel(*m, blockinfo, Stats), m->p(1,1);
   }
   #endif //USE_WAVMODEL
   if ((blocktype==JPEG || blocktype==HDR)) {
@@ -10846,7 +10926,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
             int wavd=bswap(buf0);
             wavlen=0;
             if ((wavch==1 || wavch==2) && (wavbps==8 || wavbps==16) && wavd>0 && wavsize>=wavd+36
-               && wavd%((wavbps/8)*wavch)==0) AUD_DET(AUDIO,wavi-3,44+wavm,wavd,wavch+wavbps/4-3);
+               && wavd%((wavbps/8)*wavch)==0) AUD_DET((wavbps==8)?AUDIO:AUDIO_LE,wavi-3,44+wavm,wavd,wavch+wavbps/4-3);
             wavi=0;
           }
         }
@@ -10864,7 +10944,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
             else if (p==12){
               int wavd = bswap(buf0);
               if (wavd && (wavd+12)==wavlen)
-                AUD_DET(AUDIO,wavi-3,(12+wavlist-(wavi-3)+1)&~1,wavd,1+16/4-3);
+                AUD_DET(AUDIO_LE,wavi-3,(12+wavlist-(wavi-3)+1)&~1,wavd,1+16/4-3);
               wavi=0;
             }
           }
@@ -11490,6 +11570,45 @@ U64 decode_im32(Encoder& en, U64 size, int width, File *out, FMode mode, U64 &di
   return size;
 }
 
+void encode_endianness16b(File *in, File *out, U64 size) {
+  for (U64 i=0, l=size>>1; i<l; i++) {
+    U8 B = in->getchar();
+    out->putchar(in->getchar());
+    out->putchar(B);
+  }
+  if ((size&1)>0)
+    out->putchar(in->getchar());
+}
+
+U64 decode_endianness16b(Encoder& en, U64 size, File *out, FMode mode, U64 &diffFound) {
+  for (U64 i=0, l=size>>1; i<l; i++) {
+    U8 B1 = en.decompress(), B2 = en.decompress();
+    if (mode==FDECOMPRESS) {
+      out->putchar(B2);
+      out->putchar(B1);
+    }
+    else if (mode==FCOMPARE){
+      bool ok = out->getchar()==B2;
+      ok&=out->getchar()==B1;
+      if (!ok && !diffFound){
+        diffFound=size-i*2;
+        break;
+      }
+    }
+    if (mode==FDECOMPRESS && !(i&0x7FF))
+      en.print_status();
+  }
+  if (!diffFound && (size&1)>0) {
+    if (mode==FDECOMPRESS)
+      out->putchar(en.decompress());
+    else if (mode==FCOMPARE) {
+      if (out->getchar()!=en.decompress())
+        diffFound=size-1;
+    }
+  }
+  return size;
+}
+
 // EOL transform
 
 void encode_eol(File *in, File *out, U64 len) {
@@ -11529,7 +11648,7 @@ U64 decode_eol(Encoder& en, U64 size, File *out, FMode mode, U64 &diffFound) {
         break;
       }
     }
-    if (mode == FDECOMPRESS && !(i&0xFFF))
+    if (mode==FDECOMPRESS && !(i&0xFFF))
       en.print_status();
   }
   return count;
@@ -12374,6 +12493,7 @@ void compressRecursive(File *in, U64 blocksize, Encoder &en, String &blstr, int 
 U64 decode_func(Blocktype type, Encoder &en, File *tmp, U64 len, int info, File *out, FMode mode, U64 &diffFound) {
   if (type==IMAGE24) return decode_bmp(en, len, info, out, mode, diffFound);
   else if (type==IMAGE32) return decode_im32(en, len, info, out, mode, diffFound);
+  else if (type==AUDIO_LE) return decode_endianness16b(en, len, out, mode, diffFound);
   else if (type==EXE) return decode_exe(en, len, out, mode, diffFound);
   else if (type == TEXT_EOL) return decode_eol(en, len, out, mode, diffFound);
   else if (type==CD) return decode_cd(tmp, len, out, mode, diffFound);
@@ -12391,6 +12511,7 @@ U64 decode_func(Blocktype type, Encoder &en, File *tmp, U64 len, int info, File 
 U64 encode_func(Blocktype type, File *in, File *tmp, U64 len, int info, int &hdrsize) {
   if (type==IMAGE24) encode_bmp(in, tmp, len, info);
   else if (type==IMAGE32) encode_im32(in, tmp, len, info);
+  else if (type==AUDIO_LE) encode_endianness16b(in, tmp, len);
   else if (type==EXE) encode_exe(in, tmp, len, info);
   else if (type == TEXT_EOL) encode_eol(in, tmp, len);
   else if (type==CD) encode_cd(in, tmp, len, info);
@@ -12453,8 +12574,8 @@ void transform_encode_block(Blocktype type, File *in, U64 len, Encoder &en, int 
 }
 
 void compressRecursive(File *in, const U64 blocksize, Encoder &en, String &blstr, int recursion_level, float p1, float p2) {
-  static const char* typenames[24]={"default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
-    "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif", "png-8b", "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol", "rle", "lzw"};
+  static const char* typenames[25]={"default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
+    "24b-image", "32b-image", "audio", "audio - le", "exe", "cd", "zlib", "base64", "gif", "png-8b", "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol", "rle", "lzw"};
   static const char* audiotypes[4]={"8b-mono", "8b-stereo", "16b-mono","16b-stereo"};
   Blocktype type=DEFAULT;
   int blnum=0, info=0;  // image width or audio type
@@ -12524,7 +12645,7 @@ void compressRecursive(File *in, const U64 blocksize, Encoder &en, String &blstr
       blnum++;
 
       printf(" %-11s | %-16s |%10" PRIu64 " bytes [%" PRIu64 " - %" PRIu64 "]",blstr_sub.c_str(),typenames[(type==ZLIB && isPNG(Blocktype(info>>24)))?info>>24:type],len,begin,nextblock_start-1);
-      if (type==AUDIO) printf(" (%s)", audiotypes[info%4]);
+      if (type==AUDIO || type==AUDIO_LE) printf(" (%s)", audiotypes[info%4]);
       else if (type==IMAGE1 || type==IMAGE4 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32 || (type==ZLIB && isPNG(Blocktype(info>>24)))) printf(" (width: %d)", (type==ZLIB)?(info&0xFFFFFF):info);
       else if (hasRecursion(type) && (info>>24)!=DEFAULT) printf(" (%s)",typenames[info>>24]);
       else if (type==CD) printf(" (mode%d/form%d)", info==1?1:2, info!=3?1:2);
