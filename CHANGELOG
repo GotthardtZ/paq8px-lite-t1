@@ -1435,3 +1435,10 @@ paq8px_v178
  - 8bpp image model now predicts from previous frames (mostly for GIF images)
  - jpegModel now also predicts from previous frames (MJPEG videos)
  - exeModel
+
+
+paq8px_v179
+2019.05.11
+- New audio16bModel, for 16bps mono and stereo
+- Slightly improved audio8bModel
+- Longer english expressions file
