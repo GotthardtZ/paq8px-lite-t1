@@ -1442,3 +1442,14 @@ paq8px_v179
 - New audio16bModel, for 16bps mono and stereo
 - Slightly improved audio8bModel
 - Longer english expressions file
+
+
+paq8px_v179fix1
+2019.06.02
+- Fixed a bug in textmodel training (possible negative offset)
+- Suppressed a compiler warning in compressRecursive()
+- Removed an out-of-date assert in SmallStationaryContextMap()
+- Enhanced BMP detection
+ - More sanity checks
+ - Fixed a bug in DIB-only image detection: reported header position could be -14 off
+ - Allowed image size is now up to 16Mx16M pixels
