@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "179"  //update version here before publishing your changes
+#define PROGVERSION  "179fix1"  //update version here before publishing your changes
 #define PROGYEAR     "2019"
 
 
@@ -1851,11 +1851,12 @@ public:
 // - We usually hash small values
 // - Multiplicative hashes promote entropy to the higher bits 
 // - When combining ( H(x) + H(y) ) entropy is still in higher bits
-// - After combining they must be finalized by taking the higher bits only
+// - After combining they must be finalized by taking the higher
+//   bits only to reduce the range to the desired hash table size
 
 // Multipliers
 // - They don't need to be prime, just large odd numbers
-// - The golden ratios are usually preferred as multipliers 
+// - The golden ratios are usually preferred as multipliers
 
 // Golden ratio of 2^32 (not a prime)
 #define PHI32 UINT32_C(0x9E3779B9) // 2654435769
@@ -1877,7 +1878,7 @@ public:
 #define MUL64_12 UINT64_C(0xF501F1D0944B2383)
 #define MUL64_13 UINT64_C(0xE3E4E8AA829AB9B5)
 
-// Finalizers
+// Finalizers (range reduction)
 // - Keep the necessary number of MSBs after a (combination of) 
 //   multiplicative hash(es)
 
@@ -1892,8 +1893,8 @@ U32 finalize64(const U64 hash, const int hashbits) {
   return U32(hash>>(64-hashbits));
 }
 
-// Get the next MSBs (8 or 6 bits) following "hasbits" for checksum
-// Remark: the result must be cast/masked to the proper checksum size (U8, U16) by the caller
+// Get the next MSBs (8 or 16 bits) following "hasbits" for checksum
+// Remark: the result must be cast/masked to the desired checksum size (U8, U16) by the caller
 static ALWAYS_INLINE 
 U64 checksum64(const U64 hash, const int hashbits, const int checksumbits) {
   return hash>>(64-hashbits-checksumbits); 
@@ -2184,8 +2185,7 @@ class SmallStationaryContextMap {
   int Context, Mask, Stride, bCount, bTotal, B;
   U16 *cp;
 public:
-  SmallStationaryContextMap(int BitsOfContext, int InputBits = 8) : Data((1ull<<BitsOfContext)*((1ull<<InputBits)-1)), Context(0), Mask((1<<BitsOfContext)-1), Stride((1<<InputBits)-1), bCount(0), bTotal(InputBits), B(0) {
-    assert(BitsOfContext<=16);
+  SmallStationaryContextMap(int BitsOfContext, int InputBits = 8) : Data((UINT64_C(1)<<BitsOfContext)*((UINT64_C(1)<<InputBits)-1)), Context(0), Mask((1<<BitsOfContext)-1), Stride((1<<InputBits)-1), bCount(0), bTotal(InputBits), B(0) {
     assert(InputBits>0 && InputBits<=8);
     Reset();
     cp=&Data[0];
@@ -2231,7 +2231,7 @@ class StationaryMap {
   int Context, bCount, bTotal, B;
   U32 *cp;
 public:
-  StationaryMap(int BitsOfContext, int InputBits = 8, int Rate = 0): Data((1ull<<BitsOfContext)*((1ull<<InputBits)-1)), mask((1<<BitsOfContext)-1), maskbits(BitsOfContext), stride((1<<InputBits)-1), Context(0), bCount(0), bTotal(InputBits), B(0) {
+  StationaryMap(int BitsOfContext, int InputBits = 8, int Rate = 0): Data((UINT64_C(1)<<BitsOfContext)*((UINT64_C(1)<<InputBits)-1)), mask((1<<BitsOfContext)-1), maskbits(BitsOfContext), stride((1<<InputBits)-1), Context(0), bCount(0), bTotal(InputBits), B(0) {
     assert(InputBits>0 && InputBits<=8);
     assert(BitsOfContext+InputBits<=24);
     Reset(Rate);
@@ -2276,7 +2276,7 @@ class IndirectMap {
   int Context, bCount, bTotal, B;
   U8 *cp;
 public:
-  IndirectMap(int BitsOfContext, int InputBits = 8): Data((1ull<<BitsOfContext)*((1ull<<InputBits)-1)), mask((1<<BitsOfContext)-1), maskbits(BitsOfContext), stride((1<<InputBits)-1), Context(0), bCount(0), bTotal(InputBits), B(0) {
+  IndirectMap(int BitsOfContext, int InputBits = 8): Data((UINT64_C(1)<<BitsOfContext)*((UINT64_C(1)<<InputBits)-1)), mask((1<<BitsOfContext)-1), maskbits(BitsOfContext), stride((1<<InputBits)-1), Context(0), bCount(0), bTotal(InputBits), B(0) {
     assert(InputBits>0 && InputBits<=8);
     assert(BitsOfContext+InputBits<=24);
     cp=&Data[0];
@@ -2996,10 +2996,10 @@ private:
   U32 ctxMask, inputMask, inputBits;
 public:
   IndirectContext(const int BitsPerContext, const int InputBits = 8) :
-    data(1ull<<BitsPerContext),
+    data(UINT64_C(1)<<BitsPerContext),
     ctx(&data[0]),
-    ctxMask((1ul<<BitsPerContext)-1),
-    inputMask((1ul<<InputBits)-1),
+    ctxMask((UINT32_C(1)<<BitsPerContext)-1),
+    inputMask((UINT32_C(1)<<InputBits)-1),
     inputBits(InputBits)
   {
     assert(BitsPerContext>0 && BitsPerContext<=20);
@@ -3077,10 +3077,10 @@ inline bool CharInArray(const char c, const char a[], const int len) {
 class Word {
 private:
   U64 CalculateHash() {
-    U64 hash=0;
+    U64 h=0;
     for (int i=Start; i<=End; i++)
-      hash=combine64(hash,Letters[i]);
-    return hash;
+      h=combine64(h,Letters[i]);
+    return h;
   }
 public:
   U8 Letters[MAX_WORD_SIZE];
@@ -4989,7 +4989,7 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
           case Language::German : { printf("[Language: German,  blpos: %d]\n",blpos); break; };
         }
         #endif
-        if (options&OPTION_TRAINTXT && Dictionaries[Lang.Id-1]==nullptr) {
+        if (options&OPTION_TRAINTXT && Lang.Id!=Language::Unknown && Dictionaries[Lang.Id-1]==nullptr) {
           switch (Lang.Id) {
             case Language::English: {
               Dictionaries[Lang.Id-1] = new WordEmbeddingDictionary();
@@ -10369,7 +10369,7 @@ Encoder::Encoder(Mode m, File *f):
     U64 start=size();
     archive->setend();
     U64 end=size();
-    if (end>=(1u<<31))quit("Large archives not yet supported.");
+    if (end>=(UINT64_C(1)<<31))quit("Large archives not yet supported.");
     set_status_range(0.0, (float)end);
     archive->setpos(start);
   }
@@ -10699,7 +10699,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
   int aiff=0,aiffm=0,aiffs=0;  // For AIFF detection
   int s3mi=0,s3mno=0,s3mni=0;  // For S3M detection
 #endif //  USE_WAVMODEL
-  int bmp=0,imgbpp=0,bmpx=0,bmpy=0,bmpof=0,bmps=0,hdrless=0;  // For BMP detection
+  U32 bmpi=0,dibi=0,imgbpp=0,bmpx=0,bmpy=0,bmpof=0,bmps=0,n_colors=0;  // For BMP detection
   int rgbi=0,rgbx=0,rgby=0;  // For RGB detection
   int tga=0,tgax=0,tgay=0,tgaz=0,tgat=0,tgaid=0,tgamap=0;  // For TGA detection
   // ascii images are currently not supported
@@ -11016,24 +11016,36 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
       }
     }
 #endif //  USE_WAVMODEL
+    
     // Detect .bmp image
-    if ( !(bmp || hdrless) && (((buf0&0xffff)==16973) || (!(buf0&0xFFFFFF) && ((buf0>>24)==0x28))) ) //possible 'BM' or headerless DIB
-      imgbpp=bmpx=bmpy=0,hdrless=!(U8)buf0,bmpof=hdrless*54,bmp=i-hdrless*16;
-    if (bmp || hdrless) {
-      const int p=i-bmp;
-      if (p==12) bmpof=bswap(buf0);
-      else if (p==16 && buf0!=0x28000000) bmp=hdrless=0; //BITMAPINFOHEADER (0x28)
-      else if (p==20) bmpx=bswap(buf0),bmp=((bmpx==0||bmpx>0x30000)?(hdrless=0):bmp); //width
-      else if (p==24) bmpy=abs((int)bswap(buf0)),bmp=((bmpy==0||bmpy>0x10000)?(hdrless=0):bmp); //height
-      else if (p==27) imgbpp=c,bmp=((imgbpp!=1 && imgbpp!=4 && imgbpp!=8 && imgbpp!=24 && imgbpp!=32)?(hdrless=0):bmp);
-      else if ((p==31) && buf0) bmp=hdrless=0;
-      else if (p==36) bmps=bswap(buf0);
-      // check number of colors in palette (4 bytes), must be 0 (default) or <= 1<<bpp.
-      // also check if image is too small, since it might not be worth it to use the image models
-      else if (p==48){
-        if ( (!buf0 || ((bswap(buf0)<=(U32)(1<<imgbpp)) && (imgbpp<=8))) && (((bmpx*bmpy*imgbpp)>>3)>64) ) {
-          // possible icon/cursor?
-          if (hdrless && (bmpx*2==bmpy) && imgbpp>1 &&
+    if (!bmpi && !dibi) {
+      if((buf0&0xffff)==16973) { // 'BM'
+        bmpi=i; // header start: bmpi-1
+        dibi=i-1+18; // we expect a DIB header to come
+      }
+      else if ((buf0==0x28000000))  // headerless (DIB-only)
+        dibi=i+1;
+    }
+    else {
+      const U32 p=i-dibi+1+18;
+           if (p==10+4) bmpof=bswap(buf0),bmpi=(bmpof<54 || start+blocksize<bmpi-1+bmpof)?(dibi=0):bmpi; //offset of pixel data (this field is still located in the BMP Header)
+      else if (p==14+4 && buf0!=0x28000000) bmpi=dibi=0; //BITMAPINFOHEADER (0x28)
+      else if (p==18+4) bmpx=bswap(buf0),bmpi=(((bmpx&0xff000000)!=0 || bmpx==0)?(dibi=0):bmpi); //width
+      else if (p==22+4) bmpy=abs(int(bswap(buf0))),bmpi=(((bmpy&0xff000000)!=0 || bmpy==0)?(dibi=0):bmpi); //height
+      else if (p==26+2) bmpi=((bswap(buf0<<16))!=1)?(dibi=0):bmpi; //number of color planes (must be 1)
+      else if (p==28+2) imgbpp=bswap(buf0<<16),bmpi=((imgbpp!=1 && imgbpp!=4 && imgbpp!=8 && imgbpp!=24 && imgbpp!=32)?(dibi=0):bmpi); //color depth
+      else if (p==30+4) bmpi=((buf0!=0)?(dibi=0):bmpi); //compression method must be: BI_RGB (uncompressed)
+      else if (p==34+4) bmps=bswap(buf0); //image size or 0
+    //else if (p==38+4) ; // the horizontal resolution of the image (ignored)
+    //else if (p==42+4) ; // the vertical resolution of the image (ignored)
+      else if (p==46+4) { 
+        n_colors=bswap(buf0); // the number of colors in the color palette, or 0 to default to (1<<imgbpp)
+        if(n_colors==0 && imgbpp<=8) n_colors=1<<imgbpp;
+        if(n_colors>(1u<<imgbpp) || (imgbpp>8 && n_colors>0))bmpi=dibi=0;
+      }
+      else if (p==50+4) { //the number of important colors used
+        if (bswap(buf0)<=n_colors || bswap(buf0)==0x10000000) {
+          if (bmpi==0 /*headerless*/ && (bmpx*2==bmpy) && imgbpp>1 && // possible icon/cursor?
              (
               (bmps>0 && bmps==( (bmpx*bmpy*(imgbpp+1))>>4 )) ||
               ((!bmps || bmps<((bmpx*bmpy*imgbpp)>>3)) && (
@@ -11046,22 +11058,36 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
           )
             bmpy=bmpx;
 
-          // if DIB and not 24bpp, we must calculate the data offset based on BPP or num. of entries in color palette
-          if (hdrless && (imgbpp<24))
-            bmpof+=((buf0)?bswap(buf0)*4:4<<imgbpp);
-          bmpof+=(bmp-1)*(bmp<1);
-
-          if (hdrless && bmps && bmps<((bmpx*bmpy*imgbpp)>>3)) { /*Guard against erroneous DIB detections*/ }
-          else if (imgbpp==1) IMG_DET(IMAGE1,max(0,bmp-1),bmpof,(((bmpx-1)>>5)+1)*4,bmpy);
-          else if (imgbpp==4) IMG_DET(IMAGE4,max(0,bmp-1),bmpof,((bmpx*4+31)>>5)*4,bmpy);
-          else if (imgbpp==8){
-            in->setpos(start+bmp+53);
-            IMG_DET( (IsGrayscalePalette(in, (buf0)?bswap(buf0):1<<imgbpp, 1))?IMAGE8GRAY:IMAGE8,max(0,bmp-1),bmpof,(bmpx+3)&-4,bmpy);
+          Blocktype blocktype=DEFAULT;
+          U32 width_in_bytes=0;
+          if      (imgbpp==1)  {blocktype=IMAGE1; width_in_bytes=(((bmpx-1)>>5)+1)*4;}
+          else if (imgbpp==4)  {blocktype=IMAGE4; width_in_bytes=((bmpx*4+31)>>5)*4;}
+          else if (imgbpp==8)  {blocktype=IMAGE8; width_in_bytes=(bmpx+3)&-4;}
+          else if (imgbpp==24) {blocktype=IMAGE24;width_in_bytes=((bmpx*3)+3)&-4;}
+          else if (imgbpp==32) {blocktype=IMAGE32;width_in_bytes=bmpx*4;}
+          
+          if (imgbpp==8){
+            const U64 color_palette_pos=dibi-18+54;
+            const U64 savedpos=in->curpos();
+            in->setpos(color_palette_pos);
+            if(IsGrayscalePalette(in, n_colors, 1)) blocktype=IMAGE8GRAY;
+            in->setpos(savedpos);
           }
-          else if (imgbpp==24) IMG_DET(IMAGE24,max(0,bmp-1),bmpof,((bmpx*3)+3)&-4,bmpy);
-          else if (imgbpp==32) IMG_DET(IMAGE32,max(0,bmp-1),bmpof,bmpx*4,bmpy);
+
+          const U32 headerpos=bmpi>0 ? bmpi-1 : dibi-4;
+          const U32 minheadersize=(bmpi>0 ? 54: 54-14)+n_colors*4;
+          const U32 headersize= bmpi>0 ? bmpof : minheadersize;
+          
+          // some final sanity checks
+          if(bmps!=0 && bmps<width_in_bytes*bmpy) { /*printf("\nBMP guard: image is larger than reported in header\n",bmps,width_in_bytes*bmpy);*/ }
+          else if(start+blocksize<headerpos+headersize+width_in_bytes*bmpy) {/*printf("\nBMP guard: cropped data\n");*/ }
+          else if(headersize==(bmpi>0 ? 54: 54-14) && n_colors>0) { /*printf("\nBMP guard: missing palette\n");*/ }
+          else if(bmpi>0 && bmpof<minheadersize) { /*printf("\nBMP guard: overlapping color palette\n");*/ }
+          else if(bmpi>0 && U64(bmpi)-1+bmpof+width_in_bytes*bmpy>start+blocksize) { /*printf("\nBMP guard: reported pixel data offset is incorrect\n");*/ }
+          else if(width_in_bytes*bmpy<=64){ /*printf("\nBMP guard: too small\n");*/ }  // too small - not worthy to use the image models
+          else IMG_DET(blocktype,headerpos,headersize,width_in_bytes,bmpy);
         }
-        bmp=hdrless=0;
+        bmpi=dibi=0;
       }
     }
 
@@ -12592,7 +12618,7 @@ void compressRecursive(File *in, const U64 blocksize, Encoder &en, String &blstr
   U64 textstart;
   U64 textend=0;
   Blocktype nextblock_type;
-  Blocktype nextblock_type_bak;
+  Blocktype nextblock_type_bak=DEFAULT; //initialized only to suppress a compiler warning, will be overwritten
   U64 bytes_to_go=blocksize;
   while (bytes_to_go>0) {
     if(type==TEXT || type==TEXT_EOL) { // it was a split block in the previous iteration: TEXT -> DEFAULT -> ...
