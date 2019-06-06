@@ -1453,3 +1453,19 @@ paq8px_v179fix1
  - More sanity checks
  - Fixed a bug in DIB-only image detection: reported header position could be -14 off
  - Allowed image size is now up to 16Mx16M pixels
+
+
+Paq8px_v179fix2
+2019.06.06
+- removed 32-bit hash support
+- removed (unused) Train() and order calculation from ContextMap
+- removed distanceModel
+- removed 2 contexts from SparseModel
+- removed changelogs from cpp
+- minor changes in CharGroupModel
+- all models are classes now
+- a new model factory, so that unused models do not consume memory (preparation*)
+- scaling in Mixer: multipliers instead of shifts (preparation*)
+- update() is now a standalone function in all maps (preparation*)
+- other minor cosmetic changes
+- eliminated some compiler warnings (VC++)
