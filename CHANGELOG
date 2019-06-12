@@ -677,7 +677,7 @@ pap8px_v98
 
 pap8px_v99
 2017.08.19
-- fixed a few more bugs and made some improvements to the exe model.
+- Exe model: fixed a few more bugs and made some improvements - including tables for instruction categorization.
 - removed all code that made the complexity of the models dependent on the compression level
 
 
@@ -695,7 +695,9 @@ pap8px_v101
 
 pap8px_v102
 2017.08.29
-- Improved the x86/x64 model and the 1bpp image model, and fixed a few bugs.
+- Improved the x86/x64 model: added variable context dependent on parsing break point
+- Improved the 1bpp image model
+- Fixed a few bugs
 - The BMP/DIB detection should now handle icons and cursors better
 - The PDF parser now handles 1bpp images compressed with Deflate and distinguishes 8bpp grayscale images from 8bpp indexed-color images.
 
@@ -786,7 +788,7 @@ pap8px_v115
 
 pap8px_v116
 2017.10.22
-- Bug fixes in DMC model reported by Mauro
+- Fixed a bug in exeModel in function ProcessMode (missing break, thank you Mauro Vezzosi)
 
 
 paq8px_v117 
@@ -891,16 +893,17 @@ paq8px_v126
 - No model or compression improvements
 
 
-paq8px_v127 
+paq8px_v127
 2017.12.29
 - Experimental English stemmer
 - Tweaked StationaryMap, added a new context to the 24/32bpp image model
 
 
-paq8px_v128 
+paq8px_v128
 2017.01.02
 - Improved 8bpp grayscale image model (PNG and non-PNG variants)
 - Tweaked SmallStationaryMap
+- Small changes in English stemmer to allow for compilation with MSVC Fix buffer overflow (thank you Jan Ondrus)
 
 
 paq8px_v129 
@@ -980,7 +983,7 @@ paq8px_v132_fix1
 - No model or compression improvements
 
 
-paq8px_v133 
+paq8px_v133
 2017.01.28
 - Refactored stemming routines
 - New French stemmer (currently unused)
@@ -993,16 +996,17 @@ paq8px_v134
 - Fixes for proper Mac OSX compilation
 
 
-paq8px_v135 
+paq8px_v135
 2017.02.04
 - New experimental text model with language detection via stemming/common word lists, currently using only one context
 - Text pre-training now uses the RunContextMaps
-- Code refactoring
+- English Stemmer: Refactoring, added processing of gender-specific words and common words
+- English Stemmer: Added processing of common words
 
 
 paq8px_v136 
 2017.02.11
-- Improved text model
+- Improved text model (uses 16 contexts, sets 3 mixer contexts)
 
 
 paq8px_v137 
@@ -1046,7 +1050,7 @@ paq8px_v137_fix1
 
 paq8px_v138 
 2017.02.15
-- A small improvement to the new text model 
+- A small improvement to the new text model (uses 21 contexts, sets 4 mixer contexts)
 
 
 paq8px_v138_e1w3fix
@@ -1056,13 +1060,13 @@ paq8px_v138_e1w3fix
 
 paq8px_v139
 2017.02.25
-- Slightly improved text model
+- Slightly improved text model (now uses 26 contexts)
 - French stemmer nows handles UTF8 Unicode code points common to that language
 
 
 paq8px_v140 
 2017.02.27
-- Slightly improved text model
+- Slightly improved text model (now sets 6 mixer contexts)
 - New german stemmer
 
 
@@ -1391,7 +1395,7 @@ paq8px_v171
 
 paq8px_v172
 2018.12.02
-- Slightly improved TextModel
+- Slightly improved TextModel (sets 8 mixer contexts)
 
 
 paq8px_v173
@@ -1432,6 +1436,7 @@ paq8px_v178
 2019.01.27
 - Slightly improved models:
  - TextModel, now using word embeddings for english text
+ - TextModel, now using 28 contexts, sets 9 mixer contexts
  - 8bpp image model now predicts from previous frames (mostly for GIF images)
  - jpegModel now also predicts from previous frames (MJPEG videos)
  - exeModel
@@ -1446,7 +1451,7 @@ paq8px_v179
 
 paq8px_v179fix1
 2019.06.02
-- Fixed a bug in textmodel training (possible negative offset)
+- Fixed a bug in textmodel's dictionary loading (possible negative offset)
 - Suppressed a compiler warning in compressRecursive()
 - Removed an out-of-date assert in SmallStationaryContextMap()
 - Enhanced BMP detection
@@ -1457,15 +1462,29 @@ paq8px_v179fix1
 
 Paq8px_v179fix2
 2019.06.06
-- removed 32-bit hash support
-- removed (unused) Train() and order calculation from ContextMap
-- removed distanceModel
-- removed 2 contexts from SparseModel
-- removed changelogs from cpp
-- minor changes in CharGroupModel
-- all models are classes now
-- a new model factory, so that unused models do not consume memory (preparation*)
-- scaling in Mixer: multipliers instead of shifts (preparation*)
-- update() is now a standalone function in all maps (preparation*)
-- other minor cosmetic changes
-- eliminated some compiler warnings (VC++)
+- Removed 32-bit hash support
+- Removed (unused) Train() and order calculation from ContextMap
+- Removed distanceModel
+- Removed 2 contexts from SparseModel
+- Removed changelogs from cpp
+- Minor changes in CharGroupModel
+- All models are classes now
+- A new model factory, so that unused models do not consume memory (preparation*)
+- Scaling in Mixer: multipliers instead of shifts (preparation*)
+- Update() is now a standalone function in all maps (preparation*)
+- Other minor/cosmetic changes
+- Eliminated some compiler warnings (VC++)
+
+
+Paq8px_v179fix3
+2019.06.12
+- Modified Mixer, APM1, StateMap, APM, RunContextMap, SmallStationaryContextMap, StationaryMap, IndirectMap (with 
+  unchanged behavior), they are now independent of the global context
+- Modified most of the Model classes - small steps toward clairity and independence of the global context
+- Refactored Trainig (NormalModel, ExeModel)
+- Refactored APM and StateMap, StateMap now handles context sets (it processed single-contexts until now)
+- Scaling of stretched probabilities is now performed by *>> instead of */ in the maps
+- Fixed an Image8bitModel context (thank you Márcio)
+- Re-added distancemodel removed in v179fix2
+- Other minor/cosmetic changes, fixed some method and variable names to follow naming conventions
+- Blended earlier removed changelogs from cpp to CHANGELOG
