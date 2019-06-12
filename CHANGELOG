@@ -1480,7 +1480,7 @@ Paq8px_v179fix3
 2019.06.12
 - Modified Mixer, APM1, StateMap, APM, RunContextMap, SmallStationaryContextMap, StationaryMap, IndirectMap (with 
   unchanged behavior), they are now independent of the global context
-- Modified most of the Model classes - small steps toward clairity and independence of the global context
+- Modified most of the Model classes - small steps toward clarity and independence of the global context
 - Refactored Trainig (NormalModel, ExeModel)
 - Refactored APM and StateMap, StateMap now handles context sets (it processed single-contexts until now)
 - Scaling of stretched probabilities is now performed by *>> instead of */ in the maps
