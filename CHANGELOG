@@ -1488,3 +1488,17 @@ Paq8px_v179fix3
 - Re-added distancemodel removed in v179fix2
 - Other minor/cosmetic changes, fixed some method and variable names to follow naming conventions
 - Blended earlier removed changelogs from cpp to CHANGELOG
+
+
+Paq8px_v179fix4
+2019.06.16
+- United Buf, IntBuf and RingBuffer
+- All the (compression-related) variables in global scope are now encapsulated in a struct ("Shared")
+- Updated Train in NormalModel and ExeModel to take advantage of the new "Shared" struct
+- A couple of the remaining static variables are now gone
+- Removed some unused functions and calculations
+- Fixed an index in Audio16bitModel
+- AudioModel now encapsulates the common functions of Audio8bitModel and Audio16bitModel
+- The DetectContent() functionality of XMLModel is moved to its class
+- SSE stage is separated from Predictor to its own function
+- Other minor/cosmetic changes
