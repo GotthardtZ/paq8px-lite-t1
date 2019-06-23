@@ -1502,3 +1502,14 @@ Paq8px_v179fix4
 - The DetectContent() functionality of XMLModel is moved to its class
 - SSE stage is separated from Predictor to its own function
 - Other minor/cosmetic changes
+
+
+Paq8px_v179fix5
+2019.06.23
+- More global scope cleanup (Shared and ModelStats)
+- IPredictor: an interface class for all probability predictors, declaring the update() event handler
+- UpdateBroadcaster: a class to notify probability predictors that the next bit is known
+- Now most of the probability predictors (maps/models/mixers) update their internal state only when they participated in the prediction
+- Now most of the probability predictors will "predict->update" instead of "update->predict" (for each bit)
+- Moved Train (for NormalModel and ExeModel) from the models to the Predictor class - now these models and their training is decoupled
+- Minor fixes: StateMap init, ContextMap2 HasHistory condition
