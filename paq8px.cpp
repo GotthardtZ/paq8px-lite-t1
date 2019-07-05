@@ -8,9 +8,8 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "179fix5"  //update version here before publishing your changes
+#define PROGVERSION  "180"  //update version here before publishing your changes
 #define PROGYEAR     "2019"
-
 
 //////////////////////// Build options /////////////////////////////////////
 
@@ -26,10 +25,10 @@
 
 //////////////////////// Debug options /////////////////////////////////////
 
-#define NVERBOSE // Remove (comment out) this line for more on-screen progress information
-#define NDEBUG   // Remove (comment out) this line for debugging (turns on Array bound checks and asserts)
+#define NDEBUG    // Remove (comment out) this line for debugging (turns on Array bound checks and asserts)
 #include <assert.h>
 
+#define NVERBOSE  // Remove (comment out) this line for more on-screen progress information
 
 //////////////////////// Target OS/Compiler ////////////////////////////////
 
@@ -65,14 +64,13 @@
 #define ALWAYS_INLINE inline
 #endif
 
-
 //////////////////////// Includes /////////////////////////////////////////
 
 // Determining the proper printf() format specifier for 64 bit unsigned integers:
 // - on Windows MSVC and MinGW-w64 use the MSVCRT runtime where it is "%I64u"
 // - on Linux it is "%llu"
 // The correct value is provided by the PRIu64 macro which is defined here:
-#include <cinttypes> //PRIu64   (C99 standard, available since VS 2013 RTM)
+#include <cinttypes> //PRIu64
 
 // Platform-specific includes
 #ifdef UNIX
@@ -85,22 +83,23 @@
   #ifndef NOMINMAX
   #define NOMINMAX
   #endif
-  #include <windows.h>
-  #include <time.h>   //clock_t, CLOCKS_PER_SEC
+  #include <windows.h> //CreateDirectory, GetModuleFileName, FileType, FILE_TYPE_PIPE, FILE_TYPE_DISK, 
+                       //uRetVal, DWORD, UINT, TRUE, MAX_PATH
 #endif
 
 // Platform-independent includes
 #include <sys/stat.h> //stat(), mkdir()
 #include <math.h>     //floor(), sqrt()
 #include <stdexcept>  //std::exception
-#include <algorithm>
+#include <algorithm>  //std::min, std::max
+#include <chrono>     //std::chrono::high_resolution_clock
 
+// zlib
 #ifdef USE_ZLIB
 #include <zlib.h>
 #endif
 
-
-//////////////////// Cross platform definitions /////////////////////////////////////
+//////////////////// Cross-platform definitions /////////////////////////////////////
 
 #ifdef _MSC_VER
 #define fseeko(a,b,c) _fseeki64(a,b,c)
@@ -143,7 +142,6 @@
 +   ((x) << 56))
 #endif
 
-
 ///////////////////////// SIMD Vectorization detection //////////////////////////////////
 
 // Uncomment one or more of the following includes if you plan adding more SIMD dispatching
@@ -170,7 +168,7 @@
 #endif
 
 // Define interface to xgetbv instruction
-static inline int64_t xgetbv (int ctr) {
+static inline unsigned long long xgetbv (unsigned long ctr) {
 #if (defined (_MSC_FULL_VER) && _MSC_FULL_VER >= 160040000) || (defined (__INTEL_COMPILER) && __INTEL_COMPILER >= 1200)
   return _xgetbv(ctr);
 #elif defined(__GNUC__)
@@ -224,7 +222,6 @@ int simd_detect() {
   return 9;
 }
 
-
 //////////////////////// Type definitions /////////////////////////////////////////
 
 // shortcuts for unsigned 8, 16, 32 bit integer types
@@ -254,7 +251,7 @@ static inline int max(int a, int b) {return a<b?b:a;}
 class IntentionalException : public std::exception {};
 
 // Error handler: print message if any, and exit
-void quit(const char* const message=0) {
+void quit(const char* const message=nullptr) {
   if(message)
     printf("\n%s",message);
   printf("\n");
@@ -285,9 +282,9 @@ void quit(const char* const message=0) {
 // Remark: only Array<T> reports its memory usage, we don't know about other types
 class ProgramChecker {
 private:
-  U64 memused;  // Bytes currently in use (all allocated-all freed)
+  U64 memused;  // Bytes currently in use (all allocated minus all freed)
   U64 maxmem;   // Most bytes allocated ever
-  clock_t start_time;  // in ticks
+  std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
 public:
   void alloc(U64 n) {
     memused+=n;
@@ -298,13 +295,14 @@ public:
     memused-=n;
   }
   ProgramChecker(): memused(0), maxmem(0) {
-    start_time=clock();
+    start_time=std::chrono::high_resolution_clock::now();
   }
   double get_runtime() const {
-    return double(clock()-start_time)/CLOCKS_PER_SEC;
+    const std::chrono::time_point<std::chrono::high_resolution_clock> finish_time=std::chrono::high_resolution_clock::now();
+    return std::chrono::duration<double>(finish_time - start_time).count();
   }
   void print() const {  // Print elapsed time and used memory
-      double runtime=get_runtime();
+      const double runtime=get_runtime();
       printf("Time %1.2f sec, used %" PRIu64 " MB (%" PRIu64 " bytes) of memory\n",runtime,maxmem>>20,maxmem);
   }
   ~ProgramChecker() {
@@ -326,15 +324,18 @@ public:
 // a.resize(newsize): grows or shrinks the array.
 // a.append(x): appends x to the end of the array and reserving space for more elements if needed.
 // a.pop_back(): removes the last element by reducing the size by one (but does not free memory).
-#ifndef NDEBUG
-static void chkindex(U64 index, U64 upper_bound)
-{
-  if (index>=upper_bound) {
-    fprintf(stderr, "%" PRIu64 " out of upper bound %" PRIu64 "\n", index, upper_bound);
-    BACKTRACE();
-    quit();
+
+#ifdef NDEBUG
+  #define chkindex(index, upper_bound)((void) 0)
+#else
+  static void chkindex(U64 index, U64 upper_bound)
+  {
+    if (index>=upper_bound) {
+      fprintf(stderr, "%" PRIu64 " out of upper bound %" PRIu64 "\n", index, upper_bound);
+      BACKTRACE();
+      quit();
+    }
   }
-}
 #endif
 
 template <class T, const int Align=16> class Array {
@@ -350,15 +351,11 @@ public:
   explicit Array(U64 requested_size) {create(requested_size);}
   ~Array();
   T& operator[](U64 i) {
-    #ifndef NDEBUG
     chkindex(i,used_size);
-    #endif
     return data[i];
   }
   const T& operator[](U64 i) const {
-    #ifndef NDEBUG
     chkindex(i,used_size);
-    #endif
     return data[i];
   }
   U64 size() const {return used_size;}
@@ -376,7 +373,7 @@ template<class T, const int Align> void Array<T,Align>::create(U64 requested_siz
     data=nullptr;ptr=nullptr;
     return;
   }
-  U64 bytes_to_allocate=allocated_bytes();
+  const U64 bytes_to_allocate=allocated_bytes();
   ptr=(char*)calloc(bytes_to_allocate,1);
   if(ptr==nullptr)quit("Out of memory.");
   U64 pad=padding();
@@ -393,7 +390,7 @@ template<class T, const int Align> void Array<T,Align>::resize(U64 new_size) {
   }
   char *old_ptr=ptr;
   T *old_data=data;
-  U64 old_size=used_size;
+  const U64 old_size=used_size;
   programChecker.free(allocated_bytes());
   create(new_size);
   if(old_size>0) {
@@ -405,8 +402,8 @@ template<class T, const int Align> void Array<T,Align>::resize(U64 new_size) {
 
 template<class T, const int Align> void Array<T,Align>::push_back(const T& x) {
   if(used_size==reserved_size) {
-    U64 old_size=used_size;
-    U64 new_size=used_size*2+16;
+    const U64 old_size=used_size;
+    const U64 new_size=used_size*2+16;
     resize(new_size);
     used_size=old_size;
   }
@@ -433,7 +430,7 @@ private:
     if(x<=9)
       push_back('0'+char(x));
     else {
-      U64 rem= x % 10;
+      const U64 rem= x % 10;
       x = x / 10;
       if(x!=0)append_int_recursive(x);
       push_back('0'+char(rem));
@@ -441,7 +438,7 @@ private:
   }
 protected:
   #ifdef NDEBUG
-  void chk_consistency() const {}
+  #define chk_consistency() ((void) 0)
   #else
   void chk_consistency() const {
     for(U32 i=0;i<size()-1;i++)
@@ -451,15 +448,15 @@ protected:
   #endif
 public:
   const char* c_str() const {return &(*this)[0];}
-  int strsize() const {chk_consistency();assert(size()>0);return (int)size()-1;}
+  U64 strsize() const {chk_consistency();assert(size()>0);return size()-1;}
   void operator=(const char* s) {
-    resize((int)strlen(s)+1);
+    resize(strlen(s)+1);
     memcpy(&(*this)[0], s, size());
     chk_consistency();
   }
   void operator+=(const char* s) {
-    U64 pos=size();
-    int len=(int)strlen(s);
+    const U64 pos=size();
+    const U64 len=strlen(s);
     resize(pos+len);
     memcpy(&(*this)[pos-1], s, len+1);
     chk_consistency();
@@ -480,37 +477,38 @@ public:
     chk_consistency();
   }
   bool endswith(const char * ending) const {
-    int endingsize=int(strlen(ending));
+    const U64 endingsize=strlen(ending);
     if(endingsize>strsize())return false;
-    int cmp=memcmp(ending,&(*this)[strsize()-endingsize],endingsize);
+    const int cmp=memcmp(ending,&(*this)[strsize()-endingsize],endingsize);
     return(cmp==0);
   }
-  void stripend(int count) {
-    int newsize=strsize()-count;
-    assert(newsize>=0);
+  void stripend(U64 count) {
+    assert(strsize()>=count);
+    const U64 newsize=strsize()-count;
     resize(newsize);
     push_back(0); //Append NUL
     chk_consistency();
   }
   bool beginswith(const char * beginning) const {
-    int beginningsize=(int)strlen(beginning);
+    const U64 beginningsize=strlen(beginning);
     if(beginningsize>strsize())return false;
-    int cmp=memcmp(beginning,&(*this)[0],beginningsize);
+    const int cmp=memcmp(beginning,&(*this)[0],beginningsize);
     return(cmp==0);
   }
-  void stripstart(int count) {
-    int newsize=strsize()-count;
-    assert(newsize>=0);
+  void stripstart(U64 count) {
+    assert(strsize()>=count);
+    const U64 newsize=strsize()-count;
     memmove(&(*this)[0],&(*this)[count],newsize);
     resize(newsize);
     push_back(0); //Append NUL
     chk_consistency();
   }
   int findlast (char c) const {
-    for(int i=strsize()-1;i>=0;i--)if((*this)[i]==c)return i;
+    U64 i=strsize();
+    while(i-->0)if((*this)[i]==c)return (int)i;
     return -1; //not found
   }
-  String(const char* s=""): Array<char>(U64(strlen(s)+1)) {
+  String(const char* s=""): Array<char>(strlen(s)+1) {
     memcpy(&(*this)[0], s, size());
     chk_consistency();
   }
@@ -536,15 +534,16 @@ public:
     return pos; //has no path when -1
   }
   void keepfilename() {
-    int pos=lastslashpos();
+    const int pos=lastslashpos();
     stripstart(pos+1); //don't keep last slash
   }
   void keeppath() {
-    int pos=lastslashpos();
+    const int pos=lastslashpos();
     stripend(strsize()-pos-1); //keep last slash
   }
   void replaceslashes() { //prepare path string for screen output
-    for(int i=strsize()-1;i>=0;i--)
+    const U64 ssize=strsize();
+    for(U64 i=0;i<ssize;i++)
       if((*this)[i]==BADSLASH)
         (*this)[i]=GOODSLASH;
     chk_consistency();
@@ -566,12 +565,12 @@ public:
 //4: when does not exist, but looks like a directory  /abcd/efgh/
 static int examinepath(const char* path) {
   struct stat status;
-  bool success = stat(path, &status)==0;
+  const bool success = stat(path, &status)==0;
   if(!success) {
     if(errno==ENOENT){ //no such file or directory
-      int len=(int)strlen(path);
+      const int len=(int)strlen(path);
       if(len==0)return 0; //error: path is an empty string
-      char lastchar=path[len-1];
+      const char lastchar=path[len-1];
       if(lastchar!='/' && lastchar!='\\')return 3; //looks like a file
       else return 4; //looks like a directory
     }
@@ -587,10 +586,10 @@ static int makedir(const char* dir) {
   if(examinepath(dir)==2)//existing directory
     return 2; //2: directory already exists, no need to create
   #ifdef WINDOWS
-    bool created = (CreateDirectory(dir, 0) == TRUE);
+    const bool created = (CreateDirectory(dir, nullptr) == TRUE);
   #else
   #ifdef UNIX
-    bool created = (mkdir(dir, 0777) == 0);
+    const bool created = (mkdir(dir, 0777) == 0);
   #else
     #error Unknown target system
   #endif
@@ -601,15 +600,15 @@ static int makedir(const char* dir) {
 //creates directories recusively if they don't exist
 static void makedirectories(const char* filename) {
   String path(filename);
-  int start = 0;
+  U64 start = 0;
   if(path[1]==':')start=2; //skip drive letter (c:)
   if(path[start] == '/' || path[start] == '\\')start++; //skip leading slashes (root dir)
-  for (int i = start; path[i]; ++i) {
+  for (U64 i = start; path[i]!=0; ++i) {
     if (path[i] == '/' || path[i] == '\\') {
       char savechar = path[i];
       path[i] = 0;
       const char* dirname = path.c_str();
-      int created = makedir(dirname);
+      const int created = makedir(dirname);
       if (created==0) {
         printf("Unable to create directory %s", dirname);
         quit();
@@ -639,8 +638,8 @@ static void makedirectories(const char* filename) {
 FILE* maketmpfile(void) {
 #if defined(WINDOWS)
   char szTempFileName[MAX_PATH];
-  UINT uRetVal = GetTempFileName(TEXT("."), TEXT("tmp"), 0, szTempFileName);
-  if(uRetVal==0)return 0;
+  const UINT uRetVal = GetTempFileName(TEXT("."), TEXT("tmp"), 0, szTempFileName);
+  if(uRetVal==0)return nullptr;
   return fopen(szTempFileName, "w+bTD");
 #else
   return tmpfile();
@@ -658,7 +657,7 @@ public:
   virtual void close() = 0;
   virtual int getchar() = 0;
   virtual void putchar(U8 c) = 0;
-  void append(const char* s) {for (int i = 0; s[i]; i++)putchar(s[i]);}
+  void append(const char* s) {for (int i = 0; s[i]; i++)putchar((U8)s[i]);}
   virtual U64 blockread(U8 *ptr, U64 count) = 0;
   virtual void blockwrite(U8 *ptr, U64 count) = 0;
   U32 get32(){return (getchar() << 24) | (getchar() << 16) | (getchar() << 8) | (getchar());}
@@ -690,39 +689,39 @@ public:
 // This class is responsible for files on disk
 // It simply passes function calls to stdio
 
-class FileDisk :public File {
+class FileDisk : public File {
 protected:
   FILE *file;
 public:
-  FileDisk() {file=0;}
+  FileDisk() {file=nullptr;}
   ~FileDisk() {close();}
-  bool open(const char *filename, bool must_succeed) {
-    assert(file==0);
+  bool open(const char *filename, bool must_succeed) override {
+    assert(file==nullptr);
     file = fopen(filename, "rb");
-    bool success=(file!=0);
+    const bool success=(file!=nullptr);
     if(!success && must_succeed){printf("Unable to open file %s (%s)", filename, strerror(errno));quit();}
     return success;
   }
-  void create(const char *filename) {
-    assert(file==0);
+  void create(const char *filename) override {
+    assert(file==nullptr);
     makedirectories(filename);
     file=fopen(filename, "wb+");
     if (!file) {printf("Unable to create file %s (%s)", filename, strerror(errno));quit();}
   }
   void createtmp() {
-    assert(file==0);
+    assert(file==nullptr);
     file = maketmpfile();
     if (!file) {printf("Unable to create temporary file (%s)", strerror(errno));quit();}
   }
-  void close() { if(file) fclose(file); file=0;}
-  int getchar() { return fgetc(file); }
-  void putchar(U8 c) { fputc(c, file); }
-  U64 blockread(U8 *ptr, U64 count) {return fread(ptr,1,count,file);}
-  void blockwrite(U8 *ptr, U64 count) {fwrite(ptr,1,count,file);}
-  void setpos(U64 newpos) { fseeko(file, newpos, SEEK_SET); }
-  void setend() { fseeko(file, 0, SEEK_END); }
-  U64 curpos() { return ftello(file); }
-  bool eof() { return feof(file)!=0; }
+  void close() override { if(file) fclose(file); file=nullptr;}
+  int getchar() override { return fgetc(file); }
+  void putchar(U8 c) override { fputc(c, file); }
+  U64 blockread(U8 *ptr, U64 count) override {return fread(ptr,1,count,file);}
+  void blockwrite(U8 *ptr, U64 count) override {fwrite(ptr,1,count,file);}
+  void setpos(U64 newpos) override { fseeko(file, newpos, SEEK_SET); }
+  void setend() override { fseeko(file, 0, SEEK_END); }
+  U64 curpos() override { return ftello(file); }
+  bool eof() override { return feof(file)!=0; }
 };
 
 // This class is responsible for temporary files in RAM or on disk
@@ -730,7 +729,7 @@ public:
 // In case of the content size in RAM grows too large, it is written to disk,
 // the RAM is freed and all subsequent file operations will use the file on disk.
 
-class FileTmp :public File {
+class FileTmp : public File {
 private:
   //file content in ram
   Array<U8> *content_in_ram; //content of file
@@ -739,7 +738,7 @@ private:
   void forget_content_in_ram() {
     if (content_in_ram) {
       delete content_in_ram;
-      content_in_ram = 0;
+      content_in_ram = nullptr;
       filepos = 0;
       filesize = 0;
     }
@@ -750,7 +749,7 @@ private:
     if (file_on_disk) {
       file_on_disk->close();
       delete file_on_disk;
-      file_on_disk = 0;
+      file_on_disk = nullptr;
     }
   }
   //switch: ram->disk
@@ -760,7 +759,7 @@ private:
   static constexpr U32 MAX_RAM_FOR_TMP_CONTENT = 64; // to trigger switching to disk earlier - for testing
   #endif
   void ram_to_disk() {
-    assert(file_on_disk==0);
+    assert(file_on_disk==nullptr);
     file_on_disk = new FileDisk();
     file_on_disk->createtmp();
     if(filesize>0)
@@ -769,31 +768,31 @@ private:
     forget_content_in_ram();
   }
 public:
-  FileTmp() {content_in_ram=new Array<U8>(0); filepos=0; filesize=0; file_on_disk = 0;}
+  FileTmp() {content_in_ram=new Array<U8>(0); filepos=0; filesize=0; file_on_disk = nullptr;}
   ~FileTmp() {close();}
-  bool open(const char *filename, bool must_succeed) { assert(false); return false; } //this method is forbidden for temporary files
-  void create(const char *filename) { assert(false); } //this method is forbidden for temporary files
-  void close() {
+  bool open(const char *, bool) override { assert(false); return false; } //this method is forbidden for temporary files
+  void create(const char *) override { assert(false); } //this method is forbidden for temporary files
+  void close() override {
     forget_content_in_ram();
     forget_file_on_disk();
   }
-  int getchar() {
+  int getchar() override {
     if(content_in_ram) {
       if (filepos >= filesize)
         return EOF;
       else {
-        U8 c = (*content_in_ram)[(U32)filepos];
+        const U8 c = (*content_in_ram)[filepos];
         filepos++;
         return c;
       }
     }
     else return file_on_disk->getchar();
   }
-  void putchar(U8 c) {
+  void putchar(U8 c) override {
     if(content_in_ram) {
       if (filepos < MAX_RAM_FOR_TMP_CONTENT) {
         if (filepos == filesize) { content_in_ram->push_back(c); filesize++; }
-        else (*content_in_ram)[(U32)filepos] = c;
+        else (*content_in_ram)[filepos] = c;
         filepos++;
         return;
       }
@@ -801,21 +800,21 @@ public:
     }
     file_on_disk->putchar(c);
   }
-  U64 blockread(U8 *ptr, U64 count) {
+  U64 blockread(U8 *ptr, U64 count) override {
     if(content_in_ram) {
-      U64 available = filesize - filepos;
+      const U64 available = filesize - filepos;
       if (available<count)count = available;
-      if(count>0)memcpy(ptr, &((*content_in_ram)[(U32)filepos]), count);
+      if(count>0)memcpy(ptr, &((*content_in_ram)[filepos]), count);
       filepos += count;
       return count;
     }
     else return file_on_disk->blockread(ptr,count);
   }
-  void blockwrite(U8 *ptr, U64 count) {
+  void blockwrite(U8 *ptr, U64 count) override {
     if(content_in_ram) {
       if (filepos+count <= MAX_RAM_FOR_TMP_CONTENT) {
-        content_in_ram->resize((U32)(filepos + count));
-        if(count>0)memcpy(&((*content_in_ram)[(U32)filepos]), ptr, count);
+        content_in_ram->resize((filepos + count));
+        if(count>0)memcpy(&((*content_in_ram)[filepos]), ptr, count);
         filesize += count;
         filepos += count;
         return;
@@ -824,22 +823,22 @@ public:
     }
     file_on_disk->blockwrite(ptr,count);
   }
-  void setpos(U64 newpos) {
+  void setpos(U64 newpos) override {
     if(content_in_ram) {
       if(newpos>filesize)ram_to_disk(); //panic: we don't support seeking past end of file (but stdio does) - let's switch to disk
       else {filepos = newpos; return;}
     }
     file_on_disk->setpos(newpos);
   }
-  void setend() {
+  void setend() override {
     if(content_in_ram) filepos = filesize;
     else file_on_disk->setend();
   }
-  U64 curpos() {
+  U64 curpos() override {
     if(content_in_ram) return filepos;
     else return file_on_disk->curpos();
   }
-  bool eof() {
+  bool eof() override {
     if(content_in_ram)return filepos >= filesize;
     else return file_on_disk->eof();
   }
@@ -857,7 +856,7 @@ public:
   #ifdef WINDOWS
     int i;
     Array<char> myfilename(MAX_PATH+1);
-    if((i=GetModuleFileName(NULL, &myfilename[0], MAX_PATH)) && i<=MAX_PATH)
+    if((i=GetModuleFileName(nullptr, &myfilename[0], MAX_PATH)) && i<=MAX_PATH)
   #endif
   #ifdef UNIX
     Array<char> myfilename(PATH_MAX+1);
@@ -870,11 +869,11 @@ public:
 
   //this static method will open a file from the executable's folder
   static void anotherfile(FileDisk *f, const char* filename) {
-    int flength=(int)strlen(filename)+1;
+    const U64 flength=strlen(filename)+1;
     #ifdef WINDOWS
       int i;
       Array<char> myfilename(MAX_PATH+flength);
-      if((i=GetModuleFileName(NULL, &myfilename[0], MAX_PATH)) && i<=MAX_PATH) {
+      if((i=GetModuleFileName(nullptr, &myfilename[0], MAX_PATH)) && i<=MAX_PATH) {
         char *endofpath=strrchr(&myfilename[0], '\\');
     #endif
     #ifdef UNIX
@@ -882,7 +881,7 @@ public:
       if(readlink("/proc/self/exe", myfilename, PATH_MAX)!=-1) {
         char *endofpath=strrchr(&myfilename[0], '/');
     #endif
-        if (endofpath==0)quit(mypatherror);
+        if (endofpath==nullptr)quit(mypatherror);
         endofpath++;
         strcpy(endofpath, filename); //append filename to my path
         f->open(&myfilename[0],true);
@@ -897,7 +896,7 @@ static U64 getfilesize(const char * filename) {
   FileDisk f;
   f.open(filename,true);
   f.setend();
-  U64 filesize=f.curpos();
+  const U64 filesize=f.curpos();
   f.close();
   if((filesize>>31)!=0)quit("Large files not supported.");
   return filesize;
@@ -931,18 +930,19 @@ static bool to_screen=!isoutputdirected();
 // 32-bit pseudo random number generator
 class Random{
   Array<U32> table;
-  int i;
+  U64 i;
 public:
   Random(): table(64) {
     table[0]=123456789;
     table[1]=987654321;
-    for (int j=0; j<62; j++) table[j+2]=table[j+1]*11+table[j]*23/16;
+    for (U64 j=0; j<62; j++) table[j+2]=table[j+1]*11+table[j]*23/16;
     i=0;
   }
   U32 operator()() {
     return ++i, table[i&63]=table[(i-24)&63]^table[(i-55)&63];
   }
-} rnd;
+};
+
 
 ////////////////////////////// RingBuffer /////////////////////////////
 
@@ -970,7 +970,7 @@ public:
     return offset;
   }
   void fill(const T B) {
-    U32 n=(U32)b.size();
+    const U32 n=(U32)b.size();
     for(U32 i=0;i<n;i++)
       b[i]=B;
   }
@@ -1037,7 +1037,7 @@ struct ModelStats {
 
   //General shared information
   Blocktype blockType{};  //used by wordModel, recordModel, SSE stage
-  U32 blpos{};            // Relative position in block
+  U32 blpos{};            //relative position in block, used by many models
   U64 Misses{};           //used by SSE stage
 
   //MatchModel
@@ -1058,7 +1058,7 @@ struct ModelStats {
     U8 ctx;          //used by SSE stage
   } Image{};
 
-  //WavModel
+  //AudioModel
   U32 Wav{};           //used by recordModel
   U8 Audio{};
 
@@ -1082,6 +1082,7 @@ struct ModelStats {
 
   //RecordModel
   //ExeModel
+  
   void reset() {
     memset(this, 0, sizeof(ModelStats));
   }
@@ -1148,18 +1149,16 @@ struct Shared {
 class Ilog {
   Array<U8> t;
 public:
-  int operator()(U16 x) const {return t[x];}
-  Ilog();
-} ilog;
-
-// Compute lookup table by numerical integration of 1/x
-Ilog::Ilog(): t(65536) {
-  U32 x=14155776;
-  for (int i=2; i<65536; ++i) {
-    x+=774541002/(i*2-1);  // numerator is 2^29/ln 2
-    t[i]=x>>24;
+  int operator()(U16 x) const {return (int)t[x];}
+  Ilog(): t(65536) {
+    // Compute lookup table by numerical integration of 1/x
+    U32 x=14155776;
+    for (U32 i=2; i<65536; ++i) {
+      x+=774541002/(i*2-1);  // numerator is 2^29/ln 2
+      t[i]=x>>24;
+    }
   }
-}
+} ilog;
 
 // llog(x) accepts 32 bits
 inline int llog(U32 x) {
@@ -1241,8 +1240,8 @@ inline float rsqrt(const float x) {
 // Also, when a bit is observed and the count of the opposite bit is large,
 // then part of this count is discarded to favor newer data over old.
 
-#if 1 // change to #if 0 to generate this table at run time (4% slower)
-static constexpr U8 State_table[256][4]={
+class StateTable {
+  static constexpr U8 State_table[256][4]={
   {  1,  2, 0, 0},{  3,  5, 1, 0},{  4,  6, 0, 1},{  7, 10, 2, 0}, // 0-3
   {  8, 12, 1, 1},{  9, 13, 1, 1},{ 11, 14, 0, 2},{ 15, 19, 3, 0}, // 4-7
   { 16, 23, 2, 1},{ 17, 24, 2, 1},{ 18, 25, 2, 1},{ 20, 27, 1, 2}, // 8-11
@@ -1308,142 +1307,41 @@ static constexpr U8 State_table[256][4]={
   {140,252, 0,40},{249,135,41, 0},{250, 69,40, 1},{ 80,251, 1,40}, // 248-251
   {140,252, 0,41}};  // 252, 253-255 are reserved
 
-#define nex(state,sel) State_table[state][sel]
+  static constexpr U8 State_group[256]=
+  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,18,23,24,24,26,25,27,26,26,25,27,26,28,28,29,15,18,23,25,25,26,26,27,27,29,15,18,23,25,24,25,26,26,27,28,27,29,15,18,23,24,24,24,25,25,27,27,28,28,28,29,15,19,22,24,23,24,25,25,26,26,27,27,28,29,28,30,16,19,22,24,23,24,28,29,28,30,16,19,22,24,23,24,28,29,28,30,16,19,22,24,23,24,28,29,28,30,16,19,22,24,23,24,28,29,28,30,16,19,22,24,22,23,29,30,28,30,16,19,22,23,22,23,29,30,29,30,16,19,22,0,0,30,16,19,22,30,16,19,22,30,16,19,22,30,16,19,22,30,16,19,22,30,16,19,21,31,16,19,21,31,16,19,21,31,16,19,21,31,16,19,21,31,16,19,21,31,16,19,21,31,16,19,21,31,16,19,21,31,16,19,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,0,0,0,};
 
-// The code used to generate the above table at run time (4% slower).
-// To print the table, uncomment the 4 lines of print statements below.
-// In this code x,y = n0,n1 is the number of 0,1 bits represented by a state.
-#else
-
-class StateTable {
-  Array<U8> ns;  // state*4 -> next state if 0, if 1, n0, n1
-  enum {B=5, N=64}; // sizes of b, t
-  static const int b[B];  // x -> max y, y -> max x
-  static U8 t[N][N][2];  // x,y -> state number, number of states
-  int num_states(int x, int y);  // compute t[x][y][1]
-  void discount(int& x);  // set new value of x after 1 or y after 0
-  void next_state(int& x, int& y, int b);  // new (x,y) after bit b
 public:
-  int operator()(int state, int sel) {return ns[state*4+sel];}
-  StateTable();
-} nex;
-
-const int StateTable::b[B]={42,41,13,6,5};  // x -> max y, y -> max x
-U8 StateTable::t[N][N][2];
-
-int StateTable::num_states(int x, int y) {
-  if (x<y) return num_states(y, x);
-  if (x<0 || y<0 || x>=N || y>=N || y>=B || x>=b[y]) return 0;
-
-  // States 0-30 are a history of the last 0-4 bits
-  if (x+y<=4) {  // x+y choose x = (x+y)!/x!y!
-    int r=1;
-    for (int i=x+1; i<=x+y; ++i) r*=i;
-    for (int i=2; i<=y; ++i) r/=i;
-    return r;
+  static U8 next(U8 const state, const int y) {
+    return State_table[state][y];
   }
 
-  // States 31-255 represent a 0,1 count and possibly the last bit
-  // if the state is reachable by either a 0 or 1.
-  else
-    return 1+(y>0 && x+y<16);
-}
+// Probabilistic increment (approximate counting)
+  // For states 205..208, 209..212, ... 249..252 a group of 4 states is not represented by
+  // the counts indicated in the state table. An exponential scale is used instead.
+  // The highest group (249..252) represents the top of this scale, where we can not increment anymore.
+  static U8 next(U8 const old_state, const int y, Random &rnd) {
 
-// New value of count x if the opposite bit is observed
-void StateTable::discount(int& x) {
-  if (x>2) x=ilog(x)/6-1;
-}
-
-// compute next x,y (0 to N) given input b (0 or 1)
-void StateTable::next_state(int& x, int& y, int b) {
-  if (x<y)
-    next_state(y, x, 1-b);
-  else {
-    if (b) {
-      ++y;
-      discount(x);
-    }
-    else {
-      ++x;
-      discount(y);
-    }
-    while (!t[x][y][1]) {
-      if (y<2) --x;
-      else {
-        x=(x*(y-1)+(y/2))/y;
-        --y;
+    U8 new_state = State_table[old_state][y];
+    if(new_state>=205) { // for all groups of four states higher than idx 205
+      if(old_state<249) { // still climbing
+        const int shift=(460-new_state)>>3;
+        //for each group the probability to advance to a higher state is less and less as we climb higher and higher
+        if((rnd()<<shift)!=0) 
+          new_state-=4; 
       }
     }
-  }
-}
-
-// Initialize next state table ns[state*4] -> next if 0, next if 1, x, y
-StateTable::StateTable(): ns(1024) {
-
-  // Assign states
-  int state=0;
-  for (int i=0; i<256; ++i) {
-    for (int y=0; y<=i; ++y) {
-      int x=i-y;
-      int n=num_states(x, y);
-      if (n) {
-        t[x][y][0]=state;
-        t[x][y][1]=n;
-        state+=n;
-      }
-    }
+    return new_state;
   }
 
-  // Print/generate next state table
-  state=0;
-  for (int i=0; i<N; ++i) {
-    for (int y=0; y<=i; ++y) {
-      int x=i-y;
-      for (int k=0; k<t[x][y][1]; ++k) {
-        int x0=x, y0=y, x1=x, y1=y;  // next x,y for input 0,1
-        int ns0=0, ns1=0;
-        if (state<15) {
-          ++x0;
-          ++y1;
-          ns0=t[x0][y0][0]+state-t[x][y][0];
-          ns1=t[x1][y1][0]+state-t[x][y][0];
-          if (x>0) ns1+=t[x-1][y+1][1];
-          ns[state*4]=ns0;
-          ns[state*4+1]=ns1;
-          ns[state*4+2]=x;
-          ns[state*4+3]=y;
-        }
-        else if (t[x][y][1]) {
-          next_state(x0, y0, 0);
-          next_state(x1, y1, 1);
-          ns[state*4]=ns0=t[x0][y0][0];
-          ns[state*4+1]=ns1=t[x1][y1][0]+(t[x1][y1][1]>1);
-          ns[state*4+2]=x;
-          ns[state*4+3]=y;
-        }
-          // uncomment to print table above
-//        printf("{%3d,%3d,%2d,%2d},", ns[state*4], ns[state*4+1],
-//          ns[state*4+2], ns[state*4+3]);
-//        if (state%4==3) printf(" // %d-%d\n  ", state-3, state);
-        assert(state>=0 && state<256);
-        assert(t[x][y][1]>0);
-        assert(t[x][y][0]<=state);
-        assert(t[x][y][0]+t[x][y][1]>state);
-        assert(t[x][y][1]<=6);
-        assert(t[x0][y0][1]>0);
-        assert(t[x1][y1][1]>0);
-        assert(ns0-t[x0][y0][0]<t[x0][y0][1]);
-        assert(ns0-t[x0][y0][0]>=0);
-        assert(ns1-t[x1][y1][0]<t[x1][y1][1]);
-        assert(ns1-t[x1][y1][0]>=0);
-        ++state;
-      }
-    }
+  static void update(U8 *const state, const int y, Random &rnd) {
+    *state=next(*state,y,rnd);
   }
-//  printf("%d states\n", state); exit(0);  // uncomment to print table above
-}
 
-#endif
+  static U8 group(const U8 state) {
+    return State_group[state];
+  }
+};
+
 
 ///////////////////////////// Squash //////////////////////////////
 
@@ -1455,7 +1353,7 @@ int squash(int d) {
     4050,4068,4079,4085,4089,4092,4093,4094};
   if (d>2047) return 4095;
   if (d<-2047) return 0;
-  int w=d&127;
+  const int w=d&127;
   d=(d>>7)+16;
   return (t[d]*(128-w)+t[(d+1)]*w+64) >> 7;
 }
@@ -1478,7 +1376,7 @@ public:
 Stretch::Stretch(): t(4096) {
   int pi=0;
   for (int x=-2047; x<=2047; ++x) {  // invert squash()
-    int i=squash(x);
+    const int i=squash(x);
     for (int j=pi; j<=i; ++j)
       t[j]=(short)x;
     pi=i+1;
@@ -1488,8 +1386,8 @@ Stretch::Stretch(): t(4096) {
 
 //////////////////////////// IPredictor //////////////////////////
 
-// Common interface for all probability predictors (probability map, 
-// model and mixer classes).
+// Common interface for all probability predictors (probability map
+// and mixer classes).
 //
 // A probability predictor predicts the probability that the 
 // next bit is 1.
@@ -1518,7 +1416,7 @@ public:
 // then next bit is known by calling the update() method of each predictor.
 class UpdateBroadcaster {
 private:
-  int n; // number of subscribed predictors, (items in "subscribers" array)
+  int n; // number of subscribed predictors, (number of items in "subscribers" array)
   IPredictor *subscribers[1024];
 public:
   UpdateBroadcaster() : n(0) {}
@@ -1648,6 +1546,9 @@ static void train_simd_none(const short* const t, short* const w, int n, const i
 
 struct ErrorInfo {
   U32 Data[2], Sum, Mask, Collected;
+  void reset() {
+    memset(this,0,sizeof(*this));
+  }
 };
 
 static inline U32 SQR(U32 x) {
@@ -1660,26 +1561,25 @@ typedef enum {SIMD_NONE, SIMD_SSE2, SIMD_AVX2} SIMD;
 class Mixer : protected IPredictor {
 protected:
   const Shared * const shared;
-  const int N, M, S;     // max inputs, max contexts, max context sets
+  const U32 N, M, S;     // max inputs, max contexts, max context sets
+  int scalefactor;       // scale factor for dot product
   Array<short, 32> tx;   // N inputs from add()
   Array<short, 32> wx;   // N*M weights
-  Array<int> cxt;        // S contexts
+  Array<U32> cxt;        // S contexts
   Array<ErrorInfo> info; // stats for the adaptive learning rates
   Array<int> rates;      // learning rates
-  int ncxt;              // number of contexts (0 to S)
-  int base;              // offset of next context
-  int nx;                // number of inputs in tx, 0 to N
+  U32 ncxt;              // number of contexts (0 to S)
+  U32 base;              // offset of next context
+  U32 nx;                // number of inputs in tx, 0 to N
   Array<int> pr;         // last result (scaled 12 bits)
-  int scalefactor;       // scale factor for dot product
 public:
   Mixer(const Shared * const sh, const int n, const int m, const int s):
-    shared(sh), N(n), M(m), S(s), tx(N), wx(N*M), cxt(S), info(S), rates(S), pr(S), scalefactor(0)
+    shared(sh), N(n), M(m), S(s), scalefactor(0), tx(N), wx(N*M), cxt(S), info(S), rates(S), pr(S)
   {
-    int i;
-    for (i=0; i<S; ++i){
+    for (U64 i=0; i<S; ++i) {
       pr[i]=2048; //initial p=0.5
       rates[i] = DEFAULT_LEARNING_RATE;
-      memset(&info[i], 0, sizeof(ErrorInfo));
+      info[i].reset();
     }
     reset();
   }
@@ -1695,10 +1595,9 @@ public:
   }
 
   // Set a context (call S times, sum of ranges <= M)
-  void set(const int cx, const int range, const int rate = DEFAULT_LEARNING_RATE) {
-    assert(range>=0);
+  void set(const U32 cx, const U32 range, const int rate = DEFAULT_LEARNING_RATE) {
     assert(ncxt<S);
-    assert(0<=cx && cx<range);
+    assert(cx<range);
     assert(base+range<=M);
     if (!(options&OPTION_ADAPTIVE))
       rates[ncxt] = rate;
@@ -1716,12 +1615,12 @@ public:
 class DummyMixer : public Mixer {
 public:
   DummyMixer(const Shared * const sh, const int n, const int m, const int s):Mixer(sh, n, m, s){}
-  void update(){reset();}
-  int p(){
+  void update() override {reset();}
+  int p() override {
     updater.subscribe(this);
     return 2048;
   }
-  void set_scalefactor(const int sf0, const int sf1){};
+  void set_scalefactor(const int, const int) override {};
 };
 
 template <SIMD simd> class SIMDMixer: public Mixer {
@@ -1746,18 +1645,18 @@ public:
     delete mp;
   }
 
-  void set_scalefactor(const int sf0, const int sf1) {
+  void set_scalefactor(const int sf0, const int sf1) override {
     scalefactor=sf0;
     if(mp){mp->set_scalefactor(sf1,0);}
   }
 
   // Adjust weights to minimize coding cost of last prediction
-  void update() {
+  void update() override {
     INJECT_SHARED_y
-    int target=y<<12;
+    const int target=y<<12;
     if(nx>0)
-    for (int i=0; i<ncxt; ++i) {
-      int err=target-pr[i];
+    for (U64 i=0; i<ncxt; ++i) {
+      const int err=target-pr[i];
       if(simd==SIMD_NONE)
         train_simd_none(&tx[0], &wx[cxt[i]*N], nx, err*rates[i]);
       if(simd==SIMD_SSE2)
@@ -1765,21 +1664,21 @@ public:
       if(simd==SIMD_AVX2)
         train_simd_avx2(&tx[0], &wx[cxt[i]*N], nx, err*rates[i]);
       if (options&OPTION_ADAPTIVE){
-        U32 logErr=min(0xF,ilog2(abs(err)));
+        const U32 logErr=min(0xF,ilog2(abs(err)));
         info[i].Sum-=SQR(info[i].Data[1]>>28);
         info[i].Data[1]<<=4; info[i].Data[1]|=info[i].Data[0]>>28;
         info[i].Data[0]<<=4; info[i].Data[0]|=logErr;
         info[i].Sum+=SQR(logErr);
         info[i].Collected+=info[i].Collected<4096;
         info[i].Mask<<=1; info[i].Mask|=(logErr<=((info[i].Data[0]>>4)&0xF));
-        U32 count=BitCount(info[i].Mask);
+        const U32 count=BitCount(info[i].Mask);
         if (info[i].Collected>=64 && (info[i].Sum>1500+U32(rates[i])*64 || count<9 || (info[i].Mask&0xFF)==0)){
           rates[i]=DEFAULT_LEARNING_RATE;
           memset(&info[i], 0, sizeof(ErrorInfo));
         }
         else if (info[i].Collected==4096 && info[i].Sum>=56 && info[i].Sum<=144 && count>28-U32(rates[i]) && ((info[i].Mask&0xFF)==0xFF)){
           rates[i]-=rates[i]>2;
-          memset(&info[i], 0, sizeof(ErrorInfo));
+          info[i].reset();
         }
       }
     }
@@ -1793,7 +1692,7 @@ public:
     //if(mp)printf("nx: %d, ncxt: %d, base: %d\n",nx, ncxt, base); //for debugging: how many inputs do we have?
     while (nx&(simd_width()-1)) tx[nx++]=0;  // pad
     if (mp) {  // combine outputs
-      for (int i=0; i<ncxt; ++i) {
+      for (U64 i=0; i<ncxt; ++i) {
         int dp;
         if(simd==SIMD_NONE)
           dp=dot_product_simd_none(&tx[0], &wx[cxt[i]*N], nx);
@@ -1821,7 +1720,6 @@ public:
       return pr[0]=squash(dp);
     }
   }
-
 };
 
 static SIMD chosen_simd=SIMD_NONE; //default value, will be overriden by the CPU dispatcher, and may be overriden from the command line
@@ -1866,7 +1764,7 @@ public:
       for (int j=0; j<33; ++j)
         t[i*33+j] = i==0 ? squash((j-16)*128)*16 : t[j];
   }
-  void update() {
+  void update() override {
     INJECT_SHARED_y
     const int g=(y<<16)+(y<<rate)-y-y;
     t[index] += (g-t[index]) >> rate;
@@ -1920,12 +1818,12 @@ protected:
   void update(U32 * const p) {
     U32 p0=p[0];
     const int n=p0&1023;  //count
-    const int pr=p0>>10;  //prediction
+    const int pr=p0>>10;  //prediction (22-bit fractional part)
     if (n<limit) ++p0;
     else p0=(p0&0xfffffc00)|limit;
     INJECT_SHARED_y
-    const int target=y<<22;
-    const int delta=((target-pr)>>3)*dt[n]; //the larger the count (n) the less it should adapt
+    const int target=y<<22; //(22-bit fractional part)
+    const int delta=((target-pr)>>3)*dt[n]; //the larger the count (n) the less it should adapt pr+=(target-pr)/(n+1.5)
     p0+=delta&0xfffffc00;
     p[0]=p0;
   }
@@ -1946,16 +1844,16 @@ public:
     assert(S>0 && N>0);
     assert(limit>0 && limit<1024);
     if (init) { // when the context is a bit history byte, we have a-priory for p
-      assert((N&255)==0);
+      assert(N==256);
       for (U32 cx=0; cx<N; ++cx) {
-        U32 n0=nex(cx,2);
-        U32 n1=nex(cx,3);
+        U32 n0=StateTable::next(cx,2);
+        U32 n1=StateTable::next(cx,3);
         if (n0==0) n1*=64;
         if (n1==0) n0*=64;
         n0=n0*2+1;
         n1=n1*2+1;
         for (U32 s=0; s<S; ++s)
-          t[s*N+cx] = ((n1<<16)/(n0+n1))<<16;
+          t[s*N+cx] = ((n1<<20)/(n0+n1))<<12;
       }
     }
     else {
@@ -1967,7 +1865,7 @@ public:
     for (U32 i=0; i<N*S; ++i)
       t[i]=(t[i]&0xfffffc00)|min(Rate, t[i]&0x3FF);
   }
-  void update() {
+  void update() override {
     assert(ncxt<=S);
     while(ncxt>0) {
       ncxt--;
@@ -2005,7 +1903,7 @@ private:
   const int steps;
   int cxt;      // Context index of last prediction
 public:
-  APM(const Shared * const sh, const int n, const int s) :  AdaptiveMap(sh, n*s,1023), N(n*s), steps(s), cxt(0)  {
+  APM(const Shared * const sh, const int n, const int s) :  AdaptiveMap(sh,n*s,1023), N(n*s), steps(s), cxt(0)  {
     assert(s>4); // number of steps - must be a positive integer bigger than 4
     for (int i=0; i<N; ++i) {
       int p = ((i%steps*2+1)*4096)/(steps*2)-2048;
@@ -2065,8 +1963,8 @@ public:
 #define MUL64_13 UINT64_C(0xE3E4E8AA829AB9B5)
 
 // Finalizers (range reduction)
-// - Keep the necessary number of MSBs after a (combination of) 
-//   multiplicative hash(es)
+// - Keep the necessary number of bits after performing a
+//   (combination of) multiplicative hash(es)
 
 static ALWAYS_INLINE 
 U32 finalize64(const U64 hash, const int hashbits) {
@@ -2074,7 +1972,7 @@ U32 finalize64(const U64 hash, const int hashbits) {
   return U32(hash>>(64-hashbits));
 }
 
-// Get the next MSBs (8 or 16 bits) following "hasbits" for checksum
+// Get the next 8 or 16 bits following "hasbits" for checksum
 static ALWAYS_INLINE 
 U64 checksum64(const U64 hash, const int hashbits, const int checksumbits) {
   assert(0<checksumbits && U32(checksumbits)<=32); //32 is just a reasonable upper limit
@@ -2110,34 +2008,34 @@ U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4) {
 }
 static ALWAYS_INLINE 
 U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
-                  const U64 x5) {
+         const U64 x5) {
   return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
          (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5;
 }
 static ALWAYS_INLINE 
 U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
-                  const U64 x5, const U64 x6) {
+         const U64 x5, const U64 x6) {
   return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
          (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5 +
          (x6+1)*MUL64_6;
 }
 static ALWAYS_INLINE 
 U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
-                  const U64 x5, const U64 x6, const U64 x7) {
+         const U64 x5, const U64 x6, const U64 x7) {
   return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
          (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5 +
          (x6+1)*MUL64_6 + (x7+1)*MUL64_7;
 }
 static ALWAYS_INLINE 
 U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
-                  const U64 x5, const U64 x6, const U64 x7, const U64 x8) {
+         const U64 x5, const U64 x6, const U64 x7, const U64 x8) {
   return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
          (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5 +
          (x6+1)*MUL64_6 + (x7+1)*MUL64_7 + (x8+1)*MUL64_8;
 }
 static ALWAYS_INLINE 
 U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
-                  const U64 x5, const U64 x6, const U64 x7, const U64 x8, const U64 x9) {
+         const U64 x5, const U64 x6, const U64 x7, const U64 x8, const U64 x9) {
   return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
          (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5 +
          (x6+1)*MUL64_6 + (x7+1)*MUL64_7 + (x8+1)*MUL64_8 +
@@ -2145,8 +2043,8 @@ U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
 }
 static ALWAYS_INLINE 
 U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
-                  const U64 x5, const U64 x6, const U64 x7, const U64 x8, const U64 x9,
-                  const U64 x10) {
+         const U64 x5, const U64 x6, const U64 x7, const U64 x8, const U64 x9,
+         const U64 x10) {
   return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
          (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5 +
          (x6+1)*MUL64_6 + (x7+1)*MUL64_7 + (x8+1)*MUL64_8 +
@@ -2154,8 +2052,8 @@ U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
 }
 static ALWAYS_INLINE 
 U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
-                  const U64 x5, const U64 x6, const U64 x7, const U64 x8, const U64 x9,
-                  const U64 x10,const U64 x11) {
+         const U64 x5, const U64 x6, const U64 x7, const U64 x8, const U64 x9,
+         const U64 x10,const U64 x11) {
   return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
          (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5 +
          (x6+1)*MUL64_6 + (x7+1)*MUL64_7 + (x8+1)*MUL64_8 +
@@ -2163,8 +2061,8 @@ U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
 }
 static ALWAYS_INLINE 
 U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
-                  const U64 x5, const U64 x6, const U64 x7, const U64 x8, const U64 x9,
-                  const U64 x10,const U64 x11,const U64 x12) {
+         const U64 x5, const U64 x6, const U64 x7, const U64 x8, const U64 x9,
+         const U64 x10,const U64 x11,const U64 x12) {
   return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
          (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5 +
          (x6+1)*MUL64_6 + (x7+1)*MUL64_7 + (x8+1)*MUL64_8 +
@@ -2207,19 +2105,19 @@ U64 combine64(const U64 seed, const U64 x) {
 // If neither a match nor an empty element is found the lowest priority
 // element is replaced by the new element (except last 2 by priority).
 
-template <int B> class BH {
+template <U64 B> class BH {
   enum {M=8};  // search limit
   Array<U8> t; // elements
   const U32 mask; // size-1
   const int hashbits;
 public:
-  BH(U32 i): t(i*B), mask(i-1), hashbits(ilog2(mask+1)) {
+  BH(U64 i): t(i*B), mask(U32(i-1)), hashbits(ilog2(mask+1)) {
     assert(B>=2 && i>0 && ispowerof2(i));
   }
   U8* operator[](const U64 i);
 };
 
-template <int B>
+template <U64 B>
 inline U8* BH<B>::operator[](const U64 ctx) {
   const U16 chk=(U16)checksum64(ctx,hashbits,16);
   const U32 i=finalize64(ctx,hashbits)*M & mask;
@@ -2330,26 +2228,24 @@ inline U8* HashTable<B>::operator[](U64 i) { //i: context selector
 // count up to M.  Size should be a power of 2.  Memory usage is 3M/4.
 class RunContextMap : IPredictor {
 public:
-  static constexpr int MIXERINPUTS=1;
+  static constexpr int MIXERINPUTS = 1;
 private:
   const Shared * const shared;
   BH<4> t;
   U8* cp;
-  U64 ctx;
 public:
-  RunContextMap(const Shared * const sh, int m): shared(sh), t(m/4) {assert(ispowerof2(m));cp=t[0]+1;}
-  void update() { 
+  RunContextMap(const Shared * const sh, U64 m): shared(sh), t(m/4) {assert(ispowerof2(m));cp=t[0]+1;}
+  void update() override { 
     INJECT_SHARED_c1
     if (cp[0]==0 || cp[1]!=c1) cp[0]=1, cp[1]=c1;
     else if (cp[0]<255) ++cp[0];
   }
   void set(U64 cx) {
-    ctx=cx;
+    cp=t[cx]+1;
   }
   void mix(Mixer& m) {
     INJECT_SHARED_bpos
     if(bpos==7)updater.subscribe(this);
-    cp=t[ctx]+1;
     INJECT_SHARED_c0
     if (cp[0]!=0 && (cp[1]+256)>>(8-bpos)==c0) {
       int sign=(cp[1]>>(7-bpos)&1)*2-1;
@@ -2374,12 +2270,12 @@ Uses (2^(BitsOfContext+1))*((2^InputBits)-1) bytes of memory.
 
 class SmallStationaryContextMap : IPredictor {
 public:
-  static constexpr int MIXERINPUTS=2;
+  static constexpr int MIXERINPUTS = 2;
 private:
   const Shared * const shared;
   Array<U16> Data;
-  const int mask, stride, bTotal;
-  int Context, bCount, B;
+  const U32 mask, stride, bTotal;
+  U32 Context, bCount, B;
   U16 *cp;
   const int rate;
   int scale;
@@ -2403,7 +2299,7 @@ public:
       Data[i]=0x7FFF;
     cp=&Data[0];
   }
-  void update() {
+  void update() override {
     INJECT_SHARED_y
     *cp+=((y<<16)-(*cp)+(1<<(rate-1)))>>rate;
     B+=(y && B>0);
@@ -2412,7 +2308,7 @@ public:
   void mix(Mixer& m) {
     updater.subscribe(this);
     cp = &Data[Context+B];
-    int Prediction = (*cp)>>4;
+    const int Prediction = (*cp)>>4;
     m.add((stretch(Prediction)*scale)>>8);
     m.add(((Prediction-2048)*scale)>>9);
     bCount++; B+=B+1;
@@ -2436,12 +2332,12 @@ public:
 
 class StationaryMap : IPredictor {
 public:
-  static constexpr int MIXERINPUTS=2;
+  static constexpr int MIXERINPUTS = 2;
 private:
   const Shared * const shared;
   Array<U32> Data;
-  const int mask, maskbits, stride, bTotal;
-  int Context, bCount,  B;
+  const U32 mask, maskbits, stride, bTotal;
+  U32 Context, bCount,  B;
   U32 *cp;
   int scale;
   const U16 limit;
@@ -2472,7 +2368,7 @@ public:
       Data[i]=(0x7FF<<20)|min(1023,Rate);
     cp=&Data[0];
   }
-  void update() {
+  void update() override {
     U32 Count = min(min(limit,0x3FF), ((*cp)&0x3FF)+1);
     INJECT_SHARED_y
     int Prediction = (*cp)>>10, Error = (y<<22)-Prediction;
@@ -2494,15 +2390,18 @@ public:
 };
 
 
+/////////////////////////// IndirectMap /////////////////////////
+
 class IndirectMap : IPredictor {
 public:
-  static constexpr int MIXERINPUTS=2;
+  static constexpr int MIXERINPUTS = 2;
 private:
   const Shared * const shared;
+  Random rnd;
   Array<U8> Data;
   StateMap sm;
-  const int mask, maskbits, stride, bTotal;
-  int Context, bCount, B;
+  const U32 mask, maskbits, stride, bTotal;
+  U32 Context, bCount, B;
   U8 *cp;
   int scale;
 public:
@@ -2526,9 +2425,9 @@ public:
     Context = (finalize64(ctx,maskbits))*stride;
     bCount=B=0;
   }
-  void update() {
+  void update() override {
     INJECT_SHARED_y
-    *cp = nex(*cp, y);
+    StateTable::update(cp, y, rnd);
     B+=(y && B>0);
   }
   void setscale(const int Scale){scale=Scale;}
@@ -2588,9 +2487,10 @@ public:
 
 class ContextMap : IPredictor {
 public:
-  static constexpr int MIXERINPUTS=5;
+  static constexpr int MIXERINPUTS = 5;
 private:
   const Shared * const shared;
+  Random rnd;
   const int C;  // max number of contexts
   class E {  // hash element, 64 bytes
     U16 chk[7];  // byte context checksums
@@ -2599,8 +2499,18 @@ private:
     U8 bh[7][7]; // byte context, 3-bit context -> bit history state
       // bh[][0] = 1st bit, bh[][1,2] = 2nd bit, bh[][3..6] = 3rd bit
       // bh[][0] is also a replacement priority, 0 = empty
-    U8* get(U16 chk);  // Find element (0-6) matching checksum.
+    inline U8* get(const U16 chksum) { // Find element (0-6) matching checksum.
       // If not found, insert or replace lowest priority (not last).
+      // Find or create hash element matching checksum ch
+      if (chk[last&15]==chksum) return &bh[last&15][0];
+      int b=0xffff, bi=0;
+      for (int i=0; i<7; ++i) {
+        if (chk[i]==chksum) return last=last<<4|i, (U8*)&bh[i][0];
+        int pri=bh[i][0];
+        if (pri<b && (last&15)!=i && last>>4!=i) b=pri, bi=i;
+      }
+      return last=0xf0|bi, chk[bi]=chksum, (U8*)memset(&bh[bi][0], 0, 7);
+    }
   };
   Array<E,64> t;  // bit histories for bits 0-1, 2-4, 5-7
     // For 0-1, also contains a run count in bh[][4] and value in bh[][5]
@@ -2615,134 +2525,118 @@ private:
   const U32 mask;
   const int hashbits;
 public:
-  ContextMap(const Shared * const sh, U64 m, int c);  // m = memory in bytes, a power of 2, C = c
-  void set(const U64 cx);   // set next whole byte context to cx
-  void update();
-  void mix(Mixer& m);
-};
-
-// Find or create hash element matching checksum ch
-inline U8* ContextMap::E::get(U16 ch) {
-  if (chk[last&15]==ch) return &bh[last&15][0];
-  int b=0xffff, bi=0;
-  for (int i=0; i<7; ++i) {
-    if (chk[i]==ch) return last=last<<4|i, (U8*)&bh[i][0];
-    int pri=bh[i][0];
-    if (pri<b && (last&15)!=i && last>>4!=i) b=pri, bi=i;
-  }
-  return last=0xf0|bi, chk[bi]=ch, (U8*)memset(&bh[bi][0], 0, 7);
-}
-
-// Construct using m bytes of memory for c contexts
-ContextMap::ContextMap(const Shared * const sh, U64 m, int c): shared(sh), C(c), t(m>>6), cp(c), cp0(c),
+  // Construct using m bytes of memory for c contexts                                                    
+  ContextMap(const Shared * const sh, U64 m, const int c): shared(sh), C(c), t(m>>6), cp(c), cp0(c),
     cxt(c), chk(c), runp(c), sm(sh,c,256,1023,true), cn(0),
     mask(U32(t.size()-1)), hashbits(ilog2(mask+1)) {
-  assert(m>=64 && ispowerof2(m));
-  assert(sizeof(E)==64);
-  for (int i=0; i<C; ++i) {
-    cp0[i]=cp[i]=&t[0].bh[0][0];
-    runp[i]=cp[i]+3;
-  }
-}
-
-// Set the i'th context to cx
-inline void ContextMap::set(const U64 cx) {
-  assert(cn>=0 && cn<C);
-  const U32 ctx = cxt[cn] = finalize64(cx,hashbits);
-  const U16 checksum = chk[cn] = (U16)checksum64(cx,hashbits,16);
-  U8* base = cp0[cn]=cp[cn]=t[ctx&mask].get(checksum);
-  runp[cn]=base+3;
-  // Update pending bit histories for bits 2-7
-  if (cp0[cn][3]==2) {
-    const int c=cp0[cn][4]+256;
-    U8 *p=t[(ctx+(c>>6))&mask].get(checksum);
-    p[0]=1+((c>>5)&1);
-    p[1+((c>>5)&1)]=1+((c>>4)&1);
-    p[3+((c>>4)&3)]=1+((c>>3)&1);
-    p=t[(ctx+(c>>3))&mask].get(checksum);
-    p[0]=1+((c>>2)&1);
-    p[1+((c>>2)&1)]=1+((c>>1)&1);
-    p[3+((c>>1)&3)]=1+(c&1);
-    cp0[cn][6]=0;
-  }
-  cn++;
-}
-
-void ContextMap::update() {
-  INJECT_SHARED_bpos INJECT_SHARED_c0 INJECT_SHARED_c1 INJECT_SHARED_y
-  for (int i=0; i<cn; ++i) {
-    // Update bit history state byte
-    if (cp[i]!=nullptr) {
-      assert(cp[i]>=&t[0].bh[0][0] && cp[i]<=&t[t.size()-1].bh[6][6]);
-      assert((uintptr_t(cp[i])&63)>=15);
-      int ns=nex(*cp[i], y);
-      if (ns>=204 && rnd() << ((452-ns)>>3)) ns-=4;  // probabilistic increment
-      *cp[i]=ns;
+    assert(m>=64 && ispowerof2(m));
+    assert(sizeof(E)==64);
+    for (int i=0; i<C; ++i) {
+      cp0[i]=cp[i]=&t[0].bh[0][0];
+      runp[i]=cp[i]+3;
     }
-    
-    // Update context pointers
-    if (bpos>1 && runp[i][0]==0)
-      cp[i]=nullptr;
-    else {
-      switch(bpos) {
-        case 1: case 3: case 6: cp[i]=cp0[i]+1+(c0&1); break;
-        case 4: case 7: cp[i]=cp0[i]+3+(c0&3); break;
-        case 2: case 5: {
-          const U16 checksum = chk[i];
-          const U32 ctx = cxt[i];
-          cp0[i]=cp[i]=t[(ctx+c0)&mask].get(checksum); break;
-        }
-        case 0:
-        {
-          // Update run count of previous context
-          if (runp[i][0]==0)  // new context
-            runp[i][0]=2, runp[i][1]=c1;
-          else if (runp[i][1]!=c1)  // different byte in context
-            runp[i][0]=1, runp[i][1]=c1;
-          else if (runp[i][0]<254)  // same byte in context
-            runp[i][0]+=2;
-          else if (runp[i][0]==255)
-            runp[i][0]=128;
-          break;
+  }
+
+  // set next whole byte context to cx
+  inline void set(const U64 cx) {
+    assert(cn>=0 && cn<C);
+    const U32 ctx = cxt[cn] = finalize64(cx,hashbits);
+    const U16 checksum = chk[cn] = (U16)checksum64(cx,hashbits,16);
+    U8* base = cp0[cn]=cp[cn]=t[ctx&mask].get(checksum);
+    runp[cn]=base+3;
+    cn++;
+    // Update pending bit histories for bits 2-7
+    if (base[3]==2) {
+      const int c=base[4]+256;
+      U8 *p=t[(ctx+(c>>6))&mask].get(checksum);
+      p[0]=1+((c>>5)&1);
+      p[1+((c>>5)&1)]=1+((c>>4)&1);
+      p[3+((c>>4)&3)]=1+((c>>3)&1);
+      p=t[(ctx+(c>>3))&mask].get(checksum);
+      p[0]=1+((c>>2)&1);
+      p[1+((c>>2)&1)]=1+((c>>1)&1);
+      p[3+((c>>1)&3)]=1+(c&1);
+      base[6]=0;
+    }
+  }
+
+  void update() override {
+    INJECT_SHARED_bpos INJECT_SHARED_c0 INJECT_SHARED_c1 INJECT_SHARED_y
+    for (int i=0; i<cn; ++i) {
+      // Update bit history state byte
+      if (cp[i]!=nullptr) {
+        assert(cp[i]>=&t[0].bh[0][0] && cp[i]<=&t[t.size()-1].bh[6][6]);
+        assert((uintptr_t(cp[i])&63)>=15);
+        StateTable::update(cp[i],y,rnd);
+      }
+
+      // Update context pointers
+      if (bpos>1 && runp[i][0]==0)
+        cp[i]=nullptr;
+      else {
+        switch(bpos) {
+          case 1: case 3: case 6: cp[i]=cp0[i]+1+(c0&1); break;
+          case 4: case 7: cp[i]=cp0[i]+3+(c0&3); break;
+          case 2: case 5: {
+            const U16 checksum = chk[i];
+            const U32 ctx = cxt[i];
+            cp0[i]=cp[i]=t[(ctx+c0)&mask].get(checksum); break;
+          }
+          case 0:
+          {
+            // Update run count of previous context
+            if (runp[i][0]==0)  // new context
+              runp[i][0]=2, runp[i][1]=c1;
+            else if (runp[i][1]!=c1)  // different byte in context
+              runp[i][0]=1, runp[i][1]=c1;
+            else if (runp[i][0]<254)  // same byte in context
+              runp[i][0]+=2;
+            else if (runp[i][0]==255)
+              runp[i][0]=128;
+            break;
+          }
         }
       }
     }
+    if (bpos==0) cn = 0;
   }
-  if (bpos==0) cn = 0;
-}
 
- void ContextMap::mix(Mixer& m) {
-  updater.subscribe(this);
-  INJECT_SHARED_bpos INJECT_SHARED_c0
-  for (int i=0; i<cn; ++i) {
-    // predict from last byte in context
-    if ((runp[i][1]+256)>>(8-bpos)==c0) {
-      int rc=runp[i][0];  // count*2, +1 if 2 different bytes seen
-      int sign=(runp[i][1]>>(7-bpos)&1)*2-1;  // predicted bit + for 1, - for 0
-      int c=ilog(rc+1)<<(2+(~rc&1));
-      m.add(sign*c);
-    }
-    else
-      m.add(0); //p=0.5
+  void mix(Mixer& m) {
+    updater.subscribe(this);
+    INJECT_SHARED_bpos INJECT_SHARED_c0
+    for (int i=0; i<cn; ++i) {
+      // predict from last byte in context
+      if ((runp[i][1]+256)>>(8-bpos)==c0) {
+        int rc=runp[i][0];  // count*2, +1 if 2 different bytes seen
+        int sign=(runp[i][1]>>(7-bpos)&1)*2-1;  // predicted bit + for 1, - for 0
+        int c=ilog(rc+1)<<(2+(~rc&1));
+        m.add(sign*c);
+      }
+      else
+        m.add(0); //p=0.5
 
-    // predict from bit context
-    const int s = cp[i]!=nullptr ?  *cp[i] : 0;
-    int p1=sm.p(i,s);
-    const int st=(stretch(p1)+(1<<1))>>2;
-    m.add(st);
-    m.add((p1-2047+(1<<2))>>3);
-    if (s == 0) {
-      m.add(0); //p=0.5
-      m.add(0); //p=0.5
-    } else {
-      const int n0=-!nex(s,2);
-      const int n1=-!nex(s,3);
-      m.add(st*abs(n1-n0));
-      const int p0=4095-p1;
-      m.add(((p1&n0)-(p0&n1)+(1<<3))>>4);
+      // predict from bit context
+      const int s = cp[i]!=nullptr ?  *cp[i] : 0;
+      const int p1=sm.p(i,s);
+      const int st=stretch(p1)>>2;
+      if (s==0) {
+        m.add(0); //skip
+        m.add(0); //skip
+        m.add(0); //skip
+        m.add(0); //skip
+      } else {
+        m.add(st);
+        m.add((p1-2047)>>3);
+        const int n0=-!StateTable::next(s,2);
+        const int n1=-!StateTable::next(s,3);
+        m.add(st*abs(n1-n0));
+        const int p0=4095-p1;
+        m.add(((p1&n0)-(p0&n1))>>4);
+      }
     }
   }
-}
+};
+
 
 /*
 Context map for large contexts (32bits).
@@ -2763,9 +2657,10 @@ states to provide additional states that are then mapped to predictions.
 
 class ContextMap2 : IPredictor {
 public:
-  static constexpr int MIXERINPUTS=7;
+  static constexpr int MIXERINPUTS = 7;
 private:
   const Shared * const shared;
+  Random rnd;
   const U32 C; // max number of contexts
   class Bucket { // hash bucket, 64 bytes
     U16 Checksums[7]; // byte context checksums
@@ -2799,7 +2694,7 @@ private:
   Array<U8*> ByteHistory;  // C pointers to run stats plus byte history, 4 bytes, [RunStats,1..3]
   Array<U32> Contexts;     // C whole byte context hashes
   Array<U16> Chk;          // C whole byte context checksums
-  StateMap Maps6b, Maps8b, Maps12b;
+  StateMap Maps7b, Maps8b, Maps12b;
   U32 index; // Next context to set by set()
   const U32 mask;
   const int hashbits;
@@ -2810,7 +2705,7 @@ public:
   ContextMap2(const Shared * const sh, const U64 Size, const U32 Count, const int Scale) : shared(sh), 
     C(Count), Table(Size>>6), BitState(Count), BitState0(Count), ByteHistory(Count), 
     Contexts(Count), Chk(Count),
-    Maps6b(sh,Count,(1<<6)+8,1023,false), Maps8b(sh,Count,(1<<8),1023,true), Maps12b(sh,Count,(1<<12)+(1<<9),1023,false),
+    Maps7b(sh,Count,(1<<7),1023,false), Maps8b(sh,Count,(1<<8),1023,true), Maps12b(sh,Count,(1<<12),1023,false),
     index(0), mask(U32(Table.size()-1)), hashbits(ilog2(mask+1)), scale(Scale) {
     assert(Size>=64 && ispowerof2(Size));
     assert(sizeof(Bucket)==64);
@@ -2826,36 +2721,57 @@ public:
     U8* base = BitState[index] = BitState0[index] = Table[ctx0&mask].Find(chk0);
     ByteHistory[index] = base+3;
     index++;
+    // Update pending bit histories for bits 2-7
+    if (base[3]==2) {
+      const int c = base[4]+256;
+      U8 *p = Table[(ctx0+(c>>6))&mask].Find(chk0);
+      p[0] = 1+((c>>5)&1);
+      p[1+((c>>5)&1)] = 1+((c>>4)&1);
+      p[3+((c>>4)&3)] = 1+((c>>3)&1);
+      p = Table[(ctx0+(c>>3))&mask].Find(chk0);
+      p[0] = 1+((c>>2)&1);
+      p[1+((c>>2)&1)] = 1+((c>>1)&1);
+      p[3+((c>>1)&3)] = 1+(c&1);
+      base[6] = 0;
+    }
   }
-  void update() {
+  void update() override {
     INJECT_SHARED_bpos INJECT_SHARED_c0 INJECT_SHARED_c1 INJECT_SHARED_y
     for (U32 i=0; i<index; i++) {
       if (BitState[i])
-        *BitState[i] = nex(*BitState[i], y);
+        StateTable::update(BitState[i],y,rnd);
 
-      switch (bpos) {
-        case 0: {
-          // Update byte history of previous context
-          ByteHistory[i][3] = ByteHistory[i][2];
-          ByteHistory[i][2] = ByteHistory[i][1];
-            if (ByteHistory[i][0]==0)  // new context
-              ByteHistory[i][0]=2, ByteHistory[i][1]=c1;
-            else if (ByteHistory[i][1]!=c1)  // different byte in context
-              ByteHistory[i][0]=1, ByteHistory[i][1]=c1;
-            else if (ByteHistory[i][0]<254)  // same byte in context
-              ByteHistory[i][0]+=2;
-            else if (ByteHistory[i][0]==255) // more than one byte seen, but long run of current byte, reset to single byte seen
-              ByteHistory[i][0] = 128;
-          break;
+      if (bpos>1 && ByteHistory[i][0]==0)
+        BitState[i] = nullptr;
+      else {
+        switch (bpos) {
+          case 0: {
+            // Update byte history of previous context
+              if (ByteHistory[i][0]==0)  // new context
+                ByteHistory[i][0]=2;
+              else if (ByteHistory[i][1]!=c1)  // different byte in context
+                ByteHistory[i][0]=1;
+              else if (ByteHistory[i][0]<254)  // same byte in context
+                ByteHistory[i][0]+=2;
+              else if (ByteHistory[i][0]==255) // more than one byte seen, but long run of current byte, reset to single byte seen
+                ByteHistory[i][0] = 128;
+              // scroll byte candidates
+              if (ByteHistory[i][1]!=c1 || ByteHistory[i][-3]<7 /*less than 3 bytes seen*/) {
+                ByteHistory[i][3] = ByteHistory[i][2];
+                ByteHistory[i][2] = ByteHistory[i][1];
+                ByteHistory[i][1] = c1;
+              }
+              break;
+          }
+          case 2: case 5: {
+            const U16 chk = Chk[i];
+            const U32 ctx = Contexts[i];
+            BitState[i] = BitState0[i] = Table[(ctx+c0)&mask].Find(chk);
+            break;
+          }
+          case 1: case 3: case 6: BitState[i] = BitState0[i]+1+y; break;
+          case 4: case 7: BitState[i] = BitState0[i]+3+(c0&3); break;
         }
-        case 2: case 5: {
-          const U16 chk = Chk[i];
-          const U32 ctx = Contexts[i];
-          BitState[i] = BitState0[i] = Table[(ctx+finalize64(c0*0xE3E4E8AA829AB9B5,hashbits))&mask].Find(chk);
-          break;
-        }
-        case 1: case 3: case 6: BitState[i] = BitState0[i]+1+y; break;
-        case 4: case 7: BitState[i] = BitState0[i]+3+(c0&3); break;
       }
     }
     if (bpos==0) index = 0;
@@ -2867,12 +2783,6 @@ public:
     INJECT_SHARED_bpos INJECT_SHARED_c0
     order = 0;
     for (U32 i=0; i<index; i++) {
-      // predict from bit context
-      int state = BitState[i]!=nullptr ? *BitState[i] : 0;
-      int p1 = Maps8b.p(i,state);
-      int n0=nex(state, 2), n1=nex(state, 3), k=-~n1;
-      k = (k*64)/(k-~n0);
-      n0=-!n0, n1=-!n1;
       // predict from last byte in context
       const int RunStats = ByteHistory[i][0]; // count*2, +1 if 2 different bytes seen
       if(RunStats!=0) {
@@ -2895,30 +2805,40 @@ public:
       else
         m.add(0);
 
-      int st=(stretch(p1)*scale)>>8;
-      m.add(st);
-      m.add(((p1-2047)*scale)>>9);
-      if (state == 0) {
+      // predict from bit context
+      const int state = BitState[i]!=nullptr ? *BitState[i] : 0;
+      const int p1 = Maps8b.p(i,state);
+      if (state==0) {
+        m.add(0);
+        m.add(0);
         m.add(0);
         m.add(0);
       } else {
+        const int n0=-!StateTable::next(state, 2);
+        const int n1=-!StateTable::next(state, 3);
+        const int st=(stretch(p1)*scale)>>8;
+        m.add(st);
+        m.add(((p1-2047)*scale)>>9);
         m.add(st*abs(n1-n0));
         const int p0=4095-p1;
         m.add((((p1&n0)-(p0&n1))*scale)>>10);
         order++;
       }
 
-      if (ByteHistory[i][-3]>=15) { //we have at least three bytes
-        state  = (ByteHistory[i][1]>>(7-bpos))&1;
-        state |= ((ByteHistory[i][2]>>(7-bpos))&1)*2;
-        state |= ((ByteHistory[i][3]>>(7-bpos))&1)*4;
-      }
-      else
-        state = 8;
-      const int state12b=(state<<9)|(bpos<<6)|k;
-      m.add(stretch(Maps12b.p(i,state12b))>>2);
-      const int state6b=(state<<3)|bpos;
-      m.add(stretch(Maps6b.p(i,state6b))>>2);
+      const U8 bh_bits =
+          (((ByteHistory[i][1]>>(7-bpos))&1)   )
+        | (((ByteHistory[i][2]>>(7-bpos))&1)<<1)
+        | (((ByteHistory[i][3]>>(7-bpos))&1)<<2);
+
+      U8 bh_state=ByteHistory[i][-3];
+      if     (bh_state>=7) bh_state=8|bh_bits; //we have seen 3 bytes (at least) 
+      else if(bh_state>=3) bh_state=4|bh_bits; //we have seen 2 bytes
+      else if(bh_state>=1) bh_state=2|bh_bits; //we have seen 1 byte only
+                                               //else new context (bh_state=0)
+      
+      const U8 g=StateTable::group(state); //0..31
+      m.add(stretch( Maps12b.p(i,(bh_state<<8)|(bpos<<5)|g) )>>2);
+      m.add(stretch( Maps7b.p(i,(bh_state<<3)|bpos) )>>2);
     }
   }
 };
@@ -2994,12 +2914,12 @@ public:
     delete[] mCovariance, delete[] mCholesky;
   }
   void Add(const T val) {
-    if (index<n)
-      x[index++] = F(val)-sub;
+    assert(index<n);
+    x[index++] = F(val)-sub;
   }
   void AddFloat(const F val) {
-    if (index<n)
-      x[index++] = val-sub;
+    assert(index<n);
+    x[index++] = val-sub;
   }
   F Predict(const T **p) {
     F sum = 0.;
@@ -3088,8 +3008,7 @@ public:
   ~LMS() {
     delete weights, delete eg, delete buffer;
   }
-  F Predict(const T sample)
-  {
+  F Predict(const T sample) {
     memmove(&buffer[S+1], &buffer[S], (D-1) * sizeof(F));
     buffer[S] = sample;
     prediction = 0.;
@@ -3097,8 +3016,7 @@ public:
       prediction+= weights[i] * buffer[i];
     return prediction;
   }
-  void Update(const T sample)
-  {
+  void Update(const T sample) {
     const F error = sample - prediction;
     int i=0;
     for (; i<S; i++) {
@@ -4856,8 +4774,12 @@ static constexpr U8 AsciiGroup[128] = {
 };
 
 class TextModel {
+private:
+  static constexpr int nCM2 = 28;
 public:
-  static constexpr int nCM=28;
+  static constexpr int MIXERINPUTS = nCM2*ContextMap2::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = 2048+2048+4096+4096+2048+2048+4096+8192+2048; //30720
+  static constexpr int MIXERCONTEXTSETS = 9;
 private:
   const Shared * const shared;
   ModelStats *stats;
@@ -4933,7 +4855,7 @@ public:
   TextModel(const Shared * const sh, ModelStats *st, const U64 Size) : 
     shared(sh), 
     stats(st),
-    cm(sh,Size,nCM,64),
+    cm(sh,Size,nCM2,64),
     Stemmers(Language::Count-1),
     Languages(Language::Count-1),
     Dictionaries(Language::Count-1),
@@ -5392,6 +5314,15 @@ void TextModel::SetContexts() {
 
 class MatchModel {
 private:
+  static constexpr int NumHashes = 3;
+  static constexpr int nST = 3;
+  static constexpr int nSSM = 3;
+  static constexpr int nSM = 3;
+public:
+  static constexpr int MIXERINPUTS = 2 + nST + nSSM*SmallStationaryContextMap::MIXERINPUTS + nSM*StationaryMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = 256;
+  static constexpr int MIXERCONTEXTSETS = 1;
+private:
   const Shared * const shared;
   ModelStats *stats;
   enum Parameters : U32 {
@@ -5400,16 +5331,14 @@ private:
     MinLen = 5,      // minimum required match length
     StepSize = 2,    // additional minimum length increase per higher order hash
     DeltaLen = 5,    // minimum length to switch to delta mode
-    NumCtxs = 3,     // number of contexts used
-    NumHashes = 3    // number of hashes used
   };
   Array<U32> Table;
-  StateMap StateMaps[NumCtxs];
-  SmallStationaryContextMap SCM[3];
-  StationaryMap Maps[3];
+  StateMap StateMaps[nST];
+  SmallStationaryContextMap SCM[nSSM];
+  StationaryMap Maps[nSM];
   IndirectContext<U8> iCtx;
   U32 hashes[NumHashes]{ 0 };
-  U32 ctx[NumCtxs]{ 0 };
+  U32 ctx[nST]{ 0 };
   U32 length=0;      // rebased length of match (length=1 represents the smallest accepted match length), or 0 if no match
   U32 index=0;       // points to next byte of match in buf, 0 when there is no match
   U8 expectedByte=0; // prediction is based on this byte (buf[index]), valid only when length>0
@@ -5518,7 +5447,7 @@ public:
     }
 
     if (!(canBypass && Bypass)) {
-      for (U32 i=0; i<NumCtxs; i++)
+      for (U32 i=0; i<nST; i++)
         ctx[i] = 0;
       if (length>0) {
         if (length<=16)
@@ -5539,7 +5468,7 @@ public:
       if (delta)
         ctx[2] = (expectedByte<<8) | c0;
 
-      for (U32 i=0; i<NumCtxs; i++) {
+      for (U32 i=0; i<nST; i++) {
         const U32 c = ctx[i];
         const U32 p = StateMaps[i].p(0,c);
         if (c!=0)
@@ -5548,12 +5477,10 @@ public:
           m.add(0);
       }
 
-      SCM[0].mix(m);
-      SCM[1].mix(m);
-      SCM[2].mix(m);
-      Maps[0].mix(m);
-      Maps[1].mix(m);
-      Maps[2].mix(m);
+      for(int i=0;i<nSSM;i++)
+        SCM[i].mix(m);
+      for(int i=0;i<nSM;i++)
+        Maps[i].mix(m);
     }
     BypassPrediction = length==0 ? 2048 : (expectedBit==0 ? 1 : 4095);
 
@@ -5566,11 +5493,17 @@ public:
 
 class SparseMatchModel {
 private:
+  static constexpr int NumHashes = 4;
+  static constexpr int nSM = 4;
+public:
+  static constexpr int MIXERINPUTS = 3 + nSM*StationaryMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = NumHashes*(64+2048);
+  static constexpr int MIXERCONTEXTSETS = 2;
+private:
   const Shared * const shared;
   enum Parameters : U32 {
     MaxLen    = 0xFFFF, // longest allowed match
     MinLen    = 3,      // default minimum required match length
-    NumHashes = 4,      // number of hashes used
   };
   struct sparseConfig {
     U32 offset    = 0;      // number of last input bytes to ignore when searching for a match
@@ -5581,7 +5514,7 @@ private:
   };
   const sparseConfig sparse[NumHashes] = { {0,1,0,5,0xDF}, {1,1,0,4}, {0,2,0,4,0xDF}, {0,1,0,5,0x0F} };
   Array<U32> Table;
-  StationaryMap Maps[4];
+  StationaryMap Maps[nSM];
   IndirectContext<U8>  iCtx8{19,1};  // BitsPerContext, InputBits
   IndirectContext<U16> iCtx16{16,8}; // BitsPerContext, InputBits
   MTFList list{NumHashes};
@@ -5695,12 +5628,12 @@ public:
       else {
         m.add(0); m.add(0); m.add(0);
       }
-      for (int i=0;i<4;i++) {
+      for (int i=0;i<nSM;i++) {
         Maps[i].mix(m);
       }
     }
     else
-      for (int i=0; i<3+4*2; i++, m.add(0));
+      for (int i=0; i<MIXERINPUTS; i++) m.add(0);
 
     m.set((hashIndex<<6)|(bpos<<3)|min(7, length), NumHashes*64);
     m.set((hashIndex<<11)|(min(7, ilog2(length+1))<<8)|(c0^(expectedByte>>(8-bpos))), NumHashes*2048);
@@ -5711,46 +5644,50 @@ public:
 //
 // modeling ascii character sequences
 
-class CharGroupModel : IPredictor {
+class CharGroupModel {
 private:
-  static constexpr int CONTEXTS=7;
+  static constexpr int nCM=7;
+public:
+  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = 0;
+  static constexpr int MIXERCONTEXTSETS = 0;
+private:
   const Shared * const shared;
   ContextMap cm;
   U32 g_ascii3=0, g_ascii2=0, g_ascii1=0; // group identifiers of the last 12 (4+4+4) characters; the most recent is 'g_ascii1'
 public:
-  CharGroupModel (const Shared * const sh, const U64 size): shared(sh), cm(sh,size,CONTEXTS){}
-  void update() {
-    INJECT_SHARED_c1 
-      U32 g=c1; // group identifier
-    if('0'<=g && g<='9') g='0'; //all digits are in one group
-    else if('A'<=g && g<='Z') g='A'; //all uppercase letters are in one group
-    else if('a'<=g && g<='z') g='a'; //all lowercase letters are in one group
-    else if(g>=128) g=128;
-
-    const bool to_be_collapsed = (g=='0' || g=='A' || g=='a') && (g == (g_ascii1&0xff));
-    if(!to_be_collapsed) {
-      g_ascii3 <<= 8;
-      g_ascii3  |= g_ascii2>>(32-8);
-      g_ascii2 <<= 8;
-      g_ascii2  |= g_ascii1>>(32-8);
-      g_ascii1 <<= 8;
-      g_ascii1  |= g;
-    }
-
-    U64 i = to_be_collapsed*8;
-    cm.set(hash( (++i), g_ascii3, g_ascii2,          g_ascii1));        // last 12 groups
-    cm.set(hash( (++i),           g_ascii2,          g_ascii1));        // last 8 groups
-    cm.set(hash( (++i),           g_ascii2&0xffff,   g_ascii1));        // last 6 groups
-    cm.set(hash( (++i),                              g_ascii1));        // last 4 groups
-    cm.set(hash( (++i),                              g_ascii1&0xffff)); // last 2 groups
-    INJECT_SHARED_c4
-      cm.set(hash( (++i),           g_ascii2&0xffffff, g_ascii1, c4&0x0000ffff )); // last 7 groups + last 2 chars
-    cm.set(hash( (++i),           g_ascii2&0xff,     g_ascii1, c4&0x00ffffff )); // last 5 groups + last 3 chars
-  }
+  CharGroupModel (const Shared * const sh, const U64 size): shared(sh), cm(sh,size,nCM){}
   void mix(Mixer& m) {
     INJECT_SHARED_bpos 
+    if(bpos==0) {
+      INJECT_SHARED_c1 
+      U32 g=c1; // group identifier
+      if('0'<=g && g<='9') g='0'; //all digits are in one group
+      else if('A'<=g && g<='Z') g='A'; //all uppercase letters are in one group
+      else if('a'<=g && g<='z') g='a'; //all lowercase letters are in one group
+      else if(g>=128) g=128;
+
+      const bool to_be_collapsed = (g=='0' || g=='A' || g=='a') && (g == (g_ascii1&0xff));
+      if(!to_be_collapsed) {
+        g_ascii3 <<= 8;
+        g_ascii3  |= g_ascii2>>(32-8);
+        g_ascii2 <<= 8;
+        g_ascii2  |= g_ascii1>>(32-8);
+        g_ascii1 <<= 8;
+        g_ascii1  |= g;
+      }
+
+      U64 i = to_be_collapsed*8;
+      cm.set(hash( (++i), g_ascii3, g_ascii2,          g_ascii1));        // last 12 groups
+      cm.set(hash( (++i),           g_ascii2,          g_ascii1));        // last 8 groups
+      cm.set(hash( (++i),           g_ascii2&0xffff,   g_ascii1));        // last 6 groups
+      cm.set(hash( (++i),                              g_ascii1));        // last 4 groups
+      cm.set(hash( (++i),                              g_ascii1&0xffff)); // last 2 groups
+      INJECT_SHARED_c4
+      cm.set(hash( (++i),           g_ascii2&0xffffff, g_ascii1, c4&0x0000ffff )); // last 7 groups + last 2 chars
+      cm.set(hash( (++i),           g_ascii2&0xff,     g_ascii1, c4&0x00ffffff )); // last 5 groups + last 3 chars
+    }
     cm.mix(m);
-    if(bpos==7)updater.subscribe(this);
   }
 };
 
@@ -5763,7 +5700,12 @@ public:
 
 class WordModel {
 private:
-  static constexpr int CONTEXTS=49;
+  static constexpr int nCM=49;
+public:
+  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = 0;
+  static constexpr int MIXERCONTEXTSETS = 0;
+private:
   const Shared * const shared;
   ModelStats const *stats;
   ContextMap cm;
@@ -5778,7 +5720,7 @@ private:
   U32 mask=0, mask2=0, f4=0;
 public:
   WordModel (const Shared * const sh, ModelStats const *st, const U64 size) : 
-    shared(sh), stats(st), cm(sh,size,CONTEXTS) {}
+    shared(sh), stats(st), cm(sh,size,nCM) {}
   void mix(Mixer &m) {
     INJECT_SHARED_bpos 
     if (bpos==0) {
@@ -5965,6 +5907,7 @@ public:
 
 #endif //USE_WORDMODEL
 
+
 //////////////////////////// RecordModel ///////////////////////
 
 // Model 2-D data with fixed record length.  Also order 1-2 models
@@ -5999,17 +5942,24 @@ struct dBASE {
 };
 
 class RecordModel {
-public:
-  static constexpr int nMaps=6;
 private:
-  static constexpr int nIndCtxs=5;
+  static constexpr int nCM = 3+3+3+16; //cm,cn,co,cp
+  static constexpr int nSM = 6;
+  static constexpr int nSSM = 3;
+  static constexpr int nIM = 3;
+  static constexpr int nIndCtxs = 5;
+public:
+  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS + nSM*StationaryMap::MIXERINPUTS + nSSM*SmallStationaryContextMap::MIXERINPUTS + nIM*IndirectMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = 1024+512+11*32;
+  static constexpr int MIXERCONTEXTSETS = 3;
+private:
   const Shared * const shared;
   ModelStats *stats;
   ContextMap cm, cn, co; 
   ContextMap cp; 
-  StationaryMap Maps[nMaps];
-  SmallStationaryContextMap sMap[3];
-  IndirectMap iMap[3];
+  StationaryMap Maps[nSM];
+  SmallStationaryContextMap sMap[nSSM];
+  IndirectMap iMap[nIM];
   IndirectContext<U16> iCtx[nIndCtxs];
   Array<U32> cpos1{256}, cpos2{256}, cpos3{256}, cpos4{256};
   Array<U32> wpos1{256*256}; // buf(1..2) -> last position
@@ -6209,8 +6159,10 @@ public:
       cp.set(hash(++i, (stats->Match.length>0)?stats->Match.expectedByte:0x100|U8(iCtx[1]()), N, WxNW));
 
       int k=0x300;
-      if (MayBeImg24b)
-        k = (col%3)<<8, Maps[0].set_direct(Clip(((U8)(c4>>16))+c-(c4>>24))|k);
+      if (MayBeImg24b) {
+        k = (col%3)<<8;
+        Maps[0].set_direct(Clip(((U8)(c4>>16))+c-(c4>>24))|k);
+      }
       else
         Maps[0].set_direct(Clip(c*2-d)|k);
       Maps[1].set_direct(Clip(c+N-buf(rlen[0]+1))|k);
@@ -6236,7 +6188,7 @@ public:
     INJECT_SHARED_y
     iCtx[nIndCtxs-1]+=y;
     iCtx[nIndCtxs-1]=ctx;
-    Maps[nMaps-1].set_direct(ctx);
+    Maps[5].set_direct(ctx);
     sMap[0].set(ctx);
     sMap[1].set(iCtx[nIndCtxs-1]());
     sMap[2].set((ctx<<8)|WxNW);
@@ -6245,15 +6197,12 @@ public:
     cn.mix(m);
     co.mix(m);
     cp.mix(m);
-    for (int i=0;i<nMaps;i++) {
+    for (int i=0;i<nSM;i++)
       Maps[i].mix(m);
-    }
-    for (int i=0; i<3; i++){
+    for (int i=0; i<nIM; i++)
       iMap[i].mix(m);
-     }
-    sMap[0].mix(m);
-    sMap[1].mix(m);
-    sMap[2].mix(m);
+    for (int i=0; i<nSSM; i++)
+      sMap[i].mix(m);
 
     m.set( (rlen[0]>2)*( (bpos<<7)|mxCtx ), 1024 );
     m.set( ((N^B)>>4)|(x<<4), 512 );
@@ -6262,21 +6211,31 @@ public:
     stats->Wav = min(0xFFFF,rlen[0]);
   }
 };
+
+
+//////////////////////// LinearPredictionModel ///////////////////
+
 class LinearPredictionModel {
 private:
-  static constexpr int nOLS=3, nLnrPrd=nOLS+2;
+  static constexpr int nOLS=3;
+  static constexpr int nSSM=nOLS+2;
+public:
+  static constexpr int MIXERINPUTS = nSSM*SmallStationaryContextMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = 0;
+  static constexpr int MIXERCONTEXTSETS = 0;
+private:
   const Shared * const shared;
-  SmallStationaryContextMap sMap[nLnrPrd];
+  SmallStationaryContextMap sMap[nSSM];
   OLS<double, U8> ols[nOLS]{ {32, 4, 0.995}, {32, 4, 0.995}, {32, 4, 0.995} };
-  U8 prd[nLnrPrd]{ 0 };
+  U8 prd[nSSM]{ 0 };
 public:
   LinearPredictionModel(const Shared * const sh) : shared(sh),
-    sMap{  /*    SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
+    sMap{  /* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
       {sh,11,1,6,128},{sh,11,1,6,128},{sh,11,1,6,128},{sh,11,1,6,128},{sh,11,1,6,128}
     }
   {}
   void mix (Mixer& m) {
-    INJECT_SHARED_bpos 
+    INJECT_SHARED_bpos
     if (bpos==0) {
       INJECT_SHARED_buf
       const U8 W=buf(1), WW=buf(2), WWW=buf(3);
@@ -6295,7 +6254,7 @@ public:
     }
     INJECT_SHARED_c0
     const U8 B=c0<<(8-bpos);
-    for (int i=0; i<nLnrPrd; i++) {
+    for (int i=0; i<nSSM; i++) {
       sMap[i].set((prd[i]-B)*8+bpos);
       sMap[i].mix(m);
     }
@@ -6306,43 +6265,47 @@ public:
 
 // Model order 1-2-3 contexts with gaps.
 
-class SparseModel : IPredictor {
+class SparseModel {
 private:
-  static constexpr int CONTEXTS=38; //17+3*7
+  static constexpr int nCM=38; //17+3*7
+public:
+  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = 0;
+  static constexpr int MIXERCONTEXTSETS = 0;
+private:
   const Shared * const shared;
   ContextMap cm;
 public:
-  SparseModel(const Shared * const sh, const U64 size) : shared(sh), cm(sh, size,CONTEXTS){}
-  void update() {
-    INJECT_SHARED_buf INJECT_SHARED_c4
-    U64 i=0;
-    cm.set(hash(++i,buf(1)|buf(5)<<8));
-    cm.set(hash(++i,buf(1)|buf(6)<<8));
-    cm.set(hash(++i,buf(3)|buf(6)<<8));
-    cm.set(hash(++i,buf(4)|buf(8)<<8));
-    cm.set(hash(++i,buf(1)|buf(3)<<8|buf(5)<<16));
-    cm.set(hash(++i,buf(2)|buf(4)<<8|buf(6)<<16));
-    cm.set(hash(++i,c4&0x00f0f0ff));
-    cm.set(hash(++i,c4&0x00ff00ff));
-    cm.set(hash(++i,c4&0xff0000ff));
-    cm.set(hash(++i,c4&0x00f8f8f8));
-    cm.set(hash(++i,c4&0xf8f8f8f8));
-    cm.set(hash(++i,c4&0x00e0e0e0));
-    cm.set(hash(++i,c4&0xe0e0e0e0));
-    cm.set(hash(++i,c4&0x810000c1));
-    cm.set(hash(++i,c4&0xC3CCC38C));
-    cm.set(hash(++i,c4&0x0081CC81));
-    cm.set(hash(++i,c4&0x00c10081));
-    for (int j=2; j<=8; ++j) {
-      cm.set(hash(++i,buf(j)<<8));
-      cm.set(hash(++i,(buf(j+1)<<8)|buf(j)));
-      cm.set(hash(++i,(buf(j+2)<<8)|buf(j)));
-    }
-  }
+  SparseModel(const Shared * const sh, const U64 size) : shared(sh), cm(sh,size,nCM){}
   void mix(Mixer& m) {
     INJECT_SHARED_bpos
+    if(bpos==0) {
+      INJECT_SHARED_buf INJECT_SHARED_c4
+      U64 i=0;
+      cm.set(hash(++i,buf(1)|buf(5)<<8));
+      cm.set(hash(++i,buf(1)|buf(6)<<8));
+      cm.set(hash(++i,buf(3)|buf(6)<<8));
+      cm.set(hash(++i,buf(4)|buf(8)<<8));
+      cm.set(hash(++i,buf(1)|buf(3)<<8|buf(5)<<16));
+      cm.set(hash(++i,buf(2)|buf(4)<<8|buf(6)<<16));
+      cm.set(hash(++i,c4&0x00f0f0ff));
+      cm.set(hash(++i,c4&0x00ff00ff));
+      cm.set(hash(++i,c4&0xff0000ff));
+      cm.set(hash(++i,c4&0x00f8f8f8));
+      cm.set(hash(++i,c4&0xf8f8f8f8));
+      cm.set(hash(++i,c4&0x00e0e0e0));
+      cm.set(hash(++i,c4&0xe0e0e0e0));
+      cm.set(hash(++i,c4&0x810000c1));
+      cm.set(hash(++i,c4&0xC3CCC38C));
+      cm.set(hash(++i,c4&0x0081CC81));
+      cm.set(hash(++i,c4&0x00c10081));
+      for (int j=2; j<=8; ++j) {
+        cm.set(hash(++i,buf(j)<<8));
+        cm.set(hash(++i,(buf(j+1)<<8)|buf(j)));
+        cm.set(hash(++i,(buf(j+2)<<8)|buf(j)));
+      }
+    }
     cm.mix(m);
-    if (bpos==7)updater.subscribe(this);
   }
 };
 
@@ -6351,27 +6314,32 @@ public:
 
 // Model for modelling distances between symbols {0, space, new line/ff}
 
-class DistanceModel : IPredictor {
+class DistanceModel {
+private:
+  static constexpr int nCM=3;
+public:
+  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = 0;
+  static constexpr int MIXERCONTEXTSETS = 0;
 private:
   const Shared * const shared;
   ContextMap cm;
   int pos00=0,pos20=0,posnl=0;
 public:
-  DistanceModel(const Shared * const sh, U64 size) : shared(sh), cm(sh,size,3){}
-  void update() {
-    INJECT_SHARED_c1 INJECT_SHARED_pos
-      if (c1==0x00) pos00=pos;
-    if (c1==0x20) pos20=pos;
-    if (c1==0xff||c1=='\r'||c1=='\n') posnl=pos;
-    U64 i=0;
-    cm.set(hash(++i, min(pos-pos00,255) | c1<<8));
-    cm.set(hash(++i, min(pos-pos20,255) | c1<<8));
-    cm.set(hash(++i, min(pos-posnl,255) | c1<<8));
-  }
+  DistanceModel(const Shared * const sh, U64 size) : shared(sh), cm(sh,size,nCM){}
   void mix (Mixer& m){
-    INJECT_SHARED_bpos 
+    INJECT_SHARED_bpos
+    if(bpos==0) {
+      INJECT_SHARED_c1 INJECT_SHARED_pos
+      if (c1==0x00) pos00=pos;
+      if (c1==0x20) pos20=pos;
+      if (c1==0xff||c1=='\r'||c1=='\n') posnl=pos;
+      U64 i=0;
+      cm.set(hash(++i, min(pos-pos00,255) | c1<<8));
+      cm.set(hash(++i, min(pos-pos20,255) | c1<<8));
+      cm.set(hash(++i, min(pos-posnl,255) | c1<<8));
+    }
     cm.mix(m);
-    if(bpos==7)updater.subscribe(this);
   }
 };
 
@@ -6389,16 +6357,23 @@ inline U8 Paeth(U8 const W, U8 const N, U8 const NW){
 // Model for filtered (PNG) or unfiltered 24/32-bit image data
 
 class Image24bitModel {
-  static constexpr int nMaps0 = 18;
-  static constexpr int nMaps1 = 76;
+private:
+  static constexpr int nSM0 = 18;
+  static constexpr int nSM1 = 76;
   static constexpr int nOLS = 6;
-  static constexpr int nMaps = nMaps0+nMaps1+nOLS;
-  static constexpr int nSCMaps = 59;
+  static constexpr int nSM = nSM0+nSM1+nOLS;
+  static constexpr int nSSM = 59;
+  static constexpr int nCM = 45;
+public:
+  static constexpr int MIXERINPUTS = nSSM*SmallStationaryContextMap::MIXERINPUTS + nSM*StationaryMap::MIXERINPUTS + nCM*ContextMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = 6+256+512+2048+8*32+6*64+256*2+1024+8192+8192+8192+8192+256; //38022
+  static constexpr int MIXERCONTEXTSETS = 13;
+
   const Shared * const shared;
   ModelStats *stats;
   ContextMap cm;
-  SmallStationaryContextMap SCMap[nSCMaps];
-  StationaryMap Map[nMaps];
+  SmallStationaryContextMap SCMap[nSSM];
+  StationaryMap Map[nSM];
   Buf buffer{0x100000}; // internal rotating buffer for (PNG unfiltered) pixel data
   //pixel neighborhood
   U8 WWWWWW=0, WWWWW=0, WWWW=0, WWW=0, WW=0, W=0;
@@ -6411,6 +6386,8 @@ class Image24bitModel {
   U8 WWp1=0, Wp1=0, p1=0, NWp1=0, Np1=0, NEp1=0, NNp1=0;
   U8 WWp2=0, Wp2=0, p2=0, NWp2=0, Np2=0, NEp2=0, NNp2=0;
   U8 px = 0; // current PNG filter prediction
+  int info=0;
+  U32 alpha=0, isPNG=0;
   int color = -1;
   int stride = 3;
   int col=0;
@@ -6418,7 +6395,7 @@ class Image24bitModel {
   U32 lastPos=0, lastWasPNG=0;
   bool filterOn = false;
   int columns[2] = {1,1}, column[2]{};
-  U8 MapCtxs[nMaps1] = { 0 }, SCMapCtxs[nSCMaps] = { 0 }, pOLS[nOLS] = { 0 };
+  U8 MapCtxs[nSM1] = { 0 }, SCMapCtxs[nSSM] = { 0 }, pOLS[nOLS] = { 0 };
   static constexpr double lambda[nOLS] ={ 0.98, 0.87, 0.9, 0.8, 0.9, 0.7 };
   static constexpr int num[nOLS] ={ 32, 12, 15, 10, 14, 8 };
   OLS<double, U8> ols[nOLS][4] = {
@@ -6437,7 +6414,7 @@ class Image24bitModel {
   const U8 *ols_ctx6[ 8] = { &WWW, &WW, &W, &NNN, &NN, &N, &p1, &p2 };
   const U8 **ols_ctxs[nOLS] = { &ols_ctx1[0], &ols_ctx2[0], &ols_ctx3[0], &ols_ctx4[0], &ols_ctx5[0], &ols_ctx6[0] };
 public:
-  Image24bitModel(const Shared * const sh, ModelStats *st,const U64 size): shared(sh), stats(st), cm(sh,size,45),
+  Image24bitModel(const Shared * const sh, ModelStats *st,const U64 size): shared(sh), stats(st), cm(sh,size,nCM),
     SCMap { /* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
       {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
       {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
@@ -6449,45 +6426,24 @@ public:
       {sh,11,1,9,86}, {sh,11,1,9,86}, {sh, 0,8,9,86}
     },
     Map { /* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
-    /*nMaps0: 0- 8*/  {sh,8,8,86,1023},  {sh,8,8,86,1023},  {sh,8,8,86,1023},  {sh,2,8,86,1023},  {sh,0,8,86,1023}, {sh,15,1,86,1023}, {sh,15,1,86,1023}, {sh,15,1,86,1023}, {sh,15,1,86,1023}, 
-    /*nMaps0: 9-17*/ {sh,15,1,86,1023}, {sh,17,1,86,1023}, {sh,17,1,86,1023}, {sh,17,1,86,1023}, {sh,17,1,86,1023}, {sh,13,1,86,1023}, {sh,13,1,86,1023}, {sh,13,1,86,1023}, {sh,13,1,86,1023}, 
-    /*nMaps1: 0- 8*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
-    /*nMaps1: 9-17*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
-    /*nMaps1:18-26*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
-    /*nMaps1:27-35*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
-    /*nMaps1:36-44*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, 
-    /*nMaps1:45-53*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
-    /*nMaps1:54-62*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
-    /*nMaps1:63-71*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
-    /*nMaps1:72-75*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
+    /*nSM0: 0- 8*/  {sh,8,8,86,1023},  {sh,8,8,86,1023},  {sh,8,8,86,1023},  {sh,2,8,86,1023},  {sh,0,8,86,1023}, {sh,15,1,86,1023}, {sh,15,1,86,1023}, {sh,15,1,86,1023}, {sh,15,1,86,1023}, 
+    /*nSM0: 9-17*/ {sh,15,1,86,1023}, {sh,17,1,86,1023}, {sh,17,1,86,1023}, {sh,17,1,86,1023}, {sh,17,1,86,1023}, {sh,13,1,86,1023}, {sh,13,1,86,1023}, {sh,13,1,86,1023}, {sh,13,1,86,1023}, 
+    /*nSM1: 0- 8*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
+    /*nSM1: 9-17*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
+    /*nSM1:18-26*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
+    /*nSM1:27-35*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
+    /*nSM1:36-44*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, 
+    /*nSM1:45-53*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
+    /*nSM1:54-62*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
+    /*nSM1:63-71*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
+    /*nSM1:72-75*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
     /*nOLS:   0- 5*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023} 
     }
   {}
-  void mix(Mixer& m, int info, U32 alpha, U32 isPNG) {
-    INJECT_SHARED_bpos 
+  void update() { 
+    INJECT_SHARED_bpos
     if (bpos==0) {
-      INJECT_SHARED_c1 INJECT_SHARED_buf INJECT_SHARED_pos
-      if ((color<0) || (pos-lastPos!=1)) {
-        stride = 3+alpha;
-        w = info&0xFFFFFF;
-        padding = w%stride;
-        x = color = line = px = 0;
-        filterOn = false;
-        columns[0] = max(1, w/max(1, ilog2(w)*3));
-        columns[1] = max(1, columns[0]/max(1, ilog2(columns[0])));
-        if (lastPos>0 && lastWasPNG!=isPNG) {
-          for (int i=0; i<nMaps; i++)
-            Map[i].Reset(0);
-        }
-        lastWasPNG = isPNG;
-        buffer.fill(0x7F);
-      }
-      else {
-        x++;
-        if (x>=w+(int)isPNG) { x=0; line++; }
-      }
-      lastPos = pos;
-
+      INJECT_SHARED_c1 INJECT_SHARED_buf
       if (x==1 && isPNG)
         filter = c1;
       else {
@@ -6624,7 +6580,7 @@ public:
         MapCtxs[++j] = ((W+N)*3-NW*2)/4;
         MapCtxs[++j] = N;
         MapCtxs[++j] = NN;
-        assert(++j==nMaps1);
+        assert(++j==nSM1);
         j = -1;
         SCMapCtxs[++j] = N+p1-Np1;
         SCMapCtxs[++j] = N+p2-Np2;
@@ -6685,7 +6641,7 @@ public:
         SCMapCtxs[++j] = NNE+W-NN;
         SCMapCtxs[++j] = NNW+W-NNWW;
         SCMapCtxs[++j] = 0;
-        assert(++j==nSCMaps);
+        assert(++j==nSSM);
         j = 0;
         for (int k=(color>0)?color-1:stride-1; j<nOLS; j++) {
           pOLS[j] = Clip(int(floor(ols[j][color].Predict(ols_ctxs[j]))));
@@ -6751,10 +6707,10 @@ public:
         }
         else {
           int residuals[5] ={ ((int8_t)buf(stride+(x<=stride)))+128,
-                               ((int8_t)buf(1+(x<2)))+128,
-                               ((int8_t)buf(stride+1+(x<=stride)))+128,
-                               ((int8_t)buf(2+(x<3)))+128,
-                               ((int8_t)buf(stride+2+(x<=stride)))+128
+                              ((int8_t)buf(1+(x<2)))+128,
+                              ((int8_t)buf(stride+1+(x<=stride)))+128,
+                              ((int8_t)buf(2+(x<3)))+128,
+                              ((int8_t)buf(stride+2+(x<=stride)))+128
           };
           R1 = (residuals[1]*residuals[0])/max(1, residuals[2]);
           R2 = (residuals[3]*residuals[0])/max(1, residuals[4]);
@@ -6837,32 +6793,67 @@ public:
       Map[++i].set_direct((min(color, stride-1)<<11)|(((U8)(Clip(W+p1-Wp1)-px-B))*8+bpos));
       Map[++i].set_direct((min(color, stride-1)<<11)|(((U8)(Clip(W+p2-Wp2)-px-B))*8+bpos));
       ++i;
-      assert(i==nMaps0);
+      assert(i==nSM0);
 
-      for (int j=0; j<nMaps1; i++, j++)
+      for (int j=0; j<nSM1; i++, j++)
         Map[i].set_direct((MapCtxs[j]-px-B)*8+bpos);
 
-      for (int j=0; i<nMaps; i++, j++)
+      for (int j=0; i<nSM; i++, j++)
         Map[i].set_direct((pOLS[j]-px-B)*8+bpos);
 
-      for (int i=0; i<nSCMaps; i++)
+      for (int i=0; i<nSSM; i++)
         SCMap[i].set((SCMapCtxs[i]-px-B)*8+bpos);
+    }   
+  }
+  void init() { //new image
+    stride = 3+alpha;
+    w = info&0xFFFFFF;
+    padding = w%stride;
+    x = color = line = px = 0;
+    filterOn = false;
+    columns[0] = max(1, w/max(1, ilog2(w)*3));
+    columns[1] = max(1, columns[0]/max(1, ilog2(columns[0])));
+    if (lastPos>0 && lastWasPNG!=isPNG) {
+      for (int i=0; i<nSM; i++)
+        Map[i].Reset(0);
     }
-
+    lastWasPNG = isPNG;
+    buffer.fill(0x7F);
+  }
+  void setparam(int info0, U32 alpha0, U32 isPNG0) {
+    info=info0;
+    alpha=alpha0;
+    isPNG=isPNG0;
+  }
+  void mix(Mixer& m) {
+    INJECT_SHARED_bpos INJECT_SHARED_pos
+    if (bpos==0) {
+      if ((color<0) || (pos-lastPos!=1))
+        init();
+      else {
+        x++;
+        if (x>=w+(int)isPNG) { x=0; line++; }
+      }
+      lastPos = pos;
+    }
+    
+    update();
+    
     // Predict next bit
     if (x>0 || !isPNG){
       cm.mix(m);
-      for (int i=0;i<nMaps;i++) {
+      
+      for (int i=0;i<nSM;i++)
         Map[i].mix(m);
-      }
-      for (int i=0;i<nSCMaps;i++) {
+        
+      for (int i=0;i<nSSM;i++)
         SCMap[i].mix(m);
-      }
-      INJECT_SHARED_c0
+        
       if (++col>=stride*8) col=0;
       m.set(5, 6);
       m.set(min(63,column[0])+((ctx[0]>>3)&0xC0), 256);
       m.set(min(127,column[1])+((ctx[0]>>2)&0x180), 512);
+      INJECT_SHARED_c0 
       m.set((ctx[0]&0x7FC)|(bpos>>1), 2048);
       m.set(col+(isPNG?(ctx[0]&7)+1:(c0==((0x100|((N+W)/2))>>(8-bpos))))*32, 8*32);
       m.set(((isPNG?p1:0)>>4)*stride+(x%stride) + min(5,filterOn?filter+1:0)*64, 6*64);
@@ -6874,9 +6865,9 @@ public:
       m.set(finalize64(hash(LogQt(W,5), LogMeanDiffQt(W,WW,3), c0),13), 8192);
       m.set(min(255,(x+line)/32), 256);
     }
-    else{
+    else {
       m.add(-2048+((filter>>(7-bpos))&1)*4096);
-      m.set(min(4,filter), 6);
+      m.set(min(4,filter), MIXERCONTEXTSETS);
     }
   }
 };
@@ -6885,15 +6876,22 @@ public:
 
 // Model for 8-bit image data
 class Image8bitModel {
-  static constexpr int nMaps0 = 2;
-  static constexpr int nMaps1 = 55;
+private:
+  static constexpr int nSM0 = 2;
+  static constexpr int nSM1 = 55;
   static constexpr int nOLS = 5;
-  static constexpr int nMaps = nMaps0 + nMaps1 + nOLS;
+  static constexpr int nSM = nSM0 + nSM1 + nOLS;
   static constexpr int nPltMaps = 4;
+  static constexpr int nCM = nPltMaps+49;
+public:
+  static constexpr int MIXERINPUTS = nSM*StationaryMap::MIXERINPUTS + nCM*ContextMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS =(2048+5)+6*16+6*32+256+1024+64+128+256; // 4069
+  static constexpr int MIXERCONTEXTSETS = 8;
+
   const Shared * const shared;
   ModelStats *stats;
   ContextMap cm;
-  StationaryMap Map[nMaps];
+  StationaryMap Map[nSM];
   SmallStationaryContextMap pltMap[nPltMaps];
   IndirectMap sceneMap[5];
   IndirectContext<U8> iCtx[nPltMaps];
@@ -6909,11 +6907,12 @@ class Image8bitModel {
   U8 NNNNNN=0;
   U8 px = 0, res = 0, prvFrmPx = 0, prvFrmPred = 0; // current PNG filter prediction, expected residual, corresponding pixel in previous frame
   U32 lastPos=0, lastWasPNG=0;
-  int ctx=0, col=0, line=0, x=0, filter=0, jump=0;
+  U32 gray=0, isPNG=0;
+  int w=0, ctx=0, col=0, line=0, x=0, filter=0, jump=0;
   int framePos=0, prevFramePos=0, frameWidth=0, prevFrameWidth=0;
   bool filterOn = false;
   int columns[2] = {1,1}, column[2]{};
-  U8 MapCtxs[nMaps1] = { 0 }, pOLS[nOLS] = { 0 };
+  U8 MapCtxs[nSM1] = { 0 }, pOLS[nOLS] = { 0 };
   static constexpr double lambda[nOLS] ={ 0.996, 0.87, 0.93, 0.8, 0.9 };
   static constexpr int num[nOLS] ={ 32, 12, 15, 10, 14 };
   OLS<double, U8> ols[nOLS] = { 
@@ -6931,21 +6930,21 @@ class Image8bitModel {
   const U8 *ols_ctx5[14] = { &WWWW, &WWW, &WW, &W, &NWWW, &NWW, &NW, &N, &NNWW, &NNW, &NN, &NNNW, &NNN, &NNNN };
   const U8 **ols_ctxs[nOLS] = { &ols_ctx1[0], &ols_ctx2[0], &ols_ctx3[0], &ols_ctx4[0], &ols_ctx5[0] };
 public:
-  Image8bitModel(const Shared * const sh, ModelStats *st,const U64 size): 
-    shared(sh), stats(st), cm(sh,size,49+nPltMaps),
+  Image8bitModel(const Shared * const sh, ModelStats *st, const U64 size): 
+    shared(sh), stats(st), cm(sh,size,nCM),
     Map{ /* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
-    /*nMaps0: 0- 1*/ {sh, 0,8,64,1023}, {sh,15,1,64,1023},
-    /*nMaps1: 0- 4*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, 
-    /*nMaps1: 5- 9*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, 
-    /*nMaps1:10-14*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, 
-    /*nMaps1:15-19*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
-    /*nMaps1:20-24*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
-    /*nMaps1:25-29*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, 
-    /*nMaps1:30-34*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
-    /*nMaps1:35-39*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
-    /*nMaps1:40-44*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
-    /*nMaps1:45-49*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
-    /*nMaps1:50-54*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM0: 0- 1*/ {sh, 0,8,64,1023}, {sh,15,1,64,1023},
+    /*nSM1: 0- 4*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, 
+    /*nSM1: 5- 9*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, 
+    /*nSM1:10-14*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, 
+    /*nSM1:15-19*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:20-24*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:25-29*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, 
+    /*nSM1:30-34*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:35-39*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:40-44*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:45-49*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:50-54*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
     /*nOLS:   0- 4*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023} 
   },
   pltMap{   /* SmallStationaryContextMap: BitsOfContext, InputBits, Rate, Scale */
@@ -6958,9 +6957,14 @@ public:
     {16,8}, {16,8}, {16,8}, {16,8}
   }
   {}
-  void mix(Mixer& m, int w, U32 gray, U32 isPNG) {
-    INJECT_SHARED_bpos 
+  void setparam(int info0, U32 gray0, U32 isPNG0) {
+    w=info0;
+    gray=gray0;
+    isPNG=isPNG0;
+  }
+  void mix(Mixer& m) {
     // Select nearby pixels as context
+    INJECT_SHARED_bpos 
     if (bpos==0) {
       INJECT_SHARED_c1 INJECT_SHARED_buf INJECT_SHARED_pos
       if (pos!=lastPos+1){
@@ -6970,7 +6974,7 @@ public:
         columns[1] = max(1,columns[0]/max(1,ilog2(columns[0])));
         if (gray){
           if (lastPos && lastWasPNG!=isPNG){
-            for (int i=0;i<nMaps;i++)
+            for (int i=0;i<nSM;i++)
               Map[i].Reset(0);
           }
           lastWasPNG = isPNG;
@@ -7269,10 +7273,10 @@ public:
         Map[i++].set_direct(0);
         Map[i++].set_direct((((U8)(Clip(W+N-NW)-px-B))*8+bpos)|(LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))<<11));
 
-        for (int j=0; j<nMaps1; i++, j++)
+        for (int j=0; j<nSM1; i++, j++)
           Map[i].set_direct((MapCtxs[j]-px-B)*8+bpos);
 
-        for (int j=0; i<nMaps; i++, j++)
+        for (int j=0; i<nSM; i++, j++)
           Map[i].set_direct((pOLS[j]-px-B)*8+bpos);
       }
       sceneMap[2].set_direct(finalize64(hash(x, line), 19)*8+bpos);
@@ -7284,7 +7288,7 @@ public:
     if (x || !isPNG){
       cm.mix(m);
       if (gray){
-        for (int i=0;i<nMaps;i++) {
+        for (int i=0;i<nSM;i++) {
           Map[i].mix(m);
         }
       }
@@ -7312,7 +7316,7 @@ public:
     }
     else{
       m.add( -2048+((filter>>(7-bpos))&1)*4096 );
-      m.set(min(4,filter),5);
+      m.set(min(4,filter),MIXERINPUTS);
     }
   }
 };
@@ -7324,83 +7328,93 @@ public:
 
 class Image4bitModel {
 private:
-  static constexpr int S=14; //number of contexts
+  static constexpr int S = 14; //number of contexts
+public:
+  static constexpr int MIXERINPUTS = (S*3+1);
+  static constexpr int MIXERCONTEXTS = 256+512+512+1024+16+1; //2321
+  static constexpr int MIXERCONTEXTSETS = 6;
+private:
   const Shared * const shared;
+  Random rnd;
   HashTable<16> t;
   StateMap sm;
   StateMap map;
   U8* cp[S]{}; // context pointers
   U8 WW=0, W=0, NWW=0, NW=0, N=0, NE=0, NEE=0, NNWW = 0, NNW=0, NN=0, NNE=0, NNEE=0;
-  int col=0, line=0, run=0, prevColor=0, px=0;
+  int w=0, col=0, line=0, run=0, prevColor=0, px=0;
 public:
   Image4bitModel(const Shared * const sh, const U64 size) : shared(sh), t(size),
     sm{sh,S,256,1023,true}, //StateMap: s, n, lim, init
     map{sh,1,16,1023,false} //StateMap: s, n, lim, init
   {}
-void mix(Mixer& m, int w) {
-  if (!cp[0]){
-    for (int i=0;i<S;i++)
-      cp[i]=t[263*i]; //set the initial context to an arbitrary slot in the hashtable
+  void setparam(int info0) {
+    w=info0;
   }
-  INJECT_SHARED_y
-  for (int i=0;i<S;i++)
-    *cp[i]=nex(*cp[i],y); //update hashtable item priorities using predicted counts
-
-  INJECT_SHARED_bpos 
-  if (bpos==0 || bpos==4){
-    WW=W; NWW=NW; NW=N; N=NE; NE=NEE; NNWW=NWW; NNW=NN; NN=NNE; NNE=NNEE;
-    INJECT_SHARED_buf 
-    if (bpos==0)
-      {INJECT_SHARED_c4 W=c4&0xF; NEE=buf(w-1)>>4; NNEE=buf(w*2-1)>>4;}
-    else
-      {INJECT_SHARED_c0 W=c0&0xF; NEE=buf(w-1)&0xF; NNEE=buf(w*2-1)&0xF;}
-    run=(W!=WW || col==0)?(prevColor=WW,0):min(0xFFF,run+1);
-    px=1; //partial pixel (4 bits) with a leading "1"
-    U64 i=0; cp[i]=t[hash(i,W,NW,N)];
-        i++; cp[i]=t[hash(i,N, min(0xFFF, col/8))];
-        i++; cp[i]=t[hash(i,W,NW,N,NN,NE)];
-        i++; cp[i]=t[hash(i,W, N, NE+NNE*16, NEE+NNEE*16)];
-        i++; cp[i]=t[hash(i,W, N, NW+NNW*16, NWW+NNWW*16)];
-        i++; cp[i]=t[hash(i,W, ilog2(run+1), prevColor, col/max(1,w/2) )];
-        i++; cp[i]=t[hash(i,NE, min(0x3FF, (col+line)/max(1,w*8)))];
-        i++; cp[i]=t[hash(i,NW, (col-line)/max(1,w*8))];
-        i++; cp[i]=t[hash(i,WW*16+W,NN*16+N,NNWW*16+NW)];
-        i++; cp[i]=t[hash(i,N,NN)];
-        i++; cp[i]=t[hash(i,W,WW)];
-        i++; cp[i]=t[hash(i,W,NE)];
-        i++; cp[i]=t[hash(i,WW,NN,NEE)];
-        i++; cp[i]=t[-1];
-    assert(++i==S);
-    col++;
-    if(col==w*2){col=0;line++;}
-  }
-  else{
+  void mix(Mixer& m) {
+    if (!cp[0]){
+      for (int i=0;i<S;i++)
+        cp[i]=t[263*i]; //set the initial context to an arbitrary slot in the hashtable
+    }
     INJECT_SHARED_y
-    px+=px+y;
-    int j=(y+1)<<(bpos&3);
     for (int i=0;i<S;i++)
-      cp[i]+=j;
-  }
+      StateTable::update(cp[i],y,rnd); //update hashtable item priorities using predicted counts
 
-  // predict
-  for (int i=0; i<S; i++) {
-    const U8 s = *cp[i];
-    const int n0=-!nex(s, 2), n1=-!nex(s, 3);
-    const int p1 = sm.p(i,s);
-    const int st = stretch(p1)>>1;
-    m.add(st);
-    m.add((p1-2047)>>2);
-    m.add(st*abs(n1-n0));
-  }
-  m.add(stretch(map.p(0,px))>>1);
+    INJECT_SHARED_bpos 
+    if (bpos==0 || bpos==4){
+      WW=W; NWW=NW; NW=N; N=NE; NE=NEE; NNWW=NWW; NNW=NN; NN=NNE; NNE=NNEE;
+      INJECT_SHARED_buf 
+      if (bpos==0)
+        {INJECT_SHARED_c4 W=c4&0xF; NEE=buf(w-1)>>4; NNEE=buf(w*2-1)>>4;}
+      else
+        {INJECT_SHARED_c0 W=c0&0xF; NEE=buf(w-1)&0xF; NNEE=buf(w*2-1)&0xF;}
+      run=(W!=WW || col==0)?(prevColor=WW,0):min(0xFFF,run+1);
+      px=1; //partial pixel (4 bits) with a leading "1"
+      U64 i=0; cp[i]=t[hash(i,W,NW,N)];
+          i++; cp[i]=t[hash(i,N, min(0xFFF, col/8))];
+          i++; cp[i]=t[hash(i,W,NW,N,NN,NE)];
+          i++; cp[i]=t[hash(i,W, N, NE+NNE*16, NEE+NNEE*16)];
+          i++; cp[i]=t[hash(i,W, N, NW+NNW*16, NWW+NNWW*16)];
+          i++; cp[i]=t[hash(i,W, ilog2(run+1), prevColor, col/max(1,w/2) )];
+          i++; cp[i]=t[hash(i,NE, min(0x3FF, (col+line)/max(1,w*8)))];
+          i++; cp[i]=t[hash(i,NW, (col-line)/max(1,w*8))];
+          i++; cp[i]=t[hash(i,WW*16+W,NN*16+N,NNWW*16+NW)];
+          i++; cp[i]=t[hash(i,N,NN)];
+          i++; cp[i]=t[hash(i,W,WW)];
+          i++; cp[i]=t[hash(i,W,NE)];
+          i++; cp[i]=t[hash(i,WW,NN,NEE)];
+          i++; cp[i]=t[-1];
+      assert(++i==S);
+      col++;
+      if(col==w*2){col=0;line++;}
+    }
+    else{
+      INJECT_SHARED_y
+      px+=px+y;
+      int j=(y+1)<<(bpos&3);
+      for (int i=0;i<S;i++)
+        cp[i]+=j;
+    }
 
-  m.set((W<<4) | px, 256);
-  m.set(min(31,col/max(1,w/16)) | (N<<5), 512);
-  m.set((bpos&3) | (W<<2) | (min(7,ilog2(run+1))<<6), 512);
-  m.set(W | (NE<<4) | ((bpos&3)<<8), 1024);
-  m.set(px, 16);
-  m.set(0,1);
-}
+    // predict
+    for (int i=0; i<S; i++) {
+      const U8 s = *cp[i];
+      const int n0=-!StateTable::next(s, 2);
+      const int n1=-!StateTable::next(s, 3);
+      const int p1 = sm.p(i,s);
+      const int st = stretch(p1)>>1;
+      m.add(st);
+      m.add((p1-2047)>>2);
+      m.add(st*abs(n1-n0));
+    }
+    m.add(stretch(map.p(0,px))>>1);
+
+    m.set((W<<4) | px, 256);
+    m.set(min(31,col/max(1,w/16)) | (N<<5), 512);
+    m.set((bpos&3) | (W<<2) | (min(7,ilog2(run+1))<<6), 512);
+    m.set(W | (NE<<4) | ((bpos&3)<<8), 1024);
+    m.set(px, 16);
+    m.set(0,1);
+  }
 };
 
 //////////////////////////// Image1bitModel /////////////////////////////////
@@ -7408,49 +7422,55 @@ void mix(Mixer& m, int w) {
 // Model for 1-bit image data
 
 class Image1bitModel {
+private:
+  static constexpr int S = 11;
 public:
-  static constexpr int nSM=11;
-  static constexpr int MIXERINPUTS=nSM*1;
+  static constexpr int MIXERINPUTS = S;
 private:
   const Shared * const shared;
+  Random rnd;
+  int w=0;
   U32 r0=0, r1=0, r2=0, r3=0;  // last 4 rows, bit 8 is over current pixel
   Array<U8> t{0x23000};  // model: cxt -> state
-  int cxt[nSM]{};  // contexts
+  int cxt[S]{};  // contexts
   StateMap sm;
 public:
   Image1bitModel(const Shared * const sh) : shared(sh),
-    sm{sh,nSM,256,1023,true} // StateMap: s, n, limit, init
+    sm{sh,S,256,1023,true} // StateMap: s, n, limit, init
   {}
-void mix(Mixer& m, int w) {
-  // update the model
-  INJECT_SHARED_y
-  for (int i=0; i<nSM; ++i)
-    t[cxt[i]]=nex(t[cxt[i]],y);
-  
-  INJECT_SHARED_bpos INJECT_SHARED_buf
-  // update the contexts (pixels surrounding the predicted one)
-  r0+=r0+y;
-  r1+=r1+((buf(w-1)>>(7-bpos))&1);
-  r2+=r2+((buf(w+w-1)>>(7-bpos))&1);
-  r3+=r3+((buf(w+w+w-1)>>(7-bpos))&1);
-  cxt[0]=(r0&0x7)|(r1>>4&0x38)|(r2>>3&0xc0);
-  cxt[1]=0x100+((r0&1)|(r1>>4&0x3e)|(r2>>2&0x40)|(r3>>1&0x80));
-  cxt[2]=0x200+((r0&1)|(r1>>4&0x1d)|(r2>>1&0x60)|(r3&0xC0));
-  cxt[3]=0x300+(y|((r0<<1)&4)|((r1>>1)&0xF0)|((r2>>3)&0xA));
-  cxt[4]=0x400+((r0>>4&0x2AC)|(r1&0xA4)|(r2&0x349)|(!(r3&0x14D)));
-  cxt[5]=0x800+(y|((r1>>4)&0xE)|((r2>>1)&0x70)|((r3<<2)&0x380));
-  cxt[6]=0xC00+(((r1&0x30)^(r3&0x0c0c))|(r0&3));
-  cxt[7]=0x1000+((!(r0&0x444))|(r1&0xC0C)|(r2&0xAE3)|(r3&0x51C));
-  cxt[8]=0x2000+((r0&7)|((r1>>1)&0x3F8)|((r2<<5)&0xC00));
-  cxt[9]=0x3000+((r0&0x3f)^(r1&0x3ffe)^(r2<<2&0x7f00)^(r3<<5&0xf800));
-  cxt[10]=0x13000+((r0&0x3e)^(r1&0x0c0c)^(r2&0xc800));
-
-  // predict
-  for (int i=0; i<nSM; ++i) {
-    const U8 s=t[cxt[i]];
-    m.add(stretch(sm.p(i,s)));
+  void setparam(int info0) {
+    w=info0;
   }
-}
+  void mix(Mixer& m) {
+    // update the model
+    INJECT_SHARED_y
+    for (int i=0; i<S; ++i)
+      StateTable::update(&t[cxt[i]],y,rnd);
+
+    INJECT_SHARED_bpos INJECT_SHARED_buf
+    // update the contexts (pixels surrounding the predicted one)
+    r0+=r0+y;
+    r1+=r1+((buf(w-1)>>(7-bpos))&1);
+    r2+=r2+((buf(w+w-1)>>(7-bpos))&1);
+    r3+=r3+((buf(w+w+w-1)>>(7-bpos))&1);
+    cxt[0]=(r0&0x7)|(r1>>4&0x38)|(r2>>3&0xc0);
+    cxt[1]=0x100+((r0&1)|(r1>>4&0x3e)|(r2>>2&0x40)|(r3>>1&0x80));
+    cxt[2]=0x200+((r0&1)|(r1>>4&0x1d)|(r2>>1&0x60)|(r3&0xC0));
+    cxt[3]=0x300+(y|((r0<<1)&4)|((r1>>1)&0xF0)|((r2>>3)&0xA));
+    cxt[4]=0x400+((r0>>4&0x2AC)|(r1&0xA4)|(r2&0x349)|(!(r3&0x14D)));
+    cxt[5]=0x800+(y|((r1>>4)&0xE)|((r2>>1)&0x70)|((r3<<2)&0x380));
+    cxt[6]=0xC00+(((r1&0x30)^(r3&0x0c0c))|(r0&3));
+    cxt[7]=0x1000+((!(r0&0x444))|(r1&0xC0C)|(r2&0xAE3)|(r3&0x51C));
+    cxt[8]=0x2000+((r0&7)|((r1>>1)&0x3F8)|((r2<<5)&0xC00));
+    cxt[9]=0x3000+((r0&0x3f)^(r1&0x3ffe)^(r2<<2&0x7f00)^(r3<<5&0xf800));
+    cxt[10]=0x13000+((r0&0x3e)^(r1&0x0c0c)^(r2&0xc800));
+
+    // predict
+    for (int i=0; i<S; ++i) {
+      const U8 s=t[cxt[i]];
+      m.add(stretch(sm.p(i,s)));
+    }
+  }
 };
 
 //////////////////////////// jpegModel /////////////////////////
@@ -7511,7 +7531,14 @@ struct JPEGImage{
 
 class JpegModel {
 private:
+  static constexpr int N = 32; // number of contexts
+public:
+  static constexpr int MIXERINPUTS = 2*N+6; 
+  static constexpr int MIXERCONTEXTS = (1+8)+(1+1024)+1024;
+  static constexpr int MIXERCONTEXTSETS = 6;
+private:
     const Shared * const shared;
+    Random rnd;
     // State of parser
     enum {SOF0=0xc0, SOF1, SOF2, SOF3, DHT, RST0=0xd0, SOI=0xd8, EOI, SOS, DQT,
       DNL, DRI, APP0=0xe0, COM=0xfe, FF};  // Second byte of 2 byte codes
@@ -7572,21 +7599,20 @@ private:
     U32 dqt_end = 0, qnum = 0;
 
     // Context model
-    static const int N=32; // size of t, number of contexts
     BH<9> t; // context hash -> bit history
       // As a cache optimization, the context does not include the last 1-2
       // bits of huffcode if the length (huffbits) is not a multiple of 3.
       // The 7 mapped values are for context+{"", 0, 00, 01, 1, 10, 11}.
     Array<U64> cxt{N};  // context hashes
     Array<U8*> cp{N};  // context pointers
-    IndirectMap MJPEGMap; /* BitsOfContext, InputBits, Scale, Limit */
+    IndirectMap MJPEGMap; 
     StateMap sm;
     Mixer *m1;
     APM apm1, apm2;
 
 public:
   JpegModel(const Shared * const sh, const U64 size): shared(sh), t(size), 
-    MJPEGMap(sh,21,3,128,127),
+    MJPEGMap(sh,21,3,128,127), /* BitsOfContext, InputBits, Scale, Limit */
     sm(sh,N,256,1023,true), apm1 (sh,0x8000,24), apm2(sh,0x20000,24)
   {
     m1=MixerFactory::CreateMixer(sh, N+1, 2050, 3);
@@ -8119,15 +8145,15 @@ public:
     if (!images[idx].jpeg || !images[idx].data) return images[idx].next_jpeg;
     if (buf(1+(bpos==0))==FF) {
       m.add(128); //network bias
-      m.set(0, 9);
-      m.set(0, 1025);
+      m.set(0, 1+8);
+      m.set(0, 1+1024);
       m.set(buf(1), 1024);
       return true;
     }
     if (rstlen>0 && rstlen==column+row*width-rstpos && mcupos==0 && (int)huffcode==(1<<huffbits)-1) {
       m.add(2047); //network bias
-      m.set(0, 9);
-      m.set(0, 1025);
+      m.set(0, 1+8);
+      m.set(0, 1+1024);
       m.set(buf(1), 1024);
       return true;
     }
@@ -8136,7 +8162,7 @@ public:
     if (cp[N-1]) {
       INJECT_SHARED_y
       for (int i=0; i<N; ++i)
-        *cp[i]=nex(*cp[i],y);
+        StateTable::update(cp[i],y,rnd);
     }
 
     // Update context
@@ -8149,38 +8175,40 @@ public:
     const int zu=zzu[mcupos&63], zv=zzv[mcupos&63];
     if (hbcount==0) {
       U64 n=hc*32;
-      cxt[0]=hash(++n, coef, adv_pred[2]/12+(run_pred[2]<<8), ssum2>>6, prev_coef/72);
-      cxt[1]=hash(++n, coef, adv_pred[0]/12+(run_pred[0]<<8), ssum2>>6, prev_coef/72);
-      cxt[2]=hash(++n, coef, adv_pred[1]/11+(run_pred[1]<<8), ssum2>>6);
-      cxt[3]=hash(++n, rs1, adv_pred[2]/7, run_pred[5]/2, prev_coef/10);
-      cxt[4]=hash(++n, rs1, adv_pred[0]/7, run_pred[3]/2, prev_coef/10);
-      cxt[5]=hash(++n, rs1, adv_pred[1]/11, run_pred[4]);
-      cxt[6]=hash(++n, adv_pred[2]/14, run_pred[2], adv_pred[0]/14, run_pred[0]);
-      cxt[7]=hash(++n, cbuf[cpos-blockN[mcupos>>6]]>>4, adv_pred[3]/17, run_pred[1], run_pred[5]);
-      cxt[8]=hash(++n, cbuf[cpos-blockW[mcupos>>6]]>>4, adv_pred[3]/17, run_pred[1], run_pred[3]);
-      cxt[9]=hash(++n, lcp[0]/22, lcp[1]/22, adv_pred[1]/7, run_pred[1]);
-      cxt[10]=hash(++n, lcp[0]/22, lcp[1]/22, mcupos&63, lcp[4]/30);
-      cxt[11]=hash(++n, zu/2, lcp[0]/13, lcp[2]/30, prev_coef/40+((prev_coef2/28)<<20));
-      cxt[12]=hash(++n, zv/2, lcp[1]/13, lcp[3]/30, prev_coef/40+((prev_coef2/28)<<20));
-      cxt[13]=hash(++n, rs1, prev_coef/42, prev_coef2/34, lcp[0]/60,lcp[2]/14,lcp[1]/60,lcp[3]/14);
-      cxt[14]=hash(++n, mcupos&63, column>>1);
-      cxt[15]=hash(++n, column>>3, min(5+2*(!comp),zu+zv), lcp[0]/10,lcp[2]/40,lcp[1]/10,lcp[3]/40);
-      cxt[16]=hash(++n, ssum>>3, mcupos&63);
-      cxt[17]=hash(++n, rs1, mcupos&63, run_pred[1]);
-      cxt[18]=hash(++n, coef, ssum2>>5, adv_pred[3]/30, (comp)?hash(prev_coef/22,prev_coef2/50):ssum/((mcupos&0x3F)+1));
-      cxt[19]=hash(++n, lcp[0]/40, lcp[1]/40, adv_pred[1]/28, (comp)?prev_coef/40+((prev_coef2/40)<<20):lcp[4]/22, min(7,zu+zv), ssum/(2*(zu+zv)+1) );
-      cxt[20]=hash(++n, zv, cbuf[cpos-blockN[mcupos>>6]], adv_pred[2]/28, run_pred[2]);
-      cxt[21]=hash(++n, zu, cbuf[cpos-blockW[mcupos>>6]], adv_pred[0]/28, run_pred[0]);
-      cxt[22]=hash(++n, adv_pred[2]/7, run_pred[2]);
-      cxt[23]=hash(  n, adv_pred[0]/7, run_pred[0]);
-      cxt[24]=hash(  n, adv_pred[1]/7, run_pred[1]);
-      cxt[25]=hash(++n, zv, lcp[1]/14, adv_pred[2]/16, run_pred[5]);
-      cxt[26]=hash(++n, zu, lcp[0]/14, adv_pred[0]/16, run_pred[3]);
-      cxt[27]=hash(++n, lcp[0]/14, lcp[1]/14, adv_pred[3]/16);
-      cxt[28]=hash(++n, coef, prev_coef/10, prev_coef2/20);
-      cxt[29]=hash(++n, coef, ssum>>2, prev_coef_rs);
-      cxt[30]=hash(++n, coef, adv_pred[1]/17, lcp[(zu<zv)]/24,lcp[2]/20,lcp[3]/24);
-      cxt[31]=hash(++n, coef, adv_pred[3]/11, lcp[(zu<zv)]/50,lcp[2+3*(zu*zv>1)]/50,lcp[3+3*(zu*zv>1)]/50);
+      int i=0;
+      cxt[i++]=hash(++n, coef, adv_pred[2]/12+(run_pred[2]<<8), ssum2>>6, prev_coef/72);
+      cxt[i++]=hash(++n, coef, adv_pred[0]/12+(run_pred[0]<<8), ssum2>>6, prev_coef/72);
+      cxt[i++]=hash(++n, coef, adv_pred[1]/11+(run_pred[1]<<8), ssum2>>6);
+      cxt[i++]=hash(++n, rs1, adv_pred[2]/7, run_pred[5]/2, prev_coef/10);
+      cxt[i++]=hash(++n, rs1, adv_pred[0]/7, run_pred[3]/2, prev_coef/10);
+      cxt[i++]=hash(++n, rs1, adv_pred[1]/11, run_pred[4]);
+      cxt[i++]=hash(++n, adv_pred[2]/14, run_pred[2], adv_pred[0]/14, run_pred[0]);
+      cxt[i++]=hash(++n, cbuf[cpos-blockN[mcupos>>6]]>>4, adv_pred[3]/17, run_pred[1], run_pred[5]);
+      cxt[i++]=hash(++n, cbuf[cpos-blockW[mcupos>>6]]>>4, adv_pred[3]/17, run_pred[1], run_pred[3]);
+      cxt[i++]=hash(++n, lcp[0]/22, lcp[1]/22, adv_pred[1]/7, run_pred[1]);
+      cxt[i++]=hash(++n, lcp[0]/22, lcp[1]/22, mcupos&63, lcp[4]/30);
+      cxt[i++]=hash(++n, zu/2, lcp[0]/13, lcp[2]/30, prev_coef/40+((prev_coef2/28)<<20));
+      cxt[i++]=hash(++n, zv/2, lcp[1]/13, lcp[3]/30, prev_coef/40+((prev_coef2/28)<<20));
+      cxt[i++]=hash(++n, rs1, prev_coef/42, prev_coef2/34, lcp[0]/60,lcp[2]/14,lcp[1]/60,lcp[3]/14);
+      cxt[i++]=hash(++n, mcupos&63, column>>1);
+      cxt[i++]=hash(++n, column>>3, min(5+2*(!comp),zu+zv), lcp[0]/10,lcp[2]/40,lcp[1]/10,lcp[3]/40);
+      cxt[i++]=hash(++n, ssum>>3, mcupos&63);
+      cxt[i++]=hash(++n, rs1, mcupos&63, run_pred[1]);
+      cxt[i++]=hash(++n, coef, ssum2>>5, adv_pred[3]/30, (comp)?hash(prev_coef/22,prev_coef2/50):ssum/((mcupos&0x3F)+1));
+      cxt[i++]=hash(++n, lcp[0]/40, lcp[1]/40, adv_pred[1]/28, (comp)?prev_coef/40+((prev_coef2/40)<<20):lcp[4]/22, min(7,zu+zv), ssum/(2*(zu+zv)+1) );
+      cxt[i++]=hash(++n, zv, cbuf[cpos-blockN[mcupos>>6]], adv_pred[2]/28, run_pred[2]);
+      cxt[i++]=hash(++n, zu, cbuf[cpos-blockW[mcupos>>6]], adv_pred[0]/28, run_pred[0]);
+      cxt[i++]=hash(++n, adv_pred[2]/7, run_pred[2]);
+      cxt[i++]=hash(  n, adv_pred[0]/7, run_pred[0]);
+      cxt[i++]=hash(  n, adv_pred[1]/7, run_pred[1]);
+      cxt[i++]=hash(++n, zv, lcp[1]/14, adv_pred[2]/16, run_pred[5]);
+      cxt[i++]=hash(++n, zu, lcp[0]/14, adv_pred[0]/16, run_pred[3]);
+      cxt[i++]=hash(++n, lcp[0]/14, lcp[1]/14, adv_pred[3]/16);
+      cxt[i++]=hash(++n, coef, prev_coef/10, prev_coef2/20);
+      cxt[i++]=hash(++n, coef, ssum>>2, prev_coef_rs);
+      cxt[i++]=hash(++n, coef, adv_pred[1]/17, lcp[(zu<zv)]/24,lcp[2]/20,lcp[3]/24);
+      cxt[i++]=hash(++n, coef, adv_pred[3]/11, lcp[(zu<zv)]/50,lcp[2+3*(zu*zv>1)]/50,lcp[3+3*(zu*zv>1)]/50);
+      assert(i==N);
     }
 
     // Predict next bit
@@ -8237,9 +8265,11 @@ public:
     pr=apm2.p(pr, (hc&511) | (coef<<9), 1023);
     m.add(stretch(pr)>>1);
     m.add((pr>>2)-511);
+    
     m.set(1 + ((zu+zv<5) | ((huffbits>8)<<1) | (firstcol<<2)), 1+8);
     m.set(1 + ((hc&0xFF) | (min(3,(zu+zv)/3))<<8), 1+1024);
     m.set(coef | (min(3,huffbits/2)<<8), 1024);
+    
     return true;
   }
 };
@@ -8305,8 +8335,16 @@ protected:
 
 class Audio8bitModel : AudioModel {
 private:
-  static constexpr int nOLS=8, nLMS=3, nLnrPrd=nOLS+nLMS+3;
-  SmallStationaryContextMap sMap1b[nLnrPrd][3];
+  static constexpr int nOLS = 8;
+  static constexpr int nLMS = 3;
+  static constexpr int nSSM = nOLS+nLMS+3;
+  static constexpr int nCtx = 3;
+public:
+  static constexpr int MIXERINPUTS = nCtx*nSSM*SmallStationaryContextMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = 4096+2048+2048+256+10; //8458
+  static constexpr int MIXERCONTEXTSETS = 5;
+private:
+  SmallStationaryContextMap sMap1b[nSSM][nCtx];
   OLS<double, int8_t> ols[nOLS][2]{
     {{128, 24, 0.9975}, {128, 24, 0.9975}},
     {{90, 30, 0.9965}, {90, 30, 0.9965}},
@@ -8322,34 +8360,36 @@ private:
     {{640, 64, 8e-5f, 1e-5f}, {640, 64, 8e-5f, 1e-5f}},
     {{2450, 8, 1.6e-5f, 1e-6f}, {2450, 8, 1.6e-5f, 1e-6f}}
   };
-  int prd[nLnrPrd][2][2]{ 0 }, residuals[nLnrPrd][2]{ 0 };
+  int prd[nSSM][2][2]{ 0 }, residuals[nSSM][2]{ 0 };
   int stereo=0, ch=0;
   U32 mask=0, errLog=0, mxCtx=0;
 public:
   Audio8bitModel(const Shared * const sh, ModelStats *st) : AudioModel(sh, st),
     sMap1b{ /* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
-    /*nOLS: 0-3*/    {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}},
-    /*nOLS: 4-7*/    {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}},
-    /*nLMS: 0-2*/    {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}, {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}, {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}, 
-    /*nLnrPrd: 0-2*/ {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}, {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}, {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}
+    /*nOLS: 0-3*/ {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}},
+    /*nOLS: 4-7*/ {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}},
+    /*nLMS: 0-2*/ {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}, {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}, {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}, 
+    /*nSSM: 0-2*/ {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}, {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}, {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}
   }
   {}
-  void mix(Mixer& m, int info) {
+  void setparam(int info) {
+    INJECT_STATS_blpos INJECT_SHARED_bpos
+    if (blpos==0 && bpos==0) {
+      assert((info&2)==0);
+      stereo = (info&1);
+      mask = 0;
+      stats->Wav = stereo+1;
+      wmode=info;
+      for (int i=0; i<nLMS; i++)
+        lms[i][0].Reset(), lms[i][1].Reset();
+    }
+  }
+  void mix(Mixer& m) {
     INJECT_SHARED_bpos INJECT_SHARED_c0 INJECT_SHARED_c1
-    const int8_t B = c0<<(8-bpos);
     if (bpos==0) {
       INJECT_STATS_blpos
-      if (blpos==0) {
-        assert((info&2)==0);
-        stereo = (info&1);
-        mask = 0;
-        stats->Wav = stereo+1;
-        wmode=info;
-        for (int i=0; i<nLMS; i++)
-          lms[i][0].Reset(), lms[i][1].Reset();
-      }
       ch=(stereo)?blpos&1:0;
-      const int8_t s = int(((info&4)>0)?c1^128:c1)-128;
+      const int8_t s = int(((wmode&4)>0)?c1^128:c1)-128;
       const int pCh = ch^stereo;
       int i = 0;
       for (errLog=0; i<nOLS; i++) {
@@ -8361,7 +8401,7 @@ public:
       }
       for (int j=0; j<nLMS; j++)
         lms[j][pCh].Update(s);
-      for (; i<nLnrPrd; i++)
+      for (; i<nSSM; i++)
         residuals[i][pCh] = s-prd[i][pCh][0];
       errLog = min(0xF, ilog2(errLog));
       stats->Audio = mxCtx = ilog2(min(0x1F, BitCount(mask)))*2+ch;
@@ -8407,10 +8447,11 @@ public:
       prd[i++][ch][0] = signedClip8(X1(1)*2-X1(2));
       prd[i++][ch][0] = signedClip8(X1(1)*3-X1(2)*3+X1(3));
       prd[i  ][ch][0] = signedClip8(X1(1)*4-X1(2)*6+X1(3)*4-X1(4));
-      for (i=0; i<nLnrPrd; i++)
+      for (i=0; i<nSSM; i++)
         prd[i][ch][1] = signedClip8(prd[i][ch][0]+residuals[i][pCh]);
     }
-    for (int i=0; i<nLnrPrd; i++) {
+    const int8_t B = c0<<(8-bpos);
+    for (int i=0; i<nSSM; i++) {
       const U32 ctx = (prd[i][ch][0]-B)*8+bpos;
       sMap1b[i][0].set(ctx);
       sMap1b[i][1].set(ctx);
@@ -8429,8 +8470,16 @@ public:
 
 class Audio16bitModel : AudioModel {
 private:
-  static constexpr int nOLS=8, nLMS=3, nLnrPrd=nOLS+nLMS+3;
-  SmallStationaryContextMap sMap1b[nLnrPrd][4];
+  static constexpr int nOLS = 8;
+  static constexpr int nLMS = 3;
+  static constexpr int nSSM = nOLS+nLMS+3;
+  static constexpr int nCtx = 4;
+public:
+  static constexpr int MIXERINPUTS = nCtx*nSSM*SmallStationaryContextMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = 8192+4096+2560+256+20; //15124
+  static constexpr int MIXERCONTEXTSETS = 5;
+private:
+  SmallStationaryContextMap sMap1b[nSSM][nCtx];
   OLS<double, short> ols[nOLS][2]{
     {{128, 24, 0.9975}, {128, 24, 0.9975}},
     {{90, 30, 0.997}, {90, 30, 0.997}},
@@ -8446,102 +8495,102 @@ private:
     {{640, 64, 7e-5f, 1e-5f}, {640, 64, 7e-5f, 1e-5f}},
     {{2450, 8, 2e-5f, 2e-6f}, {2450, 8, 2e-5f, 2e-6f}}
   };
-  int prd[nLnrPrd][2][2]{ 0 }, residuals[nLnrPrd][2]{ 0 };
+  int prd[nSSM][2][2]{ 0 }, residuals[nSSM][2]{ 0 };
   int stereo=0, ch=0, lsb=0;
   U32 mask=0, errLog=0, mxCtx=0;
   short sample = 0;
 public:
   Audio16bitModel(const Shared * const sh, ModelStats *st) : AudioModel(sh, st),
     sMap1b{ /* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
-    /*nOLS: 0-3*/    {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}},
-    /*nOLS: 4-7*/    {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}},
-    /*nLMS: 0-2*/    {{sh,17,1,7,86}, {sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}}, {{sh,17,1,7,86},{sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}}, {{sh,17,1,7,86},{sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}},
-    /*nLnrPrd: 0-2*/ {{sh,17,1,7,86}, {sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}}, {{sh,17,1,7,86},{sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}}, {{sh,17,1,7,86},{sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}}
+    /*nOLS: 0-3*/ {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}},
+    /*nOLS: 4-7*/ {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}},
+    /*nLMS: 0-2*/ {{sh,17,1,7,86}, {sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}}, {{sh,17,1,7,86},{sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}}, {{sh,17,1,7,86},{sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}},
+    /*nSSM: 0-2*/ {{sh,17,1,7,86}, {sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}}, {{sh,17,1,7,86},{sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}}, {{sh,17,1,7,86},{sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}}
   }
   {}
-  void mix(Mixer& m, int info) {
-    INJECT_SHARED_bpos INJECT_SHARED_c0 INJECT_SHARED_c1
-    info|=4;  // comment this line if skipping the endianness transform
-    if (bpos==0) {
-      INJECT_STATS_blpos
-      if (blpos==0) {
-        assert((info&2)!=0);
-        stereo = (info&1);
-        lsb = (info<4);
-        mask = 0;
-        stats->Wav = (stereo+1)*2;
-        wmode=info;
-        for (int i=0; i<nLMS; i++)
-          lms[i][0].Reset(), lms[i][1].Reset();
-      }
-      else {
-        ch=(stereo)?(blpos&2)>>1:0;
-        lsb=(blpos&1)^(info<4);
-        if ((blpos&1)==0) {
-          sample = (info<4)?s2(2):t2(2);
-          const int pCh = ch^stereo;
-          int i = 0;
-          for (errLog=0; i<nOLS; i++) {
-            ols[i][pCh].Update(sample);
-            residuals[i][pCh] = sample-prd[i][pCh][0];
-            const U32 absResidual = (U32)abs(residuals[i][pCh]);
-            mask+=mask+(absResidual>128);
-            errLog+=SQR(absResidual>>6);
-          }
-          for (int j=0; j<nLMS; j++)
-            lms[j][pCh].Update(sample);
-          for (; i<nLnrPrd; i++)
-            residuals[i][pCh] = sample-prd[i][pCh][0];
-          errLog = min(0xF, ilog2(errLog));
-
-          if (stereo) {
-            for (int i=1; i<=24; i++) ols[0][ch].Add(X2(i));
-            for (int i=1; i<=104; i++) ols[0][ch].Add(X1(i));
-          }
-          else
-            for (int i=1; i<=128; i++) ols[0][ch].Add(X1(i));
-
-          int k1=90, k2=k1-12*stereo;
-          for (int j=(i=1); j<=k1; j++, i+=1<<((j>16)+(j>32)+(j>64))) ols[1][ch].Add(X1(i));
-          for (int j=(i=1); j<=k2; j++, i+=1<<((j>5)+(j>10)+(j>17)+(j>26)+(j>37))) ols[2][ch].Add(X1(i));       
-          for (int j=(i=1); j<=k2; j++, i+=1<<((j>3)+(j>7)+(j>14)+(j>20)+(j>33)+(j>49))) ols[3][ch].Add(X1(i));
-          for (int j=(i=1); j<=k2; j++, i+=1+(j>4)+(j>8)) ols[4][ch].Add(X1(i));
-          for (int j=(i=1); j<=k1; j++, i+=2+((j>3)+(j>9)+(j>19)+(j>36)+(j>61))) ols[5][ch].Add(X1(i));
-
-          if (stereo) {
-            for (i=1; i<=k1-k2; i++) {
-              const double s = (double)X2(i);
-              ols[2][ch].AddFloat(s);
-              ols[3][ch].AddFloat(s);
-              ols[4][ch].AddFloat(s);
-            }
-          }
-
-          k1=28, k2=k1-6*stereo;
-          for (i=1; i<=k2; i++) ols[6][ch].Add(X1(i));
-          for (i=1; i<=k1-k2; i++) ols[6][ch].Add(X2(i));
-
-          k1=32, k2=k1-8*stereo;
-          for (i=1; i<=k2; i++) ols[7][ch].Add(X1(i));
-          for (i=1; i<=k1-k2; i++) ols[7][ch].Add(X2(i));
-
-          for (i=0; i<nOLS; i++)
-            prd[i][ch][0] = signedClip16((int)floor(ols[i][ch].Predict()));
-          for (; i<nOLS+nLMS; i++)
-            prd[i][ch][0] = signedClip16((int)floor(lms[i-nOLS][ch].Predict(sample)));
-          prd[i++][ch][0] = signedClip16(X1(1)*2-X1(2));
-          prd[i++][ch][0] = signedClip16(X1(1)*3-X1(2)*3+X1(3));
-          prd[i  ][ch][0] = signedClip16(X1(1)*4-X1(2)*6+X1(3)*4-X1(4));
-          for (i=0; i<nLnrPrd; i++)
-            prd[i][ch][1] = signedClip16(prd[i][ch][0]+residuals[i][pCh]);
+  void setparam(int info) {
+    INJECT_STATS_blpos INJECT_SHARED_bpos
+    if (blpos==0 && bpos==0) {
+      info|=4;  // comment this line if skipping the endianness transform
+      assert((info&2)!=0);
+      stereo = (info&1);
+      lsb = (info<4);
+      mask = 0;
+      stats->Wav = (stereo+1)*2;
+      wmode=info;
+      for (int i=0; i<nLMS; i++)
+        lms[i][0].Reset(), lms[i][1].Reset();
+    }
+  }
+  void mix(Mixer& m) {
+    INJECT_SHARED_bpos INJECT_STATS_blpos INJECT_SHARED_c0 INJECT_SHARED_c1
+    if (bpos==0 && blpos!=0) {
+      ch=(stereo)?(blpos&2)>>1:0;
+      lsb=(blpos&1)^(wmode<4);
+      if ((blpos&1)==0) {
+        sample = (wmode<4)?s2(2):t2(2);
+        const int pCh = ch^stereo;
+        int i = 0;
+        for (errLog=0; i<nOLS; i++) {
+          ols[i][pCh].Update(sample);
+          residuals[i][pCh] = sample-prd[i][pCh][0];
+          const U32 absResidual = (U32)abs(residuals[i][pCh]);
+          mask+=mask+(absResidual>128);
+          errLog+=SQR(absResidual>>6);
         }
-        stats->Audio = 0x80|(mxCtx = ilog2(min(0x1F, BitCount(mask)))*4+ch*2+lsb);
+        for (int j=0; j<nLMS; j++)
+          lms[j][pCh].Update(sample);
+        for (; i<nSSM; i++)
+          residuals[i][pCh] = sample-prd[i][pCh][0];
+        errLog = min(0xF, ilog2(errLog));
+
+        if (stereo) {
+          for (int i=1; i<=24; i++) ols[0][ch].Add(X2(i));
+          for (int i=1; i<=104; i++) ols[0][ch].Add(X1(i));
+        }
+        else
+          for (int i=1; i<=128; i++) ols[0][ch].Add(X1(i));
+
+        int k1=90, k2=k1-12*stereo;
+        for (int j=(i=1); j<=k1; j++, i+=1<<((j>16)+(j>32)+(j>64))) ols[1][ch].Add(X1(i));
+        for (int j=(i=1); j<=k2; j++, i+=1<<((j>5)+(j>10)+(j>17)+(j>26)+(j>37))) ols[2][ch].Add(X1(i));       
+        for (int j=(i=1); j<=k2; j++, i+=1<<((j>3)+(j>7)+(j>14)+(j>20)+(j>33)+(j>49))) ols[3][ch].Add(X1(i));
+        for (int j=(i=1); j<=k2; j++, i+=1+(j>4)+(j>8)) ols[4][ch].Add(X1(i));
+        for (int j=(i=1); j<=k1; j++, i+=2+((j>3)+(j>9)+(j>19)+(j>36)+(j>61))) ols[5][ch].Add(X1(i));
+
+        if (stereo) {
+          for (i=1; i<=k1-k2; i++) {
+            const double s = (double)X2(i);
+            ols[2][ch].AddFloat(s);
+            ols[3][ch].AddFloat(s);
+            ols[4][ch].AddFloat(s);
+          }
+        }
+
+        k1=28, k2=k1-6*stereo;
+        for (i=1; i<=k2; i++) ols[6][ch].Add(X1(i));
+        for (i=1; i<=k1-k2; i++) ols[6][ch].Add(X2(i));
+
+        k1=32, k2=k1-8*stereo;
+        for (i=1; i<=k2; i++) ols[7][ch].Add(X1(i));
+        for (i=1; i<=k1-k2; i++) ols[7][ch].Add(X2(i));
+
+        for (i=0; i<nOLS; i++)
+          prd[i][ch][0] = signedClip16((int)floor(ols[i][ch].Predict()));
+        for (; i<nOLS+nLMS; i++)
+          prd[i][ch][0] = signedClip16((int)floor(lms[i-nOLS][ch].Predict(sample)));
+        prd[i++][ch][0] = signedClip16(X1(1)*2-X1(2));
+        prd[i++][ch][0] = signedClip16(X1(1)*3-X1(2)*3+X1(3));
+        prd[i  ][ch][0] = signedClip16(X1(1)*4-X1(2)*6+X1(3)*4-X1(4));
+        for (i=0; i<nSSM; i++)
+          prd[i][ch][1] = signedClip16(prd[i][ch][0]+residuals[i][pCh]);
       }
+      stats->Audio = 0x80|(mxCtx = ilog2(min(0x1F, BitCount(mask)))*4+ch*2+lsb);
     }
 
-    const short B = short( (info<4)? (lsb)?U8(c0<<(8-bpos)):(c0<<(16-bpos))|c1 : (lsb)?(c1<<8)|U8(c0<<(8-bpos)):c0<<(16-bpos) );
+    const short B = short( (wmode<4)? (lsb)?U8(c0<<(8-bpos)):(c0<<(16-bpos))|c1 : (lsb)?(c1<<8)|U8(c0<<(8-bpos)):c0<<(16-bpos) );
 
-    for (int i=0; i<nLnrPrd; i++) {
+    for (int i=0; i<nSSM; i++) {
       const U32 ctx0 = U16(prd[i][ch][0]-B);
       const U32 ctx1 = U16(prd[i][ch][1]-B);
 
@@ -8576,545 +8625,545 @@ public:
 //  are relevant to parsing (prefixes, opcode, Mod and R/M fields of the ModRM byte, Scale field of the SIB byte)
 //
 
-// formats
-enum InstructionFormat {
-  // encoding mode
-  fNM = 0x0,      // no ModRM
-  fAM = 0x1,      // no ModRM, "address mode" (jumps or direct addresses)
-  fMR = 0x2,      // ModRM present
-  fMEXTRA = 0x3,  // ModRM present, includes extra bits for opcode
-  fMODE = 0x3,    // bitmask for mode
-
-  // no ModRM: size of immediate operand
-  fNI = 0x0,      // no immediate
-  fBI = 0x4,      // byte immediate
-  fWI = 0x8,      // word immediate
-  fDI = 0xc,      // dword immediate
-  fTYPE = 0xc,    // type mask
-
-  // address mode: type of address operand
-  fAD = 0x0,      // absolute address
-  fDA = 0x4,      // dword absolute jump target
-  fBR = 0x8,      // byte relative jump target
-  fDR = 0xc,      // dword relative jump target
-
-  // others
-  fERR = 0xf,     // denotes invalid opcodes
-};
-
-// 1 byte opcodes
-static constexpr U8 Table1[256] = {
-  // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 0
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 1
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 2
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 3
-
-  fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 4
-  fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 5
-  fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fDI,fMR|fDI,fNM|fBI,fMR|fBI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 6
-  fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR, // 7
-
-  fMR|fBI,fMR|fDI,fMR|fBI,fMR|fBI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 8
-  fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fAM|fDA,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 9
-  fAM|fAD,fAM|fAD,fAM|fAD,fAM|fAD,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // a
-  fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI, // b
-
-  fMR|fBI,fMR|fBI,fNM|fWI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fBI,fMR|fDI,fNM|fBI,fNM|fNI,fNM|fWI,fNM|fNI,fNM|fNI,fNM|fBI,fERR   ,fNM|fNI, // c
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fBI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // d
-  fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fAM|fDR,fAM|fDR,fAM|fAD,fAM|fBR,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // e
-  fNM|fNI,fERR   ,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fMEXTRA,fMEXTRA,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fMEXTRA,fMEXTRA, // f
-};
-
-// 2 byte opcodes
-static constexpr U8 Table2[256] = {
-  // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fNM|fNI,fERR   ,fNM|fNI,fNM|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 0
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 1
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 2
-  fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fERR   ,fNM|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 3
-
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 4
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 5
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 6
-  fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI, // 7
-
-  fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR, // 8
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 9
-  fNM|fNI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fBI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fBI,fMR|fNI,fERR   ,fMR|fNI, // a
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // b
-
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // c
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // d
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // e
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   , // f
-};
-
-// 3 byte opcodes 0F38XX
-static constexpr U8 Table3_38[256] = {
-  // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   , // 0
-  fMR|fNI,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fERR   ,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fERR   , // 1
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   , // 2
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 3
-  fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 4
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 5
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 6
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 7
-  fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 8
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 9
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // a
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // b
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // c
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // d
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // e
-  fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // f
-};
-
-// 3 byte opcodes 0F3AXX
-static constexpr U8 Table3_3A[256] = {
-  // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI, // 0
-  fERR   ,fERR   ,fERR   ,fERR   ,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 1
-  fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 2
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 3
-  fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 4
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 5
-  fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 6
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 7
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 8
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 9
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // a
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // b
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // c
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // d
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // e
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // f
-};
-
-// escape opcodes using ModRM byte to get more variants
-static constexpr U8 TableX[32] = {
-  // 0       1       2       3       4       5       6       7
-  fMR|fBI,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // escapes for 0xf6
-  fMR|fDI,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // escapes for 0xf7
-  fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // escapes for 0xfe
-  fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fMR|fNI,fERR   ,fMR|fNI,fERR   , // escapes for 0xff
-};
-
-static constexpr U8 InvalidX64Ops[19] = {0x06, 0x07, 0x16, 0x17, 0x1E, 0x1F, 0x27, 0x2F, 0x37, 0x3F, 0x60, 0x61, 0x62, 0x82, 0x9A, 0xD4, 0xD5, 0xD6, 0xEA,};
-static constexpr U8 X64Prefixes[8] = {0x26, 0x2E, 0x36, 0x3E, 0x9B, 0xF0, 0xF2, 0xF3,};
-
-enum InstructionCategory {
-  OP_INVALID              =  0,
-  OP_PREFIX_SEGREG        =  1,
-  OP_PREFIX               =  2,
-  OP_PREFIX_X87FPU        =  3,
-  OP_GEN_DATAMOV          =  4,
-  OP_GEN_STACK            =  5,
-  OP_GEN_CONVERSION       =  6,
-  OP_GEN_ARITH_DECIMAL    =  7,
-  OP_GEN_ARITH_BINARY     =  8,
-  OP_GEN_LOGICAL          =  9,
-  OP_GEN_SHF_ROT          = 10,
-  OP_GEN_BIT              = 11,
-  OP_GEN_BRANCH           = 12,
-  OP_GEN_BRANCH_COND      = 13,
-  OP_GEN_BREAK            = 14,
-  OP_GEN_STRING           = 15,
-  OP_GEN_INOUT            = 16,
-  OP_GEN_FLAG_CONTROL     = 17,
-  OP_GEN_SEGREG           = 18,
-  OP_GEN_CONTROL          = 19,
-  OP_SYSTEM               = 20,
-  OP_X87_DATAMOV          = 21,
-  OP_X87_ARITH            = 22,
-  OP_X87_COMPARISON       = 23,
-  OP_X87_TRANSCENDENTAL   = 24,
-  OP_X87_LOAD_CONSTANT    = 25,
-  OP_X87_CONTROL          = 26,
-  OP_X87_CONVERSION       = 27,
-  OP_STATE_MANAGEMENT     = 28,
-  OP_MMX                  = 29,
-  OP_SSE                  = 30,
-  OP_SSE_DATAMOV          = 31,
-};
-
-static constexpr U8 TypeOp1[256] = {
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //03
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_STACK         , //07
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , //0B
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_STACK         , OP_PREFIX            , //0F
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //13
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_STACK         , //17
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //1B
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_STACK         , //1F
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , //23
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //27
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //2B
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //2F
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , //33
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //37
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //3B
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //3F
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //43
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //47
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //4B
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //4F
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //53
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //57
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //5B
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //5F
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_BREAK         , OP_GEN_CONVERSION    , //63
-  OP_PREFIX_SEGREG     , OP_PREFIX_SEGREG     , OP_PREFIX            , OP_PREFIX            , //67
-  OP_GEN_STACK         , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_ARITH_BINARY  , //6B
-  OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , //6F
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //73
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //77
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //7B
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //7F
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //83
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //87
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //8B
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_STACK         , //8F
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //93
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //97
-  OP_GEN_CONVERSION    , OP_GEN_CONVERSION    , OP_GEN_BRANCH        , OP_PREFIX_X87FPU     , //9B
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //9F
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //A3
-  OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , //A7
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_STRING        , OP_GEN_STRING        , //AB
-  OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , //AF
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //B3
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //B7
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //BB
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //BF
-  OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_GEN_BRANCH        , OP_GEN_BRANCH        , //C3
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //C7
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_BRANCH        , OP_GEN_BRANCH        , //CB
-  OP_GEN_BREAK         , OP_GEN_BREAK         , OP_GEN_BREAK         , OP_GEN_BREAK         , //CF
-  OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , //D3
-  OP_GEN_ARITH_DECIMAL , OP_GEN_ARITH_DECIMAL , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //D7
-  OP_X87_ARITH         , OP_X87_DATAMOV       , OP_X87_ARITH         , OP_X87_DATAMOV       , //DB
-  OP_X87_ARITH         , OP_X87_DATAMOV       , OP_X87_ARITH         , OP_X87_DATAMOV       , //DF
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //E3
-  OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , //E7
-  OP_GEN_BRANCH        , OP_GEN_BRANCH        , OP_GEN_BRANCH        , OP_GEN_BRANCH        , //EB
-  OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , //EF
-  OP_PREFIX            , OP_GEN_BREAK         , OP_PREFIX            , OP_PREFIX            , //F3
-  OP_SYSTEM            , OP_GEN_FLAG_CONTROL  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //F7
-  OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , //FB
-  OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , OP_GEN_ARITH_BINARY  , OP_GEN_BRANCH        , //FF
-};
-
-static constexpr U8 TypeOp2[256] = {
-  OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //03
-  OP_INVALID           , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //07
-  OP_SYSTEM            , OP_SYSTEM            , OP_INVALID           , OP_GEN_CONTROL       , //0B
-  OP_INVALID           , OP_GEN_CONTROL       , OP_INVALID           , OP_INVALID           , //0F
-  OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , //13
-  OP_SSE               , OP_SSE               , OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , //17
-  OP_SSE               , OP_GEN_CONTROL       , OP_GEN_CONTROL       , OP_GEN_CONTROL       , //1B
-  OP_GEN_CONTROL       , OP_GEN_CONTROL       , OP_GEN_CONTROL       , OP_GEN_CONTROL       , //1F
-  OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //23
-  OP_SYSTEM            , OP_INVALID           , OP_SYSTEM            , OP_INVALID           , //27
-  OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , OP_SSE               , OP_SSE               , //2B
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //2F
-  OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //33
-  OP_SYSTEM            , OP_SYSTEM            , OP_INVALID           , OP_INVALID           , //37
-  OP_PREFIX            , OP_INVALID           , OP_PREFIX            , OP_INVALID           , //3B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //3F
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //43
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //47
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //4B
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //4F
-  OP_SSE_DATAMOV       , OP_SSE               , OP_SSE               , OP_SSE               , //53
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //57
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //5B
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //5F
-  OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //63
-  OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //67
-  OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //6B
-  OP_INVALID           , OP_INVALID           , OP_MMX               , OP_MMX               , //6F
-  OP_SSE               , OP_MMX               , OP_MMX               , OP_MMX               , //73
-  OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //77
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7B
-  OP_INVALID           , OP_INVALID           , OP_MMX               , OP_MMX               , //7F
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //83
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //87
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //8B
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //8F
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //93
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //97
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //9B
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //9F
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_CONTROL       , OP_GEN_BIT           , //A3
-  OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_INVALID           , OP_INVALID           , //A7
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_SYSTEM            , OP_GEN_BIT           , //AB
-  OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_STATE_MANAGEMENT  , OP_GEN_ARITH_BINARY  , //AF
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_BIT           , //B3
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_CONVERSION    , OP_GEN_CONVERSION    , //B7
-  OP_INVALID           , OP_GEN_CONTROL       , OP_GEN_BIT           , OP_GEN_BIT           , //BB
-  OP_GEN_BIT           , OP_GEN_BIT           , OP_GEN_CONVERSION    , OP_GEN_CONVERSION    , //BF
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_SSE               , OP_SSE               , //C3
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_GEN_DATAMOV       , //C7
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //CB
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //CF
-  OP_INVALID           , OP_MMX               , OP_MMX               , OP_MMX               , //D3
-  OP_SSE               , OP_MMX               , OP_INVALID           , OP_SSE               , //D7
-  OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //DB
-  OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //DF
-  OP_SSE               , OP_MMX               , OP_SSE               , OP_MMX               , //E3
-  OP_SSE               , OP_MMX               , OP_INVALID           , OP_SSE               , //E7
-  OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //EB
-  OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //EF
-  OP_INVALID           , OP_MMX               , OP_MMX               , OP_MMX               , //F3
-  OP_SSE               , OP_MMX               , OP_SSE               , OP_SSE               , //F7
-  OP_MMX               , OP_MMX               , OP_MMX               , OP_SSE               , //FB
-  OP_MMX               , OP_MMX               , OP_MMX               , OP_INVALID           , //FF
-};
-
-static constexpr U8 TypeOp3_38[256] = {
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //03
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //07
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //0B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //0F
-  OP_SSE               , OP_INVALID           , OP_INVALID           , OP_INVALID           , //13
-  OP_SSE               , OP_SSE               , OP_INVALID           , OP_SSE               , //17
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //1B
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_INVALID           , //1F
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //23
-  OP_SSE               , OP_SSE               , OP_INVALID           , OP_INVALID           , //27
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //2B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //2F
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //33
-  OP_SSE               , OP_SSE               , OP_INVALID           , OP_SSE               , //37
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //3B
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //3F
-  OP_SSE               , OP_SSE               , OP_INVALID           , OP_INVALID           , //43
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //47
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //53
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //57
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //63
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //67
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //73
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //77
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //83
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //87
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //93
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //97
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EF
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_INVALID           , OP_INVALID           , //F3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //F7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FF
-};
-
-static constexpr U8 TypeOp3_3A[256] = {
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //03
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //07
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //0B
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //0F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //13
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //17
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //1B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //1F
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_INVALID           , //23
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //27
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //2B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //2F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //33
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //37
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //3B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //3F
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_INVALID           , //43
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //47
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //53
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //57
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5F
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //63
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //67
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //73
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //77
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //83
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //87
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //93
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //97
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //F3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //F7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FF
-};
-
-static constexpr U8 TypeOpX[32] = {
-  // escapes for F6
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_ARITH_BINARY  ,
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  ,
-  // escapes for F7
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_ARITH_BINARY  ,
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  ,
-  // escapes for FE
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_INVALID           , OP_INVALID           ,
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           ,
-  // escapes for FF
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_BRANCH        , OP_GEN_BRANCH        ,
-  OP_GEN_BRANCH        , OP_GEN_BRANCH        , OP_GEN_STACK         , OP_INVALID           ,
-};
-
-enum Prefixes {
-  ES_OVERRIDE = 0x26,
-  CS_OVERRIDE = 0x2E,
-  SS_OVERRIDE = 0x36,
-  DS_OVERRIDE = 0x3E,
-  FS_OVERRIDE = 0x64,
-  GS_OVERRIDE = 0x65,
-  AD_OVERRIDE = 0x67,
-  WAIT_FPU    = 0x9B,
-  LOCK        = 0xF0,
-  REP_N_STR   = 0xF2,
-  REP_STR     = 0xF3,
-};
-
-enum Opcodes {
-  // 1-byte opcodes of special interest (for one reason or another)
-  OP_2BYTE  = 0x0f,     // start of 2-byte opcode
-  OP_OSIZE  = 0x66,     // operand size prefix
-  OP_CALLF  = 0x9a,
-  OP_RETNI  = 0xc2,     // ret near+immediate
-  OP_RETN   = 0xc3,
-  OP_ENTER  = 0xc8,
-  OP_INT3   = 0xcc,
-  OP_INTO   = 0xce,
-  OP_CALLN  = 0xe8,
-  OP_JMPF   = 0xea,
-  OP_ICEBP  = 0xf1,
-};
-
-enum ExeState {
-  Start             =  0,
-  Pref_Op_Size      =  1,
-  Pref_MultiByte_Op =  2,
-  ParseFlags        =  3,
-  ExtraFlags        =  4,
-  ReadModRM         =  5,
-  Read_OP3_38       =  6,
-  Read_OP3_3A       =  7,
-  ReadSIB           =  8,
-  Read8             =  9,
-  Read16            = 10,
-  Read32            = 11,
-  Read8_ModRM       = 12,
-  Read16_f          = 13,
-  Read32_ModRM      = 14,
-  Error             = 15,
-};
-
-struct OpCache {
-  U32 Op[CacheSize];
-  U32 Index;
-};
-
-struct Instruction {
-  U32 Data;
-  U8 Prefix, Code, ModRM, SIB, REX, Flags, BytesRead, Size, Category;
-  bool MustCheckREX, Decoding, o16, imm8;
-};
-
-#define CodeShift            3
-#define CodeMask             (0xFF<<CodeShift)
-#define ClearCodeMask        ((-1)^CodeMask)
-#define PrefixMask           ((1<<CodeShift)-1)
-#define OperandSizeOverride  (0x01<<(8+CodeShift))
-#define MultiByteOpcode      (0x02<<(8+CodeShift))
-#define PrefixREX            (0x04<<(8+CodeShift))
-#define Prefix38             (0x08<<(8+CodeShift))
-#define Prefix3A             (0x10<<(8+CodeShift))
-#define HasExtraFlags        (0x20<<(8+CodeShift))
-#define HasModRM             (0x40<<(8+CodeShift))
-#define ModRMShift           (7+8+CodeShift)
-#define SIBScaleShift        (ModRMShift+8-6)
-#define RegDWordDisplacement (0x01<<(8+SIBScaleShift))
-#define AddressMode          (0x02<<(8+SIBScaleShift))
-#define TypeShift            (2+8+SIBScaleShift)
-#define CategoryShift        5
-#define CategoryMask         ((1<<CategoryShift)-1)
-#define ModRM_mod            0xC0
-#define ModRM_reg            0x38
-#define ModRM_rm             0x07
-#define SIB_scale            0xC0
-#define SIB_index            0x38
-#define SIB_base             0x07
-#define REX_w                0x08
-
-#define MinRequired          8 // minimum required consecutive valid instructions to be considered as code
-
 class ExeModel {
+  // formats
+  enum InstructionFormat {
+    // encoding mode
+    fNM = 0x0,      // no ModRM
+    fAM = 0x1,      // no ModRM, "address mode" (jumps or direct addresses)
+    fMR = 0x2,      // ModRM present
+    fMEXTRA = 0x3,  // ModRM present, includes extra bits for opcode
+    fMODE = 0x3,    // bitmask for mode
+
+    // no ModRM: size of immediate operand
+    fNI = 0x0,      // no immediate
+    fBI = 0x4,      // byte immediate
+    fWI = 0x8,      // word immediate
+    fDI = 0xc,      // dword immediate
+    fTYPE = 0xc,    // type mask
+
+    // address mode: type of address operand
+    fAD = 0x0,      // absolute address
+    fDA = 0x4,      // dword absolute jump target
+    fBR = 0x8,      // byte relative jump target
+    fDR = 0xc,      // dword relative jump target
+
+    // others
+    fERR = 0xf,     // denotes invalid opcodes
+  };
+
+  // 1 byte opcodes
+  static constexpr U8 Table1[256] = {
+    // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 0
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 1
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 2
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 3
+
+    fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 4
+    fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 5
+    fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fDI,fMR|fDI,fNM|fBI,fMR|fBI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 6
+    fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR, // 7
+
+    fMR|fBI,fMR|fDI,fMR|fBI,fMR|fBI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 8
+    fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fAM|fDA,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 9
+    fAM|fAD,fAM|fAD,fAM|fAD,fAM|fAD,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // a
+    fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI, // b
+
+    fMR|fBI,fMR|fBI,fNM|fWI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fBI,fMR|fDI,fNM|fBI,fNM|fNI,fNM|fWI,fNM|fNI,fNM|fNI,fNM|fBI,fERR   ,fNM|fNI, // c
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fBI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // d
+    fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fAM|fDR,fAM|fDR,fAM|fAD,fAM|fBR,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // e
+    fNM|fNI,fERR   ,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fMEXTRA,fMEXTRA,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fMEXTRA,fMEXTRA, // f
+  };
+
+  // 2 byte opcodes
+  static constexpr U8 Table2[256] = {
+    // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fNM|fNI,fERR   ,fNM|fNI,fNM|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 0
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 1
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 2
+    fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fERR   ,fNM|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 3
+
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 4
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 5
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 6
+    fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI, // 7
+
+    fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR, // 8
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 9
+    fNM|fNI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fBI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fBI,fMR|fNI,fERR   ,fMR|fNI, // a
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // b
+
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // c
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // d
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // e
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   , // f
+  };
+
+  // 3 byte opcodes 0F38XX
+  static constexpr U8 Table3_38[256] = {
+    // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   , // 0
+    fMR|fNI,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fERR   ,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fERR   , // 1
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   , // 2
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 3
+    fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 4
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 5
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 6
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 7
+    fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 8
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 9
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // a
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // b
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // c
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // d
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // e
+    fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // f
+  };
+
+  // 3 byte opcodes 0F3AXX
+  static constexpr U8 Table3_3A[256] = {
+    // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI, // 0
+    fERR   ,fERR   ,fERR   ,fERR   ,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 1
+    fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 2
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 3
+    fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 4
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 5
+    fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 6
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 7
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 8
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 9
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // a
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // b
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // c
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // d
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // e
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // f
+  };
+
+  // escape opcodes using ModRM byte to get more variants
+  static constexpr U8 TableX[32] = {
+    // 0       1       2       3       4       5       6       7
+    fMR|fBI,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // escapes for 0xf6
+    fMR|fDI,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // escapes for 0xf7
+    fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // escapes for 0xfe
+    fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fMR|fNI,fERR   ,fMR|fNI,fERR   , // escapes for 0xff
+  };
+
+  static constexpr U8 InvalidX64Ops[19] = {0x06, 0x07, 0x16, 0x17, 0x1E, 0x1F, 0x27, 0x2F, 0x37, 0x3F, 0x60, 0x61, 0x62, 0x82, 0x9A, 0xD4, 0xD5, 0xD6, 0xEA,};
+  static constexpr U8 X64Prefixes[8] = {0x26, 0x2E, 0x36, 0x3E, 0x9B, 0xF0, 0xF2, 0xF3,};
+
+  enum InstructionCategory {
+    OP_INVALID              =  0,
+    OP_PREFIX_SEGREG        =  1,
+    OP_PREFIX               =  2,
+    OP_PREFIX_X87FPU        =  3,
+    OP_GEN_DATAMOV          =  4,
+    OP_GEN_STACK            =  5,
+    OP_GEN_CONVERSION       =  6,
+    OP_GEN_ARITH_DECIMAL    =  7,
+    OP_GEN_ARITH_BINARY     =  8,
+    OP_GEN_LOGICAL          =  9,
+    OP_GEN_SHF_ROT          = 10,
+    OP_GEN_BIT              = 11,
+    OP_GEN_BRANCH           = 12,
+    OP_GEN_BRANCH_COND      = 13,
+    OP_GEN_BREAK            = 14,
+    OP_GEN_STRING           = 15,
+    OP_GEN_INOUT            = 16,
+    OP_GEN_FLAG_CONTROL     = 17,
+    OP_GEN_SEGREG           = 18,
+    OP_GEN_CONTROL          = 19,
+    OP_SYSTEM               = 20,
+    OP_X87_DATAMOV          = 21,
+    OP_X87_ARITH            = 22,
+    OP_X87_COMPARISON       = 23,
+    OP_X87_TRANSCENDENTAL   = 24,
+    OP_X87_LOAD_CONSTANT    = 25,
+    OP_X87_CONTROL          = 26,
+    OP_X87_CONVERSION       = 27,
+    OP_STATE_MANAGEMENT     = 28,
+    OP_MMX                  = 29,
+    OP_SSE                  = 30,
+    OP_SSE_DATAMOV          = 31,
+  };
+
+  static constexpr U8 TypeOp1[256] = {
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //03
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_STACK         , //07
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , //0B
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_STACK         , OP_PREFIX            , //0F
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //13
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_STACK         , //17
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //1B
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_STACK         , //1F
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , //23
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //27
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //2B
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //2F
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , //33
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //37
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //3B
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //3F
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //43
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //47
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //4B
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //4F
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //53
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //57
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //5B
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //5F
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_BREAK         , OP_GEN_CONVERSION    , //63
+    OP_PREFIX_SEGREG     , OP_PREFIX_SEGREG     , OP_PREFIX            , OP_PREFIX            , //67
+    OP_GEN_STACK         , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_ARITH_BINARY  , //6B
+    OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , //6F
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //73
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //77
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //7B
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //7F
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //83
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //87
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //8B
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_STACK         , //8F
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //93
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //97
+    OP_GEN_CONVERSION    , OP_GEN_CONVERSION    , OP_GEN_BRANCH        , OP_PREFIX_X87FPU     , //9B
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //9F
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //A3
+    OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , //A7
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_STRING        , OP_GEN_STRING        , //AB
+    OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , //AF
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //B3
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //B7
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //BB
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //BF
+    OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_GEN_BRANCH        , OP_GEN_BRANCH        , //C3
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //C7
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_BRANCH        , OP_GEN_BRANCH        , //CB
+    OP_GEN_BREAK         , OP_GEN_BREAK         , OP_GEN_BREAK         , OP_GEN_BREAK         , //CF
+    OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , //D3
+    OP_GEN_ARITH_DECIMAL , OP_GEN_ARITH_DECIMAL , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //D7
+    OP_X87_ARITH         , OP_X87_DATAMOV       , OP_X87_ARITH         , OP_X87_DATAMOV       , //DB
+    OP_X87_ARITH         , OP_X87_DATAMOV       , OP_X87_ARITH         , OP_X87_DATAMOV       , //DF
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //E3
+    OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , //E7
+    OP_GEN_BRANCH        , OP_GEN_BRANCH        , OP_GEN_BRANCH        , OP_GEN_BRANCH        , //EB
+    OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , //EF
+    OP_PREFIX            , OP_GEN_BREAK         , OP_PREFIX            , OP_PREFIX            , //F3
+    OP_SYSTEM            , OP_GEN_FLAG_CONTROL  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //F7
+    OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , //FB
+    OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , OP_GEN_ARITH_BINARY  , OP_GEN_BRANCH        , //FF
+  };
+
+  static constexpr U8 TypeOp2[256] = {
+    OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //03
+    OP_INVALID           , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //07
+    OP_SYSTEM            , OP_SYSTEM            , OP_INVALID           , OP_GEN_CONTROL       , //0B
+    OP_INVALID           , OP_GEN_CONTROL       , OP_INVALID           , OP_INVALID           , //0F
+    OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , //13
+    OP_SSE               , OP_SSE               , OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , //17
+    OP_SSE               , OP_GEN_CONTROL       , OP_GEN_CONTROL       , OP_GEN_CONTROL       , //1B
+    OP_GEN_CONTROL       , OP_GEN_CONTROL       , OP_GEN_CONTROL       , OP_GEN_CONTROL       , //1F
+    OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //23
+    OP_SYSTEM            , OP_INVALID           , OP_SYSTEM            , OP_INVALID           , //27
+    OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , OP_SSE               , OP_SSE               , //2B
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //2F
+    OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //33
+    OP_SYSTEM            , OP_SYSTEM            , OP_INVALID           , OP_INVALID           , //37
+    OP_PREFIX            , OP_INVALID           , OP_PREFIX            , OP_INVALID           , //3B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //3F
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //43
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //47
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //4B
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //4F
+    OP_SSE_DATAMOV       , OP_SSE               , OP_SSE               , OP_SSE               , //53
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //57
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //5B
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //5F
+    OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //63
+    OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //67
+    OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //6B
+    OP_INVALID           , OP_INVALID           , OP_MMX               , OP_MMX               , //6F
+    OP_SSE               , OP_MMX               , OP_MMX               , OP_MMX               , //73
+    OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //77
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7B
+    OP_INVALID           , OP_INVALID           , OP_MMX               , OP_MMX               , //7F
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //83
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //87
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //8B
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //8F
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //93
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //97
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //9B
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //9F
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_CONTROL       , OP_GEN_BIT           , //A3
+    OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_INVALID           , OP_INVALID           , //A7
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_SYSTEM            , OP_GEN_BIT           , //AB
+    OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_STATE_MANAGEMENT  , OP_GEN_ARITH_BINARY  , //AF
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_BIT           , //B3
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_CONVERSION    , OP_GEN_CONVERSION    , //B7
+    OP_INVALID           , OP_GEN_CONTROL       , OP_GEN_BIT           , OP_GEN_BIT           , //BB
+    OP_GEN_BIT           , OP_GEN_BIT           , OP_GEN_CONVERSION    , OP_GEN_CONVERSION    , //BF
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_SSE               , OP_SSE               , //C3
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_GEN_DATAMOV       , //C7
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //CB
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //CF
+    OP_INVALID           , OP_MMX               , OP_MMX               , OP_MMX               , //D3
+    OP_SSE               , OP_MMX               , OP_INVALID           , OP_SSE               , //D7
+    OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //DB
+    OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //DF
+    OP_SSE               , OP_MMX               , OP_SSE               , OP_MMX               , //E3
+    OP_SSE               , OP_MMX               , OP_INVALID           , OP_SSE               , //E7
+    OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //EB
+    OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //EF
+    OP_INVALID           , OP_MMX               , OP_MMX               , OP_MMX               , //F3
+    OP_SSE               , OP_MMX               , OP_SSE               , OP_SSE               , //F7
+    OP_MMX               , OP_MMX               , OP_MMX               , OP_SSE               , //FB
+    OP_MMX               , OP_MMX               , OP_MMX               , OP_INVALID           , //FF
+  };
+
+  static constexpr U8 TypeOp3_38[256] = {
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //03
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //07
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //0B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //0F
+    OP_SSE               , OP_INVALID           , OP_INVALID           , OP_INVALID           , //13
+    OP_SSE               , OP_SSE               , OP_INVALID           , OP_SSE               , //17
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //1B
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_INVALID           , //1F
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //23
+    OP_SSE               , OP_SSE               , OP_INVALID           , OP_INVALID           , //27
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //2B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //2F
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //33
+    OP_SSE               , OP_SSE               , OP_INVALID           , OP_SSE               , //37
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //3B
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //3F
+    OP_SSE               , OP_SSE               , OP_INVALID           , OP_INVALID           , //43
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //47
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //53
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //57
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //63
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //67
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //73
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //77
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //83
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //87
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //93
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //97
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EF
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_INVALID           , OP_INVALID           , //F3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //F7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FF
+  };
+
+  static constexpr U8 TypeOp3_3A[256] = {
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //03
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //07
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //0B
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //0F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //13
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //17
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //1B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //1F
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_INVALID           , //23
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //27
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //2B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //2F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //33
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //37
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //3B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //3F
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_INVALID           , //43
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //47
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //53
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //57
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5F
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //63
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //67
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //73
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //77
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //83
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //87
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //93
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //97
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //F3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //F7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FF
+  };
+
+  static constexpr U8 TypeOpX[32] = {
+    // escapes for F6
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_ARITH_BINARY  ,
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  ,
+    // escapes for F7
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_ARITH_BINARY  ,
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  ,
+    // escapes for FE
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_INVALID           , OP_INVALID           ,
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           ,
+    // escapes for FF
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_BRANCH        , OP_GEN_BRANCH        ,
+    OP_GEN_BRANCH        , OP_GEN_BRANCH        , OP_GEN_STACK         , OP_INVALID           ,
+  };
+
+  enum Prefixes {
+    ES_OVERRIDE = 0x26,
+    CS_OVERRIDE = 0x2E,
+    SS_OVERRIDE = 0x36,
+    DS_OVERRIDE = 0x3E,
+    FS_OVERRIDE = 0x64,
+    GS_OVERRIDE = 0x65,
+    AD_OVERRIDE = 0x67,
+    WAIT_FPU    = 0x9B,
+    LOCK        = 0xF0,
+    REP_N_STR   = 0xF2,
+    REP_STR     = 0xF3,
+  };
+
+  enum Opcodes {
+    // 1-byte opcodes of special interest (for one reason or another)
+    OP_2BYTE  = 0x0f,     // start of 2-byte opcode
+    OP_OSIZE  = 0x66,     // operand size prefix
+    OP_CALLF  = 0x9a,
+    OP_RETNI  = 0xc2,     // ret near+immediate
+    OP_RETN   = 0xc3,
+    OP_ENTER  = 0xc8,
+    OP_INT3   = 0xcc,
+    OP_INTO   = 0xce,
+    OP_CALLN  = 0xe8,
+    OP_JMPF   = 0xea,
+    OP_ICEBP  = 0xf1,
+  };
+
+  enum ExeState {
+    Start             =  0,
+    Pref_Op_Size      =  1,
+    Pref_MultiByte_Op =  2,
+    ParseFlags        =  3,
+    ExtraFlags        =  4,
+    ReadModRM         =  5,
+    Read_OP3_38       =  6,
+    Read_OP3_3A       =  7,
+    ReadSIB           =  8,
+    Read8             =  9,
+    Read16            = 10,
+    Read32            = 11,
+    Read8_ModRM       = 12,
+    Read16_f          = 13,
+    Read32_ModRM      = 14,
+    Error             = 15,
+  };
+
+  struct OpCache {
+    U32 Op[CacheSize];
+    U32 Index;
+  };
+
+  struct Instruction {
+    U32 Data;
+    U8 Prefix, Code, ModRM, SIB, REX, Flags, BytesRead, Size, Category;
+    bool MustCheckREX, Decoding, o16, imm8;
+  };
+
+  static constexpr int CodeShift           = 3;
+  static constexpr U32 CodeMask            = 0xFF<<CodeShift;       // 0x000007F8
+  static constexpr U32 ClearCodeMask       = 0xFFFFFFFF^CodeMask;   // 0xFFFFF807
+  static constexpr U32 PrefixMask          = (1<<CodeShift)-1;      // 0x07
+  static constexpr U32 OperandSizeOverride = 0x01<<(8+CodeShift);   // 0x00000800
+  static constexpr U32 MultiByteOpcode     = 0x02<<(8+CodeShift);   // 0x00001000
+  static constexpr U32 PrefixREX           = 0x04<<(8+CodeShift);   // 0x00002000
+  static constexpr U32 Prefix38            = 0x08<<(8+CodeShift);   // 0x00004000
+  static constexpr U32  Prefix3A           = 0x10<<(8+CodeShift);   // 0x00008000
+  static constexpr U32 HasExtraFlags       = 0x20<<(8+CodeShift);   // 0x00010000
+  static constexpr U32 HasModRM            = 0x40<<(8+CodeShift);   // 0x00020000
+  static constexpr U32 ModRMShift          = 7+8+CodeShift;         // 18
+  static constexpr U32 SIBScaleShift       = ModRMShift+8-6;        // 20
+  static constexpr U32 RegDWordDisplacement= 1<<(8+SIBScaleShift);  // 0x10000000
+  static constexpr U32 AddressMode         = 2<<(8+SIBScaleShift);  // 0x20000000
+  static constexpr U32 TypeShift           = 2+8+SIBScaleShift;     // 30
+  static constexpr U32 CategoryShift       = 5;
+  static constexpr U32 CategoryMask        = ((1<<CategoryShift)-1); //0x1F (31)
+  static constexpr U8  ModRM_mod           = 0xC0;
+  static constexpr U8  ModRM_reg           = 0x38;
+  static constexpr U8  ModRM_rm            = 0x07;
+  static constexpr U8  SIB_scale           = 0xC0;
+  static constexpr U8  SIB_index           = 0x38; //unused
+  static constexpr U8  SIB_base            = 0x07;
+  static constexpr U8  REX_w               = 0x08;
+
+  static constexpr U32 MinRequired         = 8; // minimum required consecutive valid instructions to be considered as code
+private:
+  static constexpr int nCM1=10, nCM2=10, nIM=1;
 public:
-  static constexpr int nCM1=10, nCM2=10, nIMAP=1;
-  static constexpr int MIXERINPUTS=(nCM1+nCM2)*ContextMap2::MIXERINPUTS + nIMAP*IndirectMap::MIXERINPUTS; //180
-  static constexpr int MIXERCONTEXTS=1024+1024+1024+8192+8192+8192; //27648
-  static constexpr int MIXERCONTEXTSETS=6;
+  static constexpr int MIXERINPUTS = (nCM1+nCM2)*ContextMap2::MIXERINPUTS + nIM*IndirectMap::MIXERINPUTS; //180
+  static constexpr int MIXERCONTEXTS = 1024+1024+1024+8192+8192+8192; //27648
+  static constexpr int MIXERCONTEXTSETS = 6;
 private:
   const Shared * const shared;
   const ModelStats * const stats;
@@ -9463,8 +9512,8 @@ void ExeModel::Update() {
 
   bool Forced=stats->blockType==EXE;  
   if (Valid || Forced) {
-    int mask=0, count0=0;
-    int i=0;
+    U32 mask=0, count0=0;
+    U32 i=0;
     while (i<nCM1) {
       if (i>1) {mask = mask*2 + (buf(i-1)==0); count0+=mask&1;}
       int j = (i<4) ? i+1 : 5+(i-4)*(2+(i>6));
@@ -9547,9 +9596,14 @@ void ExeModel::mix(Mixer& m) {
 // The context is a byte string history that occurs within a
 // 1 or 2 byte context.
 
-class IndirectModel : IPredictor {
+class IndirectModel  {
 private:
-  static constexpr int CONTEXTS=15;
+  static constexpr int nCM = 15;
+public:
+  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = 0;
+  static constexpr int MIXERCONTEXTSETS = 0;
+private:
   const Shared * const shared;
   ContextMap cm;
   Array<U32> t1{256};
@@ -9558,50 +9612,49 @@ private:
   Array<U16> t4{0x8000};
   IndirectContext<U32> iCtx{16,8}; /* BitsPerContext, InputBits */
 public:
-  IndirectModel(const Shared * const sh, const U64 size) : shared(sh), cm(sh,size,CONTEXTS){}
-  void update() {
-    INJECT_SHARED_c4 INJECT_SHARED_buf
-    U32 d=c4&0xffff, c=d&255, d2=(buf(1)&31)+32*(buf(2)&31)+1024*(buf(3)&31);
-    U32 d3=(buf(1)>>3&31)+32*(buf(3)>>3&31)+1024*(buf(4)>>3&31);
-    U32& r1=t1[d>>8];
-    r1=r1<<8|c;
-    U16& r2=t2[c4>>8&0xffff];
-    r2=r2<<8|c;
-    U16& r3=t3[(buf(2)&31)+32*(buf(3)&31)+1024*(buf(4)&31)];
-    r3=r3<<8|c;
-    U16& r4=t4[(buf(2)>>3&31)+32*(buf(4)>>3&31)+1024*(buf(5)>>3&31)];
-    r4=r4<<8|c;
-    const U32 t=c|t1[c]<<8;
-    const U32 t0=d|t2[d]<<16;
-    const U32 ta=d2|t3[d2]<<16;
-    const U32 tc=d3|t4[d3]<<16;
-    const U8 pc=tolower(U8(c4>>8));
-    iCtx+=(c=tolower(c)), iCtx=(pc<<8)|c;
-    const U32 ctx0=iCtx(), mask=(U8(t1[c])==U8(t2[d]))|
-      ((U8(t1[c])==U8(t3[d2]))<<1)|
-      ((U8(t1[c])==U8(t4[d3]))<<2)|
-      ((U8(t1[c])==U8(ctx0))<<3);
-    U64 i=0;
-    cm.set(hash(++i,t));
-    cm.set(hash(++i,t0));
-    cm.set(hash(++i,ta));
-    cm.set(hash(++i,tc));
-    cm.set(hash(++i,t&0xff00, mask));
-    cm.set(hash(++i,t0&0xff0000));
-    cm.set(hash(++i,ta&0xff0000));
-    cm.set(hash(++i,tc&0xff0000));
-    cm.set(hash(++i,t&0xffff));
-    cm.set(hash(++i,t0&0xffffff));
-    cm.set(hash(++i,ta&0xffffff));
-    cm.set(hash(++i,tc&0xffffff));
-    cm.set(hash(++i, ctx0&0xff, c));
-    cm.set(hash(++i, ctx0&0xffff));
-    cm.set(hash(++i, ctx0&0x7f7fff));
-  }
+  IndirectModel(const Shared * const sh, const U64 size) : shared(sh), cm(sh,size,nCM){}
   void mix(Mixer& m) {
-    INJECT_SHARED_bpos 
+    INJECT_SHARED_bpos
+    if(bpos==0) {
+      INJECT_SHARED_c4 INJECT_SHARED_buf
+      U32 d=c4&0xffff, c=d&255, d2=(buf(1)&31)+32*(buf(2)&31)+1024*(buf(3)&31);
+      U32 d3=(buf(1)>>3&31)+32*(buf(3)>>3&31)+1024*(buf(4)>>3&31);
+      U32& r1=t1[d>>8];
+      r1=r1<<8|c;
+      U16& r2=t2[c4>>8&0xffff];
+      r2=r2<<8|c;
+      U16& r3=t3[(buf(2)&31)+32*(buf(3)&31)+1024*(buf(4)&31)];
+      r3=r3<<8|c;
+      U16& r4=t4[(buf(2)>>3&31)+32*(buf(4)>>3&31)+1024*(buf(5)>>3&31)];
+      r4=r4<<8|c;
+      const U32 t=c|t1[c]<<8;
+      const U32 t0=d|t2[d]<<16;
+      const U32 ta=d2|t3[d2]<<16;
+      const U32 tc=d3|t4[d3]<<16;
+      const U8 pc=tolower(U8(c4>>8));
+      iCtx+=(c=tolower(c)), iCtx=(pc<<8)|c;
+      const U32 ctx0=iCtx(), mask=(U8(t1[c])==U8(t2[d]))|
+        ((U8(t1[c])==U8(t3[d2]))<<1)|
+        ((U8(t1[c])==U8(t4[d3]))<<2)|
+        ((U8(t1[c])==U8(ctx0))<<3);
+      U64 i=0;
+      cm.set(hash(++i,t));
+      cm.set(hash(++i,t0));
+      cm.set(hash(++i,ta));
+      cm.set(hash(++i,tc));
+      cm.set(hash(++i,t&0xff00, mask));
+      cm.set(hash(++i,t0&0xff0000));
+      cm.set(hash(++i,ta&0xff0000));
+      cm.set(hash(++i,tc&0xff0000));
+      cm.set(hash(++i,t&0xffff));
+      cm.set(hash(++i,t0&0xffffff));
+      cm.set(hash(++i,ta&0xffffff));
+      cm.set(hash(++i,tc&0xffffff));
+      cm.set(hash(++i, ctx0&0xff, c));
+      cm.set(hash(++i, ctx0&0xffff));
+      cm.set(hash(++i, ctx0&0x7f7fff));
+    }
     cm.mix(m);
-    if(bpos==7)updater.subscribe(this);
   }
 };
 
@@ -9648,6 +9701,7 @@ public:
 class dmcModel {
 private:
   const Shared * const shared;
+  Random rnd;
   Array<DMCNode> t;     // state graph
   StateMap sm;          // statemap for bit history states
   U32 top, curr;        // index of first unallocated node (i.e. number of allocated nodes); index of current node
@@ -9706,7 +9760,7 @@ public:
     // update counts, state
     t[curr].c0=increment_counter(c0,1-y);
     t[curr].c1=increment_counter(c1,y);
-    t[curr].set_state(nex(t[curr].get_state(), y));
+    t[curr].set_state( StateTable::next(t[curr].get_state(),y,rnd) );
 
     // clone next state when threshold is reached
     if(n>threshold) {
@@ -9797,10 +9851,15 @@ public:
 
 class DmcForest {
 private:
-  const Shared * const shared;
   static constexpr U32 MODELS = 10; // 8 fast and 2 slow models
-  static constexpr U32 dmcparams [10] = {2,32, 64,4, 128,8, 256,16, 1024,1536};
-  static constexpr U64 dmcmem [10]    = {6,10, 11,7,  12,8,  13, 9,    2,   2};
+public:
+  static constexpr int MIXERINPUTS = 2 + 8/2; // fast models (2 individually) + slow models (8 combined pairwise)
+  static constexpr int MIXERCONTEXTS = 0;
+  static constexpr int MIXERCONTEXTSETS = 0;
+private:
+  static constexpr U32 dmcparams [MODELS] = {2,32, 64,4, 128,8, 256,16, 1024,1536};
+  static constexpr U64 dmcmem [MODELS]    = {6,10, 11,7,  12,8,  13, 9,    2,   2};
+  const Shared * const shared;
   Array<dmcModel*> dmcmodels;
 public:
   DmcForest(const Shared * const sh, const U64 size) : shared(sh), dmcmodels(MODELS) {
@@ -9842,12 +9901,17 @@ public:
 
 class NestModel {
 private:
-  static constexpr int CONTEXTS=12;
+  static constexpr int nCM = 12;
+public:
+  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = 0;
+  static constexpr int MIXERCONTEXTSETS = 0;
+private:
   const Shared * const shared;
   int ic=0, bc=0, pc=0,vc=0, qc=0, lvc=0, wc=0, ac=0, ec=0, uc=0, sense1=0, sense2=0, w=0;
   ContextMap cm;
 public:
-  NestModel(const Shared * const sh, const U64 size) : shared(sh), cm(sh,size,CONTEXTS) {}
+  NestModel(const Shared * const sh, const U64 size) : shared(sh), cm(sh,size,nCM) {}
   void mix(Mixer& m) {
     INJECT_SHARED_bpos 
     if (bpos==0) {
@@ -9977,7 +10041,12 @@ enum XMLState {
 
 class XMLModel {
 private:
-  static constexpr int CONTEXTS=4;
+  static constexpr int nCM = 4;
+public:
+  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = 0;
+  static constexpr int MIXERCONTEXTSETS = 0;
+private:
   const Shared * const shared;
   ContextMap cm;
   XMLTagCache Cache{};
@@ -10030,7 +10099,7 @@ private:
       (*Content).Type |= ContentFlags::ISBN;
   }
 public:
-  XMLModel(const Shared * const sh, const U64 size) : shared(sh), cm(sh,size,CONTEXTS) {}
+  XMLModel(const Shared * const sh, const U64 size) : shared(sh), cm(sh,size,nCM) {}
   void update() {
     INJECT_SHARED_c1 INJECT_SHARED_c4 INJECT_SHARED_c8
     XMLTag *pTag = &Cache.Tags[ (Cache.Index-1)&(CacheSize-1) ], *Tag = &Cache.Tags[ Cache.Index&(CacheSize-1) ];
@@ -10213,8 +10282,11 @@ public:
 // Note: order 7+ contexts are modeled by matchModel as well
 
 class NormalModel { 
+private:
+  static constexpr int nCM = 10;
+  static constexpr int nRCM = 3;
+  static constexpr int nSM = 2;
 public:
-  static constexpr int nCM=10, nRCM=3, nSM=2;
   static constexpr int MIXERINPUTS = nCM*ContextMap2::MIXERINPUTS + nRCM*RunContextMap::MIXERINPUTS + nSM; //75
   static constexpr int MIXERCONTEXTS = 64 + 8+1024+256+256+256+256+1536; //3656
   static constexpr int MIXERCONTEXTSETS = 7;
@@ -10235,35 +10307,38 @@ public:
   {
     assert(ispowerof2(cmsize) && ispowerof2(rcmsize));
   }
+
   void reset_hashes() {
     memset(&cxt[0], 0, sizeof(cxt));
   }
 
-  void update() {
+  void update_hashes() {
     // update order 1..14 context hashes
     // note: order 0 context does not need an update so its hash never changes
     INJECT_SHARED_c1
     cxt[15]=(isalpha(c1))?combine64(cxt[15], tolower(c1)):0;
-    cm.set(cxt[15]);
     for (int i=14; i>0; --i)
       cxt[i]=combine64(cxt[i-1],c1);
-    for (int i=0; i<=6; ++i) 
-      cm.set(cxt[i]);
-    cm.set(cxt[8]);
-    cm.set(cxt[14]);
-    rcm7.set(cxt[7]);
-    rcm9.set(cxt[10]);
-    rcm10.set(cxt[12]);
   }
 
   void mix(Mixer& m) {
     INJECT_SHARED_bpos
-    if(bpos==0)update();
+    if(bpos==0) {
+      update_hashes();
+      for (int i=0; i<=6; ++i) 
+        cm.set(cxt[i]);
+      cm.set(cxt[8]);
+      cm.set(cxt[14]);
+      cm.set(cxt[15]);
+      rcm7.set(cxt[7]);
+      rcm9.set(cxt[10]);
+      rcm10.set(cxt[12]);
+    }
     cm.mix(m);
     rcm7.mix(m);
     rcm9.mix(m);
     rcm10.mix(m);
-
+    
     INJECT_SHARED_c0 INJECT_SHARED_c1 
     m.add((stretch(StateMaps[0].p(0,c0))+1)>>1);
     m.add((stretch(StateMaps[1].p(0,c0|(c1<<8)))+1)>>1);
@@ -10352,7 +10427,7 @@ class ContextModel {
   int blocksize=0, blockinfo=0, bytesread=0;
   bool readsize=false;
 public:
-  bool Bypass;
+  bool Bypass=false;
   ContextModel(const Shared * const sh, ModelStats *st, Models &mdls) : shared(sh), stats(st), models(mdls) {
     #ifdef USE_WORDMODEL
       m=MixerFactory::CreateMixer(sh,1247, 8+3648/*normalModel*/+1888/*recordModel*/+27648/*exeModel*/+30720/*textModel*/+256/*matchModel*/+8448/*sparseMatchModel*/, 28);
@@ -10427,53 +10502,63 @@ int ContextModel::p(){
   switch(blocktype) {
     case IMAGE1: {
       Image1bitModel &image1bitModel=models.image1bitModel();
-      image1bitModel.mix(*m, blockinfo);
+      image1bitModel.setparam(blockinfo);
+      image1bitModel.mix(*m);
       break;
     }
     case IMAGE4: {
       Image4bitModel &image4bitModel=models.image4bitModel();
+      image4bitModel.setparam(blockinfo);
       m->set_scalefactor(2048,256);
-      return image4bitModel.mix(*m, blockinfo), m->p();
+      return image4bitModel.mix(*m), m->p();
     }
     case IMAGE8: {
       Image8bitModel &image8bitModel=models.image8bitModel();
+      image8bitModel.setparam(blockinfo,0,0);
       m->set_scalefactor(2048,128);
-      return image8bitModel.mix(*m, blockinfo, 0, 0), m->p();
+      return image8bitModel.mix(*m), m->p();
     }
     case IMAGE8GRAY: {
       Image8bitModel &image8bitModel=models.image8bitModel();
+      image8bitModel.setparam(blockinfo,1,0);
       m->set_scalefactor(2048,128);
-      return image8bitModel.mix(*m, blockinfo, 1, 0), m->p();
+      return image8bitModel.mix(*m), m->p();
     }
     case IMAGE24: {
       Image24bitModel &image24bitModel=models.image24bitModel();
+      image24bitModel.setparam(blockinfo,0,0);
       m->set_scalefactor(1024,128);
-      return image24bitModel.mix(*m, blockinfo, 0, 0), m->p();
+      return image24bitModel.mix(*m), m->p();
     }
     case IMAGE32: {
       Image24bitModel &image24bitModel=models.image24bitModel();
+      image24bitModel.setparam(blockinfo,1,0);
       m->set_scalefactor(2048,128);
-      return image24bitModel.mix(*m, blockinfo, 1, 0), m->p();
+      return image24bitModel.mix(*m), m->p();
     }
     case PNG8: {
       Image8bitModel &image8bitModel=models.image8bitModel();
+      image8bitModel.setparam(blockinfo,0,1);
       m->set_scalefactor(2048,128);
-      return image8bitModel.mix(*m, blockinfo, 0, 1), m->p();
+      return image8bitModel.mix(*m), m->p();
     }
     case PNG8GRAY: {
       Image8bitModel &image8bitModel=models.image8bitModel();
+      image8bitModel.setparam(blockinfo,1,1);
       m->set_scalefactor(2048,128);
-      return image8bitModel.mix(*m, blockinfo, 1, 1), m->p();
+      return image8bitModel.mix(*m), m->p();
     }
     case PNG24: {
       Image24bitModel &image24bitModel=models.image24bitModel();
+      image24bitModel.setparam(blockinfo,0,1);
       m->set_scalefactor(1024,128);
-      return image24bitModel.mix(*m, blockinfo, 0, 1), m->p();
+      return image24bitModel.mix(*m), m->p();
     }
     case PNG32: {
       Image24bitModel &image24bitModel=models.image24bitModel();
+      image24bitModel.setparam(blockinfo,1,1);
       m->set_scalefactor(2048,128);
-      return image24bitModel.mix(*m, blockinfo, 1, 1), m->p();
+      return image24bitModel.mix(*m), m->p();
     }
     #ifdef USE_AUDIOMODEL
     case AUDIO:
@@ -10482,13 +10567,15 @@ int ContextModel::p(){
       recordModel.mix(*m);
       if ((blockinfo&2)==0) {
         Audio8bitModel &audio8bitModel=models.audio8bitModel();
+        audio8bitModel.setparam(blockinfo);
         m->set_scalefactor(1024,128);
-        return audio8bitModel.mix(*m, blockinfo), m->p();
+        return audio8bitModel.mix(*m), m->p();
       }
       else {
         Audio16bitModel &audio16bitModel=models.audio16bitModel();
+        audio16bitModel.setparam(blockinfo);
         m->set_scalefactor(1024,128);
-        return audio16bitModel.mix(*m, blockinfo), m->p();
+        return audio16bitModel.mix(*m), m->p();
       }
     }
     #endif //USE_AUDIOMODEL
@@ -10773,8 +10860,8 @@ public:
     // Broadcast to all current subscribers: y (and c0, c1, c4, etc) is known
     updater.broadcast_update();
 
-    const U8  bpos=shared.bpos;
-    const U8  c0=shared.c0;
+    const U8 bpos=shared.bpos;
+    const U8 c0=shared.c0;
     U8 chargrp = (bpos>0)?AsciiGroupC0[0][(1<<bpos)-2+(c0&((1<<bpos)-1))]:0;
     stats.Text.chargrp=chargrp;
 
@@ -11444,22 +11531,22 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
         && (buf0&0xff)!=0 && (buf0&0xf8)!=0xd0) return DEFAULT;
 #ifdef USE_AUDIOMODEL
     // Detect .wav file header
-    if (buf0==0x52494646) wavi=i,wavm=wavlen=0;
+    if (buf0==0x52494646) wavi=i,wavm=wavlen=0; //"RIFF"
     if (wavi) {
       int p=i-wavi;
-      if (p==4) wavsize=bswap(buf0);
+      if (p==4) wavsize=bswap(buf0); //filesize
       else if (p==8){
-        wavtype=(buf0==0x57415645)?1:(buf0==0x7366626B)?2:0;
+        wavtype=(buf0==0x57415645 /*WAVE*/)?1:(buf0==0x7366626B /*sfbk*/)?2:0; 
         if (!wavtype) wavi=0;
       }
       else if (wavtype){
         if (wavtype==1) {
-          if (p==16+wavlen && (buf1!=0x666d7420 || ((wavm=bswap(buf0)-16)&0xFFFFFFFD)!=0)) wavlen=((bswap(buf0)+1)&(-2))+8, wavi*=(buf1==0x666d7420 && (wavm&0xFFFFFFFD)!=0);
-          else if (p==22+wavlen) wavch=bswap(buf0)&0xffff;
-          else if (p==34+wavlen) wavbps=bswap(buf0)&0xffff;
-          else if (p==40+wavlen+wavm && buf1!=0x64617461) wavm+=((bswap(buf0)+1)&(-2))+8,wavi=(wavm>0xfffff?0:wavi);
+          if (p==16+wavlen && (buf1!=0x666d7420 /*"fmt "*/|| ((wavm=bswap(buf0)-16)&0xFFFFFFFD)!=0)) wavlen=((bswap(buf0)+1)&(-2))+8, wavi*=(buf1==0x666d7420 /*"fmt "*/ && (wavm&0xFFFFFFFD)!=0);
+          else if (p==22+wavlen) wavch=bswap(buf0)&0xffff; // number of channels: 1 or 2
+          else if (p==34+wavlen) wavbps=bswap(buf0)&0xffff; // bits per smaple: 8 or 16
+          else if (p==40+wavlen+wavm && buf1!=0x64617461 /*"data"*/) wavm+=((bswap(buf0)+1)&(-2))+8,wavi=(wavm>0xfffff?0:wavi);
           else if (p==40+wavlen+wavm) {
-            int wavd=bswap(buf0);
+            int wavd=bswap(buf0); // size of data section
             wavlen=0;
             if ((wavch==1 || wavch==2) && (wavbps==8 || wavbps==16) && wavd>0 && wavsize>=wavd+36
                && wavd%((wavbps/8)*wavch)==0) AUD_DET((wavbps==8)?AUDIO:AUDIO_LE,wavi-3,44+wavm,wavd,wavch+wavbps/4-3);
@@ -11467,20 +11554,20 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
           }
         }
         else{
-          if ((p==16 && buf1!=0x4C495354) || (p==20 && buf0!=0x494E464F))
+          if ((p==16 && buf1!=0x4C495354 /*LIST*/) || (p==20 && buf0!=0x494E464F /*INFO*/))
             wavi=0;
-          else if (p>20 && buf1==0x4C495354 && (wavi*=(buf0!=0))){
+          else if (p>20 && buf1==0x4C495354 /*LIST*/ && (wavi*=(buf0!=0))){
             wavlen = bswap(buf0);
             wavlist = i;
           }
           else if (wavlist){
             p=i-wavlist;
-            if (p==8 && (buf1!=0x73647461 || buf0!=0x736D706C))
+            if (p==8 && (buf1!=0x73647461 /*sdta*/ || buf0!=0x736D706C /*smpl*/))
               wavi=0;
             else if (p==12){
               int wavd = bswap(buf0);
               if (wavd && (wavd+12)==wavlen)
-                AUD_DET(AUDIO_LE,wavi-3,(12+wavlist-(wavi-3)+1)&~1,wavd,1+16/4-3);
+                AUD_DET(AUDIO_LE,wavi-3,(12+wavlist-(wavi-3)+1)&~1,wavd,1+16/4-3 /*mono, 16-bit*/);
               wavi=0;
             }
           }
@@ -11495,7 +11582,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
       if (p==12 && (buf1!=0x41494646 || buf0!=0x434f4d4d)) aiff=0; // AIFF COMM
       else if (p==24) {
         const int bits=buf0&0xffff, chn=buf1>>16;
-        if ((bits==8 || bits==16) && (chn==1 || chn==2)) aiffm=chn+bits/4+1; else aiff=0;
+        if ((bits==8 || bits==16) && (chn==1 || chn==2)) aiffm=chn+bits/4-3+4; else aiff=0;
       } else if (p==42+aiffs && buf1!=0x53534e44) aiffs+=(buf0+8)+(buf0&1),aiff=(aiffs>0x400?0:aiff);
       else if (p==42+aiffs) AUD_DET(AUDIO,aiff-3,54+aiffs,buf0-8,aiffm);
     }
@@ -11518,16 +11605,19 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
         int x=in->getchar();
         if (x+1>numpat) numpat=x+1;
       }
-      if (numpat<65) AUD_DET(AUDIO,i-1083,1084+numpat*256*chn,len,4);
+      if (numpat<65) AUD_DET(AUDIO,i-1083,1084+numpat*256*chn,len,4 /*mono, 8-bit*/);
       in->setpos(savedpos);
     }
 
     // Detect .s3m file header
-    if (buf0==0x1a100000) s3mi=i,s3mno=s3mni=0;
+    if (buf0==0x1a100000) s3mi=i,s3mno=s3mni=0; //0x1A: signature byte, 0x10: song type, 0x0000: reserved
     if (s3mi) {
       const int p=i-s3mi;
-      if (p==4) s3mno=bswap(buf0)&0xffff,s3mni=(bswap(buf0)>>16);
-      else if (p==16 && (((buf1>>16)&0xff)!=0x13 || buf0!=0x5343524d)) s3mi=0;
+      if (p==4) {
+        s3mno=bswap(buf0)&0xffff; //Number of entries in the order table, should be even 
+        s3mni=(bswap(buf0)>>16);  //Number of instruments in the song
+      }
+      else if (p==16 && (((buf1>>16)&0xff)!=0x13 || buf0!=0x5343524d /*SCRM*/)) s3mi=0;
       else if (p==16) {
         const U64 savedpos=in->curpos();
         int b[31],sam_start=(1<<16),sam_end=0,ok=1;
@@ -11546,7 +11636,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
             if (ofs*16+len>sam_end) sam_end=ofs*16+len;
           }
         }
-        if (ok && sam_start<(1<<16)) AUD_DET(AUDIO,s3mi-31,sam_start,sam_end-sam_start,0);
+        if (ok && sam_start<(1<<16)) AUD_DET(AUDIO,s3mi-31,sam_start,sam_end-sam_start,0 /*mono, 8-bit*/);
         s3mi=0;
         in->setpos(savedpos);
       }
@@ -13866,7 +13956,7 @@ int main(int argc, char** argv) {
         FileDisk f;
         f.open(list_filename.c_str(),true);
         String *s=listoffiles.getstring();
-        for(int i=0;i<s->strsize();i++)
+        for(U64 i=0;i<s->strsize();i++)
           if(f.getchar()!=(*s)[i])
             quit("Mismatch in list of files.");
         if(f.getchar()!=EOF) printf("Filelist on disk is larger than in archive.\n");
@@ -13948,7 +14038,7 @@ int main(int argc, char** argv) {
   }
   // we catch only the intentional exceptions from quit() to exit gracefully
   // any other exception should result in a crash and must be investigated
-  catch(IntentionalException const& e) {}
+  catch(IntentionalException const&) {}
 
   return 0;
 }
