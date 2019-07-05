@@ -1513,3 +1513,14 @@ Paq8px_v179fix5
 - Now most of the probability predictors will "predict->update" instead of "update->predict" (for each bit)
 - Moved Train (for NormalModel and ExeModel) from the models to the Predictor class - now these models and their training is decoupled
 - Minor fixes: StateMap init, ContextMap2 HasHistory condition
+
+
+Paq8px_v180
+2019.07.05
+- Minor code changes with unchanged functionality according to VS2019 suggestions with C++11 guidelines in mind
+- Minor fixes in probabilistic increment in StateMap
+- Introduced probabilistic increment in StateMaps (IndirectMap, ContextMap2, Image4bitModel, Image1bitModel, JpegModel, DMCModel)
+- Improvements in ContextMap, ContextMap2
+- Introduced state group in StateMap (used by ContextMap2)
+- More global scope (now ExeModel-related) cleanup 
+- Other minor/cosmetic changes
