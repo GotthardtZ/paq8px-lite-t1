@@ -1524,3 +1524,19 @@ Paq8px_v180
 - Introduced state group in StateMap (used by ContextMap2)
 - More global scope (now ExeModel-related) cleanup 
 - Other minor/cosmetic changes
+
+
+Paq8px_v181
+2019.07.11
+- Matchmodel changes:
+ - fix: expectedByte could contain garbage
+ - fix: delta mode turned on unnecessarily for the next byte (at bpos=0) when the last bit (bpos=7) of the previous byte did not match 
+ - enhancement: a new recovery mode: when a 1-byte mismatch occurs but the match continues, the match is recovered (if no new match
+   is found in the meantime)
+ - enhancement: a StationaryMap and a SmallStationaryContextMap is converted to a ContextMap (less memory, better prediction, except 
+   maybe for some images)
+ - enhancement: number of mixer contexts: 8 instead of 256 (less memory, better mixing)
+- Removed experimental command line options: Fastmode (-f) (in favor of a new blocktype in a forthcoming version)
+  and Force PNM detection in text (-p).
+- Reverted probabilistic increment to normal increment in JpegModel 
+- Other cosmetic changes

@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "180"  //update version here before publishing your changes
+#define PROGVERSION  "181"  //update version here before publishing your changes
 #define PROGYEAR     "2019"
 
 //////////////////////// Build options /////////////////////////////////////
@@ -1024,8 +1024,6 @@ U8 options=0;
 #define OPTION_TRAINTXT 8
 #define OPTION_ADAPTIVE 16
 #define OPTION_SKIPRGB 32
-#define OPTION_FASTMODE 64
-#define OPTION_FORCEPNM_IN_TEXT 128
 
 #define INJECT_STATS_blpos   const U32 blpos=stats->blpos;
 
@@ -1041,7 +1039,7 @@ struct ModelStats {
 
   //MatchModel
   struct {
-    U32 length;      //used by SSE stage
+    U32 length3;     //used by SSE stage and RecordModel
     U8 expectedByte; //used by SSE stage
   } Match{};
 
@@ -1188,7 +1186,8 @@ inline int VLICost(U64 n) {
 }
 
 // ilog2
-// returns floor(log2(x)), e.g. 30->4  31->4  32->5,  33->5
+// returns floor(log2(x))
+// 0/1->0, 2->1, 3->1, 4->2 ..., 30->4,  31->4, 32->5,  33->5
 #ifdef _MSC_VER
 #include <intrin.h>
 inline U32 ilog2(U32 x) {
@@ -1307,19 +1306,37 @@ class StateTable {
   {140,252, 0,41}};  // 252, 253-255 are reserved
 
   static constexpr U8 State_group[256]=
-  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,18,23,24,24,26,25,27,26,26,25,27,26,28,28,29,15,18,23,25,25,26,26,27,27,29,15,18,23,25,24,25,26,26,27,28,27,29,15,18,23,24,24,24,25,25,27,27,28,28,28,29,15,19,22,24,23,24,25,25,26,26,27,27,28,29,28,30,16,19,22,24,23,24,28,29,28,30,16,19,22,24,23,24,28,29,28,30,16,19,22,24,23,24,28,29,28,30,16,19,22,24,23,24,28,29,28,30,16,19,22,24,22,23,29,30,28,30,16,19,22,23,22,23,29,30,29,30,16,19,22,0,0,30,16,19,22,30,16,19,22,30,16,19,22,30,16,19,22,30,16,19,22,30,16,19,21,31,16,19,21,31,16,19,21,31,16,19,21,31,16,19,21,31,16,19,21,31,16,19,21,31,16,19,21,31,16,19,21,31,16,19,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,20,21,31,17,0,0,0,};
+  { 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14, // 0-14
+    18,23,24,24,26,25,27,26,26,25,27,26,28,28,29,15, //15-30
+    18,23,25,25,26,26,27,27,29,15, //31-40
+    18,23,25,24,25,26,26,27,28,27,29,15, //41-52
+    18,23,24,24,24,25,25,27,27,28,28,28,29,15, //53-66
+    19,22,24,23,24,25,25,26,26,27,27,28,29,28,30,16, //67-82
+    19,22,24,23,24,28,29,28,30,16, //83-92
+    19,22,24,23,24,28,29,28,30,16, //93-102
+    19,22,24,23,24,28,29,28,30,16, //103-112
+    19,22,24,23,24,28,29,28,30,16, //113-122
+    19,22,24,22,23,29,30,28,30,16, //123-132
+    19,22,23,22,23,29,30,29,30,16, //133-142
+    19,22, 0, 0,30,16, //143-148
+    19,22,30,16, 19,22,30,16, 19,22,30,16, 19,22,30,16, 19,22,30,16, //149-152 153-156 157-160 161-164 165-168 
+    19,21,31,16, 19,21,31,16, 19,21,31,16, 19,21,31,16, 19,21,31,16, //169-172 173-176 177-180 181-184 185-188 
+    19,21,31,16, 19,21,31,16, 19,21,31,16, 19,21,31,16, 19,21,31,17, //189-192 193-196 197-200 201-204 205-208 
+    20,21,31,17, 20,21,31,17, 20,21,31,17, 20,21,31,17, 20,21,31,17, //209-212 213-216 217-220 221-224 225-228
+    20,21,31,17, 20,21,31,17, 20,21,31,17, 20,21,31,17, 20,21,31,17, //229-232 233-236 237-240 241-244 245-248
+    20,21,31,17, 0,0,0, //249-252 253-255
+  };
 
 public:
   static U8 next(U8 const state, const int y) {
     return State_table[state][y];
   }
 
-// Probabilistic increment (approximate counting)
+  // Probabilistic increment (approximate counting)
   // For states 205..208, 209..212, ... 249..252 a group of 4 states is not represented by
   // the counts indicated in the state table. An exponential scale is used instead.
   // The highest group (249..252) represents the top of this scale, where we can not increment anymore.
   static U8 next(U8 const old_state, const int y, Random &rnd) {
-
     U8 new_state = State_table[old_state][y];
     if(new_state>=205) { // for all groups of four states higher than idx 205
       if(old_state<249) { // still climbing
@@ -1391,7 +1408,7 @@ Stretch::Stretch(): t(4096) {
 // A probability predictor predicts the probability that the 
 // next bit is 1.
 //
-// After each bit bacomes known, all probability predictors participated 
+// After each bit becomes known, all probability predictors participated 
 // in the prediction must update their internal state to improve future 
 // predictions (adapting). In order to achieve this, a probability 
 // predictor must 
@@ -1631,7 +1648,7 @@ private:
     if(simd==SIMD_NONE)return  4/sizeof(short); //processes 2 shorts at once -> width is 4 bytes
     assert(false);
   }
-  SIMDMixer *mp;       // points to a Mixer to combine results
+  SIMDMixer *mp; // points to a Mixer to combine results
 public:
   SIMDMixer(const Shared *sh, const int n, const int m, const int s) :
     Mixer(sh, ((n+(simd_width()-1))&-(simd_width())), m, s)
@@ -1756,7 +1773,9 @@ private:
   const int rate;
 public:
   
-  APM1(const Shared * const sh, const int n, const int r): shared(sh), index(0), N(n), t(n*33), rate(r) {
+  APM1(const Shared * const sh, const int n, const int r): shared(sh), 
+    index(0), N(n), t(n*33), rate(r)
+  {
     assert(n>0 && rate>0 && rate<32);
     // maps p, cxt -> p initially
     for (int i=0; i<N; ++i)
@@ -1909,7 +1928,7 @@ public:
       t[i] = (U32(squash(p))<<20)+6; //initial count: 6
     }
   }
-  void update() {
+  void update() override {
     assert(cxt>=0 && cxt<N);
     AdaptiveMap::update(&t[cxt]);
   }
@@ -2354,11 +2373,11 @@ public:
     Reset(0);
     set(0);
   }
-  void set_direct(U32 ctx) {
+  void set_direct(U32 ctx) { // ctx must be a direct context (no hash)
     Context = (ctx&mask)*stride;
     bCount=B=0;
   }
-  void set(U64 ctx) {
+  void set(U64 ctx) { // ctx must be a hash
     Context = (finalize64(ctx,maskbits)&mask)*stride;
     bCount=B=0;
   }
@@ -4453,7 +4472,7 @@ private:
     for (int i=W->Start; i<=W->End; i++) {
       if (W->Letters[i]==0xDF) {
         W->Letters[i]='s';
-        if (i+1<MAX_WORD_SIZE) {
+        if (i<MAX_WORD_SIZE-1) {
           memmove(&W->Letters[i+2], &W->Letters[i+1], MAX_WORD_SIZE-i-2);
           W->Letters[i+1]='s';
           W->End+=(W->End<MAX_WORD_SIZE-1);
@@ -5314,177 +5333,215 @@ void TextModel::SetContexts() {
 class MatchModel {
 private:
   static constexpr int NumHashes = 3;
+  static constexpr int nCM = 2;
   static constexpr int nST = 3;
-  static constexpr int nSSM = 3;
-  static constexpr int nSM = 3;
+  static constexpr int nSSM = 2;
+  static constexpr int nSM = 2;
 public:
-  static constexpr int MIXERINPUTS = 2 + nST + nSSM*SmallStationaryContextMap::MIXERINPUTS + nSM*StationaryMap::MIXERINPUTS;
-  static constexpr int MIXERCONTEXTS = 256;
+  static constexpr int MIXERINPUTS = 2 + nCM*ContextMap::MIXERINPUTS + nST + nSSM*SmallStationaryContextMap::MIXERINPUTS + nSM*StationaryMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = 8;
   static constexpr int MIXERCONTEXTSETS = 1;
 private:
   const Shared * const shared;
   ModelStats *stats;
   enum Parameters : U32 {
-    MaxLen = 0xFFFF, // longest allowed match
     MaxExtend = 0,   // longest allowed match expansion // warning: larger value -> slowdown
     MinLen = 5,      // minimum required match length
     StepSize = 2,    // additional minimum length increase per higher order hash
-    DeltaLen = 5,    // minimum length to switch to delta mode
   };
   Array<U32> Table;
   StateMap StateMaps[nST];
-  SmallStationaryContextMap SCM[nSSM];
+  ContextMap cm;
+  SmallStationaryContextMap SCM, SCM_pos;
   StationaryMap Maps[nSM];
   IndirectContext<U8> iCtx;
   U32 hashes[NumHashes]{ 0 };
   U32 ctx[nST]{ 0 };
   U32 length=0;      // rebased length of match (length=1 represents the smallest accepted match length), or 0 if no match
   U32 index=0;       // points to next byte of match in buf, 0 when there is no match
+  U32 length_bak=0;  // allows match recovery after a 1-byte mismatch 
+  U32 index_bak=0;   // 
   U8 expectedByte=0; // prediction is based on this byte (buf[index]), valid only when length>0
-  bool delta=false;
-  const bool canBypass;
+  bool delta=false;  // indicates that a match has just failed (delta mode)
   const U32 mask;
   const int hashbits;
 public:
-  bool Bypass=false;
-  U16 BypassPrediction=2048; // prediction for bypass mode
-  MatchModel(const Shared * const sh, ModelStats *st,const U64 Size, const bool AllowBypass = false) : 
+  MatchModel(const Shared * const sh, ModelStats *st, const U64 Size) : 
     shared(sh), stats(st), Table(Size/sizeof(U32)), 
     StateMaps{ //StateMap:  s, n, lim, 
       {sh,1,56*256,1023,false}, {sh,1,8*256*256+1,1023,false}, {sh,1,256*256,1023,false}
     },
-    SCM{ /* SmallStationaryContextMap: BitsOfContext, InputBits, Rate, Scale */
-      {sh,8,8,7,64}, {sh,11,1,6,64}, {sh,8,8,5,64}
-    },
+    cm(sh,MEM/4,nCM),
+    SCM{sh,6,1,6,64}, /* SmallStationaryContextMap: BitsOfContext, InputBits, Rate, Scale */
+    SCM_pos {sh,8,8,5,64},
     Maps{ /* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
-      {sh,16,8,64,255}, {sh,22,1,64,1023}, {sh,4,1,64,1023}
+      {sh,23,1,64,1023}, {sh,15,1,64,1023}
     },
-    iCtx{19,1}, // IndirectContext<U8>: BitsPerContext, InputBits
-    canBypass(AllowBypass), mask(U32(Size/sizeof(U32)-1)), hashbits(ilog2(mask+1))
+    iCtx{15,1}, // IndirectContext<U8>: BitsPerContext, InputBits
+    mask(U32(Size/sizeof(U32)-1)), hashbits(ilog2(mask+1))
   {
     assert(ispowerof2(Size));
   }
   void Update() {
-    delta = false;
-    if (length==0 && Bypass)
-      Bypass = false; // can quit bypass mode on byte boundary only
-    INJECT_SHARED_buf 
-    // update hashes
-    for (U32 i=0, minLen=MinLen+(NumHashes-1)*StepSize; i<NumHashes; i++, minLen-=StepSize) {
-      U64 hash = 0;
-      for (U32 j=minLen; j>0; j--)
-        hash = combine64(hash, buf(j));
-      hashes[i] = finalize64(hash,hashbits);
-    }
-    // extend current match, if available
-    if (length) {
-      index++;
-      if (length<MaxLen)
-        length++;
-    }
-    // or find a new match, starting with the highest order hash and falling back to lower ones
-    else {
-      U32 minLen = MinLen+(NumHashes-1)*StepSize, bestLen = 0, bestIndex = 0;
-      for (U32 i=0; i<NumHashes && length<minLen; i++, minLen-=StepSize) {
-        index = Table[hashes[i]];
-        if (index>0) {
-          length = 0;
-          while (length<(minLen+MaxExtend) && buf(length+1)==buf[index-length-1])
-            length++;
-          if (length>bestLen) {
-            bestLen = length;
-            bestIndex = index;
+    INJECT_SHARED_bpos INJECT_SHARED_buf 
+    if (length!=0) {
+      const int expectedBit = (expectedByte>>((8-bpos)&7))&1;
+      INJECT_SHARED_y
+        if (y!=expectedBit) {
+          if(length_bak!=0 && length-length_bak<MinLen) { // mismatch too soon in recovery mode -> give up
+            length_bak=0;
+            index_bak=0;
+          } 
+          else { //backup match information: maybe we can recover it just after this mismatch
+            length_bak=length;
+            index_bak=index;
           }
+          delta = true;
+          length = 0;
+        }
+    }
+
+    if(bpos==0) {
+      // update hashes
+      for (U32 i=0, minLen=MinLen+(NumHashes-1)*StepSize; i<NumHashes; i++, minLen-=StepSize) {
+        U64 hash = 0;
+        for (U32 j=minLen; j>0; j--)
+          hash = combine64(hash, buf(j));
+        hashes[i] = finalize64(hash,hashbits);
+      }
+
+      // recover match after a 1-byte mismatch
+      if(length==0 && !delta && length_bak!=0)  { //match failed (2 bytes ago), no new match found, and we have a backup
+        index_bak++;
+        if(length_bak<mask)length_bak++;
+        INJECT_SHARED_c1
+        if(buf[index_bak]==c1) { // match continues -> recover
+          length=length_bak;
+          index=index_bak;
+        }
+        else { // still mismatch
+          length_bak=index_bak=0; // purge backup
         }
       }
-      if (bestLen>=MinLen) {
-        length = bestLen-(MinLen-1); // rebase, a length of 1 actually means a length of MinLen
-        index = bestIndex;
+      // extend current match
+      if(length!=0) {
+        index++;
+        if(length<mask)length++;
       }
-      else
-        length = index = 0;
-    }
-    // update position information in hashtable
-    INJECT_SHARED_pos
-    for (U32 i=0; i<NumHashes; i++)
-      Table[hashes[i]] = pos;
-    expectedByte = buf[index];
-    INJECT_SHARED_y
-    INJECT_SHARED_c1
-    iCtx+=y, iCtx=(c1<<8)|expectedByte;
-    SCM[0].set(expectedByte);
-    SCM[1].set(expectedByte);
-    SCM[2].set(pos);
-    Maps[0].set_direct((expectedByte<<8)|c1); //bytewise
-    INJECT_SHARED_c0
-    Maps[1].set(hash(expectedByte, c0, c1, buf(2), min(3,(int)ilog2(length+1)))); //bitwise
-    Maps[2].set_direct(iCtx()); //bitwise
+      delta = false;
 
-    stats->Match.expectedByte = (length>0) ? expectedByte : 0;
+      // find a new match, starting with the highest order hash and falling back to lower ones
+      if(length==0) {
+        U32 minLen = MinLen+(NumHashes-1)*StepSize, bestLen = 0, bestIndex = 0;
+        for (U32 i=0; i<NumHashes && length<minLen; i++, minLen-=StepSize) {
+          index = Table[hashes[i]];
+          if (index>0) {
+            length = 0;
+            while (length<(minLen+MaxExtend) && buf(length+1)==buf[index-length-1])
+              length++;
+            if (length>bestLen) {
+              bestLen = length;
+              bestIndex = index;
+            }
+          }
+        }
+        if (bestLen>=MinLen) {
+          length = bestLen-(MinLen-1); // rebase, a length of 1 actually means a length of MinLen
+          index = bestIndex;
+          length_bak=index_bak=0; // purge any backup
+        }
+        else
+          length = index = 0;
+      }
+      // update position information in hashtable
+      INJECT_SHARED_pos
+      for (U32 i=0; i<NumHashes; i++)
+        Table[hashes[i]] = pos;
+      stats->Match.expectedByte = expectedByte = (length!=0 ? buf[index] : 0);
+    }
   }
 
   void mix(Mixer& m) {
-    INJECT_SHARED_bpos INJECT_SHARED_buf INJECT_SHARED_c0 INJECT_SHARED_c1
-    if (bpos==0)
-      Update();
-    else {
-      const U8 B = c0<<(8-bpos);
-      SCM[1].set((bpos<<8)|(expectedByte^B));
-      Maps[1].set(hash(expectedByte, c0, c1, buf(2), min(3,(int)ilog2(length+1)))); //bitwise
+    Update();
+    
+    for (U32 i=0; i<nST; i++) // reset contexts
+      ctx[i] = 0;
+
+    INJECT_SHARED_bpos INJECT_SHARED_buf INJECT_SHARED_c1 INJECT_SHARED_c0 
+    const int expectedBit = length!=0 ? (expectedByte>>(7-bpos))&1 : 0;
+    if (length!=0) {
+      if (length<=16)
+        ctx[0] = (length-1)*2 + expectedBit; // 0..31
+      else
+        ctx[0] = 24 + (min(length-1, 63)>>2)*2 + expectedBit; // 32..55
+      ctx[0] = ((ctx[0]<<8) | c0);
+      ctx[1] = ((expectedByte<<11) | (bpos<<8) | c1) + 1;
+      const int sign = 2*expectedBit-1;
+      m.add(sign*(min(length, 32)<<5)); // +/- 32..1024
+      m.add(sign*(ilog(min(length,65535))<<2));   // +/-  0..1024
+    }
+    else { // no match at all or delta mode
+      m.add(0);
+      m.add(0);
+    }
+
+    if (delta) // delta mode: helps predicting the remaining bits of a character when a mismatch occurs
+      ctx[2] = (expectedByte<<8) | c0;
+
+    for (U32 i=0; i<nST; i++) {
+      const U32 c = ctx[i];
+      const U32 p = StateMaps[i].p(0,c);
+      if (c!=0)
+        m.add(stretch(p)>>1);
+      else
+        m.add(0);
+    }
+
+    const U32 length_ilog2  = ilog2(length+1);
+    //no match:      length_ilog2=0
+    //length=1..2:   length_ilog2=1
+    //length=3..6:   length_ilog2=2
+    //length=7..14:  length_ilog2=3
+    //length=15..30: length_ilog2=4
+
+    const U8 length3 = min(length_ilog2,3); // 2 bits
+    const U8 rm = length_bak!=0 && length-length_bak==1; // predicting the first byte in recovery mode is still uncertain
+    const U8 length3_rm = length3<<1|rm; // 3 bits
+
+    //bytewise contexts
+    if(bpos==0) {
+      cm.set(hash(0,expectedByte,length3_rm));
+      cm.set(hash(1,expectedByte,length3_rm,c1));
+      INJECT_SHARED_pos
+      SCM_pos.set(pos&255); //~sparsemodel (pos mod 256)
+    }
+    cm.mix(m);
+    SCM_pos.mix(m);
+
+    //bitwise contexts
+    {
+      Maps[0].set(hash(expectedByte, c0, c1, buf(2), length3_rm));
       INJECT_SHARED_y
-      iCtx+=y, iCtx=(bpos<<16)|(c1<<8)|(expectedByte^B);
-      Maps[2].set_direct(iCtx()); //bitwise
+      iCtx+=y; 
+      const U8 C = length3_rm<<1 | expectedBit; // 4 bits
+      iCtx=(bpos<<11)|(c1<<3)|C;
+      Maps[1].set_direct(iCtx());
+      SCM.set((bpos<<3)|C);
     }
-    const int expectedBit = (expectedByte>>(7-bpos))&1;
+    Maps[0].mix(m);
+    Maps[1].mix(m);
+    SCM.mix(m);
 
-    if (length>0) {
-      const bool isMatch = bpos==0 ? c1==buf[index-1] : ((expectedByte+256)>>(8-bpos))==c0; // next bit matches the prediction?
-      if (!isMatch) {
-        delta = (length+MinLen)>DeltaLen;
-        length = 0;
-      }
-    }
+    const U32 length_C = length_ilog2 !=0 ? length_ilog2 +1 : delta;
+    //no match, no delta mode:   length_C=0
+    //failed match, delta mode:  length_C=1
+    //length=1..2:   length_C=2
+    //length=3..6:   length_C=3
+    //length=7..14:  length_C=4
+    //length=15..30: length_C=5
 
-    if (!(canBypass && Bypass)) {
-      for (U32 i=0; i<nST; i++)
-        ctx[i] = 0;
-      if (length>0) {
-        if (length<=16)
-          ctx[0] = (length-1)*2 + expectedBit; // 0..31
-        else
-          ctx[0] = 24 + (min(length-1, 63)>>2)*2 + expectedBit; // 32..55
-        ctx[0] = ((ctx[0]<<8) | c0);
-        ctx[1] = ((expectedByte<<11) | (bpos<<8) | c1) + 1;
-        const int sign = 2*expectedBit-1;
-        m.add(sign*(min(length, 32)<<5)); // +/- 32..1024
-        m.add(sign*(ilog(length)<<2));   // +/-  0..1024
-      }
-      else { // no match at all or delta mode
-        m.add(0);
-        m.add(0);
-      }
-
-      if (delta)
-        ctx[2] = (expectedByte<<8) | c0;
-
-      for (U32 i=0; i<nST; i++) {
-        const U32 c = ctx[i];
-        const U32 p = StateMaps[i].p(0,c);
-        if (c!=0)
-          m.add((stretch(p)+1)>>1);
-        else
-          m.add(0);
-      }
-
-      for(int i=0;i<nSSM;i++)
-        SCM[i].mix(m);
-      for(int i=0;i<nSM;i++)
-        Maps[i].mix(m);
-    }
-    BypassPrediction = length==0 ? 2048 : (expectedBit==0 ? 1 : 4095);
-
-    m.set(ilog(length),256); //0->0, 5->37, 6->41, 7->44, ... , 65535->255
-    stats->Match.length = length;
+    m.set(min(length_C,7),8);
+    stats->Match.length3 = min(length_C,3);
   }
 };
 
@@ -5511,7 +5568,7 @@ private:
     U32 minLen    = MinLen;
     U32 bitMask   = 0xFF;   // match every byte according to this bit mask
   };
-  const sparseConfig sparse[NumHashes] = { {0,1,0,5,0xDF}, {1,1,0,4}, {0,2,0,4,0xDF}, {0,1,0,5,0x0F} };
+  const sparseConfig sparse[NumHashes] = { {0,1,0,5,0xDF}, {1,1,0,4,0xFF}, {0,2,0,4,0xDF}, {0,1,0,5,0x0F} };
   Array<U32> Table;
   StationaryMap Maps[nSM];
   IndirectContext<U8>  iCtx8{19,1};  // BitsPerContext, InputBits
@@ -5526,7 +5583,7 @@ private:
   const U32 mask;
   const int hashbits;
 public:
-  SparseMatchModel(const Shared * const sh, const U64 Size, const bool AllowBypass = false) : shared(sh), 
+  SparseMatchModel(const Shared * const sh, const U64 Size) : shared(sh), 
     Table(Size/sizeof(U32)), 
     Maps{ /* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
       {sh,22,1,128,1023}, {sh,17,4,128,1023}, {sh,8,1,128,1023}, {sh,19,1,128,1023}
@@ -6155,7 +6212,7 @@ public:
       cp.set(hash(++i, iCtx[1]()&0xFF, iCtx[3]()&0xFF));
 
       cp.set(hash(++i, N, (WxNW=c^buf(rlen[0]+1))));
-      cp.set(hash(++i, (stats->Match.length>0)?stats->Match.expectedByte:0x100|U8(iCtx[1]()), N, WxNW));
+      cp.set(hash(++i, (stats->Match.length3!=0)<<8 | stats->Match.expectedByte, U8(iCtx[1]()), N, WxNW));
 
       int k=0x300;
       if (MayBeImg24b) {
@@ -7537,7 +7594,6 @@ public:
   static constexpr int MIXERCONTEXTSETS = 6;
 private:
     const Shared * const shared;
-    Random rnd;
     // State of parser
     enum {SOF0=0xc0, SOF1, SOF2, SOF3, DHT, RST0=0xd0, SOI=0xd8, EOI, SOS, DQT,
       DNL, DRI, APP0=0xe0, COM=0xfe, FF};  // Second byte of 2 byte codes
@@ -8161,7 +8217,7 @@ public:
     if (cp[N-1]) {
       INJECT_SHARED_y
       for (int i=0; i<N; ++i)
-        StateTable::update(cp[i],y,rnd);
+        *cp[i]=StateTable::next(*cp[i],y);
     }
 
     // Update context
@@ -10426,12 +10482,11 @@ class ContextModel {
   int blocksize=0, blockinfo=0, bytesread=0;
   bool readsize=false;
 public:
-  bool Bypass=false;
   ContextModel(const Shared * const sh, ModelStats *st, Models &mdls) : shared(sh), stats(st), models(mdls) {
     #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(sh,1247, 8+3648/*normalModel*/+1888/*recordModel*/+27648/*exeModel*/+30720/*textModel*/+256/*matchModel*/+8448/*sparseMatchModel*/, 28);
+      m=MixerFactory::CreateMixer(sh,1253, 8+3648/*normalModel*/+1888/*recordModel*/+27648/*exeModel*/+30720/*textModel*/+8/*matchModel*/+8448/*sparseMatchModel*/, 28);
     #else
-      m=MixerFactory::CreateMixer(sh,1002, 8+3648/*normalModel*/+1888/*recordModel*/+27648/*exeModel*/+30720/*textModel*/+256/*matchModel*/+8448/*sparseMatchModel*/, 28);
+      m=MixerFactory::CreateMixer(sh,1008, 8+3648/*normalModel*/+1888/*recordModel*/+27648/*exeModel*/+30720/*textModel*/+8/*matchModel*/+8448/*sparseMatchModel*/, 28);
     #endif //USE_WORD_MODEL
   }
 
@@ -10485,15 +10540,8 @@ int ContextModel::p(){
 
   m->add(256); //network bias
 
-  Bypass=false;
   MatchModel &matchModel=models.matchModel();
   matchModel.mix(*m);
-  if (options&OPTION_FASTMODE && (stats->Match.length>=4096 || matchModel.Bypass)) {
-    matchModel.Bypass = Bypass = true;
-    m->reset();
-    return matchModel.BypassPrediction;
-  }
-
   NormalModel &normalModel=models.normalModel();
   normalModel.mix(*m);
 
@@ -10688,12 +10736,12 @@ public:
         int limit=0x3FF>>((blpos<0xFFF)*2);
         pr  = Text.APMs[0].p(pr0, (c0<<8)|(stats->Text.mask&0xF)|((stats->Misses&0xF)<<4), limit);
         pr1 = Text.APMs[1].p(pr0, finalize64(hash(bpos, stats->Misses&3, c4&0xffff, stats->Text.mask>>4),16), limit);
-        pr2 = Text.APMs[2].p(pr0, finalize64(hash(c0, stats->Match.expectedByte, std::min<U32>(3, ilog2(stats->Match.length+1))),16), limit);
+        pr2 = Text.APMs[2].p(pr0, finalize64(hash(c0, stats->Match.expectedByte, stats->Match.length3),16), limit);
         pr3 = Text.APMs[3].p(pr0, finalize64(hash(c0, c4&0xffff, stats->Text.firstLetter),16), limit);
 
         pr0 = (pr0+pr1+pr2+pr3+2)>>2;
 
-        pr1 = Text.APM1s[0].p(pr0, finalize64(hash(stats->Match.expectedByte, std::min<U32>(3, ilog2(stats->Match.length+1)), c4&0xff),16));
+        pr1 = Text.APM1s[0].p(pr0, finalize64(hash(stats->Match.expectedByte, stats->Match.length3, c4&0xff),16));
         pr2 = Text.APM1s[1].p(pr, finalize64(hash(c0, c4&0x00ffffff),16));
         pr3 = Text.APM1s[2].p(pr, finalize64(hash(c0, c4&0xffffff00),16));
 
@@ -10742,7 +10790,7 @@ public:
         break;
       }
       default: {
-        pr  = Generic.APM1s[0].p(pr0, (std::min<U32>(3, ilog2(stats->Match.length+1))<<11)|(c0<<3)|(stats->Misses&0x7));
+        pr  = Generic.APM1s[0].p(pr0, (stats->Match.length3)<<11 | c0<<3 | (stats->Misses&0x7));
         const U16 ctx1 = c0 | (c4&0xff)<<8;
         const U16 ctx2 = c0 ^ finalize64(hash(c4&0xffff),16);
         const U16 ctx3 = c0 ^ finalize64(hash(c4&0xffffff),16);
@@ -10866,9 +10914,7 @@ public:
 
     // Predict
     pr=contextModel.p();
-    if (contextModel.Bypass)
-      return;
-    
+
     // SSE Stage
     pr=sse.p(pr);
   }
@@ -11756,8 +11802,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
       }
       else { // pixel data
         if(textparser.start()==U32(i) ||         // for any sign of non-text data in pixel area
-           (pgm-2==0 && n-pgmdatasize==i) ||     // or the image is the whole file/block
-           (options&OPTION_FORCEPNM_IN_TEXT))    // or forced detection  -> finish (success)
+           (pgm-2==0 && n-pgmdatasize==i))        // or the image is the whole file/block -> finish (success)
         {
           if (pgmw && pgmh && !pgmc && pgmn==4) IMG_DET(IMAGE1,pgm-2,pgmdata-pgm+3,(pgmw+7)/8,pgmh);
           if (pgmw && pgmh && pgmc && (pgmn==5 || (pgmn==7 && pamd==1 && pamatr==6))) IMG_DET(IMAGE8GRAY,pgm-2,pgmdata-pgm+3,pgmw,pgmh);
@@ -13476,7 +13521,6 @@ int main(int argc, char** argv) {
         "          (english.dic, english.exp)\n"
         "      a = Adaptive learning rate\n"
         "      s = Skip the color transform, just reorder the RGB channels\n"
-        "      f = Bypass modeling and mixing on long matches\n\n"
         "    INPUTSPEC:\n"
         "    The input may be a FILE or a PATH/FILE or a [PATH/]@FILELIST.\n"
         "    Only file content and the file size is kept in the archive. Filename,\n"
@@ -13585,8 +13629,6 @@ int main(int argc, char** argv) {
               case 'T': options |= OPTION_TRAINTXT; break;
               case 'A': options |= OPTION_ADAPTIVE; break;
               case 'S': options |= OPTION_SKIPRGB; break;
-              case 'F': options |= OPTION_FASTMODE; break;
-              case 'P': options |= OPTION_FORCEPNM_IN_TEXT; break;
               default: {printf("Invalid compression switch: %c",argv[1][j]); quit();}
             }
           }
@@ -13851,8 +13893,6 @@ int main(int argc, char** argv) {
       printf(" Train txt  (t) = %s\n",options&OPTION_TRAINTXT ? "On  (Pre-train main model with word and expression list)" : "Off");
       printf(" Adaptive   (a) = %s\n",options&OPTION_ADAPTIVE ? "On  (Adaptive learning rate)" : "Off");
       printf(" Skip RGB   (s) = %s\n",options&OPTION_SKIPRGB  ? "On  (Skip the color transform, just reorder the RGB channels)" : "Off");
-      printf(" Fast mode  (f) = %s\n",options&OPTION_FASTMODE ? "On  (Bypass modeling and mixing on long matches)" : "Off");
-      printf(" Force PNM  (p) = %s\n",options&OPTION_FORCEPNM_IN_TEXT ? "On  (Force PNM detection in textual data)" : "Off"); //this is a compression-only option, but we put/get it for reproducibility
       printf(" File mode      = %s\n",options&OPTION_MULTIPLE_FILE_MODE ? "Multiple": "Single");
     }
     printf("\n");
