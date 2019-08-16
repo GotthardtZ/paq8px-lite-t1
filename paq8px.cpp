@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "181"  //update version here before publishing your changes
+#define PROGVERSION  "181fix1"  //update version here before publishing your changes
 #define PROGYEAR     "2019"
 
 //////////////////////// Build options /////////////////////////////////////
@@ -555,6 +555,66 @@ public:
 // These functions/classes are responsible for all the file
 // and directory operations.
 
+
+// Wrappers to utf8 vs. wchar functions
+// Linux i/o works with utf8 char* but on windows it's wchar_t*.
+// We'll be using utf8 char* in all our functions, so we need to convert to 
+// wchar_t* when on windows.
+
+//only for Windows: convert utf8 string to a wchar string
+#ifdef WINDOWS
+wchar_t* utf8_to_wchar_str(const char *utf8_str) {
+  int buffersize = MultiByteToWideChar(CP_UTF8,0,utf8_str,-1,NULL,0);
+  wchar_t* wchar_str = new wchar_t[buffersize];
+  MultiByteToWideChar(CP_UTF8,0,utf8_str,-1,wchar_str,buffersize);
+  return wchar_str;
+}
+#endif
+
+//only for Windows: a class storing a wchar string
+#ifdef WINDOWS
+class WcharStr {
+public:
+  wchar_t* wchar_str=nullptr;
+  WcharStr(const char *utf8_str) {
+    wchar_str=utf8_to_wchar_str(utf8_str);
+  }
+  ~WcharStr() {
+    delete[] wchar_str;
+  }
+};
+#endif
+
+static constexpr int READ=0;
+static constexpr int WRITE=1;
+static constexpr int APPEND=2;
+
+// Wrapper function (Linux vs Windows) to open a file
+FILE* openfile(const char *filename, const int mode) {
+  FILE* file;
+#ifdef WINDOWS
+  file = _wfopen(WcharStr(filename).wchar_str, mode==READ ? L"rb" : mode==WRITE ? L"wb+" : L"a");
+#else
+  file = fopen(filename, mode==READ ? "rb" : mode==WRITE ? "wb+" : "a");
+#endif
+  return file;
+}
+
+#ifdef WINDOWS
+#define STAT _stat64i32
+#else
+#define STAT stat
+#endif
+
+// Wrapper function (Linux vs Windows) to examine a path
+bool statpath(const char* path, struct STAT &status) {
+#ifdef WINDOWS
+  return _wstat(WcharStr(path).wchar_str,&status);
+#else
+  return stat(path,&status);
+#endif
+}
+
 //////////////////// Folder operations ///////////////////////////
 
 //examines given "path" and returns:
@@ -564,8 +624,8 @@ public:
 //3: when does not exist, but looks like a file       /abcd/efgh
 //4: when does not exist, but looks like a directory  /abcd/efgh/
 static int examinepath(const char* path) {
-  struct stat status;
-  const bool success = stat(path, &status)==0;
+  struct STAT status;
+  const bool success = statpath(path, status)==0;
   if(!success) {
     if(errno==ENOENT){ //no such file or directory
       const int len=(int)strlen(path);
@@ -697,7 +757,7 @@ public:
   ~FileDisk() {close();}
   bool open(const char *filename, bool must_succeed) override {
     assert(file==nullptr);
-    file = fopen(filename, "rb");
+    file = openfile(filename,READ);
     const bool success=(file!=nullptr);
     if(!success && must_succeed){printf("Unable to open file %s (%s)", filename, strerror(errno));quit();}
     return success;
@@ -705,7 +765,7 @@ public:
   void create(const char *filename) override {
     assert(file==nullptr);
     makedirectories(filename);
-    file=fopen(filename, "wb+");
+    file=openfile(filename,WRITE);
     if (!file) {printf("Unable to create file %s (%s)", filename, strerror(errno));quit();}
   }
   void createtmp() {
@@ -903,7 +963,7 @@ static U64 getfilesize(const char * filename) {
 }
 
 static void appendtofile(const char *filename, const char* s) {
-  FILE *f=fopen(filename,"a");
+  FILE *f=openfile(filename,APPEND);
   if (f==nullptr)
     printf("Warning: could not log compression results to %s\n",filename);
   else {
@@ -1457,7 +1517,7 @@ public:
 // Mixer m(N, M, S=1, w=0) combines models using M neural networks with
 //   N inputs each, of which up to S may be selected.  If S > 1 then
 //   the outputs of these neural networks are combined using another
-//   neural network (with parameters S, 1, 1).  If S = 1 then the
+//   neural network (with arguments S, 1, 1).  If S = 1 then the
 //   output is direct.  The weights are initially w (+-32K).
 //   It is used as follows:
 // m.update() trains the network where the expected output is the
@@ -9883,8 +9943,8 @@ public:
 //    choices are troublesome: i) resetting the model degrades the predictive power significantly
 //    until the graph becomes large enough again and ii) a fixed structure can't adapt anymore.
 //    To solve this issue:
-//    Ten models with different parameters work in tandem. Only eight of the ten models
-//    are reset periodically. Due to their different cloning threshold parameters and 
+//    Ten models with different arguments work in tandem. Only eight of the ten models
+//    are reset periodically. Due to their different cloning threshold arguments and 
 //    different state graph sizes they are reset at different points in time. 
 //    The remaining two models (having the highest threshold and largest stategraph) are
 //    never reset and are beneficial for semi-stationary files.
@@ -9900,7 +9960,7 @@ public:
 //    Advantage: more stable and better compression - even with reduced number of nodes.
 //
 // Further notes: 
-//    Extremely small initial threshold parameters (i) help the state graph become large faster
+//    Extremely small initial threshold arguments (i) help the state graph become large faster
 //    and model longer input bit sequences sooner. Moreover (ii) when using a small threshold 
 //    parameter the split counts c0 and c1 will be small after cloning, and after updating them
 //    with 0 and 1 the prediction p=c1/(c0+c1) will be biased towards these latest events.
@@ -11027,12 +11087,12 @@ public:
 
   void set_status_range(float perc1, float perc2) { p1=perc1; p2=perc2; }
   void print_status(U64 n, U64 size) {
-    if (to_screen)
-      printf("%6.2f%%\b\b\b\b\b\b\b", (p1+(p2-p1)*n/(size+1))*100), fflush(stdout);
+    fprintf(stderr,"%6.2f%%\b\b\b\b\b\b\b", (p1+(p2-p1)*n/(size+1))*100);
+    fflush(stderr);
   }
   void print_status() {
-    if (to_screen)
-      printf("%6.2f%%\b\b\b\b\b\b\b", float(size())/(p2+1)*100), fflush(stdout);
+    fprintf(stderr,"%6.2f%%\b\b\b\b\b\b\b", float(size())/(p2+1)*100);
+    fflush(stderr);
   }
 };
 
@@ -13175,14 +13235,12 @@ void direct_encode_block(Blocktype type, File *in, U64 len, Encoder &en, int inf
     en.compress((info>>8)&0xFF);
     en.compress((info)&0xFF);
   }
-  if (to_screen)
-    printf("Compressing... ");
+  fprintf(stderr,"Compressing... ");
   for (U64 j=0; j<len; ++j) {
     if ((j&0xfff)==0) en.print_status(j, len);
     en.compress(in->getchar());
   }
-  if (to_screen)
-    printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+  fprintf(stderr,"\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
 }
 
 void compressRecursive(File *in, U64 blocksize, Encoder &en, String &blstr, int recursion_level, float p1, float p2);
@@ -13494,9 +13552,11 @@ public:
   String * getstring() {return &list_of_files;}
 };
 
-int main(int argc, char** argv) {
+int main_utf8(int argc, char** argv) {
   try {
 
+    if(!to_screen) //we need a minimal feedback when redirected
+      fprintf(stderr,PROGNAME " archiver v" PROGVERSION " (C) " PROGYEAR ", Matt Mahoney et al.\n");
     printf(PROGNAME " archiver v" PROGVERSION " (C) " PROGYEAR ", Matt Mahoney et al.\n");
 
     // Print help message
@@ -13590,7 +13650,7 @@ int main(int argc, char** argv) {
         "    -simd [NONE|SSE2|AVX2]\n"
         "    Overrides detected SIMD instruction set for neural network operations\n"
         "\n"
-        "Remark: the command line parameters may be used in any order except the input\n"
+        "Remark: the command line arguments may be used in any order except the input\n"
         "and output: always the input comes first then (the optional) output.\n"
         "\n"
         "    Example:\n"
@@ -13601,7 +13661,7 @@ int main(int argc, char** argv) {
       quit();
     }
 
-    // Parse command line parameters
+    // Parse command line arguments
     typedef enum {doNone, doCompress, doExtract, doCompare, doList} WHATTODO;
     WHATTODO whattodo=doNone;
     bool verbose=false;
@@ -13741,7 +13801,7 @@ int main(int argc, char** argv) {
       printf("\n");
     }
 
-    // Successfully parsed command line parameters
+    // Successfully parsed command line arguments
     // Let's check their validity
     if(whattodo==doNone)
       quit("A command switch is required: -0..-9 to compress, -d to decompress, -t to test, -l to list.");
@@ -13997,7 +14057,7 @@ int main(int argc, char** argv) {
         f.open(list_filename.c_str(),true);
         String *s=listoffiles.getstring();
         for(U64 i=0;i<s->strsize();i++)
-          if(f.getchar()!=(*s)[i])
+          if(f.getchar()!=(U8)(*s)[i])
             quit("Mismatch in list of files.");
         if(f.getchar()!=EOF) printf("Filelist on disk is larger than in archive.\n");
         f.close();
@@ -14009,10 +14069,14 @@ int main(int argc, char** argv) {
 
     // Compress or decompress files
     if (mode==COMPRESS) {
+      if(!to_screen) //we need a minimal feedback when redirected
+        fprintf(stderr,"Output is redirected - only minimal feedback is on screen\n");
       if ((options & OPTION_MULTIPLE_FILE_MODE)!=0) { //multiple file mode
         for (int i=0; i<number_of_files; i++) {
           const char* fname=listoffiles.getfilename(i);
           U64 fsize=getfilesize(fname);
+          if(!to_screen) //we need a minimal feedback when redirected
+            fprintf(stderr,"\n%d/%d - Filename: %s (%" PRIu64 " bytes)\n", i+1, number_of_files, fname, fsize);
           printf("\n%d/%d - Filename: %s (%" PRIu64 " bytes)\n", i+1, number_of_files, fname, fsize);
           compressfile(fname, fsize, en, verbose);
           total_size+=fsize+4; //4: file size information
@@ -14022,6 +14086,8 @@ int main(int argc, char** argv) {
         FileName fn;fn+=inputpath.c_str();fn+=input.c_str();
         const char * fname=fn.c_str();
         U64 fsize=getfilesize(fname);
+        if(!to_screen) //we need a minimal feedback when redirected
+          fprintf(stderr,"\nFilename: %s (%" PRIu64 " bytes)\n",fname, fsize);
         printf("\nFilename: %s (%" PRIu64 " bytes)\n",fname, fsize);
         compressfile(fname, fsize, en, verbose);
         total_size+=fsize+4; //4: file size information
@@ -14081,4 +14147,40 @@ int main(int argc, char** argv) {
   catch(IntentionalException const&) {}
 
   return 0;
+}
+
+int main(int argc, char** argv) {
+  #ifdef WINDOWS
+    // in Windows, argv is encoded in the effective codepage, therefore unsuitable for acquiring command line arguments (file names
+    // in our case) not representable in that particular codepage.
+    // -> We will recreate argv as UTF8 (like in Linux)
+    U32 oldcp = GetConsoleOutputCP();
+    SetConsoleOutputCP(CP_UTF8);
+    wchar_t **szArglist;
+    int argc_utf8;
+    char** argv_utf8;
+    if( (szArglist = CommandLineToArgvW(GetCommandLineW(), &argc_utf8)) == NULL) {
+      printf("CommandLineToArgvW failed\n");
+      return 0;
+    } else {
+      if(argc!=argc_utf8)quit("Error preparing command line arguments.");
+      argv_utf8=new char*[argc_utf8+1];
+      for(int i=0; i<argc_utf8; i++) { 
+        wchar_t *s=szArglist[i];
+        int buffersize = WideCharToMultiByte(CP_UTF8,0,s,-1,NULL,0,NULL,NULL);
+        argv_utf8[i] = new char[buffersize];
+        WideCharToMultiByte(CP_UTF8,0,s,-1,argv_utf8[i],buffersize,NULL,NULL);
+        //printf("%d: %s\n", i, argv_utf8[i]); //debug: see if conversion is successful
+      }
+      argv_utf8[argc_utf8]=nullptr;
+      int retval=main_utf8(argc_utf8, argv_utf8);
+      for(int i=0; i<argc_utf8; i++)
+        delete[] argv_utf8[i]; 
+      delete[] argv_utf8;
+      SetConsoleOutputCP(oldcp);
+      return retval;
+    }
+  #else
+    return main_utf8(argc, argv);
+  #endif
 }
