@@ -1540,3 +1540,9 @@ Paq8px_v181
   and Force PNM detection in text (-p).
 - Reverted probabilistic increment to normal increment in JpegModel 
 - Other cosmetic changes
+
+
+Paq8px_v181fix1
+2019.08.16
+- support for unicode file names
+- printing minimal feedback on screen when output is redirected (file names, file sizes, progress bar)
