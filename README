@@ -14,7 +14,7 @@ COPYRIGHT
     We would like to express our gratitude for the endless support of many 
     contributors who encouraged PAQ8PX development with ideas, testing, 
     compiling, debugging:
-    LovePimple, Skymmer, Darek,  Stephan Busch, m^2, Christian Schneider,
+    LovePimple, Skymmer, Darek, Stephan Busch, m^2, Christian Schneider,
     pat357, Rugxulo, Gonzalo, a902cd23, pinguin2, Luca Biondi - and many others.
 
 -------
@@ -46,7 +46,7 @@ compression ratio (although at the expense of speed and memory usage).
 
 PAQ8PX (this branch) is one of the longest living branch of the PAQ series started 
 by Jan Ondrus in 2009.
-For history and current state of development visit https://encode.ru/threads/342-paq8px
+For history and current state of development visit https://encode.su/threads/342-paq8px
 
 -----------------
 HOW DOES IT WORK?
@@ -120,7 +120,7 @@ HOW TO COMPILE
 --------------
 
 If you are a Windows user you don't need to compile the source. Just grab the 
-executable bundled with the source from the https://encode.ru/threads/342-paq8px thread.
+executable bundled with the source from the https://encode.su/threads/342-paq8px thread.
 
 If you are a Linux or macOS user, you will need to build the binary from source.
 You will need:
@@ -132,9 +132,11 @@ The following compilers were tested and verified to work correctly in this relea
 or in an earlier release:
 
   - Visual Studio 2017 Community Edition (Windows)
+  - Visual Studio 2019 Community Edition (Windows)
   - MinGW-w64 7.1.0 and 7.2.0 (Windows)
   - GCC 7.3.0 (macOS)
   - GCC 7.2.0 (Ubuntu)
+  - GCC 8.3.0 (Lubuntu)
   - clang 4.0.1-6 on (Ubuntu)
 
 Note:
@@ -156,7 +158,7 @@ then rename it to "paq8px.cpp" before invoking gcc or change the file name in th
 gcc parameters to include the version information.
 
 For detailed building instructions visit:
-https://encode.ru/threads/2885-PAQ8PX-building-instructions
+https://encode.su/threads/2885-PAQ8PX-building-instructions
 
 --------------
 FOR DEVELOPERS

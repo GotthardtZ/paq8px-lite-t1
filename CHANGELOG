@@ -1544,5 +1544,19 @@ Paq8px_v181
 
 Paq8px_v181fix1
 2019.08.16
-- support for unicode file names
-- printing minimal feedback on screen when output is redirected (file names, file sizes, progress bar)
+- Support for unicode file names
+- Printing minimal feedback on screen when output is redirected (file names, file sizes, progress bar)
+
+
+Paq8px_v182
+2019.09.10
+- Support for unicode path names
+- Refactored WordModel
+  - WordModel now extracts text from pdf files and processes it as it would be a separate text file
+  - Added: expressions, content between words (gap-content) 
+  - Removed: number modeling, space modeling (they are merged into word modeling and gap-content modeling)
+- Introduced context skipping in StateMap and ContextMap (used currently in WordModel only)
+- Removed DistanceModel (partially merged into WordModel)
+- Reinstated probabilistic increment in JpegModel 
+- Updated help screen to reflect the current default memory use per compression level
+- Other cosmetic changes

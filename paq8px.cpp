@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "181fix1"  //update version here before publishing your changes
+#define PROGVERSION  "182"  //update version here before publishing your changes
 #define PROGYEAR     "2019"
 
 //////////////////////// Build options /////////////////////////////////////
@@ -21,7 +21,6 @@
 #define USE_ZLIB
 #define USE_AUDIOMODEL
 #define USE_TEXTMODEL
-#define USE_WORDMODEL
 
 //////////////////////// Debug options /////////////////////////////////////
 
@@ -74,7 +73,6 @@
 
 // Platform-specific includes
 #ifdef UNIX
-  #include <dirent.h> //opendir(), readdir(), dirent()
   #include <string.h> //strlen(), strcpy(), strcat(), strerror(), memset(), memcpy(), memmove()
   #include <limits.h> //PATH_MAX (for OSX)
   #include <unistd.h> //isatty()
@@ -83,8 +81,11 @@
   #ifndef NOMINMAX
   #define NOMINMAX
   #endif
-  #include <windows.h> //CreateDirectory, GetModuleFileName, FileType, FILE_TYPE_PIPE, FILE_TYPE_DISK, 
-                       //uRetVal, DWORD, UINT, TRUE, MAX_PATH
+  #include <windows.h>   //CreateDirectoryW, CommandLineToArgvW, GetConsoleOutputCP, SetConsoleOutputCP
+                         //GetCommandLineW, GetModuleFileNameW, GetStdHandle, GetTempFileName
+                         //MultiByteToWideChar, WideCharToMultiByte,
+                         //FileType, FILE_TYPE_PIPE, FILE_TYPE_DISK, 
+                         //uRetVal, DWORD, UINT, TRUE, MAX_PATH, CP_UTF8, etc.
 #endif
 
 // Platform-independent includes
@@ -558,29 +559,51 @@ public:
 
 // Wrappers to utf8 vs. wchar functions
 // Linux i/o works with utf8 char* but on windows it's wchar_t*.
-// We'll be using utf8 char* in all our functions, so we need to convert to 
+// We'll be using utf8 char* in all our functions, so we need to convert to/from 
 // wchar_t* when on windows.
 
-//only for Windows: convert utf8 string to a wchar string
+//only for Windows: a class encapsulating a wchar string converted from a utf8 string
+//purpose: to properly free the allocated string buffer on destruction
 #ifdef WINDOWS
+class WcharStr {
+private:
+  //convert a utf8 string to a wchar string
 wchar_t* utf8_to_wchar_str(const char *utf8_str) {
   int buffersize = MultiByteToWideChar(CP_UTF8,0,utf8_str,-1,NULL,0);
   wchar_t* wchar_str = new wchar_t[buffersize];
   MultiByteToWideChar(CP_UTF8,0,utf8_str,-1,wchar_str,buffersize);
   return wchar_str;
 }
-#endif
-
-//only for Windows: a class storing a wchar string
-#ifdef WINDOWS
-class WcharStr {
 public:
-  wchar_t* wchar_str=nullptr;
+  wchar_t* wchar_str;
   WcharStr(const char *utf8_str) {
     wchar_str=utf8_to_wchar_str(utf8_str);
   }
   ~WcharStr() {
     delete[] wchar_str;
+  }
+};
+#endif
+
+//only for Windows: a class encapsulating a utf8 string converted from a wchar string
+//purpose: to properly free the allocated string buffer on destruction
+#ifdef WINDOWS
+class Utf8Str {
+private:
+  //convert a wchar string to a utf8 string
+  char* wchar_to_utf8_str(const wchar_t *wchar_str) {
+    int buffersize = WideCharToMultiByte(CP_UTF8,0,wchar_str,-1,NULL,0,NULL,NULL);
+    char* utf8_str = new char[buffersize];
+    WideCharToMultiByte(CP_UTF8,0,wchar_str,-1,utf8_str,buffersize,NULL,NULL);
+    return utf8_str;
+  }
+public:
+  char* utf8_str;
+  Utf8Str(const wchar_t *wchar_str) {
+    utf8_str=wchar_to_utf8_str(wchar_str);
+  }
+  ~Utf8Str() {
+    delete[] utf8_str;
   }
 };
 #endif
@@ -646,7 +669,7 @@ static int makedir(const char* dir) {
   if(examinepath(dir)==2)//existing directory
     return 2; //2: directory already exists, no need to create
   #ifdef WINDOWS
-    const bool created = (CreateDirectory(dir, nullptr) == TRUE);
+    const bool created = (CreateDirectoryW(WcharStr(dir).wchar_str, nullptr) == TRUE);
   #else
   #ifdef UNIX
     const bool created = (mkdir(dir, 0777) == 0);
@@ -911,29 +934,33 @@ static char mypatherror[]="Can't determine my path.";
 class OpenFromMyFolder {
 private:
 public:
-  //this static method will open the executable itself
+  //this static method will open the executable itself for reading
   static void myself(FileDisk *f) {
   #ifdef WINDOWS
     int i;
-    Array<char> myfilename(MAX_PATH+1);
-    if((i=GetModuleFileName(nullptr, &myfilename[0], MAX_PATH)) && i<=MAX_PATH)
-  #endif
-  #ifdef UNIX
+    Array<wchar_t> myfilename(MAX_PATH);
+    if((i=GetModuleFileNameW(nullptr, &myfilename[0], MAX_PATH)) && i<MAX_PATH && i!=0) {
+      f->open(Utf8Str(&myfilename[0]).utf8_str,true);
+    }
+    else
+      quit(mypatherror);
+  #else
     Array<char> myfilename(PATH_MAX+1);
     if(readlink("/proc/self/exe", &myfilename[0], PATH_MAX)!=-1)
-  #endif
       f->open(&myfilename[0],true);
     else
       quit(mypatherror);
+  #endif
   }
 
   //this static method will open a file from the executable's folder
+  //only ASCII filenames are supported
   static void anotherfile(FileDisk *f, const char* filename) {
     const U64 flength=strlen(filename)+1;
     #ifdef WINDOWS
       int i;
       Array<char> myfilename(MAX_PATH+flength);
-      if((i=GetModuleFileName(nullptr, &myfilename[0], MAX_PATH)) && i<=MAX_PATH) {
+      if((i=GetModuleFileName(nullptr, &myfilename[0], MAX_PATH)) && i<MAX_PATH && i!=0) {
         char *endofpath=strrchr(&myfilename[0], '\\');
     #endif
     #ifdef UNIX
@@ -1123,7 +1150,6 @@ struct ModelStats {
   //JpegModel
   //SparseMatchModel
   //SparseModel
-  //DistanceModel
   //CharGroupModel
   //WordModel
   //IndirectModel
@@ -1133,7 +1159,7 @@ struct ModelStats {
 
   //TextModel
   struct {
-    U8 chargrp;      //used by RecordModel, TextModel - Quantized partial byte as ASCII group
+    U8 chargrp;     //used by RecordModel, TextModel - Quantized partial byte as ASCII group
     U8 firstLetter;  //used by SSE stage
     U8 mask;         //used by SSE stage
   } Text{};
@@ -1170,7 +1196,7 @@ struct Shared {
     bpos=(bpos+1)&7;
     if (bpos==0) {
       c1=c0;
-      buf.add(c0);
+      buf.add(c1);
       c8=(c8<<8)|(c4>>24);
       c4=(c4<<8)|c0;
       c0=1;
@@ -1193,6 +1219,38 @@ struct Shared {
     dst->c8=c8;
   }
 };
+
+// UTF8 validator
+// Based on: http://bjoern.hoehrmann.de/utf-8/decoder/dfa/
+// Control caracters (0x00-0x1f) and 0x7f are not allowed (except for 0/tab/cr/lf)
+
+#define UTF8_ACCEPT 0
+#define UTF8_REJECT 12
+
+static const U8 utf8_state_table[] = {
+  // byte -> character class
+  // character_class = utf8_state_table[byte]
+  1,1,1,1,1,1,1,1,1,0,0,1,1,0,1,1,  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 00..1f  
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, // 20..3f
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, // 40..5f
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1, // 60..7f
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9, // 80..9f
+  7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,  7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7, // a0..bf
+  8,8,2,2,2,2,2,2,2,2,2,2,2,2,2,2,  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, // c0..df
+ 10,3,3,3,3,3,3,3,3,3,3,3,3,4,3,3, 11,6,6,6,5,8,8,8,8,8,8,8,8,8,8,8, // e0..ff
+  // validating automaton
+  // new_state = utf8_state_table[256*old_state + character_class]
+   0,12,24,36,60,96,84,12,12,12,48,72, // state  0-11
+  12,12,12,12,12,12,12,12,12,12,12,12, // state 12-23
+  12, 0,12,12,12,12,12, 0,12, 0,12,12, // state 24-35
+  12,24,12,12,12,12,12,24,12,24,12,12, // state 36-47
+  12,12,12,12,12,12,12,24,12,12,12,12, // state 48-59
+  12,24,12,12,12,12,12,12,12,24,12,12, // state 60-71
+  12,12,12,12,12,12,12,36,12,36,12,12, // state 72-83
+  12,36,12,12,12,12,12,36,12,36,12,12, // state 84-95
+  12,36,12,12,12,12,12,12,12,12,12,12  // state 96-108
+};
+
 
 #define CacheSize 32
 
@@ -1275,7 +1333,7 @@ inline U32 ilog2(U32 x) {
 #endif
 
 inline float rsqrt(const float x) {
-  float r = _mm_cvtss_f32(_mm_rsqrt_ss(_mm_set_ss(x)));
+  float r = _mm_cvtss_f32(_mm_rsqrt_ss(_mm_set_ss(x))); //SSE
   return (0.5f * (r + 1.0f/(x * r)));
 }
 
@@ -1948,8 +2006,10 @@ public:
     assert(ncxt<=S);
     while(ncxt>0) {
       ncxt--;
-      assert(ncxt*N<=cxt[ncxt] && cxt[ncxt]<(ncxt+1)*N);
-      AdaptiveMap::update(&t[cxt[ncxt]]);
+      const U32 idx=cxt[ncxt];
+      if(idx+1==0)continue; //skipped context
+      assert(ncxt*N<=idx && idx<(ncxt+1)*N);
+      AdaptiveMap::update(&t[idx]);
     }
   }
   int p(const U32 s, const U32 cx) {
@@ -1961,6 +2021,13 @@ public:
     cxt[ncxt]=idx;
     ncxt++;
     return t[idx]>>20;
+  }
+  void skip(const U32 s) {
+    if(ncxt==0)updater.subscribe(this);
+    assert(s>=0 && s<S);
+    assert(s==ncxt);
+    cxt[ncxt]=0-1; //mark for skipping
+    ncxt++;
   }
 };
 
@@ -2584,9 +2651,9 @@ private:
       if (chk[last&15]==chksum) return &bh[last&15][0];
       int b=0xffff, bi=0;
       for (int i=0; i<7; ++i) {
-        if (chk[i]==chksum) return last=last<<4|i, (U8*)&bh[i][0];
+        if (chk[i]==chksum) {last=last<<4|i; return (U8*)&bh[i][0];}
         int pri=bh[i][0];
-        if (pri<b && (last&15)!=i && last>>4!=i) b=pri, bi=i;
+        if (pri<b && (last&15)!=i && last>>4!=i) {b=pri; bi=i;}
       }
       return last=0xf0|bi, chk[bi]=chksum, (U8*)memset(&bh[bi][0], 0, 7);
     }
@@ -2603,17 +2670,15 @@ private:
   int cn;        // Next context to set by set()
   const U32 mask;
   const int hashbits;
+  U64 validflags;
 public:
   // Construct using m bytes of memory for c contexts                                                    
   ContextMap(const Shared * const sh, U64 m, const int c): shared(sh), C(c), t(m>>6), cp(c), cp0(c),
     cxt(c), chk(c), runp(c), sm(sh,c,256,1023,true), cn(0),
-    mask(U32(t.size()-1)), hashbits(ilog2(mask+1)) {
+    mask(U32(t.size()-1)), hashbits(ilog2(mask+1)), validflags(0) {
     assert(m>=64 && ispowerof2(m));
     assert(sizeof(E)==64);
-    for (int i=0; i<C; ++i) {
-      cp0[i]=cp[i]=&t[0].bh[0][0];
-      runp[i]=cp[i]+3;
-    }
+    assert(C<(int)sizeof(validflags)*8); // validflags is 64 bits
   }
 
   // set next whole byte context to cx
@@ -2623,7 +2688,6 @@ public:
     const U16 checksum = chk[cn] = (U16)checksum64(cx,hashbits,16);
     U8* base = cp0[cn]=cp[cn]=t[ctx&mask].get(checksum);
     runp[cn]=base+3;
-    cn++;
     // Update pending bit histories for bits 2-7
     if (base[3]==2) {
       const int c=base[4]+256;
@@ -2637,80 +2701,96 @@ public:
       p[3+((c>>1)&3)]=1+(c&1);
       base[6]=0;
     }
+    cn++;
+    validflags=(validflags<<1)+1;
+  }
+
+  inline void skip() {
+    assert(cn>=0 && cn<C);
+    cn++;
+    validflags<<=1;
   }
 
   void update() override {
     INJECT_SHARED_bpos INJECT_SHARED_c0 INJECT_SHARED_c1 INJECT_SHARED_y
     for (int i=0; i<cn; ++i) {
-      // Update bit history state byte
-      if (cp[i]!=nullptr) {
-        assert(cp[i]>=&t[0].bh[0][0] && cp[i]<=&t[t.size()-1].bh[6][6]);
-        assert((uintptr_t(cp[i])&63)>=15);
-        StateTable::update(cp[i],y,rnd);
-      }
+      if(((validflags>>(cn-1-i))&1)!=0) {
+        // Update bit history state byte
+        if (cp[i]!=nullptr) {
+          assert(cp[i]>=&t[0].bh[0][0] && cp[i]<=&t[t.size()-1].bh[6][6]);
+          assert((uintptr_t(cp[i])&63)>=15);
+          StateTable::update(cp[i],y,rnd);
+        }
 
-      // Update context pointers
-      if (bpos>1 && runp[i][0]==0)
-        cp[i]=nullptr;
-      else {
-        switch(bpos) {
-          case 1: case 3: case 6: cp[i]=cp0[i]+1+(c0&1); break;
-          case 4: case 7: cp[i]=cp0[i]+3+(c0&3); break;
-          case 2: case 5: {
-            const U16 checksum = chk[i];
-            const U32 ctx = cxt[i];
-            cp0[i]=cp[i]=t[(ctx+c0)&mask].get(checksum); break;
-          }
-          case 0:
-          {
-            // Update run count of previous context
-            if (runp[i][0]==0)  // new context
-              runp[i][0]=2, runp[i][1]=c1;
-            else if (runp[i][1]!=c1)  // different byte in context
-              runp[i][0]=1, runp[i][1]=c1;
-            else if (runp[i][0]<254)  // same byte in context
-              runp[i][0]+=2;
-            else if (runp[i][0]==255)
-              runp[i][0]=128;
-            break;
+        // Update context pointers
+        if (bpos>1 && runp[i][0]==0)
+          cp[i]=nullptr;
+        else {
+          switch(bpos) {
+            case 1: case 3: case 6: cp[i]=cp0[i]+1+(c0&1); break;
+            case 4: case 7: cp[i]=cp0[i]+3+(c0&3); break;
+            case 2: case 5: {
+              const U16 checksum = chk[i];
+              const U32 ctx = cxt[i];
+              cp0[i]=cp[i]=t[(ctx+c0)&mask].get(checksum); break;
+            }
+            case 0:
+            {
+              // Update run count of previous context
+              if (runp[i][0]==0)  // new context
+                runp[i][0]=2, runp[i][1]=c1;
+              else if (runp[i][1]!=c1)  // different byte in context
+                runp[i][0]=1, runp[i][1]=c1;
+              else if (runp[i][0]<254)  // same byte in context
+                runp[i][0]+=2;
+              else if (runp[i][0]==255)
+                runp[i][0]=128;
+              break;
+            }
           }
         }
       }
     }
-    if (bpos==0) cn = 0;
+    if (bpos==0) {cn = 0; validflags = 0;}
   }
 
   void mix(Mixer& m) {
     updater.subscribe(this);
     INJECT_SHARED_bpos INJECT_SHARED_c0
     for (int i=0; i<cn; ++i) {
-      // predict from last byte in context
-      if ((runp[i][1]+256)>>(8-bpos)==c0) {
-        int rc=runp[i][0];  // count*2, +1 if 2 different bytes seen
-        int sign=(runp[i][1]>>(7-bpos)&1)*2-1;  // predicted bit + for 1, - for 0
-        int c=ilog(rc+1)<<(2+(~rc&1));
-        m.add(sign*c);
-      }
-      else
-        m.add(0); //p=0.5
+      if(((validflags>>(cn-1-i))&1)!=0) {
+        // predict from last byte in context
+        if ((runp[i][1]+256)>>(8-bpos)==c0) {
+          int rc=runp[i][0];  // count*2, +1 if 2 different bytes seen
+          int sign=(runp[i][1]>>(7-bpos)&1)*2-1;  // predicted bit + for 1, - for 0
+          int c=ilog(rc+1)<<(2+(~rc&1));
+          m.add(sign*c);
+        }
+        else
+          m.add(0); //p=0.5
 
-      // predict from bit context
-      const int s = cp[i]!=nullptr ?  *cp[i] : 0;
-      const int p1=sm.p(i,s);
-      const int st=stretch(p1)>>2;
-      if (s==0) {
-        m.add(0); //skip
-        m.add(0); //skip
-        m.add(0); //skip
-        m.add(0); //skip
-      } else {
-        m.add(st);
-        m.add((p1-2047)>>3);
-        const int n0=-!StateTable::next(s,2);
-        const int n1=-!StateTable::next(s,3);
-        m.add(st*abs(n1-n0));
-        const int p0=4095-p1;
-        m.add(((p1&n0)-(p0&n1))>>4);
+        // predict from bit context
+        const int s = cp[i]!=nullptr ?  *cp[i] : 0;
+        if (s==0) {  //skip context
+          sm.skip(i);
+          m.add(0);
+          m.add(0);
+          m.add(0);
+          m.add(0);
+        } else {
+          const int p1= sm.p(i,s);
+          const int st=stretch(p1)>>2;
+          m.add(st);
+          m.add((p1-2047)>>3);
+          const int n0=-!StateTable::next(s,2);
+          const int n1=-!StateTable::next(s,3);
+          m.add(st*abs(n1-n0));
+          const int p0=4095-p1;
+          m.add(((p1&n0)-(p0&n1))>>4);
+        }
+      } else { //skipped context
+        sm.skip(i);
+        m.add(0);m.add(0);m.add(0);m.add(0);m.add(0);
       }
     }
   }
@@ -2754,8 +2834,10 @@ private:
         return &BitState[MRU&15][0];
       int worst=0xFFFF, idx=0;
       for (int i=0; i<7; ++i) {
-        if (Checksums[i]==Checksum)
-          return MRU=MRU<<4|i, (U8*)&BitState[i][0];
+        if (Checksums[i]==Checksum) {
+          MRU=MRU<<4|i;
+          return (U8*)&BitState[i][0];
+        }
         if (BitState[i][0]<worst && (MRU&15)!=i && MRU>>4!=i) {
           worst = BitState[i][0];
           idx=i;
@@ -2886,16 +2968,17 @@ public:
 
       // predict from bit context
       const int state = BitState[i]!=nullptr ? *BitState[i] : 0;
-      const int p1 = Maps8b.p(i,state);
       if (state==0) {
+        Maps8b.skip(i);
         m.add(0);
         m.add(0);
         m.add(0);
         m.add(0);
       } else {
+        const int p1 = Maps8b.p(i,state);
+        const int st=(stretch(p1)*scale)>>8;
         const int n0=-!StateTable::next(state, 2);
         const int n1=-!StateTable::next(state, 3);
-        const int st=(stretch(p1)*scale)>>8;
         m.add(st);
         m.add(((p1-2047)*scale)>>9);
         m.add(st*abs(n1-n0));
@@ -3191,6 +3274,8 @@ public:
 #define NEW_LINE 0x0A
 #define CARRIAGE_RETURN 0x0D
 #define SPACE 0x20
+#define QUOTE 0x22
+#define APOSTROPHE 0x27
 
 #ifdef USE_TEXTMODEL
 
@@ -3633,13 +3718,13 @@ private:
     bool result=false;
     //trim all apostrophes from the beginning
     int cnt=0;
-    while(W->Start!=W->End && (*W)[0]=='\'') {
+    while(W->Start!=W->End && (*W)[0]==APOSTROPHE) {
       result=true;
       W->Start++;
       cnt++;
     }
     //trim the same number of apostrophes from the end (if there are)
-    while(W->Start!=W->End && (*W)(0)=='\'') {
+    while(W->Start!=W->End && (*W)(0)==APOSTROPHE) {
       if(cnt==0)break;
       W->End--;
       cnt--;
@@ -4856,7 +4941,7 @@ class TextModel {
 private:
   static constexpr int nCM2 = 28;
 public:
-  static constexpr int MIXERINPUTS = nCM2*ContextMap2::MIXERINPUTS;
+  static constexpr int MIXERINPUTS = nCM2*ContextMap2::MIXERINPUTS; // 196
   static constexpr int MIXERCONTEXTS = 2048+2048+4096+4096+2048+2048+4096+8192+2048; //30720
   static constexpr int MIXERCONTEXTSETS = 9;
 private:
@@ -4974,7 +5059,7 @@ public:
     }
     cm.mix(m);
 
-    const U8 chargrp=stats->Text.chargrp;
+    const U8 chargrp = stats->Text.chargrp;
     INJECT_SHARED_c1 INJECT_SHARED_c0
     m.set(finalize64(hash((Lang.Id!=Language::Unknown)?1+Stemmers[Lang.Id-1]->IsVowel(c1):0, Info.masks[1]&0xFF, c0),11), 2048);
     m.set(finalize64(hash(ilog2(Info.wordLength[0]+1), c0,
@@ -5026,7 +5111,7 @@ void TextModel::Update() {
   State = Parse::Unknown;
   ParseCtx = hash(State, pWord->Hash[0], c, (ilog2(Info.lastNewLine)+1)*(Info.lastNewLine*3>Info.prevNewLine), Info.masks[1]&0xFC);
 
-  if ((c>='a' && c<='z') || c=='\'' || c=='-' || c>0x7F) {
+  if ((c>='a' && c<='z') || c==APOSTROPHE || c=='-' || c>0x7F) {
     if (Info.wordLength[0]==0) {
       // check for hyphenation with "+" (book1 from Calgary)
       if (pC==NEW_LINE && ((Info.lastLetter==3 && buf(3)=='+') || (Info.lastLetter==4 && buf(3)==CARRIAGE_RETURN && buf(4)=='+'))) {
@@ -5049,7 +5134,7 @@ void TextModel::Update() {
     Info.lastLetter = 0;
     Info.wordLength[0]++;
     Info.masks[0]+=(Lang.Id!=Language::Unknown)?1+Stemmers[Lang.Id-1]->IsVowel(c):1, Info.masks[1]++, Info.masks[3]+=Info.masks[0]&3;
-    if (c=='\'') {
+    if (c==APOSTROPHE) {
       Info.masks[2]+=12;
       if (Info.wordLength[0]==1) {
         if (Info.quoteLength==0 && pC==SPACE)
@@ -5219,7 +5304,7 @@ void TextModel::Update() {
       case '}' : Info.masks[2]+=8; Info.nestHash-=17; Info.lastNest=0; break;
       case '>' : Info.masks[2]+=9; Info.nestHash-=23; Info.lastNest=0; break;
       case 0xBB: Info.masks[2]+=10; break;
-      case '"': {
+      case QUOTE: {
         Info.masks[2]+=11;
         // start/stop counting
         if (Info.quoteLength==0)
@@ -5285,13 +5370,13 @@ void TextModel::SetContexts() {
   INJECT_SHARED_buf
   const U8 c = buf(1), lc = tolower(c), m2 = Info.masks[2]&0xF, column = min(0xFF, Info.lastNewLine);
   const U64 w = State==Parse::ReadingWord ? cWord->Hash[0] : pWord->Hash[0];
-  U64 i = State*64;
 
   const U64 cWordHash0 = cWord->Hash[0];
   const U64 pWordHash0 = pWord->Hash[0];
   const U64 pWordHash1 = pWord->Hash[1];
 
   cm.set(ParseCtx);
+  U64 i = State*64;
   cm.set(hash(++i, cWordHash0, pWordHash0,
     (Info.lastUpper<Info.wordLength[0])|
     ((Info.lastDigit<Info.wordLength[0]+Info.wordGap)<<1)
@@ -5377,6 +5462,7 @@ void TextModel::SetContexts() {
     (Info.lastUpper<Info.wordLength[0])|
     ((cSegment->WordCount==0)<<1)
   ));
+  assert(i-State*64+1==nCM2);
 }
 
 #endif //USE_TEXTMODEL
@@ -5399,7 +5485,7 @@ private:
   static constexpr int nSSM = 2;
   static constexpr int nSM = 2;
 public:
-  static constexpr int MIXERINPUTS = 2 + nCM*ContextMap::MIXERINPUTS + nST + nSSM*SmallStationaryContextMap::MIXERINPUTS + nSM*StationaryMap::MIXERINPUTS;
+  static constexpr int MIXERINPUTS = 2 + nCM*ContextMap::MIXERINPUTS + nST + nSSM*SmallStationaryContextMap::MIXERINPUTS + nSM*StationaryMap::MIXERINPUTS; // 23
   static constexpr int MIXERCONTEXTS = 8;
   static constexpr int MIXERCONTEXTSETS = 1;
 private:
@@ -5613,8 +5699,8 @@ private:
   static constexpr int NumHashes = 4;
   static constexpr int nSM = 4;
 public:
-  static constexpr int MIXERINPUTS = 3 + nSM*StationaryMap::MIXERINPUTS;
-  static constexpr int MIXERCONTEXTS = NumHashes*(64+2048);
+  static constexpr int MIXERINPUTS = 3 + nSM*StationaryMap::MIXERINPUTS; // 11
+  static constexpr int MIXERCONTEXTS = NumHashes*(64+2048); // 8448
   static constexpr int MIXERCONTEXTSETS = 2;
 private:
   const Shared * const shared;
@@ -5694,7 +5780,7 @@ public:
     for (U32 i=0; i<NumHashes; i++)
       Table[hashes[i]] = pos;
     
-    expectedByte = buf[index];
+    expectedByte = length!=0 ? buf[index] : 0;
     INJECT_SHARED_c1
     if (valid) {
       INJECT_SHARED_y
@@ -5765,7 +5851,7 @@ class CharGroupModel {
 private:
   static constexpr int nCM=7;
 public:
-  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS;
+  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS; // 35
   static constexpr int MIXERCONTEXTS = 0;
   static constexpr int MIXERCONTEXTSETS = 0;
 private:
@@ -5811,180 +5897,290 @@ public:
 
 //////////////////////////// WordModel /////////////////////////
 
-// Model English text (words and columns/end of line)
+// Model words, expressions, numbers, paragraphs/lines, etc.
+// simple procesing of pdf text
+// simple modeling of some binary content
 
-#ifdef USE_WORDMODEL
+#ifdef USE_TEXTMODEL
 
 class WordModel {
 private:
-  static constexpr int nCM=49;
+  static constexpr int nCM1=17; // pdf / non_pdf contexts
+  static constexpr int nCM2=35; // common contexts
+  static constexpr int nCM = nCM1+nCM2; // 52
 public:
-  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS;
+  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS; // 260
   static constexpr int MIXERCONTEXTS = 0;
   static constexpr int MIXERCONTEXTSETS = 0;
 private:
   const Shared * const shared;
   ModelStats const *stats;
   ContextMap cm;
-  Array<int> wpos{0x10000};  // last position of word
-  U32 frstchar=0, spafdo=0, spaces=0, spacecount=0, words=0, wordcount=0, wordlen=0, wordlen1=0;
-  U64 word0=0, word1=0, word2=0, word3=0, word4=0, word5=0;  // hashes
-  U64 xword0=0, xword1=0, xword2=0, cword0=0, ccword=0; // hashes
-  U64 number0=0, number1=0;  // hashes
-  U32 text0=0;  // uninterrupted stream of letters
-  U32 wrdhsh=0, lastLetter=0, firstLetter=0, lastUpper=0, lastDigit=0, wordGap=0;
-  int nl1=-3, nl=-2, w=0;  // previous, current newline position
-  U32 mask=0, mask2=0, f4=0;
-public:
-  WordModel (const Shared * const sh, ModelStats const *st, const U64 size) : 
-    shared(sh), stats(st), cm(sh,size,nCM) {}
-  void mix(Mixer &m) {
-    INJECT_SHARED_bpos 
-    if (bpos==0) {
-      bool end_of_sentence=false;
+  static constexpr int wposbits=16;
+  static constexpr int maxwordlen=45;
+  static constexpr int maxlinematch=16;
+  static constexpr int maxlastUpper=63;
+  static constexpr int maxlastLetter=16;
+  class Info {
+    const Shared * const shared;
+    ModelStats const *stats;
+    ContextMap &cm;
+    Array<U32> wpos{1<<wposbits};  // last positions of whole words
+    Array<U16> wchk{1<<wposbits};  // checksums for whole words
+    U32 c4{};                      // last 4 processed characters
+    U8 c{}, pC{}, ppC{};           // last char, previous char, char before the previous char (converted to lowearcase)
+    bool is_letter{}, is_letter_pC{}, is_letter_ppC{};
+    U8 opened{};     // "(", "[", "{", "<", opening QUOTE, opening APOSTROPHE (or 0 when none of them)
+    U8 wordlen0{}, wordlen1{};     // length of word0 and word1
+    U64 line0{}, frstword{};       // hash of line content, hash of first word on line
+    U64 word0{}, word1{}, word2{}, word3{}, word4{};  // wordtoken hashes, word0 is the partally processed ("current") word
+    U64 expr0{}, expr1{}, expr2{}, expr3{}, expr4{};  // wordtoken hashes for expressions
+    U64 keyword0{}, gaptoken0{}, gaptoken1{};         // hashes
+    U16 w{}, chk{}; // finalized hash and checksum of last partially processed word
+    int frstchar{};  // category of first character of the current line (or -1 when in first column)
+    int linematch{}; // the length of match of the current line vs the previos line
+    int nl1{}, nl2{};  // current newline position, previous newline position
+    U64 groups{}; // 8 last character categories
+    U64 text0{};  // uninterrupted stream of letters
+    U32 wrdhsh{}, lastLetter{}, lastUpper{}, wordGap{};
+    U32 mask{}, mask2{}, f4{};
+  public:
+    Info(const Shared * const sh, ModelStats const *st, ContextMap &contextmap): shared(sh), stats(st), cm(contextmap) {
+      lastUpper=maxlastUpper;
+      lastLetter=wordGap=maxlastLetter;
+      frstchar=linematch=-1;
+    }
+    void shiftwords() {
+      word4=word3;
+      word3=word2;
+      word2=word1;
+      word1=word0;
+      wordlen1=wordlen0;
+    }
+    void killwords() {
+      word4=word3=word2=word1=0;
+    }
+    void process_char(const bool is_extended_char) {
+      //note: the pdf model uses this function, therefore only c1 may be referenced, c4, c8, etc. should not
 
-      if (spaces&0x80000000) --spacecount;
-      if (words&0x80000000) --wordcount;
-      spaces<<=1;
-      words<<=1;
-      lastUpper=min(lastUpper+1,63);
-      lastLetter=min(lastLetter+1,63);
-      mask2<<=2;
+      //shift history
+      ppC=pC; pC=c;
+      is_letter_ppC=is_letter_pC; is_letter_pC=is_letter;
 
-      INJECT_SHARED_buf INJECT_SHARED_c1 INJECT_SHARED_c4 INJECT_SHARED_pos
-      int c=c1;
-      if (c>='A' && c<='Z') {c+='a'-'A'; lastUpper=0;}
+      INJECT_SHARED_c1 
+      c4=c4<<8|c1;
+      c=c1;
+      if(c>='A' && c<='Z') {c+='a'-'A'; lastUpper=0;}
 
-      int pC=buf(2);
-      if (pC>='A' && pC<='Z') pC+='a'-'A';
+                 is_letter = (c>='a' && c<='z') || is_extended_char;
+      const bool is_number = (c>='0' && c<='9') || (pC>='0' && pC<='9' && c=='.' /* decimal point (english) or thousand separator (misc) */);
 
-      if ((c>='a' && c<='z') || c==1 || c==2 || (c>=128 &&(c!=3))) {
-        if (wordlen==0){
-          // model hyphenation with "+" (book1 from Calgary)
-          if (pC==NEW_LINE && ((lastLetter==3 && buf(3)=='+') || (lastLetter==4 && buf(3)==CARRIAGE_RETURN && buf(4)=='+'))) {
-            word0 = word1;
-            wordlen = wordlen1;
-          }
-          else {
+      lastUpper=min(lastUpper+1,maxlastUpper);
+      lastLetter=min(lastLetter+1,maxlastLetter);
+      mask2<<=3;
+
+      if (is_letter || is_number) {
+        if (wordlen0==0){ // the beginning of a new word
+          if (pC==NEW_LINE && lastLetter==3 && ppC=='+') { 
+            // correct hyphenation with "+" (book1 from Calgary)
+            // (undo some of the recent context changes)
+            word0=word1; word1=word2; word2=word3; 
+            word3=word4=0;
+            wordlen0=wordlen1; 
+          } else {
             wordGap = lastLetter;
-            firstLetter = c;
             wrdhsh = 0;
           }
+          gaptoken1=gaptoken0;
+          gaptoken0=0;
+          if (pC==QUOTE || (pC==APOSTROPHE && !is_letter_ppC)) opened=pC;
         }
         lastLetter=0;
-        ++words, ++wordcount;
         word0=combine64(word0, c);
-        text0=(text0<<6)+(c-'a'+1);
-        wordlen++;
-        wordlen=min(wordlen,45);
-        end_of_sentence=false;
-        w=U32(word0)&(wpos.size()-1);
-        if ((c=='a' || c=='e' || c=='i' || c=='o' || c=='u') || (c=='y' && (wordlen>0 && pC!='a' && pC!='e' && pC!='i' && pC!='o' && pC!='u'))){
+        w=U16(finalize64(word0,wposbits));
+        chk=U16(checksum64(word0,wposbits,16));
+        wrdhsh = is_number ? 0 : wrdhsh<<8|c; // last 4 consecutive letters
+        text0=(text0<<8|c)&0xffffffffff; // last 5 alphanumeric chars (other chars are ignored)
+        wordlen0=min(wordlen0+1,maxwordlen);
+        if ((c=='a' || c=='e' || c=='i' || c=='o' || c=='u') || (c=='y' && (wordlen0>0 && pC!='a' && pC!='e' && pC!='i' && pC!='o' && pC!='u')))
           mask2++;
-          wrdhsh = wrdhsh*997*8+(c/4-22);
-        }
-        else if (c>='b' && c<='z'){
-          mask2+=2;
-          wrdhsh = wrdhsh*271*32+(c-97);
-        }
-        else
-          wrdhsh = wrdhsh*11*32+c;
+        else if (c>='b' && c<='z')
+          mask2+=c=='q'?2:3;
       }
-      else { //it's not a letter
-        if (word0!=0) {
-          word5=word4;
-          word4=word3;
-          word3=word2;
-          word2=word1;
-          word1=word0;
-          wordlen1=wordlen;
+      else { //it's not a letter/number 
+        gaptoken0=combine64(gaptoken0,c1==NEW_LINE?' ':c1);
+        if(c1==NEW_LINE && pC=='+' && is_letter_ppC) {} //calgary/book1 hyphenation - don't shift again
+        else if(c=='?' || pC=='!' || pC=='.') killwords(); //end of sentence
+        else if(c==pC) {} //don't shift when anything repeats
+        else if((c==SPACE || c==NEW_LINE) && (pC==SPACE || pC==NEW_LINE)) {} //ignore repeating whitespace
+        else shiftwords();
+        if (wordlen0!=0) { //beginning of a new non-word token
+          INJECT_SHARED_pos
           wpos[w]=pos;
-          if (c==':'|| c=='=') cword0=word0;
-          if (c==']'&& (frstchar==':' || frstchar=='*')) xword0=word0;
-          ccword=0;
+          wchk[w]=chk;
+          w=0;
+          chk=0;
+
+          if (c1==':'||c1=='=') keyword0 = word0; // enwik, world95.txt, html/xml
+          if(frstword==0)frstword=word0;
+
           word0=0;
-          wordlen=0;
-          if((c=='.'||c=='!'||c=='?' ||c=='}' ||c==')') && buf(2)!=10 && (stats->blockType==TEXT || stats->blockType==TEXT_EOL)) end_of_sentence=true;
+          wordlen0=0;
+          wrdhsh=0;
         }
-        if ((c4&0xFFFF)==0x3D3D) xword1=word1,xword2=word2; // ==
-        if ((c4&0xFFFF)==0x2727) xword1=word1,xword2=word2; // ''
-        if (c==32 || c==10) { ++spaces, ++spacecount; if (c==10 ) {nl1=nl; nl=pos-1;}}
-        else if (c=='.' || c=='!' || c=='?' || c==',' || c==';' || c==':') {spafdo=0;ccword=c;mask2+=3;}
-        else { ++spafdo; spafdo=min(63,spafdo); }
+
+             if (c1=='.' || c1=='!' || c1=='?') mask2+=4;
+        else if (c1==',' || c1==';' || c1==':') mask2+=5;
+        else if (c1=='(' || c1=='{' || c1=='[' || c1=='<') {mask2+=6;opened=c1;}
+        else if (c1==')' || c1=='}' || c1==']' || c1=='>' || c1==QUOTE || c1==APOSTROPHE) {mask2+=7;opened=0;}
       }
-      lastDigit=min(0xFF,lastDigit+1);
-      if (c>='0' && c<='9') {
-          number0=combine64(number0, c);
-          lastDigit = 0;
+      
+      const U8 chargrp = stats->Text.chargrp;
+      U8 g=c1;
+      if(g>=128){
+        //utf8 code points (weak context)
+        if((g&0xf8)==0xf0)g=0xf0;
+        else if((g&0xf0)==0xe0)g=0xe0;
+        else if((g&0xe0)==0xc0)g=0xc0;
+        else if((g&0xc0)==0x80)g=0x80;
+        else if (g!=0xff)g=0xfe;
       }
-      else if (number0!=0) {
-        number1=number0;
-        number0=0;
-        ccword=0;
+      else if(g>='0' && g<='9')g='0';
+      else if(g>='a' && g<='z')g='a';
+      else if(g>='A' && g<='Z')g='A';
+      else if(g<32 && g!=0 && g!=NEW_LINE)g=1;
+      groups=groups<<8|g;
+
+      // Expressions (words separated by single spaces)
+      //
+      // Remarks: (1) formatted text files may contain SPACE+NEW_LINE (dickens) or NEW_LINE+SPACE (world95.txt)
+      // or just a NEW_LINE instead of a SPACE. (2) quotes and apostrophes are ignored during processing
+      if(is_letter/* || is_number*/) {
+        expr0=combine64(expr0,c);
+      } else if((c==SPACE || c==NEW_LINE) && (is_letter_pC || pC==APOSTROPHE || pC==QUOTE)) {
+        expr4=expr3;
+        expr3=expr2;
+        expr2=expr1;
+        expr1=expr0;
+        expr0=0;
+      } else if(c==APOSTROPHE || c==QUOTE || (c==NEW_LINE && pC==SPACE) || (c==SPACE && pC==NEW_LINE)) {
+        //ignore
+      } else {
+        expr4=expr3=expr2=expr1=expr0=0;
       }
+    }
+    void line_model_predict(U8 in_pdf_text_block) {
+      U64 i = 2048;
 
-      U32 col=min(255, pos-nl);
-      int above=buf[nl1+col];
-      if (col<=2) frstchar=(col==2?min(c,96):0);
-      if (frstchar=='[' && c==32)    {if(buf(3)==']' || buf(4)==']' ) frstchar=96,xword0=0;}
+      INJECT_SHARED_c1 
+      INJECT_SHARED_pos
+      if (c1==NEW_LINE || c1==0) {  // a new line has just started (or zero in asciiz or binary data)
+        nl2=nl1; nl1=pos; 
+        frstchar=-1; frstword=0; line0=0;
+      }
+      line0=combine64(line0,c1);
+      cm.set(hash(++i,line0));
 
-      U64 i = 0;
-      cm.set(hash(++i,spafdo, spaces, ccword));
-      cm.set(hash(++i,frstchar, c));
-      cm.set(hash(++i,col, frstchar, (lastUpper<col)*4+(mask2&3)));
-      cm.set(hash(++i,spaces, words&255));
-      cm.set(hash(++i,number0, word2));
-      cm.set(hash(++i,number0, word1));
-      cm.set(hash(++i,number1, c,ccword));
-      cm.set(hash(++i,number0, number1));
-      cm.set(hash(++i,word0, number1, lastDigit<wordGap+wordlen));
-      cm.set(hash(++i,wordlen1, col));
-      cm.set(hash(++i,c, spacecount/2));
+      int col = pos-nl1;
+      if (col==1) frstchar = groups&0xff;
+      INJECT_SHARED_buf
+      const U8  c_above = buf[nl2+col];
+      const U8 pC_above = buf[nl2+col-1];
 
-      const U32 h=wordcount*64+spacecount;
-      cm.set(hash(++i,c,h,ccword));
-      cm.set(hash(++i,frstchar,h));
-      cm.set(hash(++i,h,spafdo));
+      const bool is_new_line_start = col==0 && nl2>0;
+      const bool is_prev_char_match_above = c1==pC_above && col!=0 && nl2!=0;
+      const U32 above_ctx = c_above<<1|is_prev_char_match_above;
+      if(is_new_line_start) linematch=0; //first char not yet known = nothing to match
+      else if(linematch>=0 && is_prev_char_match_above) linematch=min(linematch+1,maxlinematch); //match continues
+      else linematch=-1; //match does not continue
 
-      cm.set(hash(++i,c4&0xf0ff,frstchar,ccword));
-    
-      cm.set(hash(++i,word0, c1));
-      cm.set(hash(++i,word0));
-      cm.set(hash(++i,word0, c1, word1));
-      cm.set(hash(++i,word0, word1));
-      cm.set(hash(++i,word0, word1, word2,c1));
+      // context: matches with the previous line
+      if(linematch>=0) cm.set(hash(++i,c_above,linematch));
+      else {cm.skip();i++;}
+      cm.set(hash(++i,       above_ctx,c1));
+      cm.set(hash(++i,col<<9|above_ctx,c1));
+      const int line_length = nl1-nl2;
+      cm.set(hash(++i,nl1-nl2, col, above_ctx, groups&0xff)); // english_mc
+      cm.set(hash(++i,nl1-nl2, col, above_ctx, c1)); // english_mc
+
+      // modeling line content per column (and NEW_LINE is some extent)
+      cm.set(hash(++i,col,c1==SPACE)); // after space vs after other char in this column // world95.txt
+      cm.set(hash(++i,col,c1));
+      cm.set(hash(++i,col,mask&0x1ff));
+      cm.set(hash(++i,col,line_length)); // the lenght of the previous line may foretell the content of columns
+
+      cm.set(hash(++i,col, frstchar, ((int)lastUpper<col)<<8 | (groups&0xff))); // book1 book2 news
+
+      // content of lines, paragraphs
+      cm.set(hash(++i,nl1,in_pdf_text_block));    //chars occurring in this paragraph (order 0)
+      cm.set(hash(++i,nl1,in_pdf_text_block,c));  //chars occurring in this paragraph (order 1)
+      cm.set(hash(++i,frstchar));   //chars occurring in a paragraph that began with frstchar (order 0)
+      cm.set(hash(++i,frstchar,c)); //chars occurring in a paragraph that began with frstchar (order 1)
+      cm.set(hash(++i,frstword));   //chars occurring in a paragraph that began with frstword (order 0)
+      cm.set(hash(++i,frstword,c)); //chars occurring in a paragraph that began with frstword (order 1)
+      assert(i==2048+nCM1);
+    }
+    void line_model_skip(ContextMap &cm) {
+      for(int i=0;i<nCM1;i++)
+        cm.skip();
+    }
+    void predict(U8 in_pdf_text_block) {
+      U64 i = 1024;
       cm.set(hash(++i,text0));
-      cm.set(hash(++i,word0, xword0));
-      cm.set(hash(++i,word0, xword1));
-      cm.set(hash(++i,word0, xword2));
-      cm.set(hash(++i,frstchar, xword2));
-      cm.set(hash(++i,word0, cword0));
-      cm.set(hash(++i,number0, cword0));
+
+      // expressions in normal text
+      cm.set(hash(++i,expr0,expr1,expr2,expr3,expr4));
+      cm.set(hash(++i,expr0,expr1,expr2));
+
+      // sections introduced by keywords (enwik world95.txt html/xml)
+      cm.set(hash(++i,gaptoken0,keyword0)); // chars occurring in a section introduced by "keyword:" or "keyword=" (order 0 and variable order for the gap)
+      cm.set(hash(++i,word0, c, keyword0)); // tokens occurring in a section introduced by "keyword:" or "keyword=" (order 1 and variable order for a word)
+
+      // Simple word morphology (order 1-3)
+      //
+      if(is_letter)
+        if(is_letter_pC)
+          if(is_letter_ppC) cm.set(hash(++i,c,pC,ppC)); //order 3 word token
+          else cm.set(hash(++i,c,pC)); //order 2 word token
+        else cm.set(hash(++i,c)); //order 1 word token
+      else {cm.skip(); i++;} //not applicable
+
+      cm.set(hash(++i,word0));
+      cm.set(hash(++i,gaptoken0));
+
+      cm.set(hash(++i,word0, c, gaptoken1)); // 
+      cm.set(hash(++i,gaptoken0, c, word1)); // stronger //french texts need that "c"
+      cm.set(hash(++i,word0, word1));        // stronger
+      cm.set(hash(++i,word0, word1, word2)); // weaker
+      cm.set(hash(++i,gaptoken0,gaptoken1,word1,word2)); //stronger
+      cm.set(hash(++i,word0    ,gaptoken1,word1,word2)); //weaker
+
+      const U8 c1=c4&0xff;
       cm.set(hash(++i,word0, c1, word2));
       cm.set(hash(++i,word0, c1, word3));
       cm.set(hash(++i,word0, c1, word4));
-      cm.set(hash(++i,word0, c1, word5));
       cm.set(hash(++i,word0, c1, word1, word3));
       cm.set(hash(++i,word0, c1, word2, word3));
 
-      if (end_of_sentence) {
-        word5=word4;
-        word4=word3;
-        word3=word2;
-        word2=word1;
-        word1='.';
-      }
+      INJECT_SHARED_pos
+      const U32 lastpos = wchk[w]!=chk ? 0 : wpos[w];
+      const U32 dist = lastpos==0 ? 0 : min(llog(pos-lastpos+120)>>4,20);
 
-      cm.set(hash(++i,col,c1,above));
-      cm.set(hash(++i,c1,above));
-      cm.set(hash(++i,col,c1));
-      cm.set(hash(++i,col,c==32));
-      cm.set(hash(++i, w, llog(pos-wpos[w])>>4));
-      cm.set(hash(++i,c1, llog(pos-wpos[w])>>2));
+      cm.set(hash(++i,word0, dist));
+      cm.set(hash(++i,word1, gaptoken0, dist));
+
+      cm.set(hash(++i,pos>>10, word0)); //word tokens occurring in this 1K block (variable order)
+
+      cm.set(hash(++i,opened,groups&0xff,in_pdf_text_block));
+      cm.set(hash(++i,opened,c,dist!=0,in_pdf_text_block));
+
+      cm.set(hash(++i,groups));
+      cm.set(hash(++i,groups,c));
+      cm.set(hash(++i,groups,c4&0xffff));
 
       if(c1=='.' || c1=='!' || c1=='?' || c1=='/'|| c1==')'|| c1=='}') f4=(f4&0xfffffff0)+2;
       f4=(f4<<4) | (c1==' ' ? 0 : c1>>4);
-    
+
       cm.set(hash(++i,f4&0xfff));
       cm.set(hash(++i,f4));
 
@@ -6002,27 +6198,67 @@ public:
 
       cm.set(hash(++i,mask));
       cm.set(hash(++i,mask,c1));
-      cm.set(hash(++i,mask&0xff,col));
       cm.set(hash(++i,mask,c4&0x00ffff00));
       cm.set(hash(++i,mask&0x1ff,f4&0x00fff0));
 
       cm.set(hash(++i, word0, c1, llog(wordGap), mask&0x1FF,
         ((wordlen1 > 3)<<6)|
-        ((wordlen > 0)<<5)|
-        ((spafdo == wordlen + 2)<<4)|
-        ((spafdo == wordlen + wordlen1 + 3)<<3)|
-        ((spafdo >= lastLetter + wordlen1 + wordGap)<<2)|
+        ((wordlen0 > 0)<<5)|
         ((lastUpper < lastLetter + wordlen1)<<1)|
-        (lastUpper < wordlen + wordlen1 + wordGap)
-      ));
-      cm.set(hash(++i, col, wordlen1, above&0x5F, c4&0x5F));
-      cm.set(hash(++i, mask2&0x3F, wrdhsh&0xFFF, (0x100|firstLetter)*(wordlen<6),(wordGap>4)*2+(wordlen1>5)));
+        (lastUpper < wordlen0 + wordlen1 + wordGap)
+      )); //weak
+      cm.set(hash(++i, mask2&0x1FF, wrdhsh&0xffff, min(wordlen0,6)));
+      assert(i==1024+nCM2);
+    }
+  };
+  U8 pdf_text_parser_state; // 0,1,2,3
+  Info info_normal;
+  Info info_pdf;
+public:
+  WordModel (const Shared * const sh, ModelStats const *st, const U64 size) : 
+    shared(sh), stats(st), cm(sh,size,nCM), info_normal(sh,st,cm), info_pdf(sh,st,cm) {}
+  void mix(Mixer &m) {
+    INJECT_SHARED_bpos 
+    if (bpos==0) {
+      //extract text from pdf
+      INJECT_SHARED_c4
+      const U8 c1=c4;
+      if(c4==0x0a42540a /* "\nBT\n" */) pdf_text_parser_state=1; // Begin Text
+      else if (c4==0x0a45540a /* "\nET\n" */) {pdf_text_parser_state=0;} // End Text
+      bool do_pdf_process=true;
+      if(pdf_text_parser_state!=0) {
+        const U8 pC=c4>>8;
+        if(pC!='\\') {
+             if(c1=='[') {pdf_text_parser_state|=2;} //array begins
+        else if(c1==']') {pdf_text_parser_state&=(255-2);}
+        else if(c1=='(') {pdf_text_parser_state|=4; do_pdf_process=false;} //signal: start text extraction
+        else if(c1==')') {pdf_text_parser_state&=(255-4);} //signal: start pdf gap processing
+        }
+      }
+
+      const bool is_pdftext = (pdf_text_parser_state&4)!=0;
+      if(is_pdftext) {
+        if(do_pdf_process) {
+          //printf("%c",c1); //debug: print the extracted pdf text
+          const bool is_extended_char = c1=='\\';
+          info_pdf.process_char(is_extended_char);
+        }
+        info_pdf.predict(pdf_text_parser_state);
+        info_pdf.line_model_skip(cm);
+      } else {
+        const bool is_textblock = stats->blockType==TEXT || stats->blockType==TEXT_EOL;
+        const bool is_extended_char = is_textblock && c1>=128;
+        info_normal.process_char(is_extended_char);
+        info_normal.predict(pdf_text_parser_state);
+        info_normal.line_model_predict(pdf_text_parser_state);
+      }
+      
     }
     cm.mix(m);
   }
 };
 
-#endif //USE_WORDMODEL
+#endif //USE_TEXTMODEL
 
 
 //////////////////////////// RecordModel ///////////////////////
@@ -6066,8 +6302,8 @@ private:
   static constexpr int nIM = 3;
   static constexpr int nIndCtxs = 5;
 public:
-  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS + nSM*StationaryMap::MIXERINPUTS + nSSM*SmallStationaryContextMap::MIXERINPUTS + nIM*IndirectMap::MIXERINPUTS;
-  static constexpr int MIXERCONTEXTS = 1024+512+11*32;
+  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS + nSM*StationaryMap::MIXERINPUTS + nSSM*SmallStationaryContextMap::MIXERINPUTS + nIM*IndirectMap::MIXERINPUTS; // 149
+  static constexpr int MIXERCONTEXTS = 1024+512+11*32; //1888
   static constexpr int MIXERCONTEXTSETS = 3;
 private:
   const Shared * const shared;
@@ -6323,7 +6559,7 @@ public:
 
     m.set( (rlen[0]>2)*( (bpos<<7)|mxCtx ), 1024 );
     m.set( ((N^B)>>4)|(x<<4), 512 );
-    m.set( (stats->Text.chargrp<<5)|x, 11*32);
+    m.set( ((stats->Text.chargrp)<<5)|x, 11*32);
 
     stats->Wav = min(0xFFFF,rlen[0]);
   }
@@ -6337,7 +6573,7 @@ private:
   static constexpr int nOLS=3;
   static constexpr int nSSM=nOLS+2;
 public:
-  static constexpr int MIXERINPUTS = nSSM*SmallStationaryContextMap::MIXERINPUTS;
+  static constexpr int MIXERINPUTS = nSSM*SmallStationaryContextMap::MIXERINPUTS; // 10
   static constexpr int MIXERCONTEXTS = 0;
   static constexpr int MIXERCONTEXTSETS = 0;
 private:
@@ -6386,7 +6622,7 @@ class SparseModel {
 private:
   static constexpr int nCM=38; //17+3*7
 public:
-  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS;
+  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS; // 190
   static constexpr int MIXERCONTEXTS = 0;
   static constexpr int MIXERCONTEXTSETS = 0;
 private:
@@ -6421,40 +6657,6 @@ public:
         cm.set(hash(++i,(buf(j+1)<<8)|buf(j)));
         cm.set(hash(++i,(buf(j+2)<<8)|buf(j)));
       }
-    }
-    cm.mix(m);
-  }
-};
-
-
-//////////////////////////// distanceModel ///////////////////////
-
-// Model for modelling distances between symbols {0, space, new line/ff}
-
-class DistanceModel {
-private:
-  static constexpr int nCM=3;
-public:
-  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS;
-  static constexpr int MIXERCONTEXTS = 0;
-  static constexpr int MIXERCONTEXTSETS = 0;
-private:
-  const Shared * const shared;
-  ContextMap cm;
-  int pos00=0,pos20=0,posnl=0;
-public:
-  DistanceModel(const Shared * const sh, U64 size) : shared(sh), cm(sh,size,nCM){}
-  void mix (Mixer& m){
-    INJECT_SHARED_bpos
-    if(bpos==0) {
-      INJECT_SHARED_c1 INJECT_SHARED_pos
-      if (c1==0x00) pos00=pos;
-      if (c1==0x20) pos20=pos;
-      if (c1==0xff||c1=='\r'||c1=='\n') posnl=pos;
-      U64 i=0;
-      cm.set(hash(++i, min(pos-pos00,255) | c1<<8));
-      cm.set(hash(++i, min(pos-pos20,255) | c1<<8));
-      cm.set(hash(++i, min(pos-posnl,255) | c1<<8));
     }
     cm.mix(m);
   }
@@ -7655,6 +7857,7 @@ public:
   static constexpr int MIXERCONTEXTSETS = 6;
 private:
     const Shared * const shared;
+    Random rnd;
     // State of parser
     enum {SOF0=0xc0, SOF1, SOF2, SOF3, DHT, RST0=0xd0, SOI=0xd8, EOI, SOS, DQT,
       DNL, DRI, APP0=0xe0, COM=0xfe, FF};  // Second byte of 2 byte codes
@@ -8278,7 +8481,7 @@ public:
     if (cp[N-1]) {
       INJECT_SHARED_y
       for (int i=0; i<N; ++i)
-        *cp[i]=StateTable::next(*cp[i],y);
+        StateTable::update(cp[i],y,rnd);
     }
 
     // Update context
@@ -9277,8 +9480,8 @@ class ExeModel {
 private:
   static constexpr int nCM1=10, nCM2=10, nIM=1;
 public:
-  static constexpr int MIXERINPUTS = (nCM1+nCM2)*ContextMap2::MIXERINPUTS + nIM*IndirectMap::MIXERINPUTS; //180
-  static constexpr int MIXERCONTEXTS = 1024+1024+1024+8192+8192+8192; //27648
+  static constexpr int MIXERINPUTS = (nCM1+nCM2)*ContextMap2::MIXERINPUTS + nIM*IndirectMap::MIXERINPUTS; // 142
+  static constexpr int MIXERCONTEXTS = 1024+1024+1024+8192+8192+8192; // 27648
   static constexpr int MIXERCONTEXTSETS = 6;
 private:
   const Shared * const shared;
@@ -9716,7 +9919,7 @@ class IndirectModel  {
 private:
   static constexpr int nCM = 15;
 public:
-  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS;
+  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS; // 75
   static constexpr int MIXERCONTEXTS = 0;
   static constexpr int MIXERCONTEXTSETS = 0;
 private:
@@ -9969,7 +10172,7 @@ class DmcForest {
 private:
   static constexpr U32 MODELS = 10; // 8 fast and 2 slow models
 public:
-  static constexpr int MIXERINPUTS = 2 + 8/2; // fast models (2 individually) + slow models (8 combined pairwise)
+  static constexpr int MIXERINPUTS = 2 + 8/2; // 6 : fast models (2 individually) + slow models (8 combined pairwise)
   static constexpr int MIXERCONTEXTS = 0;
   static constexpr int MIXERCONTEXTSETS = 0;
 private:
@@ -10019,7 +10222,7 @@ class NestModel {
 private:
   static constexpr int nCM = 12;
 public:
-  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS;
+  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS; // 60
   static constexpr int MIXERCONTEXTS = 0;
   static constexpr int MIXERCONTEXTSETS = 0;
 private:
@@ -10159,7 +10362,7 @@ class XMLModel {
 private:
   static constexpr int nCM = 4;
 public:
-  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS;
+  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS; //20
   static constexpr int MIXERCONTEXTS = 0;
   static constexpr int MIXERCONTEXTSETS = 0;
 private:
@@ -10399,11 +10602,11 @@ public:
 
 class NormalModel { 
 private:
-  static constexpr int nCM = 10;
+  static constexpr int nCM = 9;
   static constexpr int nRCM = 3;
   static constexpr int nSM = 2;
 public:
-  static constexpr int MIXERINPUTS = nCM*ContextMap2::MIXERINPUTS + nRCM*RunContextMap::MIXERINPUTS + nSM; //75
+  static constexpr int MIXERINPUTS = nCM*ContextMap2::MIXERINPUTS + nRCM*RunContextMap::MIXERINPUTS + nSM; //68
   static constexpr int MIXERCONTEXTS = 64 + 8+1024+256+256+256+256+1536; //3656
   static constexpr int MIXERCONTEXTSETS = 7;
 private:
@@ -10412,7 +10615,7 @@ private:
   ContextMap2 cm;
   RunContextMap rcm7, rcm9, rcm10;
   StateMap StateMaps[2];
-  U64 cxt[16]{}; // context hashes
+  U64 cxt[15]{}; // context hashes
 public:
   NormalModel(const Shared * const sh, ModelStats *st,const U64 cmsize, const U64 rcmsize):
     shared(sh), stats(st),
@@ -10432,7 +10635,6 @@ public:
     // update order 1..14 context hashes
     // note: order 0 context does not need an update so its hash never changes
     INJECT_SHARED_c1
-    cxt[15]=(isalpha(c1))?combine64(cxt[15], tolower(c1)):0;
     for (int i=14; i>0; --i)
       cxt[i]=combine64(cxt[i-1],c1);
   }
@@ -10445,7 +10647,6 @@ public:
         cm.set(cxt[i]);
       cm.set(cxt[8]);
       cm.set(cxt[14]);
-      cm.set(cxt[15]);
       rcm7.set(cxt[7]);
       rcm9.set(cxt[10]);
       rcm10.set(cxt[12]);
@@ -10459,7 +10660,7 @@ public:
     m.add((stretch(StateMaps[0].p(0,c0))+1)>>1);
     m.add((stretch(StateMaps[1].p(0,c0|(c1<<8)))+1)>>1);
 
-    const int order=max(0, cm.order-3); //0-7
+    const int order=max(0, cm.order-(nCM-7)); //0-7
     assert(0<=order && order<=7);
     m.set(order<<3 | bpos, 64); 
     stats->order=order;
@@ -10500,17 +10701,14 @@ public:
   CharGroupModel& charGroupModel() {static CharGroupModel instance{shared, MEM/2};return instance;}
   RecordModel& recordModel() {static RecordModel instance{shared, stats, MEM*2};return instance;}
   SparseModel& sparseModel() {static SparseModel instance{shared, MEM*2};return instance;}
-  DistanceModel& distanceModel() {static DistanceModel instance{shared, MEM/4};return instance;}
   MatchModel& matchModel() {static MatchModel instance{shared, stats, MEM*4};return instance;}
   SparseMatchModel& sparseMatchModel() {static SparseMatchModel instance{shared, MEM};return instance;}
   IndirectModel& indirectModel() {static IndirectModel instance{shared, MEM};return instance;}
 
 #ifdef USE_TEXTMODEL
   TextModel& textModel() {static TextModel instance{shared, stats, MEM*16};return instance;}
-#endif //USE_TEXTMODEL
-#ifdef USE_WORDMODEL
   WordModel& wordModel() {static WordModel instance{shared, stats, MEM*16};return instance;}
-#endif //USE_WORDMODEL
+#endif //USE_TEXTMODEL
   NestModel& nestModel() {static NestModel instance{shared, MEM};return instance;}
   XMLModel& xmlModel() {static XMLModel instance{shared, MEM/4};return instance;}
 
@@ -10544,11 +10742,27 @@ class ContextModel {
   bool readsize=false;
 public:
   ContextModel(const Shared * const sh, ModelStats *st, Models &mdls) : shared(sh), stats(st), models(mdls) {
-    #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(sh,1253, 8+3648/*normalModel*/+1888/*recordModel*/+27648/*exeModel*/+30720/*textModel*/+8/*matchModel*/+8448/*sparseMatchModel*/, 28);
-    #else
-      m=MixerFactory::CreateMixer(sh,1008, 8+3648/*normalModel*/+1888/*recordModel*/+27648/*exeModel*/+30720/*textModel*/+8/*matchModel*/+8448/*sparseMatchModel*/, 28);
-    #endif //USE_WORD_MODEL
+    m=MixerFactory::CreateMixer(
+      sh, 
+      1 +  //bias
+      MatchModel::MIXERINPUTS  + NormalModel::MIXERINPUTS + SparseMatchModel::MIXERINPUTS + 
+      SparseModel::MIXERINPUTS + RecordModel::MIXERINPUTS + CharGroupModel::MIXERINPUTS + 
+      TextModel::MIXERINPUTS   + WordModel::MIXERINPUTS   + IndirectModel::MIXERINPUTS + 
+      DmcForest::MIXERINPUTS   + NestModel::MIXERINPUTS   + XMLModel::MIXERINPUTS + 
+      LinearPredictionModel::MIXERINPUTS  +  ExeModel::MIXERINPUTS
+      ,
+      MatchModel::MIXERCONTEXTS  + NormalModel::MIXERCONTEXTS + SparseMatchModel::MIXERCONTEXTS +
+      SparseModel::MIXERCONTEXTS + RecordModel::MIXERCONTEXTS + CharGroupModel::MIXERCONTEXTS + 
+      TextModel::MIXERCONTEXTS   + WordModel::MIXERCONTEXTS   + IndirectModel::MIXERCONTEXTS +
+      DmcForest::MIXERCONTEXTS   + NestModel::MIXERCONTEXTS   + XMLModel::MIXERCONTEXTS +
+      LinearPredictionModel::MIXERCONTEXTS  +  ExeModel::MIXERCONTEXTS
+      ,
+      MatchModel::MIXERCONTEXTSETS  + NormalModel::MIXERCONTEXTSETS + SparseMatchModel::MIXERCONTEXTSETS +
+      SparseModel::MIXERCONTEXTSETS + RecordModel::MIXERCONTEXTSETS + CharGroupModel::MIXERCONTEXTSETS +
+      TextModel::MIXERCONTEXTSETS   + WordModel::MIXERCONTEXTSETS   + IndirectModel::MIXERCONTEXTSETS +
+      DmcForest::MIXERCONTEXTSETS   + NestModel::MIXERCONTEXTSETS   + XMLModel::MIXERCONTEXTSETS +
+      LinearPredictionModel::MIXERCONTEXTSETS  +  ExeModel::MIXERCONTEXTSETS
+    );
   }
 
   ~ContextModel() {
@@ -10714,8 +10928,6 @@ int ContextModel::p(){
     sparseMatchModel.mix(*m);
     SparseModel &sparseModel=models.sparseModel();
     sparseModel.mix(*m);
-    DistanceModel &distanceModel=models.distanceModel();
-    distanceModel.mix(*m);
     RecordModel &recordModel=models.recordModel();
     recordModel.mix(*m);
     CharGroupModel &charGroupModel=models.charGroupModel();
@@ -10723,11 +10935,9 @@ int ContextModel::p(){
     #ifdef USE_TEXTMODEL
     TextModel &textModel=models.textModel();
     textModel.mix(*m);
-    #endif //USE_TEXTMODEL
-    #ifdef USE_WORDMODEL
     WordModel &wordModel=models.wordModel();
     wordModel.mix(*m);
-    #endif //USE_WORDMODEL
+    #endif //USE_TEXTMODEL
     IndirectModel &indirectModel=models.indirectModel();
     indirectModel.mix(*m);
     DmcForest &dmcForest=models.dmcForest();
@@ -10970,8 +11180,8 @@ public:
 
     const U8 bpos=shared.bpos;
     const U8 c0=shared.c0;
-    U8 chargrp = (bpos>0)?AsciiGroupC0[0][(1<<bpos)-2+(c0&((1<<bpos)-1))]:0;
-    stats.Text.chargrp=chargrp;
+    const U8 chargrp = (bpos>0)?AsciiGroupC0[0][(1<<bpos)-2+(c0&((1<<bpos)-1))]:0;
+    stats.Text.chargrp = chargrp;
 
     // Predict
     pr=contextModel.p();
@@ -11374,38 +11584,6 @@ struct TextParserStateInfo {
     }
   }
 } textparser;
-
-
-// UTF8 validator
-// Based on: http://bjoern.hoehrmann.de/utf-8/decoder/dfa/
-// Control caracters (0x00-0x1f) and 0x7f are not allowed (except for 0/tab/cr/lf)
-
-#define UTF8_ACCEPT 0
-#define UTF8_REJECT 12
-
-static const U8 utf8_state_table[] = {
-  // byte -> character class
-  // character_class = utf8_state_table[byte]
-  1,1,1,1,1,1,1,1,1,0,0,1,1,0,1,1,  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 00..1f  
-  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, // 20..3f
-  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, // 40..5f
-  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1, // 60..7f
-  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9, // 80..9f
-  7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,  7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7, // a0..bf
-  8,8,2,2,2,2,2,2,2,2,2,2,2,2,2,2,  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, // c0..df
- 10,3,3,3,3,3,3,3,3,3,3,3,3,4,3,3, 11,6,6,6,5,8,8,8,8,8,8,8,8,8,8,8, // e0..ff
-  // validating automaton
-  // new_state = utf8_state_table[256*old_state + character_class]
-   0,12,24,36,60,96,84,12,12,12,48,72, // state  0-11
-  12,12,12,12,12,12,12,12,12,12,12,12, // state 12-23
-  12, 0,12,12,12,12,12, 0,12, 0,12,12, // state 24-35
-  12,24,12,12,12,12,12,24,12,24,12,12, // state 36-47
-  12,12,12,12,12,12,12,24,12,12,12,12, // state 48-59
-  12,24,12,12,12,12,12,12,12,24,12,12, // state 60-71
-  12,12,12,12,12,12,12,36,12,36,12,12, // state 72-83
-  12,36,12,12,12,12,12,36,12,36,12,12, // state 84-95
-  12,36,12,12,12,12,12,12,12,12,12,12  // state 96-108
-};
 
 
 // Detect blocks
@@ -13569,9 +13747,9 @@ int main_utf8(int argc, char** argv) {
         "  " PROGNAME " -LEVEL[SWITCHES] INPUTSPEC [OUTPUTSPEC]\n"
         "\n"
         "    -LEVEL:\n"
-        "      -0 = store (uses 360 MB)\n"
-        "      -1 -2 -3 = faster (uses 372, 386, 414 MB)\n"
-        "      -4 -5 -6 -7 -8 -9 = smaller (uses 471, 584, 810, 1263, 2170, 3982 MB)\n"
+        "      -0 = store (uses 300 MB)\n"
+        "      -1 -2 -3 = faster (uses 392, 406, 435 MB)\n"
+        "      -4 -5 -6 -7 -8 -9 = smaller (uses 492, 605, 833, 1288, 2198, 4018 MB)\n"
         "    The listed memory requirements are indicative, actual usage may vary\n"
         "    depending on several factors including need for temporary files,\n"
         "    temporary memory needs of some preprocessing (transformations), etc.\n"
@@ -13762,11 +13940,6 @@ int main_utf8(int argc, char** argv) {
       printf("NO_TEXTMODEL ");
       #endif
 
-      #ifdef USE_WORDMODEL
-      printf("USE_WORDMODEL ");
-      #else
-      printf("NO_WORDMODEL ");
-      #endif
       printf("\n");
     }
 
@@ -14151,7 +14324,7 @@ int main_utf8(int argc, char** argv) {
 
 int main(int argc, char** argv) {
   #ifdef WINDOWS
-    // in Windows, argv is encoded in the effective codepage, therefore unsuitable for acquiring command line arguments (file names
+    // On Windows, argv is encoded in the effective codepage, therefore unsuitable for acquiring command line arguments (file names
     // in our case) not representable in that particular codepage.
     // -> We will recreate argv as UTF8 (like in Linux)
     U32 oldcp = GetConsoleOutputCP();
