@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "182"  //update version here before publishing your changes
+#define PROGVERSION  "182fix1"  //update version here before publishing your changes
 #define PROGYEAR     "2019"
 
 //////////////////////// Build options /////////////////////////////////////
@@ -28,6 +28,11 @@
 #include <assert.h>
 
 #define NVERBOSE  // Remove (comment out) this line for more on-screen progress information
+
+//
+//  User specified options are above
+//  Automatic definitions are below = for compiling no need to change anything below this line
+//
 
 //////////////////////// Target OS/Compiler ////////////////////////////////
 
@@ -624,7 +629,7 @@ FILE* openfile(const char *filename, const int mode) {
 }
 
 #ifdef WINDOWS
-#define STAT _stat64i32
+#define STAT _stat
 #else
 #define STAT stat
 #endif
@@ -5927,25 +5932,44 @@ private:
     ContextMap &cm;
     Array<U32> wpos{1<<wposbits};  // last positions of whole words
     Array<U16> wchk{1<<wposbits};  // checksums for whole words
-    U32 c4{};                      // last 4 processed characters
-    U8 c{}, pC{}, ppC{};           // last char, previous char, char before the previous char (converted to lowearcase)
-    bool is_letter{}, is_letter_pC{}, is_letter_ppC{};
-    U8 opened{};     // "(", "[", "{", "<", opening QUOTE, opening APOSTROPHE (or 0 when none of them)
-    U8 wordlen0{}, wordlen1{};     // length of word0 and word1
-    U64 line0{}, frstword{};       // hash of line content, hash of first word on line
-    U64 word0{}, word1{}, word2{}, word3{}, word4{};  // wordtoken hashes, word0 is the partally processed ("current") word
-    U64 expr0{}, expr1{}, expr2{}, expr3{}, expr4{};  // wordtoken hashes for expressions
-    U64 keyword0{}, gaptoken0{}, gaptoken1{};         // hashes
-    U16 w{}, chk{}; // finalized hash and checksum of last partially processed word
-    int frstchar{};  // category of first character of the current line (or -1 when in first column)
-    int linematch{}; // the length of match of the current line vs the previos line
-    int nl1{}, nl2{};  // current newline position, previous newline position
-    U64 groups{}; // 8 last character categories
-    U64 text0{};  // uninterrupted stream of letters
-    U32 wrdhsh{}, lastLetter{}, lastUpper{}, wordGap{};
-    U32 mask{}, mask2{}, f4{};
+    U32 c4;                      // last 4 processed characters
+    U8 c, pC, ppC;           // last char, previous char, char before the previous char (converted to lowearcase)
+    bool is_letter, is_letter_pC, is_letter_ppC;
+    U8 opened;     // "(", "[", "{", "<", opening QUOTE, opening APOSTROPHE (or 0 when none of them)
+    U8 wordlen0, wordlen1;     // length of word0 and word1
+    U64 line0, frstword;       // hash of line content, hash of first word on line
+    U64 word0, word1, word2, word3, word4;  // wordtoken hashes, word0 is the partally processed ("current") word
+    U64 expr0, expr1, expr2, expr3, expr4;  // wordtoken hashes for expressions
+    U64 keyword0, gaptoken0, gaptoken1;         // hashes
+    U16 w, chk; // finalized hash and checksum of last partially processed word
+    int frstchar;  // category of first character of the current line (or -1 when in first column)
+    int linematch; // the length of match of the current line vs the previos line
+    int nl1, nl2;  // current newline position, previous newline position
+    U64 groups; // 8 last character categories
+    U64 text0;  // uninterrupted stream of letters
+    U32 lastLetter, lastUpper, wordGap;
+    U32 mask, word0chars, mask2, f4;
   public:
     Info(const Shared * const sh, ModelStats const *st, ContextMap &contextmap): shared(sh), stats(st), cm(contextmap) {
+      reset();
+    }
+    void reset() {
+      //zero contents
+      memset(&wpos[0], 0, (1<<wposbits)*sizeof(U32));
+      memset(&wchk[0], 0, (1<<wposbits)*sizeof(U16));
+      c4=0;c=pC=ppC=0;
+      is_letter=is_letter_pC=is_letter_ppC=false;
+      opened=wordlen0=wordlen1=0;
+      line0=frstword=0;
+      word0=word1=word2=word3=word4=0;
+      expr0=expr1=expr2=expr3=expr4=0;
+      keyword0=gaptoken0=gaptoken1=0;
+      w=chk=0;
+      frstchar=linematch=nl1=nl2=0;
+      groups=text0=0;
+      lastLetter=lastUpper=wordGap=0;
+      mask=word0chars=mask2=f4=0;
+      //---
       lastUpper=maxlastUpper;
       lastLetter=wordGap=maxlastLetter;
       frstchar=linematch=-1;
@@ -5989,7 +6013,6 @@ private:
             wordlen0=wordlen1; 
           } else {
             wordGap = lastLetter;
-            wrdhsh = 0;
           }
           gaptoken1=gaptoken0;
           gaptoken0=0;
@@ -5999,7 +6022,7 @@ private:
         word0=combine64(word0, c);
         w=U16(finalize64(word0,wposbits));
         chk=U16(checksum64(word0,wposbits,16));
-        wrdhsh = is_number ? 0 : wrdhsh<<8|c; // last 4 consecutive letters
+        word0chars = is_number ? 0 : word0chars<<8|c; // last 4 consecutive letters
         text0=(text0<<8|c)&0xffffffffff; // last 5 alphanumeric chars (other chars are ignored)
         wordlen0=min(wordlen0+1,maxwordlen);
         if ((c=='a' || c=='e' || c=='i' || c=='o' || c=='u') || (c=='y' && (wordlen0>0 && pC!='a' && pC!='e' && pC!='i' && pC!='o' && pC!='u')))
@@ -6026,7 +6049,7 @@ private:
 
           word0=0;
           wordlen0=0;
-          wrdhsh=0;
+          word0chars=0;
         }
 
              if (c1=='.' || c1=='!' || c1=='?') mask2+=4;
@@ -6035,7 +6058,7 @@ private:
         else if (c1==')' || c1=='}' || c1==']' || c1=='>' || c1==QUOTE || c1==APOSTROPHE) {mask2+=7;opened=0;}
       }
       
-      const U8 chargrp = stats->Text.chargrp;
+      //const U8 chargrp = stats->Text.chargrp;
       U8 g=c1;
       if(g>=128){
         //utf8 code points (weak context)
@@ -6074,7 +6097,7 @@ private:
 
       INJECT_SHARED_c1 
       INJECT_SHARED_pos
-      if (c1==NEW_LINE || c1==0) {  // a new line has just started (or zero in asciiz or binary data)
+      if (c1==NEW_LINE || c1==0) {  // a new line has just started (or: zero in asciiz or in binary data)
         nl2=nl1; nl1=pos; 
         frstchar=-1; frstword=0; line0=0;
       }
@@ -6207,7 +6230,7 @@ private:
         ((lastUpper < lastLetter + wordlen1)<<1)|
         (lastUpper < wordlen0 + wordlen1 + wordGap)
       )); //weak
-      cm.set(hash(++i, mask2&0x1FF, wrdhsh&0xffff, min(wordlen0,6)));
+      cm.set(hash(++i, mask2&0x1FF, word0chars&0xffff, min(wordlen0,6)));
       assert(i==1024+nCM2);
     }
   };
@@ -6217,6 +6240,10 @@ private:
 public:
   WordModel (const Shared * const sh, ModelStats const *st, const U64 size) : 
     shared(sh), stats(st), cm(sh,size,nCM), info_normal(sh,st,cm), info_pdf(sh,st,cm) {}
+  void reset() {
+    info_normal.reset();
+    info_pdf.reset();
+  }
   void mix(Mixer &m) {
     INJECT_SHARED_bpos 
     if (bpos==0) {
@@ -10627,7 +10654,7 @@ public:
     assert(ispowerof2(cmsize) && ispowerof2(rcmsize));
   }
 
-  void reset_hashes() {
+  void reset() {
     memset(&cxt[0], 0, sizeof(cxt));
   }
 
@@ -11097,12 +11124,17 @@ class Predictor {
   SSE sse;
   int pr;  // next prediction, scaled by 12 bits (0-4095)
   
-  void trainNormalModel(const char * const Dictionary, int Iterations) {
+  void trainText(const char * const Dictionary, int Iterations) {
     NormalModel &normalModel=models.normalModel();
-    DummyMixer m_dummy(&shared,normalModel.MIXERINPUTS,normalModel.MIXERCONTEXTS,normalModel.MIXERCONTEXTSETS);
+    WordModel &wordModel=models.wordModel();
+    DummyMixer m_dummy(&shared,
+      normalModel.MIXERINPUTS+wordModel.MIXERINPUTS,
+      normalModel.MIXERCONTEXTS+wordModel.MIXERCONTEXTS,
+      normalModel.MIXERCONTEXTSETS+wordModel.MIXERCONTEXTSETS
+    );
     assert(shared.buf.getpos()==0 && stats.blpos==0);
     FileDisk f;
-    printf("Pre-training main model...");
+    printf("Pre-training models with text...");
     OpenFromMyFolder::anotherfile(&f, Dictionary);
     int c;
     int training_bytecount=0;
@@ -11112,26 +11144,42 @@ class Predictor {
       training_bytecount=0;
       do {
         training_bytecount++;
-        if (c==CARRIAGE_RETURN)
-          continue;
-        for (int bpos=0; bpos<8; bpos++) {
-          normalModel.mix(m_dummy); //update (train) model
-          m_dummy.p();
-          if(bpos==0 && c==NEW_LINE) {c=SPACE; normalModel.reset_hashes();}
-          shared.y=(c>>(7-bpos))&1;
-          shared.update();
-          updater.broadcast_update();
+        U8 c1 = c==NEW_LINE ? SPACE : c;
+        if(c!=CARRIAGE_RETURN) {
+          for (int bpos=0; bpos<8; bpos++) {
+            normalModel.mix(m_dummy); //update (train) model
+              wordModel.mix(m_dummy); //update (train) model
+            m_dummy.p();
+            shared.y=(c1>>(7-bpos))&1;
+            shared.update();
+            updater.broadcast_update();
+          }
+        } 
+        // emulate a space before and after each word/expression
+        // reset models in between
+        if(c==NEW_LINE) {
+          normalModel.reset();
+          wordModel.reset();
+          for (int bpos=0; bpos<8; bpos++) {
+            normalModel.mix(m_dummy); //update (train) model
+            wordModel.mix(m_dummy); //update (train) model
+            m_dummy.p();
+            shared.y=(c1>>(7-bpos))&1;
+            shared.update();
+            updater.broadcast_update();
+          }
         }
       } while ((c=f.getchar())!=EOF);
     }
-    normalModel.reset_hashes();
+    normalModel.reset();
+    wordModel.reset();
     shared.reset();
     stats.reset();
     printf(" done [%s, %d bytes]\n", Dictionary, training_bytecount);
     f.close();
   }
   
-  void trainExeModel() {
+  void trainExe() {
     ExeModel &exeModel=models.exeModel();
     DummyMixer dummy_m(&shared,exeModel.MIXERINPUTS,exeModel.MIXERCONTEXTS,exeModel.MIXERCONTEXTSETS);
     assert(shared.buf.getpos()==0 && stats.blpos==0);
@@ -11162,11 +11210,11 @@ public:
     shared.buf.setsize(MEM*8);
     //initiate pre-traing
     if(options & OPTION_TRAINTXT) {
-      trainNormalModel("english.dic",3);
-      trainNormalModel("english.exp",1);
+      trainText("english.dic",3);
+      trainText("english.exp",1);
     }
     if(options & OPTION_TRAINEXE)
-      trainExeModel();
+      trainExe();
   }
   int p() const {return pr;}
   void update(U8 y) {
