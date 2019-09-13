@@ -1560,3 +1560,9 @@ Paq8px_v182
 - Reinstated probabilistic increment in JpegModel 
 - Updated help screen to reflect the current default memory use per compression level
 - Other cosmetic changes
+
+
+Paq8px_v182fix1
+2019.09.12
+- Text pre-training is applied to WordModel
+- Fixed 32-bit compilation issue (_stat64i32->_stat)
