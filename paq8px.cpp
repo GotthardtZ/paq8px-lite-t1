@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "182fix1"  //update version here before publishing your changes
+#define PROGVERSION  "183"  //update version here before publishing your changes
 #define PROGYEAR     "2019"
 
 //////////////////////// Build options /////////////////////////////////////
@@ -21,6 +21,8 @@
 #define USE_ZLIB
 #define USE_AUDIOMODEL
 #define USE_TEXTMODEL
+
+#define NHASHCONFIG  //Remove (comment out) this line to enable hash configuration from the command line (somewhat slower compression)
 
 //////////////////////// Debug options /////////////////////////////////////
 
@@ -246,9 +248,9 @@ static_assert(sizeof(int)==4,"sizeof(int)");
 //////////////////////// Helper functions /////////////////////////////////////////
 
 // min, max functions
-static inline int min(int a, int b) {return a<b?a:b;}
-static inline U64 min(U64 a, U64 b) {return a<b?a:b;}
-static inline int max(int a, int b) {return a<b?b:a;}
+static inline int min(int a, int b) {return std::min<int>(a,b);}
+static inline U64 min(U64 a, U64 b) {return std::min<U64>(a,b);}
+static inline int max(int a, int b) {return std::max<int>(a,b);}
 
 #define ispowerof2(x) ((x&(x-1))==0)
 
@@ -1164,7 +1166,7 @@ struct ModelStats {
 
   //TextModel
   struct {
-    U8 chargrp;     //used by RecordModel, TextModel - Quantized partial byte as ASCII group
+    U8 chargrp;      //used by RecordModel, TextModel - Quantized partial byte as ASCII group
     U8 firstLetter;  //used by SSE stage
     U8 mask;         //used by SSE stage
   } Text{};
@@ -1427,7 +1429,8 @@ class StateTable {
   {130,244, 0,38},{245,135,39, 0},{246,137,38, 1},{138,247, 1,38}, // 240-243
   {140,248, 0,39},{249,135,40, 0},{250, 69,39, 1},{ 80,251, 1,39}, // 244-247
   {140,252, 0,40},{249,135,41, 0},{250, 69,40, 1},{ 80,251, 1,40}, // 248-251
-  {140,252, 0,41}};  // 252, 253-255 are reserved
+  {140,252, 0,41}, // 252
+  {0,0, 0,0},{0,0, 0,0},{255,255, 0,0}};   // 253-255 are reserved
 
   static constexpr U8 State_group[256]=
   { 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14, // 0-14
@@ -1751,7 +1754,7 @@ public:
   }
 };
 
-// for training NormalModel and ExeModel
+// for training NormalModel, WordModel and ExeModel
 class DummyMixer : public Mixer {
 public:
   DummyMixer(const Shared * const sh, const int n, const int m, const int s):Mixer(sh, n, m, s){}
@@ -1977,28 +1980,39 @@ class StateMap : public AdaptiveMap {
 protected:
   const U32 S;    // Number of context sets
   const U32 N;    // Number of contexts in each context set
-  U32 ncxt;       // Number of context indexes present in cxt (0..S-1)
+  U32 ncxt;       // Number of context indexes present in cxt array (0..S-1)
   Array<U32> cxt; // Context index of last prediction per context set
 public:
-  StateMap(const Shared * const sh, const int s, const int n, const int lim, const bool init): 
+  enum MAPTYPE {GENERIC, BITHISTORY, RUN};
+  StateMap(const Shared * const sh, const int s, const int n, const int lim, const MAPTYPE maptype): 
     AdaptiveMap(sh, n*s,lim), S(s), N(n), ncxt(0), cxt(s)
   {
     assert(S>0 && N>0);
     assert(limit>0 && limit<1024);
-    if (init) { // when the context is a bit history byte, we have a-priory for p
-      assert(N==256);
+    if (maptype==BITHISTORY) { // when the context is a bit history byte, we have a-priory for p
+      assert((N&255)==0);
       for (U32 cx=0; cx<N; ++cx) {
-        U32 n0=StateTable::next(cx,2);
-        U32 n1=StateTable::next(cx,3);
-        if (n0==0) n1*=64;
-        if (n1==0) n0*=64;
-        n0=n0*2+1;
-        n1=n1*2+1;
+        U8 state=U8(cx&255);
+        U32 n0=StateTable::next(state,2)*3+1;
+        U32 n1=StateTable::next(state,3)*3+1;
         for (U32 s=0; s<S; ++s)
           t[s*N+cx] = ((n1<<20)/(n0+n1))<<12;
       }
     }
-    else {
+    else if (maptype==RUN) { // when the context is a run count: we have a-priory for p
+      for (U32 cx=0; cx<N; ++cx){
+        const int predicted_bit = (cx)&1;
+        const int uncertainity = (cx>>1)&1;
+      //const int bp = (cx>>2)&1; // unused in calculation - a-priory does not seem to depend on bpos in the general case
+        const int runcount = (cx>>4); // 0..254
+        U32 n0 = uncertainity*16+16;
+        U32 n1 = runcount*128+16;
+        if(predicted_bit==0)std::swap(n0,n1);
+        for (U32 s=0; s<S; ++s)
+          t[s*N+cx] = ((n1<<20)/(n0+n1))<<12 | min(runcount,limit);
+      }
+    }
+    else { // no a-priory
       for (U32 i=0; i<N*S; ++i)
         t[i]=(1u<<31)+0;  //initial p=0.5, initial count=0
     }
@@ -2012,13 +2026,23 @@ public:
     while(ncxt>0) {
       ncxt--;
       const U32 idx=cxt[ncxt];
-      if(idx+1==0)continue; //skipped context
+      if(idx+1==0)continue; // UINT32_MAX: skipped context
       assert(ncxt*N<=idx && idx<(ncxt+1)*N);
       AdaptiveMap::update(&t[idx]);
     }
   }
-  int p(const U32 s, const U32 cx) {
-    if(ncxt==0)updater.subscribe(this);
+  //call p1() when there is only 1 context set
+  //no need to call subscribe()
+  int p1(const U32 cx) {
+    updater.subscribe(this);
+    assert(cx>=0 && cx<N);
+    cxt[0]=cx;
+    ncxt++;
+    return t[cx]>>20;
+  }
+  //call p2() for each context when there is more context sets
+  //and call subscribe() once
+  int p2(const U32 s, const U32 cx) {
     assert(s>=0 && s<S);
     assert(cx>=0 && cx<N);
     assert(s==ncxt);
@@ -2027,12 +2051,22 @@ public:
     ncxt++;
     return t[idx]>>20;
   }
+  void subscribe() {
+    updater.subscribe(this);
+  }
+  //call skip() instead of p2() when the context is unknown or uninteresting
+  //remark: no need to call skip() when there is only 1 context or all contexts will be skipped
   void skip(const U32 s) {
-    if(ncxt==0)updater.subscribe(this);
     assert(s>=0 && s<S);
     assert(s==ncxt);
-    cxt[ncxt]=0-1; //mark for skipping
+    cxt[ncxt]=0-1; // UINT32_MAX: mark for skipping
     ncxt++;
+  }
+  void print() const {
+    for(U32 i=0;i<t.size();i++){
+      U32 p0=t[i]>>10;
+      printf("%d\t%d\n",i,p0);
+    }
   }
 };
 
@@ -2093,25 +2127,66 @@ public:
 
 // Multipliers
 // - They don't need to be prime, just large odd numbers
-// - The golden ratios are usually preferred as multipliers
+// - The golden ratio is usually preferred as a multiplier (PHI64)
+
+#ifdef NHASHCONFIG
+#define HASHEXPR constexpr
+#else 
+#define HASHEXPR
+#endif
+
+static HASHEXPR U64 hashes[14] = {
+  UINT64_C(0x9E3779B97F4A7C15),
+  UINT64_C(0x993DDEFFB1462949),
+  UINT64_C(0xE9C91DC159AB0D2D),
+  UINT64_C(0x83D6A14F1B0CED73),
+  UINT64_C(0xA14F1B0CED5A841F),
+  UINT64_C(0xC0E51314A614F4EF),
+  UINT64_C(0xDA9CC2600AE45A27),
+  UINT64_C(0x826797AA04A65737),
+  UINT64_C(0x2375BE54C41A08ED),
+  UINT64_C(0xD39104E950564B37),
+  UINT64_C(0x3091697D5E685623),
+  UINT64_C(0x20EB84EE04A3C7E1),
+  UINT64_C(0xF501F1D0944B2383),
+  UINT64_C(0xE3E4E8AA829AB9B5)
+};
+
+#ifndef NHASHCONFIG
+void loadHashesFromCmd(const char* hashes_from_commandline) {
+  if(strlen(hashes_from_commandline)!=16*14+13 /*237*/)quit("Bad hash config.");
+  for(int i=0;i<14;i++) { // for each specified hash value
+    U64 hashval=0;
+    for(int j=0;j<16;j++) { // for each hex char
+      U8 c=hashes_from_commandline[i*17+j];
+      if(c>='a' && c<='f')c=c+'A'-'a';
+      if(c>='0' && c<='9')c-='0';
+      else if(c>='A' && c<='F')c=c-'A'+10;
+      else quit("Bad hash config.");
+      hashval=hashval<<4|c;
+    }
+    hashes[i]=hashval;
+  }
+}
+#endif //NHASHCONFIG
 
 // Golden ratio of 2^64 (not a prime)
-#define PHI64 UINT64_C(0x9E3779B97F4A7C15) // 11400714819323198485
+#define PHI64 hashes[0] // 11400714819323198485
 
 // Some more arbitrary magic (prime) numbers
-#define MUL64_1  UINT64_C(0x993DDEFFB1462949)
-#define MUL64_2  UINT64_C(0xE9C91DC159AB0D2D)
-#define MUL64_3  UINT64_C(0x83D6A14F1B0CED73)
-#define MUL64_4  UINT64_C(0xA14F1B0CED5A841F)
-#define MUL64_5  UINT64_C(0xC0E51314A614F4EF) 
-#define MUL64_6  UINT64_C(0xDA9CC2600AE45A27)
-#define MUL64_7  UINT64_C(0x826797AA04A65737)
-#define MUL64_8  UINT64_C(0x2375BE54C41A08ED)
-#define MUL64_9  UINT64_C(0xD39104E950564B37)
-#define MUL64_10 UINT64_C(0x3091697D5E685623)
-#define MUL64_11 UINT64_C(0x20EB84EE04A3C7E1)
-#define MUL64_12 UINT64_C(0xF501F1D0944B2383)
-#define MUL64_13 UINT64_C(0xE3E4E8AA829AB9B5)
+#define MUL64_1  hashes[1]
+#define MUL64_2  hashes[2]
+#define MUL64_3  hashes[3]
+#define MUL64_4  hashes[4]
+#define MUL64_5  hashes[5] 
+#define MUL64_6  hashes[6]
+#define MUL64_7  hashes[7]
+#define MUL64_8  hashes[8]
+#define MUL64_9  hashes[9]
+#define MUL64_10 hashes[10]
+#define MUL64_11 hashes[11]
+#define MUL64_12 hashes[12]
+#define MUL64_13 hashes[13]
 
 // Finalizers (range reduction)
 // - Keep the necessary number of bits after performing a
@@ -2334,7 +2409,7 @@ template <int B>
 inline U8* HashTable<B>::operator[](U64 i) { //i: context selector
   U8 chk=(U8)checksum64(i,hashbits,8); // 8-bit checksum
   i=finalize64(i,hashbits)*B & mask;    // index: force bounds
-  //search for the checksum in t
+                                        //search for the checksum in t
   U8 *p = &t[0];
   if (p[i]==chk) return p+i+1;
   if (p[i^B]==chk) return p+(i^B)+1;
@@ -2367,45 +2442,11 @@ inline U8* HashTable<B>::operator[](U64 i) { //i: context selector
 //
 // The different types are as follows:
 //
-// - RunContextMap.  The bit history is a count of 0-255 consecutive
-//     zeros or ones.  Uses 4 bytes per whole byte context.  C=1.
-//     The context must be a multiplicative hash.
+
 // - SmallStationaryContextMap.  0 <= cx*256 < M.
 //     The state is a 16-bit probability that is adjusted after each
 //     prediction.  C=1.
-// - ContextMap.  For large contexts, C >= 1.  Context need not be hashed.
-
-// A RunContextMap maps a context into the next byte and a repeat
-// count up to M.  Size should be a power of 2.  Memory usage is 3M/4.
-class RunContextMap : IPredictor {
-public:
-  static constexpr int MIXERINPUTS = 1;
-private:
-  const Shared * const shared;
-  BH<4> t;
-  U8* cp;
-public:
-  RunContextMap(const Shared * const sh, U64 m): shared(sh), t(m/4) {assert(ispowerof2(m));cp=t[0]+1;}
-  void update() override { 
-    INJECT_SHARED_c1
-    if (cp[0]==0 || cp[1]!=c1) cp[0]=1, cp[1]=c1;
-    else if (cp[0]<255) ++cp[0];
-  }
-  void set(U64 cx) {
-    cp=t[cx]+1;
-  }
-  void mix(Mixer& m) {
-    INJECT_SHARED_bpos
-    if(bpos==7)updater.subscribe(this);
-    INJECT_SHARED_c0
-    if (cp[0]!=0 && (cp[1]+256)>>(8-bpos)==c0) {
-      int sign=(cp[1]>>(7-bpos)&1)*2-1;
-      m.add(sign*(ilog(cp[0]+1)<<3));
-    }
-    else
-      m.add(0); //p=0.5
-  }
-};
+// - ContextMap.  For large contexts, C >= 1.  Context must be hashed.
 
 /*
 Map for modelling contexts of (nearly-)stationary data.
@@ -2558,7 +2599,7 @@ private:
 public:
   IndirectMap(const Shared * const sh, const int BitsOfContext, const int InputBits, const int Scale, const int Limit): 
     shared(sh), Data((UINT64_C(1)<<BitsOfContext)*((UINT64_C(1)<<InputBits)-1)), 
-    sm {sh,1,256,1023,true}, /* StateMap : s, n, lim, init */
+    sm {sh,1,256,1023,StateMap::BITHISTORY}, /* StateMap : s, n, lim, init */
     mask((1<<BitsOfContext)-1), maskbits(BitsOfContext), stride((1<<InputBits)-1), bTotal(InputBits),
     scale(Scale)
   {
@@ -2586,7 +2627,7 @@ public:
     updater.subscribe(this);
     cp=&Data[Context+B];
     const U8 state = *cp;
-    const int p1 = sm.p(0,state);
+    const int p1 = sm.p1(state);
     m.add((stretch(p1)*scale)>>8);
     m.add(((p1-2048)*scale)>>9);
     bCount++; B+=B+1;
@@ -2679,11 +2720,11 @@ private:
 public:
   // Construct using m bytes of memory for c contexts                                                    
   ContextMap(const Shared * const sh, U64 m, const int c): shared(sh), C(c), t(m>>6), cp(c), cp0(c),
-    cxt(c), chk(c), runp(c), sm(sh,c,256,1023,true), cn(0),
+    cxt(c), chk(c), runp(c), sm(sh,c,256,1023,StateMap::BITHISTORY), cn(0),
     mask(U32(t.size()-1)), hashbits(ilog2(mask+1)), validflags(0) {
     assert(m>=64 && ispowerof2(m));
     assert(sizeof(E)==64);
-    assert(C<(int)sizeof(validflags)*8); // validflags is 64 bits
+    assert(C<=(int)sizeof(validflags)*8); // validflags is 64 bits - it can't support more than 64 contexts
   }
 
   // set next whole byte context to cx
@@ -2704,7 +2745,6 @@ public:
       p[0]=1+((c>>2)&1);
       p[1+((c>>2)&1)]=1+((c>>1)&1);
       p[3+((c>>1)&3)]=1+(c&1);
-      base[6]=0;
     }
     cn++;
     validflags=(validflags<<1)+1;
@@ -2761,6 +2801,7 @@ public:
 
   void mix(Mixer& m) {
     updater.subscribe(this);
+    sm.subscribe();
     INJECT_SHARED_bpos INJECT_SHARED_c0
     for (int i=0; i<cn; ++i) {
       if(((validflags>>(cn-1-i))&1)!=0) {
@@ -2783,13 +2824,14 @@ public:
           m.add(0);
           m.add(0);
         } else {
-          const int p1= sm.p(i,s);
+          const int p1=sm.p2(i,s);
           const int st=stretch(p1)>>2;
-          m.add(st);
-          m.add((p1-2047)>>3);
+          const int context_is_young=int(s<=2);
+          m.add(st>>context_is_young);
+          m.add((p1-2048)>>3);
           const int n0=-!StateTable::next(s,2);
           const int n1=-!StateTable::next(s,3);
-          m.add(st*abs(n1-n0));
+          m.add((n0|n1)&st); // when both counts are nonzero add(0) otherwise add(st)
           const int p0=4095-p1;
           m.add(((p1&n0)-(p0&n1))>>4);
         }
@@ -2803,7 +2845,7 @@ public:
 
 
 /*
-Context map for large contexts (32bits).
+Context map for large contexts.
 Maps to a bit history state, a 3 MRU byte history, and 1 byte RunStats.
 
 Bit and byte histories are stored in a hash table with 64 byte buckets.
@@ -2812,16 +2854,22 @@ current byte. Thus, each byte modeled results in 3 main memory accesses
 per context, with all other accesses to cache.
 
 On a byte boundary (bit 0), only 3 of the 7 bit history states are used.
-Of the remaining 4 bytes, 3 are then used to store the last bytes seen
-in this context, 7 bits to store the length of consecutive occurrences of
-the previously seen byte, and 1 bit to signal if more than 1 byte as been
-seen in this context. The byte history is then combined with the bit history
-states to provide additional states that are then mapped to predictions.
+Of the remaining 4 bytes, 1 byte is used as a run length (the consecutive
+occurrences of the previously seen byte), 3 are used to store the last
+3 distinct bytes seen in this context. The byte history is then combined
+with the bit history states to provide additional states that are then
+mapped to predictions.
 */
+
+#define CM_USE_NONE 0
+#define CM_USE_RUNSTATS 1
+#define CM_USE_BYTEHISTORY 2
 
 class ContextMap2 : IPredictor {
 public:
-  static constexpr int MIXERINPUTS = 7;
+  static constexpr int MIXERINPUTS = 4;
+  static constexpr int MIXERINPUTS_RUNSTATS = 1;
+  static constexpr int MIXERINPUTS_BYTEHISTORY = 2;
 private:
   const Shared * const shared;
   Random rnd;
@@ -2860,152 +2908,214 @@ private:
   Array<U8*> ByteHistory;  // C pointers to run stats plus byte history, 4 bytes, [RunStats,1..3]
   Array<U32> Contexts;     // C whole byte context hashes
   Array<U16> Chk;          // C whole byte context checksums
-  StateMap Maps7b, Maps8b, Maps12b;
+  StateMap runmap, statemap, bhmap8b, bhmap12b;
   U32 index; // Next context to set by set()
   const U32 mask;
   const int hashbits;
+  U64 validflags;
   int scale;
+  U32 usewhat;
 public:
   int order=0; // is set after mix()
   // Construct using Size bytes of memory for Count contexts
-  ContextMap2(const Shared * const sh, const U64 Size, const U32 Count, const int Scale) : shared(sh), 
+  ContextMap2(const Shared * const sh, const U64 Size, const U32 Count, const int Scale, const U32 uw) : shared(sh), 
     C(Count), Table(Size>>6), BitState(Count), BitState0(Count), ByteHistory(Count), 
     Contexts(Count), Chk(Count),
-    Maps7b(sh,Count,(1<<7),1023,false), Maps8b(sh,Count,(1<<8),1023,true), Maps12b(sh,Count,(1<<12),1023,false),
-    index(0), mask(U32(Table.size()-1)), hashbits(ilog2(mask+1)), scale(Scale) {
+    runmap   (sh,Count,(1<<12),127,StateMap::RUN),        /* StateMap : s, n, lim, init */  // 63-255
+    statemap (sh,Count,(1<<8),511,StateMap::BITHISTORY),  /* StateMap : s, n, lim, init */  // 511-1023
+    bhmap8b  (sh,Count,(1<<8),511,StateMap::GENERIC),     /* StateMap : s, n, lim, init */  // 511-1023
+    bhmap12b (sh,Count,(1<<12),511,StateMap::GENERIC),    /* StateMap : s, n, lim, init */  // 255-1023
+    index(0), mask(U32(Table.size()-1)), hashbits(ilog2(mask+1)), validflags(0), scale(Scale), usewhat(uw) {
     assert(Size>=64 && ispowerof2(Size));
     assert(sizeof(Bucket)==64);
+    assert(C<=(int)sizeof(validflags)*8); // validflags is 64 bits - it can't support more than 64 contexts
     for (U32 i=0; i<C; i++) {
       BitState[i] = BitState0[i] = &Table[i].BitState[0][0];
       ByteHistory[i] = BitState[i]+3;
     }
   }
+  //~ContextMap2() {
+  //  runmap.print();
+  //}
   inline void set(const U64 ctx) { // set next whole byte context to ctx
     assert(index>=0 && index<C);
     const U32 ctx0 = Contexts[index] = finalize64(ctx,hashbits);
     const U16 chk0 = Chk[index] = (U16)checksum64(ctx,hashbits,16);
     U8* base = BitState[index] = BitState0[index] = Table[ctx0&mask].Find(chk0);
-    ByteHistory[index] = base+3;
-    index++;
-    // Update pending bit histories for bits 2-7
-    if (base[3]==2) {
+    ByteHistory[index] = &base[3];
+    const U8 runcount = base[3];
+    if (runcount==255) { // pendig
+      // Update pending bit histories for bits 2-7
+      // in case of a collision updating (mixing) is slightly better (but slightly slower) then resetting, so we update
       const int c = base[4]+256;
-      U8 *p = Table[(ctx0+(c>>6))&mask].Find(chk0);
-      p[0] = 1+((c>>5)&1);
-      p[1+((c>>5)&1)] = 1+((c>>4)&1);
-      p[3+((c>>4)&3)] = 1+((c>>3)&1);
-      p = Table[(ctx0+(c>>3))&mask].Find(chk0);
-      p[0] = 1+((c>>2)&1);
-      p[1+((c>>2)&1)] = 1+((c>>1)&1);
-      p[3+((c>>1)&3)] = 1+(c&1);
-      base[6] = 0;
+      U8 *p1a = Table[(ctx0+(c>>6))&mask].Find(chk0);
+      StateTable::update(p1a,((c>>5)&1),rnd);
+      StateTable::update(p1a+1+((c>>5)&1),((c>>4)&1),rnd);
+      StateTable::update(p1a+3+((c>>4)&3),((c>>3)&1),rnd);
+      U8 *p1b = Table[(ctx0+(c>>3))&mask].Find(chk0);
+      StateTable::update(p1b,(c>>2)&1,rnd);
+      StateTable::update(p1b+1+((c>>2)&1),(c>>1)&1,rnd);
+      StateTable::update(p1b+3+((c>>1)&3),c&1,rnd);
+      base[3]=1; // runcount: flag for having completed storing all the 8 bits of the first byte
+    } else {
+      const U8 byte_state = base[0];
+      if(byte_state==0) // empty slot, new context
+        base[3]=255; // runcount: flag for skipping updating bits 2..7
     }
+    index++;
+    validflags=(validflags<<1)+1;
   }
+
+  inline void skip() {
+    assert(index>=0 && index<C);
+    index++;
+    validflags<<=1;
+  }
+
   void update() override {
     INJECT_SHARED_bpos INJECT_SHARED_c0 INJECT_SHARED_c1 INJECT_SHARED_y
     for (U32 i=0; i<index; i++) {
-      if (BitState[i])
-        StateTable::update(BitState[i],y,rnd);
+      if(((validflags>>(index-1-i))&1)!=0) {
+        if (BitState[i])
+          StateTable::update(BitState[i],y,rnd);
 
-      if (bpos>1 && ByteHistory[i][0]==0)
-        BitState[i] = nullptr;
-      else {
-        switch (bpos) {
-          case 0: {
-            // Update byte history of previous context
-              if (ByteHistory[i][0]==0)  // new context
-                ByteHistory[i][0]=2;
-              else if (ByteHistory[i][1]!=c1)  // different byte in context
-                ByteHistory[i][0]=1;
-              else if (ByteHistory[i][0]<254)  // same byte in context
-                ByteHistory[i][0]+=2;
-              else if (ByteHistory[i][0]==255) // more than one byte seen, but long run of current byte, reset to single byte seen
-                ByteHistory[i][0] = 128;
-              // scroll byte candidates
-              if (ByteHistory[i][1]!=c1 || ByteHistory[i][-3]<7 /*less than 3 bytes seen*/) {
-                ByteHistory[i][3] = ByteHistory[i][2];
-                ByteHistory[i][2] = ByteHistory[i][1];
-                ByteHistory[i][1] = c1;
+        U8* const bytehistory_ptr=ByteHistory[i];
+        const U8 runcount = bytehistory_ptr[0];
+
+        if (runcount==255 && bpos>=2)
+          BitState[i] = nullptr; // shadow non-reserverd slots for bits 2..7 and skip update temporarily
+        else {
+          switch (bpos) {
+            case 0: {
+              // Update byte history
+              const U8 byte_state = bytehistory_ptr[-3];
+              if (byte_state<3) { // 1st byte has just become known
+                bytehistory_ptr[1]=bytehistory_ptr[2]=bytehistory_ptr[3]=c1; // set all byte candidates to c1
+              }
+              else { // 2nd byte is known
+                const bool is_match=bytehistory_ptr[1]==c1;
+                if (is_match) {
+                  if (runcount<253)
+                    bytehistory_ptr[0]=runcount+1;
+                } else {
+                  bytehistory_ptr[0]=1; //runcount
+                  // scroll byte candidates
+                  bytehistory_ptr[3]=bytehistory_ptr[2]; 
+                  bytehistory_ptr[2]=bytehistory_ptr[1];
+                  bytehistory_ptr[1]=c1;
+                }
               }
               break;
+            }
+            case 2: case 5: {
+              const U16 chk = Chk[i];
+              const U32 ctx = Contexts[i];
+              BitState[i] = BitState0[i] = Table[(ctx+c0)&mask].Find(chk);
+              break;
+            }
+            case 1: case 3: case 6: BitState[i] = BitState0[i]+1+y; break;
+            case 4: case 7: BitState[i] = BitState0[i]+3+(c0&3); break;
           }
-          case 2: case 5: {
-            const U16 chk = Chk[i];
-            const U32 ctx = Contexts[i];
-            BitState[i] = BitState0[i] = Table[(ctx+c0)&mask].Find(chk);
-            break;
-          }
-          case 1: case 3: case 6: BitState[i] = BitState0[i]+1+y; break;
-          case 4: case 7: BitState[i] = BitState0[i]+3+(c0&3); break;
         }
       }
     }
-    if (bpos==0) index = 0;
+    if (bpos==0) {index = 0; validflags = 0;} // start over
   }
 
   void setscale(const int Scale){scale=Scale;}
   void mix(Mixer& m) {
     updater.subscribe(this);
+    statemap.subscribe();
+    if(usewhat&CM_USE_RUNSTATS){runmap.subscribe();}
+    if(usewhat&CM_USE_BYTEHISTORY){bhmap8b.subscribe();bhmap12b.subscribe();}
     INJECT_SHARED_bpos INJECT_SHARED_c0
     order = 0;
     for (U32 i=0; i<index; i++) {
-      // predict from last byte in context
-      const int RunStats = ByteHistory[i][0]; // count*2, +1 if 2 different bytes seen
-      if(RunStats!=0) {
-        if (((ByteHistory[i][1]+256)>>(8-bpos))==c0) { // 1st candidate matches
-          int sign=(ByteHistory[i][1]>>(7-bpos)&1)*2-1;  // predicted bit + for 1, - for 0
-          int value = ilog(RunStats+1)<<(3-(RunStats&1));
-          m.add(sign*value);
-        }
-        else if ((RunStats&1)!=0) {
-          if (((ByteHistory[i][2]+256)>>(8-bpos))==c0) // 2st candidate matches
-            m.add((((ByteHistory[i][2]>>(7-bpos))&1)*2-1)*128);
-          else if ((ByteHistory[i][-3])>=15 && ((ByteHistory[i][3]+256)>>(8-bpos))==c0) // 3rd candidate matches
-            m.add((((ByteHistory[i][3]>>(7-bpos))&1)*2-1)*128);
-          else
+      if(((validflags>>(index-1-i))&1)!=0) {
+        const int state = BitState[i]!=nullptr ? *BitState[i] : 0;
+        const int n0=StateTable::next(state,2);
+        const int n1=StateTable::next(state,3);
+        const int bit_is_uncertain=int(n0!=0 && n1!=0);
+
+        // predict from last byte(s) in context
+        U8* const bytehistory_ptr = ByteHistory[i];
+        U8 byte_state = bytehistory_ptr[-3];
+        const U8 byte1 = bytehistory_ptr[1];
+        const U8 byte2 = bytehistory_ptr[2];
+        const U8 byte3 = bytehistory_ptr[3];
+        const bool complete1 = (byte_state>=3 ) || (byte_state>=1 && bpos==0);
+        const bool complete2 = (byte_state>=7 ) || (byte_state>=3 && bpos==0);
+        const bool complete3 = (byte_state>=15) || (byte_state>=7 && bpos==0);
+        if(usewhat&CM_USE_RUNSTATS) {
+          const int bp=(0xFEA4>>(bpos<<1))&3; // {0}->0  {1}->1  {2,3,4}->2  {5,6,7}->3
+          bool skiprunmap=true;
+          if(complete1) {
+            if (((byte1+256)>>(8-bpos))==c0) { // 1st candidate (last byte seen) matches
+              const int predicted_bit=(byte1>>(7-bpos))&1;
+              const int byte1_is_uncertain=(byte2!=byte1);
+              const int runcount = bytehistory_ptr[0]; // 1..254
+              m.add(stretch(runmap.p2(i,runcount<<4|bp<<2|byte1_is_uncertain<<1|predicted_bit))>>(1+byte1_is_uncertain));
+              skiprunmap=false;
+            }
+            else if (complete2 && ((byte2+256)>>(8-bpos))==c0) { // 2nd candidate matches
+              const int predicted_bit=(byte2>>(7-bpos))&1;
+              const int byte2_is_uncertain=(byte3!=byte2);
+              m.add(stretch(runmap.p2(i,                    bit_is_uncertain<<1|predicted_bit))>>(2+byte2_is_uncertain));
+              skiprunmap=false;
+            }
+            // remark: considering the 3rd byte is not beneficial in most cases, except for some 8bpp images
+          }
+          if(skiprunmap) {
+            runmap.skip(i);
             m.add(0);
+          }
         }
-        else 
+        // predict from bit context
+        if (state==0) {
+          statemap.skip(i);
           m.add(0);
+          m.add(0);
+          m.add(0);
+          m.add(0);
+        } else {
+          const int p1=statemap.p2(i,state);
+          const int st=(stretch(p1)*scale)>>8;
+          const int context_is_young=int(state<=2);
+          m.add(st>>context_is_young);
+          m.add(((p1-2048)*scale)>>9);
+          m.add((bit_is_uncertain-1)&st); // when both counts are nonzero add(0) otherwise add(st)
+          const int p0=4095-p1;
+          m.add((((p1&(-!n0))-(p0&(-!n1)))*scale)>>10);
+          order++;
+        }
+        
+        if(usewhat&CM_USE_BYTEHISTORY) {
+          const int bh_bits =
+              (((byte1>>(7-bpos))&1)   )
+            | (((byte2>>(7-bpos))&1)<<1)
+            | (((byte3>>(7-bpos))&1)<<2);
+
+          int bh_state=0; // 4 bit
+          if     (complete3) bh_state=8|(bh_bits  ); //we have seen 3 bytes (at least) 
+          else if(complete2) bh_state=4|(bh_bits&3); //we have seen 2 bytes
+          else if(complete1) bh_state=2|(bh_bits&1); //we have seen 1 byte only
+                                                     //else new context (bh_state=0)
+ 
+          const U8 state_group=StateTable::group(state); //0..31
+          m.add(stretch(  bhmap8b.p2(i,bit_is_uncertain<<7|(bh_state<<3)|bpos) )>>2); // using bit_is_uncertain is generally beneficial except for some 8bpp image (noticable loss)
+          m.add(stretch( bhmap12b.p2(i,     state_group<<7|(bh_state<<3)|bpos) )>>2);
+        }
+      } else { //skipped context
+        if(usewhat&CM_USE_RUNSTATS) {
+          runmap.skip(i); m.add(0);
+        }
+        if(usewhat&CM_USE_BYTEHISTORY) {
+           bhmap8b.skip(i); m.add(0);
+          bhmap12b.skip(i); m.add(0);
+        }
+        statemap.skip(i); m.add(0);
+        m.add(0);m.add(0);m.add(0);
       }
-      else
-        m.add(0);
-
-      // predict from bit context
-      const int state = BitState[i]!=nullptr ? *BitState[i] : 0;
-      if (state==0) {
-        Maps8b.skip(i);
-        m.add(0);
-        m.add(0);
-        m.add(0);
-        m.add(0);
-      } else {
-        const int p1 = Maps8b.p(i,state);
-        const int st=(stretch(p1)*scale)>>8;
-        const int n0=-!StateTable::next(state, 2);
-        const int n1=-!StateTable::next(state, 3);
-        m.add(st);
-        m.add(((p1-2047)*scale)>>9);
-        m.add(st*abs(n1-n0));
-        const int p0=4095-p1;
-        m.add((((p1&n0)-(p0&n1))*scale)>>10);
-        order++;
-      }
-
-      const U8 bh_bits =
-          (((ByteHistory[i][1]>>(7-bpos))&1)   )
-        | (((ByteHistory[i][2]>>(7-bpos))&1)<<1)
-        | (((ByteHistory[i][3]>>(7-bpos))&1)<<2);
-
-      U8 bh_state=ByteHistory[i][-3];
-      if     (bh_state>=7) bh_state=8|bh_bits; //we have seen 3 bytes (at least) 
-      else if(bh_state>=3) bh_state=4|bh_bits; //we have seen 2 bytes
-      else if(bh_state>=1) bh_state=2|bh_bits; //we have seen 1 byte only
-                                               //else new context (bh_state=0)
-      
-      const U8 g=StateTable::group(state); //0..31
-      m.add(stretch( Maps12b.p(i,(bh_state<<8)|(bpos<<5)|g) )>>2);
-      m.add(stretch( Maps7b.p(i,(bh_state<<3)|bpos) )>>2);
     }
   }
 };
@@ -4946,7 +5056,7 @@ class TextModel {
 private:
   static constexpr int nCM2 = 28;
 public:
-  static constexpr int MIXERINPUTS = nCM2*ContextMap2::MIXERINPUTS; // 196
+  static constexpr int MIXERINPUTS = nCM2*(ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUNSTATS + ContextMap2::MIXERINPUTS_BYTEHISTORY) ; // 196
   static constexpr int MIXERCONTEXTS = 2048+2048+4096+4096+2048+2048+4096+8192+2048; //30720
   static constexpr int MIXERCONTEXTSETS = 9;
 private:
@@ -5024,7 +5134,7 @@ public:
   TextModel(const Shared * const sh, ModelStats *st, const U64 Size) : 
     shared(sh), 
     stats(st),
-    cm(sh,Size,nCM2,64),
+    cm(sh,Size,nCM2,64,CM_USE_RUNSTATS|CM_USE_BYTEHISTORY),
     Stemmers(Language::Count-1),
     Languages(Language::Count-1),
     Dictionaries(Language::Count-1),
@@ -5490,7 +5600,7 @@ private:
   static constexpr int nSSM = 2;
   static constexpr int nSM = 2;
 public:
-  static constexpr int MIXERINPUTS = 2 + nCM*ContextMap::MIXERINPUTS + nST + nSSM*SmallStationaryContextMap::MIXERINPUTS + nSM*StationaryMap::MIXERINPUTS; // 23
+  static constexpr int MIXERINPUTS = 2 + nCM*(ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUNSTATS) + nST + nSSM*SmallStationaryContextMap::MIXERINPUTS + nSM*StationaryMap::MIXERINPUTS; // 23
   static constexpr int MIXERCONTEXTS = 8;
   static constexpr int MIXERCONTEXTSETS = 1;
 private:
@@ -5503,8 +5613,8 @@ private:
   };
   Array<U32> Table;
   StateMap StateMaps[nST];
-  ContextMap cm;
-  SmallStationaryContextMap SCM, SCM_pos;
+  ContextMap2 cm;
+  SmallStationaryContextMap SCM;
   StationaryMap Maps[nSM];
   IndirectContext<U8> iCtx;
   U32 hashes[NumHashes]{ 0 };
@@ -5521,11 +5631,10 @@ public:
   MatchModel(const Shared * const sh, ModelStats *st, const U64 Size) : 
     shared(sh), stats(st), Table(Size/sizeof(U32)), 
     StateMaps{ //StateMap:  s, n, lim, 
-      {sh,1,56*256,1023,false}, {sh,1,8*256*256+1,1023,false}, {sh,1,256*256,1023,false}
+      {sh,1,56*256,1023,StateMap::GENERIC}, {sh,1,8*256*256+1,1023,StateMap::GENERIC}, {sh,1,256*256,1023,StateMap::GENERIC}
     },
-    cm(sh,MEM/4,nCM),
+    cm(sh,MEM/32,nCM,74,CM_USE_RUNSTATS),
     SCM{sh,6,1,6,64}, /* SmallStationaryContextMap: BitsOfContext, InputBits, Rate, Scale */
-    SCM_pos {sh,8,8,5,64},
     Maps{ /* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
       {sh,23,1,64,1023}, {sh,15,1,64,1023}
     },
@@ -5553,6 +5662,7 @@ public:
         }
     }
 
+    //bytewise contexts
     if(bpos==0) {
       // update hashes
       for (U32 i=0, minLen=MinLen+(NumHashes-1)*StepSize; i<NumHashes; i++, minLen-=StepSize) {
@@ -5619,7 +5729,7 @@ public:
     for (U32 i=0; i<nST; i++) // reset contexts
       ctx[i] = 0;
 
-    INJECT_SHARED_bpos INJECT_SHARED_buf INJECT_SHARED_c1 INJECT_SHARED_c0 
+    INJECT_SHARED_bpos INJECT_SHARED_c1 INJECT_SHARED_c0 
     const int expectedBit = length!=0 ? (expectedByte>>(7-bpos))&1 : 0;
     if (length!=0) {
       if (length<=16)
@@ -5642,9 +5752,8 @@ public:
 
     for (U32 i=0; i<nST; i++) {
       const U32 c = ctx[i];
-      const U32 p = StateMaps[i].p(0,c);
       if (c!=0)
-        m.add(stretch(p)>>1);
+        m.add(stretch(StateMaps[i].p1(c))>>1);
       else
         m.add(0);
     }
@@ -5661,18 +5770,24 @@ public:
     const U8 length3_rm = length3<<1|rm; // 3 bits
 
     //bytewise contexts
+    INJECT_SHARED_c4
     if(bpos==0) {
-      cm.set(hash(0,expectedByte,length3_rm));
-      cm.set(hash(1,expectedByte,length3_rm,c1));
-      INJECT_SHARED_pos
-      SCM_pos.set(pos&255); //~sparsemodel (pos mod 256)
+      if(length!=0) {
+        cm.set(hash(0,expectedByte,length3_rm));
+        cm.set(hash(1,expectedByte,length3_rm,c1));
+      } else {
+        // when there is no match it is still slightly beneficial not to skip(), but set some low-order contexts
+        cm.set(hash(2,c4&0xff));   // order 1
+        cm.set(hash(3,c4&0xffff)); // order 2
+        //cm.skip();
+        //cm.skip();
+      }
     }
     cm.mix(m);
-    SCM_pos.mix(m);
 
     //bitwise contexts
     {
-      Maps[0].set(hash(expectedByte, c0, c1, buf(2), length3_rm));
+      Maps[0].set(hash(expectedByte, c0, c4&0xffff, length3_rm));
       INJECT_SHARED_y
       iCtx+=y; 
       const U8 C = length3_rm<<1 | expectedBit; // 4 bits
@@ -5856,15 +5971,15 @@ class CharGroupModel {
 private:
   static constexpr int nCM=7;
 public:
-  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS; // 35
+  static constexpr int MIXERINPUTS = nCM*(ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUNSTATS + ContextMap2::MIXERINPUTS_BYTEHISTORY); // 35
   static constexpr int MIXERCONTEXTS = 0;
   static constexpr int MIXERCONTEXTSETS = 0;
 private:
   const Shared * const shared;
-  ContextMap cm;
+  ContextMap2 cm;
   U32 g_ascii3=0, g_ascii2=0, g_ascii1=0; // group identifiers of the last 12 (4+4+4) characters; the most recent is 'g_ascii1'
 public:
-  CharGroupModel (const Shared * const sh, const U64 size): shared(sh), cm(sh,size,nCM){}
+  CharGroupModel (const Shared * const sh, const U64 size): shared(sh), cm(sh,size,nCM,64,CM_USE_RUNSTATS|CM_USE_BYTEHISTORY) {}
   void mix(Mixer& m) {
     INJECT_SHARED_bpos 
     if(bpos==0) {
@@ -5911,16 +6026,16 @@ public:
 class WordModel {
 private:
   static constexpr int nCM1=17; // pdf / non_pdf contexts
-  static constexpr int nCM2=35; // common contexts
-  static constexpr int nCM = nCM1+nCM2; // 52
+  static constexpr int nCM2=41; // common contexts
+  static constexpr int nCM = nCM1+nCM2; // 58
 public:
-  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS; // 260
+  static constexpr int MIXERINPUTS = nCM*(ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUNSTATS + ContextMap2::MIXERINPUTS_BYTEHISTORY); // 406
   static constexpr int MIXERCONTEXTS = 0;
   static constexpr int MIXERCONTEXTSETS = 0;
 private:
   const Shared * const shared;
   ModelStats const *stats;
-  ContextMap cm;
+  ContextMap2 cm;
   static constexpr int wposbits=16;
   static constexpr int maxwordlen=45;
   static constexpr int maxlinematch=16;
@@ -5929,14 +6044,14 @@ private:
   class Info {
     const Shared * const shared;
     ModelStats const *stats;
-    ContextMap &cm;
-    Array<U32> wpos{1<<wposbits};  // last positions of whole words
-    Array<U16> wchk{1<<wposbits};  // checksums for whole words
+    ContextMap2 &cm;
+    Array<U32> wpos{1<<wposbits};  // last positions of whole words/numbers
+    Array<U16> wchk{1<<wposbits};  // checksums for whole words/numbers
     U32 c4;                      // last 4 processed characters
     U8 c, pC, ppC;           // last char, previous char, char before the previous char (converted to lowearcase)
     bool is_letter, is_letter_pC, is_letter_ppC;
     U8 opened;     // "(", "[", "{", "<", opening QUOTE, opening APOSTROPHE (or 0 when none of them)
-    U8 wordlen0, wordlen1;     // length of word0 and word1
+    U8 wordlen0, wordlen1, exprlen0;     // length of word0 and word1
     U64 line0, frstword;       // hash of line content, hash of first word on line
     U64 word0, word1, word2, word3, word4;  // wordtoken hashes, word0 is the partally processed ("current") word
     U64 expr0, expr1, expr2, expr3, expr4;  // wordtoken hashes for expressions
@@ -5948,9 +6063,11 @@ private:
     U64 groups; // 8 last character categories
     U64 text0;  // uninterrupted stream of letters
     U32 lastLetter, lastUpper, wordGap;
-    U32 mask, word0chars, mask2, f4;
+    U32 mask, expr0chars, mask2, f4;
   public:
-    Info(const Shared * const sh, ModelStats const *st, ContextMap &contextmap): shared(sh), stats(st), cm(contextmap) {
+    Info(const Shared * const sh, ModelStats const *st, ContextMap2 &contextmap): shared(sh), stats(st), 
+      cm(contextmap)
+    {
       reset();
     }
     void reset() {
@@ -5959,7 +6076,7 @@ private:
       memset(&wchk[0], 0, (1<<wposbits)*sizeof(U16));
       c4=0;c=pC=ppC=0;
       is_letter=is_letter_pC=is_letter_ppC=false;
-      opened=wordlen0=wordlen1=0;
+      opened=wordlen0=wordlen1=exprlen0=0;
       line0=frstword=0;
       word0=word1=word2=word3=word4=0;
       expr0=expr1=expr2=expr3=expr4=0;
@@ -5968,7 +6085,7 @@ private:
       frstchar=linematch=nl1=nl2=0;
       groups=text0=0;
       lastLetter=lastUpper=wordGap=0;
-      mask=word0chars=mask2=f4=0;
+      mask=expr0chars=mask2=f4=0;
       //---
       lastUpper=maxlastUpper;
       lastLetter=wordGap=maxlastLetter;
@@ -5983,9 +6100,10 @@ private:
     }
     void killwords() {
       word4=word3=word2=word1=0;
+      gaptoken1=0; //not really necessary - tiny gain
     }
     void process_char(const bool is_extended_char) {
-      //note: the pdf model uses this function, therefore only c1 may be referenced, c4, c8, etc. should not
+      //note: the pdf model too uses this function, therefore only c1 may be referenced, c4, c8, etc. should not
 
       //shift history
       ppC=pC; pC=c;
@@ -5998,13 +6116,16 @@ private:
 
                  is_letter = (c>='a' && c<='z') || is_extended_char;
       const bool is_number = (c>='0' && c<='9') || (pC>='0' && pC<='9' && c=='.' /* decimal point (english) or thousand separator (misc) */);
+      const bool is_newline = c==NEW_LINE || c==0;
+      const bool is_newline_pC = pC==NEW_LINE || pC==0;
 
       lastUpper=min(lastUpper+1,maxlastUpper);
       lastLetter=min(lastLetter+1,maxlastLetter);
-      mask2<<=3;
+
+      mask2<<=8;
 
       if (is_letter || is_number) {
-        if (wordlen0==0){ // the beginning of a new word
+        if (wordlen0==0) { // the beginning of a new word
           if (pC==NEW_LINE && lastLetter==3 && ppC=='+') { 
             // correct hyphenation with "+" (book1 from Calgary)
             // (undo some of the recent context changes)
@@ -6012,30 +6133,41 @@ private:
             word3=word4=0;
             wordlen0=wordlen1; 
           } else {
-            wordGap = lastLetter;
+            wordGap=lastLetter;
+            gaptoken1=gaptoken0;
+            if (pC==QUOTE || (pC==APOSTROPHE && !is_letter_ppC)) opened=pC;
           }
-          gaptoken1=gaptoken0;
           gaptoken0=0;
-          if (pC==QUOTE || (pC==APOSTROPHE && !is_letter_ppC)) opened=pC;
+          mask2=0;
         }
         lastLetter=0;
         word0=combine64(word0, c);
         w=U16(finalize64(word0,wposbits));
         chk=U16(checksum64(word0,wposbits,16));
-        word0chars = is_number ? 0 : word0chars<<8|c; // last 4 consecutive letters
         text0=(text0<<8|c)&0xffffffffff; // last 5 alphanumeric chars (other chars are ignored)
         wordlen0=min(wordlen0+1,maxwordlen);
-        if ((c=='a' || c=='e' || c=='i' || c=='o' || c=='u') || (c=='y' && (wordlen0>0 && pC!='a' && pC!='e' && pC!='i' && pC!='o' && pC!='u')))
-          mask2++;
-        else if (c>='b' && c<='z')
-          mask2+=c=='q'?2:3;
+        //last letter types
+        if(is_letter) {
+          if(c=='e')mask2|=c; // vowel/e // separating 'a' is also ok
+          else if (c=='a' || c=='i' || c=='o' || c=='u')mask2|='a'; // vowel
+          else if (c>='b' && c<='z') {
+            if(c=='y')mask2|='y'; // y
+            else if(pC=='t' && c=='h') {mask2=((mask2>>8)&0x00ffff00)|'t';} // consonant/th
+            else mask2|='b'; // consonant
+          }
+          else mask2|=128; // extended_char: c>=128
+        }
+        else { // is_number
+          if(c=='.') mask2|='.'; // decimal point or thousand separator
+          else mask2|= c=='0'?'0':'1'; // number
+        }
       }
       else { //it's not a letter/number 
-        gaptoken0=combine64(gaptoken0,c1==NEW_LINE?' ':c1);
-        if(c1==NEW_LINE && pC=='+' && is_letter_ppC) {} //calgary/book1 hyphenation - don't shift again
-        else if(c=='?' || pC=='!' || pC=='.') killwords(); //end of sentence
+        gaptoken0=combine64(gaptoken0,is_newline?' ':c1);
+        if(is_newline && pC=='+' && is_letter_ppC) {} //calgary/book1 hyphenation - don't shift again
+        else if(c=='?' || pC=='!' || pC=='.') killwords(); //end of sentence (probably)
         else if(c==pC) {} //don't shift when anything repeats
-        else if((c==SPACE || c==NEW_LINE) && (pC==SPACE || pC==NEW_LINE)) {} //ignore repeating whitespace
+        else if((c==SPACE || is_newline) && (pC==SPACE || is_newline_pC)) {} //ignore repeating whitespace
         else shiftwords();
         if (wordlen0!=0) { //beginning of a new non-word token
           INJECT_SHARED_pos
@@ -6044,60 +6176,73 @@ private:
           w=0;
           chk=0;
 
-          if (c1==':'||c1=='=') keyword0 = word0; // enwik, world95.txt, html/xml
+          if (c==':'||c=='=') keyword0 = word0; // enwik, world95.txt, html/xml
           if(frstword==0)frstword=word0;
 
           word0=0;
           wordlen0=0;
-          word0chars=0;
+          mask2=0;
         }
 
-             if (c1=='.' || c1=='!' || c1=='?') mask2+=4;
-        else if (c1==',' || c1==';' || c1==':') mask2+=5;
-        else if (c1=='(' || c1=='{' || c1=='[' || c1=='<') {mask2+=6;opened=c1;}
-        else if (c1==')' || c1=='}' || c1==']' || c1=='>' || c1==QUOTE || c1==APOSTROPHE) {mask2+=7;opened=0;}
+        if (c1=='.' || c1=='!' || c1=='?') mask2|='!';
+        else if (c1==',' || c1==';' || c1==':') mask2|=',';
+        else if (c1=='(' || c1=='{' || c1=='[' || c1=='<') {mask2|='(';opened=c1;}
+        else if (c1==')' || c1=='}' || c1==']' || c1=='>') {mask2|=')';opened=0;}
+        else if (c1==QUOTE || c1==APOSTROPHE) {mask2|=c1;opened=0;}
+        else if (c1=='-') mask2|=c1;
+        else mask2|=c1; //0, SPACE, NEW_LINE, /\+=%$ etc.
       }
       
       //const U8 chargrp = stats->Text.chargrp;
       U8 g=c1;
       if(g>=128){
         //utf8 code points (weak context)
-        if((g&0xf8)==0xf0)g=0xf0;
-        else if((g&0xf0)==0xe0)g=0xe0;
-        else if((g&0xe0)==0xc0)g=0xc0;
-        else if((g&0xc0)==0x80)g=0x80;
-        else if (g!=0xff)g=0xfe;
+             if((g&0xf8)==0xf0)g=1;
+        else if((g&0xf0)==0xe0)g=2;
+        else if((g&0xe0)==0xc0)g=3;
+        else if((g&0xc0)==0x80)g=4;
+        //the rest of the values
+        else if (g==0xff)g=5;
+        else g=c1&0xf0;
       }
       else if(g>='0' && g<='9')g='0';
       else if(g>='a' && g<='z')g='a';
       else if(g>='A' && g<='Z')g='A';
-      else if(g<32 && g!=0 && g!=NEW_LINE)g=1;
+      else if(g<32 && !is_newline)g=6;
       groups=groups<<8|g;
 
-      // Expressions (words separated by single spaces)
+      // Expressions (pure words separated by single spaces)
       //
       // Remarks: (1) formatted text files may contain SPACE+NEW_LINE (dickens) or NEW_LINE+SPACE (world95.txt)
       // or just a NEW_LINE instead of a SPACE. (2) quotes and apostrophes are ignored during processing
-      if(is_letter/* || is_number*/) {
+      if(is_letter) {
+        expr0chars = expr0chars<<8|c; // last 4 consecutive letters
         expr0=combine64(expr0,c);
-      } else if((c==SPACE || c==NEW_LINE) && (is_letter_pC || pC==APOSTROPHE || pC==QUOTE)) {
-        expr4=expr3;
-        expr3=expr2;
-        expr2=expr1;
-        expr1=expr0;
-        expr0=0;
-      } else if(c==APOSTROPHE || c==QUOTE || (c==NEW_LINE && pC==SPACE) || (c==SPACE && pC==NEW_LINE)) {
-        //ignore
-      } else {
-        expr4=expr3=expr2=expr1=expr0=0;
+        exprlen0=min(exprlen0+1,maxwordlen);
+      }
+      else {
+        expr0chars=0;
+        exprlen0=0;
+        if((c==SPACE || is_newline) && (is_letter_pC || pC==APOSTROPHE || pC==QUOTE)) {
+          expr4=expr3;
+          expr3=expr2;
+          expr2=expr1;
+          expr1=expr0;
+          expr0=0;
+        } else if(c==APOSTROPHE || c==QUOTE || (is_newline && pC==SPACE) || (c==SPACE && is_newline_pC)) {
+          //ignore
+        } else {
+          expr4=expr3=expr2=expr1=expr0=0;
+        }
       }
     }
-    void line_model_predict(U8 in_pdf_text_block) {
-      U64 i = 2048;
+    void line_model_predict() {
+      U64 i = 1024;
 
       INJECT_SHARED_c1 
       INJECT_SHARED_pos
-      if (c1==NEW_LINE || c1==0) {  // a new line has just started (or: zero in asciiz or in binary data)
+      const bool is_newline = c==NEW_LINE || c==0;
+      if (is_newline) {  // a new line has just started (or: zero in asciiz or in binary data)
         nl2=nl1; nl1=pos; 
         frstchar=-1; frstword=0; line0=0;
       }
@@ -6112,7 +6257,7 @@ private:
 
       const bool is_new_line_start = col==0 && nl2>0;
       const bool is_prev_char_match_above = c1==pC_above && col!=0 && nl2!=0;
-      const U32 above_ctx = c_above<<1|is_prev_char_match_above;
+      const U32 above_ctx = c_above<<1|U32(is_prev_char_match_above);
       if(is_new_line_start) linematch=0; //first char not yet known = nothing to match
       else if(linematch>=0 && is_prev_char_match_above) linematch=min(linematch+1,maxlinematch); //match continues
       else linematch=-1; //match does not continue
@@ -6135,75 +6280,118 @@ private:
       cm.set(hash(++i,col, frstchar, ((int)lastUpper<col)<<8 | (groups&0xff))); // book1 book2 news
 
       // content of lines, paragraphs
-      cm.set(hash(++i,nl1,in_pdf_text_block));    //chars occurring in this paragraph (order 0)
-      cm.set(hash(++i,nl1,in_pdf_text_block,c));  //chars occurring in this paragraph (order 1)
+      cm.set(hash(++i,nl1));    //chars occurring in this paragraph (order 0)
+      cm.set(hash(++i,nl1,c));  //chars occurring in this paragraph (order 1)
       cm.set(hash(++i,frstchar));   //chars occurring in a paragraph that began with frstchar (order 0)
       cm.set(hash(++i,frstchar,c)); //chars occurring in a paragraph that began with frstchar (order 1)
       cm.set(hash(++i,frstword));   //chars occurring in a paragraph that began with frstword (order 0)
       cm.set(hash(++i,frstword,c)); //chars occurring in a paragraph that began with frstword (order 1)
-      assert(i==2048+nCM1);
+      assert(i==1024+nCM1);
     }
-    void line_model_skip(ContextMap &cm) {
+    void line_model_skip(ContextMap2 &cm) {
       for(int i=0;i<nCM1;i++)
         cm.skip();
     }
-    void predict(U8 in_pdf_text_block) {
-      U64 i = 1024;
-      cm.set(hash(++i,text0));
+    void predict(const U8 pdf_text_parser_state) {
+      INJECT_SHARED_pos
+      const U32 lastpos = wchk[w]!=chk ? 0 : wpos[w]; //last occurrence (position) of a whole word or number
+      const U32 dist = lastpos==0 ? 0 : min(llog(pos-lastpos+120)>>4,20);
+      const bool word0_may_end_now = lastpos!=0;
+      const U8 may_be_caps = U8(c4>>8)>='A' && U8(c4>>8)<='Z' && U8(c4)>='A' && U8(c4)<='Z';
+      const bool is_textblock = stats->blockType==TEXT || stats->blockType==TEXT_EOL;
+
+      U64 i = 2048*is_textblock;
+
+      cm.set(hash(++i,text0)); //strong
 
       // expressions in normal text
-      cm.set(hash(++i,expr0,expr1,expr2,expr3,expr4));
-      cm.set(hash(++i,expr0,expr1,expr2));
+      if(is_textblock) {
+        cm.set(hash(++i,expr0,expr1,expr2,expr3,expr4));
+        cm.set(hash(++i,expr0,expr1,expr2));
+      } else {
+        cm.skip();i++;
+        cm.skip();i++;
+      }
 
       // sections introduced by keywords (enwik world95.txt html/xml)
       cm.set(hash(++i,gaptoken0,keyword0)); // chars occurring in a section introduced by "keyword:" or "keyword=" (order 0 and variable order for the gap)
       cm.set(hash(++i,word0, c, keyword0)); // tokens occurring in a section introduced by "keyword:" or "keyword=" (order 1 and variable order for a word)
 
-      // Simple word morphology (order 1-3)
-      //
-      if(is_letter)
-        if(is_letter_pC)
-          if(is_letter_ppC) cm.set(hash(++i,c,pC,ppC)); //order 3 word token
-          else cm.set(hash(++i,c,pC)); //order 2 word token
-        else cm.set(hash(++i,c)); //order 1 word token
-      else {cm.skip(); i++;} //not applicable
-
-      cm.set(hash(++i,word0));
-      cm.set(hash(++i,gaptoken0));
-
-      cm.set(hash(++i,word0, c, gaptoken1)); // 
-      cm.set(hash(++i,gaptoken0, c, word1)); // stronger //french texts need that "c"
-      cm.set(hash(++i,word0, word1));        // stronger
-      cm.set(hash(++i,word0, word1, word2)); // weaker
-      cm.set(hash(++i,gaptoken0,gaptoken1,word1,word2)); //stronger
-      cm.set(hash(++i,word0    ,gaptoken1,word1,word2)); //weaker
-
-      const U8 c1=c4&0xff;
-      cm.set(hash(++i,word0, c1, word2));
-      cm.set(hash(++i,word0, c1, word3));
-      cm.set(hash(++i,word0, c1, word4));
-      cm.set(hash(++i,word0, c1, word1, word3));
-      cm.set(hash(++i,word0, c1, word2, word3));
-
-      INJECT_SHARED_pos
-      const U32 lastpos = wchk[w]!=chk ? 0 : wpos[w];
-      const U32 dist = lastpos==0 ? 0 : min(llog(pos-lastpos+120)>>4,20);
-
       cm.set(hash(++i,word0, dist));
       cm.set(hash(++i,word1, gaptoken0, dist));
 
-      cm.set(hash(++i,pos>>10, word0)); //word tokens occurring in this 1K block (variable order)
+      cm.set(hash(++i,pos>>10, word0)); //word/number tokens and characters occurring in this 1K block
 
-      cm.set(hash(++i,opened,groups&0xff,in_pdf_text_block));
-      cm.set(hash(++i,opened,c,dist!=0,in_pdf_text_block));
+      // Simple word morphology (order 1-4)
+
+      const int wme_mbc=word0_may_end_now<<1|may_be_caps;
+      const int wl=min(wordlen0,6);
+      const int wl_wme_mbc=wl<<2|wme_mbc;
+      cm.set(hash(++i, wl_wme_mbc, mask2 /*last 1-4 char types*/));
+
+      if(exprlen0>=1) {
+        const int wl_wme_mbc=min(exprlen0,1+3)<<2|wme_mbc;
+        cm.set(hash(++i, wl_wme_mbc, c));
+      }
+      else {cm.skip();i++;}
+
+      if(exprlen0>=2) {
+        const int wl_wme_mbc=min(exprlen0,2+3)<<2|wme_mbc;
+        cm.set(hash(++i, wl_wme_mbc, expr0chars&0xffff));
+      }
+      else {cm.skip();i++;}
+
+      if(exprlen0>=3) {
+        const int wl_wme_mbc=min(exprlen0,3+3)<<2|wme_mbc;
+        cm.set(hash(++i, wl_wme_mbc, expr0chars&0xffffff));
+      }
+      else {cm.skip();i++;}
+
+      if(exprlen0>=4) {
+        const int wl_wme_mbc=min(exprlen0,4+3)<<2|wme_mbc;
+        cm.set(hash(++i, wl_wme_mbc, expr0chars));
+      }
+      else {cm.skip();i++;}
+
+      cm.set(hash(++i,word0, pdf_text_parser_state));
+
+      cm.set(hash(++i,   word0, gaptoken0));                           // stronger
+      cm.set(hash(++i,c, word0,                    gaptoken1));        // stronger
+      cm.set(hash(++i,c,        gaptoken0,  word1));                   // stronger //french texts need that "c"
+      cm.set(hash(++i,   word0,             word1));                   // stronger
+      cm.set(hash(++i,   word0,             word1,            word2)); // weaker
+      cm.set(hash(++i,          gaptoken0,  word1, gaptoken1, word2)); // stronger
+      cm.set(hash(++i,   word0,             word1, gaptoken1, word2)); // weaker
+      cm.set(hash(++i,   word0,             word1, gaptoken1));        // weaker
+
+      const U8 c1=c4&0xff;
+      if(is_textblock) {
+        cm.set(hash(++i,word0, c1, word2));
+        cm.set(hash(++i,word0, c1, word3));
+        cm.set(hash(++i,word0, c1, word4));
+        cm.set(hash(++i,word0, c1, word1, word4));
+        cm.set(hash(++i,word0, c1, word1, word3));
+        cm.set(hash(++i,word0, c1, word2, word3));
+      } else {
+        cm.skip();i++;
+        cm.skip();i++;
+        cm.skip();i++;
+        cm.skip();i++;
+        cm.skip();i++;
+        cm.skip();i++;
+      }
+
+      const U8 g=groups&0xff;
+      cm.set(hash(++i,opened,wl_wme_mbc,g,pdf_text_parser_state));
+      cm.set(hash(++i,opened,c,dist!=0,pdf_text_parser_state));
+      cm.set(hash(++i,opened,word0)); // book1, book2, dickens, enwik
+
 
       cm.set(hash(++i,groups));
       cm.set(hash(++i,groups,c));
-      cm.set(hash(++i,groups,c4&0xffff));
+      cm.set(hash(++i,groups,c4&0x0000ffff));
 
-      if(c1=='.' || c1=='!' || c1=='?' || c1=='/'|| c1==')'|| c1=='}') f4=(f4&0xfffffff0)+2;
       f4=(f4<<4) | (c1==' ' ? 0 : c1>>4);
-
       cm.set(hash(++i,f4&0xfff));
       cm.set(hash(++i,f4));
 
@@ -6222,24 +6410,28 @@ private:
       cm.set(hash(++i,mask));
       cm.set(hash(++i,mask,c1));
       cm.set(hash(++i,mask,c4&0x00ffff00));
-      cm.set(hash(++i,mask&0x1ff,f4&0x00fff0));
+      cm.set(hash(++i,mask&0x1ff,f4&0x00fff0)); // for some binary files
 
-      cm.set(hash(++i, word0, c1, llog(wordGap), mask&0x1FF,
-        ((wordlen1 > 3)<<6)|
-        ((wordlen0 > 0)<<5)|
-        ((lastUpper < lastLetter + wordlen1)<<1)|
-        (lastUpper < wordlen0 + wordlen1 + wordGap)
-      )); //weak
-      cm.set(hash(++i, mask2&0x1FF, word0chars&0xffff, min(wordlen0,6)));
-      assert(i==1024+nCM2);
+      if(is_textblock) {
+        cm.set(hash(++i, word0, c1, llog(wordGap), mask&0x1FF,
+          ((wordlen1 > 3)<<2)|
+          ((lastUpper < lastLetter + wordlen1)<<1)|
+          (lastUpper < wordlen0 + wordlen1 + wordGap)
+        )); //weak
+      }
+      else {
+        cm.skip();i++;
+      }
+      assert(int(i)==2048*is_textblock+nCM2);
     }
   };
-  U8 pdf_text_parser_state; // 0,1,2,3
-  Info info_normal;
-  Info info_pdf;
+  Info info_normal; //used for general content
+  Info info_pdf;    //used only in case of pdf text - in place of info_normal
+  U8 pdf_text_parser_state;  // 0..7
 public:
-  WordModel (const Shared * const sh, ModelStats const *st, const U64 size) : 
-    shared(sh), stats(st), cm(sh,size,nCM), info_normal(sh,st,cm), info_pdf(sh,st,cm) {}
+  WordModel(const Shared * const sh, ModelStats const *st, const U64 size) : 
+    shared(sh), stats(st), cm(sh,size,nCM,74,CM_USE_RUNSTATS|CM_USE_BYTEHISTORY), 
+    info_normal(sh,st,cm), info_pdf(sh,st,cm), pdf_text_parser_state(0) {}
   void reset() {
     info_normal.reset();
     info_pdf.reset();
@@ -6258,16 +6450,17 @@ public:
         if(pC!='\\') {
              if(c1=='[') {pdf_text_parser_state|=2;} //array begins
         else if(c1==']') {pdf_text_parser_state&=(255-2);}
-        else if(c1=='(') {pdf_text_parser_state|=4; do_pdf_process=false;} //signal: start text extraction
+        else if(c1=='(') {pdf_text_parser_state|=4; do_pdf_process=false;} //signal: start text extraction from the next char
         else if(c1==')') {pdf_text_parser_state&=(255-4);} //signal: start pdf gap processing
         }
       }
 
       const bool is_pdftext = (pdf_text_parser_state&4)!=0;
       if(is_pdftext) {
-        if(do_pdf_process) {
+        const bool is_extended_char = 0;
+        //predict the chars after "(", but the "(" must not be processed
+        if(do_pdf_process) { 
           //printf("%c",c1); //debug: print the extracted pdf text
-          const bool is_extended_char = c1=='\\';
           info_pdf.process_char(is_extended_char);
         }
         info_pdf.predict(pdf_text_parser_state);
@@ -6277,9 +6470,8 @@ public:
         const bool is_extended_char = is_textblock && c1>=128;
         info_normal.process_char(is_extended_char);
         info_normal.predict(pdf_text_parser_state);
-        info_normal.line_model_predict(pdf_text_parser_state);
+        info_normal.line_model_predict();
       }
-      
     }
     cm.mix(m);
   }
@@ -6325,7 +6517,7 @@ class RecordModel {
 private:
   static constexpr int nCM = 3+3+3+16; //cm,cn,co,cp
   static constexpr int nSM = 6;
-  static constexpr int nSSM = 3;
+  static constexpr int nSSM = 4;
   static constexpr int nIM = 3;
   static constexpr int nIndCtxs = 5;
 public:
@@ -6359,7 +6551,8 @@ public:
       {sh,10,8,86,1023},{sh,10,8,86,1023},{sh,8,8,86,1023},{sh,8,8,86,1023},{sh,8,8,86,1023},{sh,11,1,86,1023}
     },
     sMap{ /* BitsOfContext, InputBits, Rate, Scale */
-      {sh,11,1,6,86}, {sh,3,1,6,86}, {sh,19,1,5,128}
+      {sh,11,1,6,86}, {sh,3,1,6,86}, {sh,19,1,5,128},
+      {sh,8,8,5,64} // pos&255
     },
     iMap{ /* BitsOfContext, InputBits, Scale, Limit */
       {sh,8,8,86,255}, {sh,8,8,86,255}, {sh,8,8,86,255}
@@ -6553,6 +6746,8 @@ public:
       iMap[1].set_direct(N*2-NN);
       iMap[2].set_direct(N*3-NN*3+NNN);
 
+      sMap[3].set(pos&255); // mozilla
+
       // update last context positions
       cpos4[c]=cpos3[c];
       cpos3[c]=cpos2[c];
@@ -6569,6 +6764,7 @@ public:
     iCtx[nIndCtxs-1]+=y;
     iCtx[nIndCtxs-1]=ctx;
     Maps[5].set_direct(ctx);
+
     sMap[0].set(ctx);
     sMap[1].set(iCtx[nIndCtxs-1]());
     sMap[2].set((ctx<<8)|WxNW);
@@ -6649,7 +6845,7 @@ class SparseModel {
 private:
   static constexpr int nCM=38; //17+3*7
 public:
-  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS; // 190
+  static constexpr int MIXERINPUTS = nCM*(ContextMap::MIXERINPUTS); // 190
   static constexpr int MIXERCONTEXTS = 0;
   static constexpr int MIXERCONTEXTSETS = 0;
 private:
@@ -6680,10 +6876,11 @@ public:
       cm.set(hash(++i,c4&0x0081CC81));
       cm.set(hash(++i,c4&0x00c10081));
       for (int j=2; j<=8; ++j) {
-        cm.set(hash(++i,buf(j)<<8));
+        cm.set(hash(++i,buf(j)));
         cm.set(hash(++i,(buf(j+1)<<8)|buf(j)));
         cm.set(hash(++i,(buf(j+2)<<8)|buf(j)));
       }
+      assert((int)i==nCM);
     }
     cm.mix(m);
   }
@@ -6711,13 +6908,13 @@ private:
   static constexpr int nSSM = 59;
   static constexpr int nCM = 45;
 public:
-  static constexpr int MIXERINPUTS = nSSM*SmallStationaryContextMap::MIXERINPUTS + nSM*StationaryMap::MIXERINPUTS + nCM*ContextMap::MIXERINPUTS;
+  static constexpr int MIXERINPUTS = nSSM*SmallStationaryContextMap::MIXERINPUTS + nSM*StationaryMap::MIXERINPUTS + nCM*(ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUNSTATS);
   static constexpr int MIXERCONTEXTS = 6+256+512+2048+8*32+6*64+256*2+1024+8192+8192+8192+8192+256; //38022
   static constexpr int MIXERCONTEXTSETS = 13;
 
   const Shared * const shared;
   ModelStats *stats;
-  ContextMap cm;
+  ContextMap2 cm;
   SmallStationaryContextMap SCMap[nSSM];
   StationaryMap Map[nSM];
   Buf buffer{0x100000}; // internal rotating buffer for (PNG unfiltered) pixel data
@@ -6760,7 +6957,7 @@ public:
   const U8 *ols_ctx6[ 8] = { &WWW, &WW, &W, &NNN, &NN, &N, &p1, &p2 };
   const U8 **ols_ctxs[nOLS] = { &ols_ctx1[0], &ols_ctx2[0], &ols_ctx3[0], &ols_ctx4[0], &ols_ctx5[0], &ols_ctx6[0] };
 public:
-  Image24bitModel(const Shared * const sh, ModelStats *st,const U64 size): shared(sh), stats(st), cm(sh,size,nCM),
+  Image24bitModel(const Shared * const sh, ModelStats *st,const U64 size): shared(sh), stats(st), cm(sh,size,nCM,64,CM_USE_RUNSTATS),
     SCMap { /* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
       {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
       {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
@@ -7110,7 +7307,7 @@ public:
         Map[++i].set_direct(buf(1+(isPNG && x<2)));
         Map[++i].set_direct(min(color, stride-1));
         Map[++i].set_direct(0);
-        stats->Image.plane = std::min<int>(color, stride-1);
+        stats->Image.plane = min(color, stride-1);
         stats->Image.pixels.W = W;
         stats->Image.pixels.N = N;
         stats->Image.pixels.NN = NN;
@@ -7230,13 +7427,13 @@ private:
   static constexpr int nPltMaps = 4;
   static constexpr int nCM = nPltMaps+49;
 public:
-  static constexpr int MIXERINPUTS = nSM*StationaryMap::MIXERINPUTS + nCM*ContextMap::MIXERINPUTS;
+  static constexpr int MIXERINPUTS = nSM*StationaryMap::MIXERINPUTS + nCM*(ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUNSTATS);
   static constexpr int MIXERCONTEXTS =(2048+5)+6*16+6*32+256+1024+64+128+256; // 4069
   static constexpr int MIXERCONTEXTSETS = 8;
 
   const Shared * const shared;
   ModelStats *stats;
-  ContextMap cm;
+  ContextMap2 cm;
   StationaryMap Map[nSM];
   SmallStationaryContextMap pltMap[nPltMaps];
   IndirectMap sceneMap[5];
@@ -7277,7 +7474,7 @@ public:
   const U8 **ols_ctxs[nOLS] = { &ols_ctx1[0], &ols_ctx2[0], &ols_ctx3[0], &ols_ctx4[0], &ols_ctx5[0] };
 public:
   Image8bitModel(const Shared * const sh, ModelStats *st, const U64 size): 
-    shared(sh), stats(st), cm(sh,size,nCM),
+    shared(sh), stats(st), cm(sh,size,nCM,64,CM_USE_RUNSTATS),
     Map{ /* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
     /*nSM0: 0- 1*/ {sh, 0,8,64,1023}, {sh,15,1,64,1023},
     /*nSM1: 0- 4*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, 
@@ -7690,8 +7887,8 @@ private:
   int w=0, col=0, line=0, run=0, prevColor=0, px=0;
 public:
   Image4bitModel(const Shared * const sh, const U64 size) : shared(sh), t(size),
-    sm{sh,S,256,1023,true}, //StateMap: s, n, lim, init
-    map{sh,1,16,1023,false} //StateMap: s, n, lim, init
+    sm{sh,S,256,1023,StateMap::BITHISTORY}, //StateMap: s, n, lim, init
+    map{sh,1,16,1023,StateMap::GENERIC} //StateMap: s, n, lim, init
   {}
   void setparam(int info0) {
     w=info0;
@@ -7742,17 +7939,18 @@ public:
     }
 
     // predict
+    sm.subscribe();
     for (int i=0; i<S; i++) {
       const U8 s = *cp[i];
       const int n0=-!StateTable::next(s, 2);
       const int n1=-!StateTable::next(s, 3);
-      const int p1 = sm.p(i,s);
+      const int p1 = sm.p2(i,s);
       const int st = stretch(p1)>>1;
       m.add(st);
-      m.add((p1-2047)>>2);
+      m.add((p1-2048)>>2);
       m.add(st*abs(n1-n0));
     }
-    m.add(stretch(map.p(0,px))>>1);
+    m.add(stretch(map.p1(px))>>1);
 
     m.set((W<<4) | px, 256);
     m.set(min(31,col/max(1,w/16)) | (N<<5), 512);
@@ -7782,7 +7980,7 @@ private:
   StateMap sm;
 public:
   Image1bitModel(const Shared * const sh) : shared(sh),
-    sm{sh,S,256,1023,true} // StateMap: s, n, limit, init
+    sm{sh,S,256,1023,StateMap::BITHISTORY} // StateMap: s, n, limit, init
   {}
   void setparam(int info0) {
     w=info0;
@@ -7812,9 +8010,10 @@ public:
     cxt[10]=0x13000+((r0&0x3e)^(r1&0x0c0c)^(r2&0xc800));
 
     // predict
+    sm.subscribe();
     for (int i=0; i<S; ++i) {
       const U8 s=t[cxt[i]];
-      m.add(stretch(sm.p(i,s)));
+      m.add(stretch(sm.p2(i,s)));
     }
   }
 };
@@ -7959,7 +8158,7 @@ private:
 public:
   JpegModel(const Shared * const sh, const U64 size): shared(sh), t(size), 
     MJPEGMap(sh,21,3,128,127), /* BitsOfContext, InputBits, Scale, Limit */
-    sm(sh,N,256,1023,true), apm1 (sh,0x8000,24), apm2(sh,0x20000,24)
+    sm(sh,N,256,1023,StateMap::BITHISTORY), apm1 (sh,0x8000,24), apm2(sh,0x20000,24)
   {
     m1=MixerFactory::CreateMixer(sh, N+1, 2050, 3);
     m1->set_scalefactor(1024, 128);
@@ -8559,12 +8758,13 @@ public:
 
     // Predict next bit
     m1->add(128); //network bias
+    sm.subscribe();
     assert(hbcount<=2);
     switch(hbcount) {
       case 0: { for (int i=0; i<N; ++i) {
                   cp[i]=t[cxt[i]]+1;
                   const U8 s=*cp[i];
-                  const U32 p=sm.p(i,s);
+                  const U32 p=sm.p2(i,s);
                   m.add(((int)p-2048)>>3);
                   const int st=stretch(p);
                   m1->add(st);
@@ -8576,7 +8776,7 @@ public:
                 for (int i=0; i<N; ++i) {
                   cp[i]+=hc;
                   const U8 s=*cp[i];
-                  const U32 p=sm.p(i,s);
+                  const U32 p=sm.p2(i,s);
                   m.add(((int)p-2048)>>3);
                   const int st=stretch(p);
                   m1->add(st);
@@ -8588,7 +8788,7 @@ public:
                 for (int i=0; i<N; ++i) {
                   cp[i]+=hc;
                   const U8 s=*cp[i];
-                  const U32 p=sm.p(i,s);
+                  const U32 p=sm.p2(i,s);
                   m.add(((int)p-2048)>>3);
                   const int st=stretch(p);
                   m1->add(st);
@@ -9507,7 +9707,7 @@ class ExeModel {
 private:
   static constexpr int nCM1=10, nCM2=10, nIM=1;
 public:
-  static constexpr int MIXERINPUTS = (nCM1+nCM2)*ContextMap2::MIXERINPUTS + nIM*IndirectMap::MIXERINPUTS; // 142
+  static constexpr int MIXERINPUTS = (nCM1+nCM2)*(ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUNSTATS + ContextMap2::MIXERINPUTS_BYTEHISTORY) + nIM*IndirectMap::MIXERINPUTS; // 142
   static constexpr int MIXERCONTEXTS = 1024+1024+1024+8192+8192+8192; // 27648
   static constexpr int MIXERCONTEXTSETS = 6;
 private:
@@ -9650,7 +9850,8 @@ private:
   void Update();
 public:
   ExeModel(const Shared * const  sh, const ModelStats * const st, const U64 size) : shared(sh), stats(st),
-    cm(sh,size,nCM1+nCM2,64), iMap(sh,20,1,64,1023),
+    cm(sh,size,nCM1+nCM2,64,CM_USE_RUNSTATS|CM_USE_BYTEHISTORY),
+    iMap(sh,20,1,64,1023),
     pState (Start), State(Start), TotalOps(0), OpMask(0), OpCategMask(0), Context(0), BrkCtx(0), Valid(false) 
   {
     assert(ispowerof2(size));
@@ -9946,7 +10147,7 @@ class IndirectModel  {
 private:
   static constexpr int nCM = 15;
 public:
-  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS; // 75
+  static constexpr int MIXERINPUTS = nCM*(ContextMap::MIXERINPUTS); // 75
   static constexpr int MIXERCONTEXTS = 0;
   static constexpr int MIXERCONTEXTSETS = 0;
 private:
@@ -10064,7 +10265,7 @@ private:
 public: 
   dmcModel(const Shared * const sh, const U64 dmc_nodes, const U32 th_start) : shared(sh), 
     t(min(dmc_nodes+DMC_NODES_BASE,DMC_NODES_MAX)), 
-    sm(sh,1,256,256 /*64-512 are all fine*/ ,true) //StateMap: s, n, limit, init
+    sm(sh,1,256,256 /*64-512 are all fine*/ ,StateMap::BITHISTORY) //StateMap: s, n, limit, init
   {
     resetstategraph(th_start);
   }
@@ -10157,7 +10358,7 @@ public:
   }
   int pr2() {
     const U8 state=t[curr].get_state();
-    return sm.p(0,state);
+    return sm.p1(state);
   }
   int st() {
     update();
@@ -10249,7 +10450,7 @@ class NestModel {
 private:
   static constexpr int nCM = 12;
 public:
-  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS; // 60
+  static constexpr int MIXERINPUTS = nCM*(ContextMap::MIXERINPUTS); // 60
   static constexpr int MIXERCONTEXTS = 0;
   static constexpr int MIXERCONTEXTSETS = 0;
 private:
@@ -10389,7 +10590,7 @@ class XMLModel {
 private:
   static constexpr int nCM = 4;
 public:
-  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS; //20
+  static constexpr int MIXERINPUTS = nCM*(ContextMap::MIXERINPUTS); //20
   static constexpr int MIXERCONTEXTS = 0;
   static constexpr int MIXERCONTEXTSETS = 0;
 private:
@@ -10630,30 +10831,29 @@ public:
 class NormalModel { 
 private:
   static constexpr int nCM = 9;
-  static constexpr int nRCM = 3;
-  static constexpr int nSM = 2;
+  static constexpr int nSM = 3;
 public:
-  static constexpr int MIXERINPUTS = nCM*ContextMap2::MIXERINPUTS + nRCM*RunContextMap::MIXERINPUTS + nSM; //68
+  static constexpr int MIXERINPUTS = nCM*(ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUNSTATS + ContextMap2::MIXERINPUTS_BYTEHISTORY) + nSM; //66
   static constexpr int MIXERCONTEXTS = 64 + 8+1024+256+256+256+256+1536; //3656
   static constexpr int MIXERCONTEXTSETS = 7;
 private:
   const Shared * const shared;
   ModelStats *stats;
   ContextMap2 cm;
-  RunContextMap rcm7, rcm9, rcm10;
-  StateMap StateMaps[2];
+  StateMap sm_order0_slow;
+  StateMap sm_order1_slow;
+  StateMap sm_order1_fast;
   U64 cxt[15]{}; // context hashes
 public:
-  NormalModel(const Shared * const sh, ModelStats *st,const U64 cmsize, const U64 rcmsize):
+  NormalModel(const Shared * const sh, ModelStats *st,const U64 cmsize):
     shared(sh), stats(st),
-    cm(sh,cmsize,nCM,64), rcm7(sh,rcmsize), rcm9(sh,rcmsize), rcm10(sh,rcmsize),
-    StateMaps{ /* StateMap: s, n, lim, init */
-      {sh,1,256,1023,false}, {sh,1,256*256,1023,false}
-    }
+    cm(sh,cmsize,nCM,64,CM_USE_RUNSTATS|CM_USE_BYTEHISTORY), 
+    sm_order0_slow(sh,1,255,1023,StateMap::GENERIC),
+    sm_order1_slow(sh,1,255*256,1023,StateMap::GENERIC),
+    sm_order1_fast(sh,1,255*256,64,StateMap::GENERIC) // 64->16 is also ok
   {
-    assert(ispowerof2(cmsize) && ispowerof2(rcmsize));
+    assert(ispowerof2(cmsize));
   }
-
   void reset() {
     memset(&cxt[0], 0, sizeof(cxt));
   }
@@ -10663,29 +10863,25 @@ public:
     // note: order 0 context does not need an update so its hash never changes
     INJECT_SHARED_c1
     for (int i=14; i>0; --i)
-      cxt[i]=combine64(cxt[i-1],c1);
+      cxt[i]=combine64(cxt[i-1],c1+(i<<10));
   }
 
   void mix(Mixer& m) {
     INJECT_SHARED_bpos
     if(bpos==0) {
       update_hashes();
-      for (int i=0; i<=6; ++i) 
+      for (int i=1; i<=7; ++i)
         cm.set(cxt[i]);
-      cm.set(cxt[8]);
+      cm.set(cxt[9]);
       cm.set(cxt[14]);
-      rcm7.set(cxt[7]);
-      rcm9.set(cxt[10]);
-      rcm10.set(cxt[12]);
     }
     cm.mix(m);
-    rcm7.mix(m);
-    rcm9.mix(m);
-    rcm10.mix(m);
-    
-    INJECT_SHARED_c0 INJECT_SHARED_c1 
-    m.add((stretch(StateMaps[0].p(0,c0))+1)>>1);
-    m.add((stretch(StateMaps[1].p(0,c0|(c1<<8)))+1)>>1);
+
+    INJECT_SHARED_c0
+    m.add((stretch(sm_order0_slow.p1(c0-1)))>>2); //order 0
+    INJECT_SHARED_c1
+    m.add((stretch(sm_order1_fast.p1((c0-1)<<8|c1)))>>2); //order 1
+    m.add((stretch(sm_order1_slow.p1((c0-1)<<8|c1)))>>2); //order 1
 
     const int order=max(0, cm.order-(nCM-7)); //0-7
     assert(0<=order && order<=7);
@@ -10723,7 +10919,7 @@ private:
 public:
   Models(const Shared * const sh, ModelStats *st): shared(sh), stats(st) {}
 public:
-  NormalModel& normalModel() {static NormalModel instance{shared, stats, MEM*32,MEM};return instance;}
+  NormalModel& normalModel() {static NormalModel instance{shared, stats, MEM*32};return instance;}
   DmcForest& dmcForest() {static DmcForest instance{shared, MEM};return instance;}
   CharGroupModel& charGroupModel() {static CharGroupModel instance{shared, MEM/2};return instance;}
   RecordModel& recordModel() {static RecordModel instance{shared, stats, MEM*2};return instance;}
@@ -10741,7 +10937,7 @@ public:
 
   ExeModel& exeModel() {static ExeModel instance{shared, stats, MEM*4};return instance;}
   LinearPredictionModel& linearPredictionModel() {static LinearPredictionModel instance{shared};return instance;}
-
+  
   JpegModel& jpegModel() {static JpegModel instance{shared, MEM};return instance;}
 
   Image24bitModel& image24bitModel() {static Image24bitModel instance{shared, stats, MEM*4};return instance;}
@@ -10776,7 +10972,7 @@ public:
       SparseModel::MIXERINPUTS + RecordModel::MIXERINPUTS + CharGroupModel::MIXERINPUTS + 
       TextModel::MIXERINPUTS   + WordModel::MIXERINPUTS   + IndirectModel::MIXERINPUTS + 
       DmcForest::MIXERINPUTS   + NestModel::MIXERINPUTS   + XMLModel::MIXERINPUTS + 
-      LinearPredictionModel::MIXERINPUTS  +  ExeModel::MIXERINPUTS
+      LinearPredictionModel::MIXERINPUTS  +   ExeModel::MIXERINPUTS
       ,
       MatchModel::MIXERCONTEXTS  + NormalModel::MIXERCONTEXTS + SparseMatchModel::MIXERCONTEXTS +
       SparseModel::MIXERCONTEXTS + RecordModel::MIXERCONTEXTS + CharGroupModel::MIXERCONTEXTS + 
@@ -11085,6 +11281,10 @@ public:
 
         pr = (pr*2+pr1+pr2+2)>>2;
         pr = (pr+pr0+1)>>1;
+        break;
+      }
+      case JPEG: {
+        pr = pr0;
         break;
       }
       default: {
@@ -12424,7 +12624,7 @@ void encode_bmp(File *in, File *out, U64 len, int width) {
       r=in->getchar();
       if (isPossibleRGB565) {
         int pTotal=total;
-        total=std::min<int>(total+1, 0xFFFF)*((b&7)==((b&8)-((b>>3)&1)) && (g&3)==((g&4)-((g>>2)&1)) && (r&7)==((r&8)-((r>>3)&1)));
+        total=min(total+1, 0xFFFF)*((b&7)==((b&8)-((b>>3)&1)) && (g&3)==((g&4)-((g>>2)&1)) && (r&7)==((r&8)-((r>>3)&1)));
         if (total>RGB565_MIN_RUN || pTotal>=RGB565_MIN_RUN) {
           b^=(b&8)-((b>>3)&1);
           g^=(g&4)-((g>>2)&1);
@@ -12458,7 +12658,7 @@ U64 decode_bmp(Encoder& en, U64 size, int width, File *out, FMode mode, U64 &dif
           g^=(g&4)-((g>>2)&1);
           r^=(r&8)-((r>>3)&1);
         }
-        total=std::min<int>(total+1, 0xFFFF)*((b&7)==((b&8)-((b>>3)&1)) && (g&3)==((g&4)-((g>>2)&1)) && (r&7)==((r&8)-((r>>3)&1)));
+        total=min(total+1, 0xFFFF)*((b&7)==((b&8)-((b>>3)&1)) && (g&3)==((g&4)-((g>>2)&1)) && (r&7)==((r&8)-((r>>3)&1)));
         isPossibleRGB565=total>0;
       }
       if (mode==FDECOMPRESS) {
@@ -13795,9 +13995,9 @@ int main_utf8(int argc, char** argv) {
         "  " PROGNAME " -LEVEL[SWITCHES] INPUTSPEC [OUTPUTSPEC]\n"
         "\n"
         "    -LEVEL:\n"
-        "      -0 = store (uses 300 MB)\n"
-        "      -1 -2 -3 = faster (uses 392, 406, 435 MB)\n"
-        "      -4 -5 -6 -7 -8 -9 = smaller (uses 492, 605, 833, 1288, 2198, 4018 MB)\n"
+        "      -0 = store (uses 322 MB)\n"
+        "      -1 -2 -3 = faster (uses 417, 431, 459 MB)\n"
+        "      -4 -5 -6 -7 -8 -9 = smaller (uses 514, 624, 845, 1288, 2172, 3941 MB)\n"
         "    The listed memory requirements are indicative, actual usage may vary\n"
         "    depending on several factors including need for temporary files,\n"
         "    temporary memory needs of some preprocessing (transformations), etc.\n"
@@ -13900,6 +14100,7 @@ int main_utf8(int argc, char** argv) {
     FileName outputpath;
     FileName archiveName;
     FileName logfile;
+    String hashconfig;
 
     for(int i=1;i<argc;i++) {
       int arg_len = (int)strlen(argv[i]);
@@ -13941,6 +14142,14 @@ int main_utf8(int argc, char** argv) {
           if(++i==argc)quit("The -log switch requires a filename.");
           logfile+=argv[i];
         }
+        #ifndef NHASHCONFIG
+        else if (strcasecmp(argv[i],"-hash")==0) {
+          if(hashconfig.strsize()!=0)quit("Only one hash configuration may be specified.");
+          if(++i==argc)quit("The -hash switch requires more parameters: 14 magic hash constants delimited by non-spaces.");
+          hashconfig+=argv[i];
+          loadHashesFromCmd(hashconfig.c_str());
+        }
+        #endif
         else if (strcasecmp(argv[i],"-simd")==0) {
           if(++i==argc)quit("The -simd switch requires an instruction set name (NONE,SSE2,AVX2).");
           if(strcasecmp(argv[i],"NONE")==0)simd_iset=0;
