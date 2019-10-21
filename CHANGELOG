@@ -1566,3 +1566,41 @@ Paq8px_v182fix1
 2019.09.12
 - Text pre-training is applied to WordModel
 - Fixed 32-bit compilation issue (_stat64i32->_stat)
+
+
+paq8px_v182fix2:
+2019.09.16
+- SSE stage: JpegModel is passing through the stage (thank you Kaido Orav)
+
+
+paq8px_v183:
+2019.10.21
+- A new command line parameter (-hash) to enable testing/tuning the magic hash values (not compiled by default)
+- Enhancements in StateMap: 
+  - new: a-priory for RUNMAP
+  - tweaked: a-priory for BITHISTORY
+  - small speed improvement (in subscribing for update)
+- Small tweaks in ContextMap
+- Enhancements is ContextMap2:
+  - the map can now skip contexts
+  - the embedded RunContextMap (providing a static mixer input) is replaced by a StateMap (runmap)
+  - the new runmap supports a run length of 254 instead of the previous 127.
+  - a different collision handling: update instead of overwrite when pending bits are flushed
+  - a more robust pending bit indicator: "255" instead of "2"
+  - fixed the detection of how many complete bytes were seen in the context
+  - models utilizing ContextMap2 may now indicate whether they want the "extra" features (run statistics, byte history statistics)
+  - miscellaneous tweaks
+  - the following models switched from ContextMap to ContextMap2: WordModel, MatchModel, CharGroupModel, Image24bitModel, Image8bitModel
+    (previous ComtextMap2 users: TextModel, ExeModel and NormalModel)
+- Enhancements in WordModel
+  - added 6 new contexts
+  - many small tweaks
+- Small modifications in MatchModel:
+  - contextmap is changed to ContextMap2 and its memory use is decreased from MEM/4 to MEM/32.
+  - the pos mod 256 context (that is beneficial for mozilla) is moved to RecordModel
+- Enhancements in NormalModel:
+  - the RunContextMap class (used solely by NormalModel) is now gone
+  - the single order 1 conext is replaced by two: a slow and a fast adapting order 1 context
+  - the order 0 context is separated from the hashed contexts: less mixer inputs (1 instead of 7), and collision-free
+  - hashed contexts were: 0-6, 8, 14; now: 1-7, 9, 14 (same in number, but generally longer)
+- Updated memory usage information displayed on help screen
