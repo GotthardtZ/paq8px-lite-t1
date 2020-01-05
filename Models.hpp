@@ -3,8 +3,10 @@
 
 #include "text/TextModel.hpp"
 
-// this is a factory class for lazy object creation for models
-// objects created within this class are instantiated on first use and guaranteed to be destroyed
+/**
+ * This is a factory class for lazy object creation for models.
+ * Objects created within this class are instantiated on first use and guaranteed to be destroyed.
+ */
 class Models {
 private:
     const Shared *const shared; //read only

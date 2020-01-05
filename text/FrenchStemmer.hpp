@@ -6,8 +6,8 @@
 class FrenchStemmer : public Stemmer {
 private:
     static constexpr int NUM_VOWELS = 17;
-    static constexpr char Vowels[NUM_VOWELS] = {'a', 'e', 'i', 'o', 'u', 'y', '\xE2', '\xE0', '\xEB', '\xE9', '\xEA',
-                                                '\xE8', '\xEF', '\xEE', '\xF4', '\xFB', '\xF9'};
+    static constexpr char Vowels[NUM_VOWELS] = {'a', 'e', 'i', 'o', 'u', 'y', '\xE2', '\xE0', '\xEB', '\xE9', '\xEA', '\xE8', '\xEF',
+                                                '\xEE', '\xF4', '\xFB', '\xF9'};
     static constexpr int NUM_COMMON_WORDS = 10;
     const char *CommonWords[NUM_COMMON_WORDS] = {"de", "la", "le", "et", "en", "un", "une", "du", "que", "pas"};
     static constexpr int NUM_EXCEPTIONS = 3;
@@ -17,8 +17,8 @@ private:
     static constexpr uint32_t TypesExceptions[NUM_EXCEPTIONS] = {French::Noun, French::Noun | French::Plural,
                                                                  French::Noun | French::Plural};
     static constexpr int NUM_SUFFIXES_STEP1 = 39;
-    const char *SuffixesStep1[NUM_SUFFIXES_STEP1] = {"ance", "iqUe", "isme", "able", "iste", "eux", "ances", "iqUes",
-                                                     "ismes", "ables", "istes", //11
+    const char *SuffixesStep1[NUM_SUFFIXES_STEP1] = {"ance", "iqUe", "isme", "able", "iste", "eux", "ances", "iqUes", "ismes", "ables",
+                                                     "istes", //11
                                                      "atrice", "ateur", "ation", "atrices", "ateurs", "ations", //6
                                                      "logie", "logies", //2
                                                      "usion", "ution", "usions", "utions", //4
@@ -31,20 +31,17 @@ private:
                                                      "ment", "ments" //2
     };
     static constexpr int NUM_SUFFIXES_STEP2a = 35;
-    const char *SuffixesStep2a[NUM_SUFFIXES_STEP2a] = {"issaIent", "issantes", "iraIent", "issante", "issants",
-                                                       "issions", "irions", "issais", "issait", "issant", "issent",
-                                                       "issiez", "issons", "irais", "irait", "irent", "iriez", "irons",
-                                                       "iront", "isses", "issez", "\xEEmes", "\xEEtes", "irai", "iras",
-                                                       "irez", "isse", "ies", "ira", "\xEEt", "ie", "ir", "is", "it",
-                                                       "i"};
+    const char *SuffixesStep2a[NUM_SUFFIXES_STEP2a] = {"issaIent", "issantes", "iraIent", "issante", "issants", "issions", "irions",
+                                                       "issais", "issait", "issant", "issent", "issiez", "issons", "irais", "irait",
+                                                       "irent", "iriez", "irons", "iront", "isses", "issez", "\xEEmes", "\xEEtes", "irai",
+                                                       "iras", "irez", "isse", "ies", "ira", "\xEEt", "ie", "ir", "is", "it", "i"};
     static constexpr int NUM_SUFFIXES_STEP2b = 38;
-    const char *SuffixesStep2b[NUM_SUFFIXES_STEP2b] = {"eraIent", "assions", "erions", "assent", "assiez", "\xE8rent",
-                                                       "erais", "erait", "eriez", "erons", "eront", "aIent", "antes",
-                                                       "asses", "ions", "erai", "eras", "erez", "\xE2mes", "\xE2tes",
-                                                       "ante", "ants", "asse", "\xE9"
-                                                                               "es", "era", "iez", "ais", "ait", "ant",
-                                                       "\xE9"
-                                                       "e", "\xE9s", "er", "ez", "\xE2t", "ai", "as", "\xE9", "a"};
+    const char *SuffixesStep2b[NUM_SUFFIXES_STEP2b] = {"eraIent", "assions", "erions", "assent", "assiez", "\xE8rent", "erais", "erait",
+                                                       "eriez", "erons", "eront", "aIent", "antes", "asses", "ions", "erai", "eras", "erez",
+                                                       "\xE2mes", "\xE2tes", "ante", "ants", "asse", "\xE9"
+                                                                                                     "es", "era", "iez", "ais", "ait",
+                                                       "ant", "\xE9"
+                                                              "e", "\xE9s", "er", "ez", "\xE2t", "ai", "as", "\xE9", "a"};
     static constexpr int NUM_SET_STEP4 = 6;
     static constexpr char SetStep4[NUM_SET_STEP4] = {'a', 'i', 'o', 'u', '\xE8', 's'};
     static constexpr int NUM_SUFFIXES_STEP4 = 7;
@@ -73,8 +70,7 @@ private:
         switch( w->letters[i] ) {
           case 'i':
           case 'u': {
-            if( i > w->start && i < w->end &&
-                (isVowel(w->letters[i - 1]) || (w->letters[i - 1] == 'q' && w->letters[i] == 'u')) &&
+            if( i > w->start && i < w->end && (isVowel(w->letters[i - 1]) || (w->letters[i - 1] == 'q' && w->letters[i] == 'u')) &&
                 isVowel(w->letters[i + 1]))
               w->letters[i] = toupper(w->letters[i]);
             break;
@@ -89,8 +85,9 @@ private:
 
     uint32_t getRv(Word *w) {
       uint32_t len = w->length(), res = w->start + len;
-      if( len >= 3 && ((isVowel(w->letters[w->start]) && isVowel(w->letters[w->start + 1])) || w->startsWith("par") ||
-                       w->startsWith("col") || w->startsWith("tap")))
+      if( len >= 3 &&
+          ((isVowel(w->letters[w->start]) && isVowel(w->letters[w->start + 1])) || w->startsWith("par") || w->startsWith("col") ||
+           w->startsWith("tap")))
         return w->start + 3;
       else {
         for( int i = w->start + 1; i <= w->end; i++ ) {
@@ -130,8 +127,7 @@ private:
         }
       }
       for( ; i < 27; i++ ) {
-        if( w->endsWith(SuffixesStep1[i]) && suffixInRn(w, r1, SuffixesStep1[i]) &&
-            isConsonant((*w)((uint8_t) strlen(SuffixesStep1[i])))) {
+        if( w->endsWith(SuffixesStep1[i]) && suffixInRn(w, r1, SuffixesStep1[i]) && isConsonant((*w)((uint8_t) strlen(SuffixesStep1[i])))) {
           w->end -= uint8_t(strlen(SuffixesStep1[i]));
           return true;
         }
@@ -148,11 +144,9 @@ private:
               w->end -= 3;
             else if( suffixInRn(w, r1, "eus"))
               w->letters[w->end] = 'x';
-          } else if((w->endsWith("abl") && suffixInRn(w, r2, "abl")) ||
-                    (w->endsWith("iqU") && suffixInRn(w, r2, "iqU")))
+          } else if((w->endsWith("abl") && suffixInRn(w, r2, "abl")) || (w->endsWith("iqU") && suffixInRn(w, r2, "iqU")))
             w->end -= 3;
-          else if((w->endsWith("i\xE8r") && suffixInRn(w, rv, "i\xE8r")) ||
-                  (w->endsWith("I\xE8r") && suffixInRn(w, rv, "I\xE8r"))) {
+          else if((w->endsWith("i\xE8r") && suffixInRn(w, rv, "i\xE8r")) || (w->endsWith("I\xE8r") && suffixInRn(w, rv, "I\xE8r"))) {
             w->end -= 2;
             w->letters[w->end] = 'i';
           }
@@ -204,8 +198,7 @@ private:
         }
       }
       for( ; i < NUM_SUFFIXES_STEP1; i++ ) {
-        if( w->endsWith(SuffixesStep1[i]) && suffixInRn(w, rv + 1, SuffixesStep1[i]) &&
-            isVowel((*w)((uint8_t) strlen(SuffixesStep1[i])))) {
+        if( w->endsWith(SuffixesStep1[i]) && suffixInRn(w, rv + 1, SuffixesStep1[i]) && isVowel((*w)((uint8_t) strlen(SuffixesStep1[i])))) {
           w->end -= uint8_t(strlen(SuffixesStep1[i]));
           (*forceStep2A) = true;
           return true;
@@ -286,8 +279,7 @@ private:
           switch( i ) {
             case 2: { //ion
               char prec = (*W)(3);
-              if( suffixInRn(W, r2, SuffixesStep4[i]) && suffixInRn(W, rv + 1, SuffixesStep4[i]) &&
-                  (prec == 's' || prec == 't')) {
+              if( suffixInRn(W, r2, SuffixesStep4[i]) && suffixInRn(W, rv + 1, SuffixesStep4[i]) && (prec == 's' || prec == 't')) {
                 W->end -= 3;
                 return true;
               }

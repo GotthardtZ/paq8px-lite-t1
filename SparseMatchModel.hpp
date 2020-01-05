@@ -1,8 +1,6 @@
 #ifndef PAQ8PX_SPARSEMATCHMODEL_HPP
 #define PAQ8PX_SPARSEMATCHMODEL_HPP
 
-//////////////////////////// SparseMatchModel ///////////////////////////
-
 class SparseMatchModel {
 private:
     static constexpr int NumHashes = 4;
@@ -51,8 +49,7 @@ public:
                                                                             {sh, 17, 4, 128, 1023},
                                                                             {sh, 8,  1, 128, 1023},
                                                                             {sh, 19, 1, 128, 1023}},
-                                                                    mask(uint32_t(Size / sizeof(uint32_t) - 1)),
-                                                                    hashBits(ilog2(mask + 1)) {
+                                                                    mask(uint32_t(Size / sizeof(uint32_t) - 1)), hashBits(ilog2(mask + 1)) {
       assert(isPowerOf2(Size));
     }
 
@@ -107,7 +104,7 @@ public:
       valid = length > 1; // only predict after at least one byte following the match
       if( valid ) {
         INJECT_SHARED_c0
-                INJECT_SHARED_c4
+        INJECT_SHARED_c4
         Maps[0].set(hash(expectedByte, c0, c1, (c4 >> 8) & 0xff, ilog2(length + 1) * NumHashes + hashIndex));
         const uint32_t c1_expectedByte = (c1 << 8) | expectedByte;
         Maps[1].set_direct(c1_expectedByte);
@@ -120,13 +117,13 @@ public:
 
     void mix(Mixer &m) {
       INJECT_SHARED_bpos
-              INJECT_SHARED_c0
+      INJECT_SHARED_c0
       const uint8_t B = c0 << (8 - bpos);
       if( bpos == 0 )
         Update();
       else if( valid ) {
         INJECT_SHARED_c1
-                INJECT_SHARED_c4
+        INJECT_SHARED_c4
         Maps[0].set(hash(expectedByte, c0, c1, (c4 >> 8) & 0xff, ilog2(length + 1) * NumHashes + hashIndex));
         if( bpos == 4 )
           Maps[1].set_direct(0x10000 | ((expectedByte ^ uint8_t(c0 << 4)) << 8) | c1);
@@ -161,8 +158,7 @@ public:
           m.add(0);
 
       m.set((hashIndex << 6) | (bpos << 3) | min(7, length), NumHashes * 64);
-      m.set((hashIndex << 11) | (min(7, ilog2(length + 1)) << 8) | (c0 ^ (expectedByte >> (8 - bpos))),
-            NumHashes * 2048);
+      m.set((hashIndex << 11) | (min(7, ilog2(length + 1)) << 8) | (c0 ^ (expectedByte >> (8 - bpos))), NumHashes * 2048);
     }
 };
 

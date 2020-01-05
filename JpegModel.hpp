@@ -1,8 +1,7 @@
 #ifndef PAQ8PX_JPEGMODEL_HPP
 #define PAQ8PX_JPEGMODEL_HPP
 
-//////////////////////////// jpegModel /////////////////////////
-
+// TODO: update this documentation
 // Model JPEG. Return 1 if a JPEG file is detected or else 0.
 // Only the baseline and 8 bit extended Huffman coded DCT modes are
 // supported.  The model partially decodes the JPEG image to provide
@@ -75,21 +74,7 @@ private:
     Random rnd;
     // state of parser
     enum {
-        SOF0 = 0xc0,
-        SOF1,
-        SOF2,
-        SOF3,
-        DHT,
-        RST0 = 0xd0,
-        SOI = 0xd8,
-        EOI,
-        SOS,
-        DQT,
-        DNL,
-        DRI,
-        APP0 = 0xe0,
-        COM = 0xfe,
-        FF
+        SOF0 = 0xc0, SOF1, SOF2, SOF3, DHT, RST0 = 0xd0, SOI = 0xd8, EOI, SOS, DQT, DNL, DRI, APP0 = 0xe0, COM = 0xfe, FF
     }; // Second byte of 2 byte codes
     static const int MaxEmbeddedLevel = 3;
     JPEGImage images[MaxEmbeddedLevel] {};
@@ -160,10 +145,10 @@ private:
     APM apm1, apm2;
 
 public:
-    JpegModel(const Shared *const sh, const uint64_t size) : shared(sh), t(size), MJPEGMap(sh, 21, 3, 128,
-                                                                                           127), /* BitsOfContext, InputBits, Scale, Limit */
-                                                             sm(sh, N, 256, 1023, StateMap::BIT_HISTORY),
-                                                             apm1(sh, 0x8000, 24), apm2(sh, 0x20000, 24) {
+    JpegModel(const Shared *const sh, const uint64_t size) : shared(sh), t(size),
+                                                             MJPEGMap(sh, 21, 3, 128, 127), /* BitsOfContext, InputBits, Scale, Limit */
+                                                             sm(sh, N, 256, 1023, StateMap::BIT_HISTORY), apm1(sh, 0x8000, 24),
+                                                             apm2(sh, 0x20000, 24) {
       m1 = MixerFactory::createMixer(sh, N + 1, 2050, 3);
       m1->setScaleFactor(1024, 128);
     }
@@ -174,11 +159,10 @@ public:
 
     int mix(Mixer &m) {
       static constexpr uint8_t zzu[64] = {// zigzag coef -> u,v
-              0, 1, 0, 0, 1, 2, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 1,
-              0, 1, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 3, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 5, 6, 7, 7, 6, 7};
-      static constexpr uint8_t zzv[64] = {0, 0, 1, 2, 1, 0, 0, 1, 2, 3, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2,
-                                          1, 0, 0, 1, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 3, 2, 1, 2, 3, 4, 5, 6, 7, 7, 6, 5,
-                                          4, 3, 4, 5, 6, 7, 7, 6, 5, 6, 7, 7};
+              0, 1, 0, 0, 1, 2, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 1, 0, 1, 2, 3, 4, 5, 6,
+              7, 7, 6, 5, 4, 3, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 5, 6, 7, 7, 6, 7};
+      static constexpr uint8_t zzv[64] = {0, 0, 1, 2, 1, 0, 0, 1, 2, 3, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4,
+                                          5, 6, 7, 7, 6, 5, 4, 3, 2, 1, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 3, 4, 5, 6, 7, 7, 6, 5, 6, 7, 7};
 
       // Standard Huffman tables (cf. JPEG standard section K.3)
       // IMPORTANT: these are only valid for 8-bit data precision
@@ -189,42 +173,33 @@ public:
       static constexpr uint8_t valuesDcChrominance[12] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 
       static constexpr uint8_t bitsAcLuminance[16] = {0, 2, 1, 3, 3, 2, 4, 3, 5, 5, 4, 4, 0, 0, 1, 0x7d};
-      static constexpr uint8_t valuesAcLuminance[162] = {0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12, 0x21, 0x31,
-                                                         0x41, 0x06, 0x13, 0x51, 0x61, 0x07, 0x22, 0x71, 0x14, 0x32,
-                                                         0x81, 0x91, 0xa1, 0x08, 0x23, 0x42, 0xb1, 0xc1, 0x15, 0x52,
-                                                         0xd1, 0xf0, 0x24, 0x33, 0x62, 0x72, 0x82, 0x09, 0x0a, 0x16,
-                                                         0x17, 0x18, 0x19, 0x1a, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a,
-                                                         0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x43, 0x44, 0x45,
-                                                         0x46, 0x47, 0x48, 0x49, 0x4a, 0x53, 0x54, 0x55, 0x56, 0x57,
-                                                         0x58, 0x59, 0x5a, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69,
-                                                         0x6a, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a, 0x83,
-                                                         0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x92, 0x93, 0x94,
-                                                         0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0xa2, 0xa3, 0xa4, 0xa5,
-                                                         0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6,
-                                                         0xb7, 0xb8, 0xb9, 0xba, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7,
-                                                         0xc8, 0xc9, 0xca, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8,
-                                                         0xd9, 0xda, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8,
-                                                         0xe9, 0xea, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8,
-                                                         0xf9, 0xfa};
+      static constexpr uint8_t valuesAcLuminance[162] = {0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12, 0x21, 0x31, 0x41, 0x06, 0x13, 0x51,
+                                                         0x61, 0x07, 0x22, 0x71, 0x14, 0x32, 0x81, 0x91, 0xa1, 0x08, 0x23, 0x42, 0xb1, 0xc1,
+                                                         0x15, 0x52, 0xd1, 0xf0, 0x24, 0x33, 0x62, 0x72, 0x82, 0x09, 0x0a, 0x16, 0x17, 0x18,
+                                                         0x19, 0x1a, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39,
+                                                         0x3a, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x53, 0x54, 0x55, 0x56, 0x57,
+                                                         0x58, 0x59, 0x5a, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x73, 0x74, 0x75,
+                                                         0x76, 0x77, 0x78, 0x79, 0x7a, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x92,
+                                                         0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7,
+                                                         0xa8, 0xa9, 0xaa, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xc2, 0xc3,
+                                                         0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8,
+                                                         0xd9, 0xda, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea, 0xf1, 0xf2,
+                                                         0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa};
 
       static constexpr uint8_t bitsAcChrominance[16] = {0, 2, 1, 2, 4, 4, 3, 4, 7, 5, 4, 4, 0, 1, 2, 0x77};
-      static constexpr uint8_t valuesAcChrominance[162] = {0x00, 0x01, 0x02, 0x03, 0x11, 0x04, 0x05, 0x21, 0x31, 0x06,
-                                                           0x12, 0x41, 0x51, 0x07, 0x61, 0x71, 0x13, 0x22, 0x32, 0x81,
-                                                           0x08, 0x14, 0x42, 0x91, 0xa1, 0xb1, 0xc1, 0x09, 0x23, 0x33,
-                                                           0x52, 0xf0, 0x15, 0x62, 0x72, 0xd1, 0x0a, 0x16, 0x24, 0x34,
-                                                           0xe1, 0x25, 0xf1, 0x17, 0x18, 0x19, 0x1a, 0x26, 0x27, 0x28,
-                                                           0x29, 0x2a, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x43, 0x44,
-                                                           0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x53, 0x54, 0x55, 0x56,
-                                                           0x57, 0x58, 0x59, 0x5a, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68,
-                                                           0x69, 0x6a, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a,
-                                                           0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x92,
-                                                           0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0xa2, 0xa3,
-                                                           0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xb2, 0xb3, 0xb4,
-                                                           0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xc2, 0xc3, 0xc4, 0xc5,
-                                                           0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6,
-                                                           0xd7, 0xd8, 0xd9, 0xda, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7,
-                                                           0xe8, 0xe9, 0xea, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8,
-                                                           0xf9, 0xfa};
+      static constexpr uint8_t valuesAcChrominance[162] = {0x00, 0x01, 0x02, 0x03, 0x11, 0x04, 0x05, 0x21, 0x31, 0x06, 0x12, 0x41, 0x51,
+                                                           0x07, 0x61, 0x71, 0x13, 0x22, 0x32, 0x81, 0x08, 0x14, 0x42, 0x91, 0xa1, 0xb1,
+                                                           0xc1, 0x09, 0x23, 0x33, 0x52, 0xf0, 0x15, 0x62, 0x72, 0xd1, 0x0a, 0x16, 0x24,
+                                                           0x34, 0xe1, 0x25, 0xf1, 0x17, 0x18, 0x19, 0x1a, 0x26, 0x27, 0x28, 0x29, 0x2a,
+                                                           0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49,
+                                                           0x4a, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a, 0x63, 0x64, 0x65, 0x66,
+                                                           0x67, 0x68, 0x69, 0x6a, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a, 0x82,
+                                                           0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x92, 0x93, 0x94, 0x95, 0x96,
+                                                           0x97, 0x98, 0x99, 0x9a, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa,
+                                                           0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xc2, 0xc3, 0xc4, 0xc5,
+                                                           0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8, 0xd9,
+                                                           0xda, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea, 0xf2, 0xf3, 0xf4,
+                                                           0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa};
 
       INJECT_SHARED_pos
       if( idx < 0 ) {
@@ -290,8 +265,7 @@ public:
             ((buf(1) & 0xFE) == 0xC0 || buf(1) == 0xC4 || (buf(1) >= 0xDB && buf(1) <= 0xFE))) {
           images[idx].jpeg = 1;
           images[idx].offset = pos - 4;
-          images[idx].sos = images[idx].sof = images[idx].htsize = images[idx].data = 0, images[idx].app =
-                  (buf(1) >> 4 == 0xE) * 2;
+          images[idx].sos = images[idx].sof = images[idx].htsize = images[idx].data = 0, images[idx].app = (buf(1) >> 4 == 0xE) * 2;
           mcusize = huffcode = huffbits = huffsize = mcupos = cpos = 0, rs = -1;
           memset(&huf[0], 0, sizeof(huf));
           memset(&pred[0], 0, pred.size() * sizeof(int));
@@ -300,8 +274,7 @@ public:
 
         // Detect end of JPEG when data contains a marker other than RSTx
         // or byte stuff (00), or if we jumped in position since the last byte seen
-        if( images[idx].jpeg && images[idx].data &&
-            ((buf(2) == FF && buf(1) && (buf(1) & 0xf8) != RST0) || (pos - lastPos > 1))) {
+        if( images[idx].jpeg && images[idx].data && ((buf(2) == FF && buf(1) && (buf(1) & 0xf8) != RST0) || (pos - lastPos > 1))) {
           JASSERT((buf(1) == EOI) || (pos - lastPos > 1))
           FINISH(true)
         }
@@ -627,18 +600,14 @@ public:
                   // necessarily in this MCU
                   int offsetDcN = cpos_dc - blockN[acomp];
                   for( int i = 0; i < 64; ++i ) {
-                    sumu[zzu[i]] += (zzv[i] & 1 ? -1 : 1) * (zzv[i] ? 16 * (16 + zzv[i]) : 185) *
-                                    (images[idx].qtab[q + i] + 1) * cbuf2[offsetDcN + i];
-                    sumv[zzv[i]] += (zzu[i] & 1 ? -1 : 1) * (zzu[i] ? 16 * (16 + zzu[i]) : 185) *
-                                    (images[idx].qtab[q + i] + 1) * cbuf2[offsetDcW + i];
+                    sumu[zzu[i]] += (zzv[i] & 1 ? -1 : 1) * (zzv[i] ? 16 * (16 + zzv[i]) : 185) * (images[idx].qtab[q + i] + 1) *
+                                    cbuf2[offsetDcN + i];
+                    sumv[zzv[i]] += (zzu[i] & 1 ? -1 : 1) * (zzu[i] ? 16 * (16 + zzu[i]) : 185) * (images[idx].qtab[q + i] + 1) *
+                                    cbuf2[offsetDcW + i];
                   }
                 } else {
-                  sumu[zzu[zz - 1]] -=
-                          (zzv[zz - 1] ? 16 * (16 + zzv[zz - 1]) : 185) * (images[idx].qtab[q + zz - 1] + 1) *
-                          cbuf2[cpos - 1];
-                  sumv[zzv[zz - 1]] -=
-                          (zzu[zz - 1] ? 16 * (16 + zzu[zz - 1]) : 185) * (images[idx].qtab[q + zz - 1] + 1) *
-                          cbuf2[cpos - 1];
+                  sumu[zzu[zz - 1]] -= (zzv[zz - 1] ? 16 * (16 + zzv[zz - 1]) : 185) * (images[idx].qtab[q + zz - 1] + 1) * cbuf2[cpos - 1];
+                  sumv[zzv[zz - 1]] -= (zzu[zz - 1] ? 16 * (16 + zzu[zz - 1]) : 185) * (images[idx].qtab[q + zz - 1] + 1) * cbuf2[cpos - 1];
                 }
 
                 for( int i = 0; i < 3; ++i ) {
@@ -663,8 +632,7 @@ public:
                 ex = 0;
                 for( int i = 0; i < 8; ++i )
                   ex += (zzu[zz] < i) * sumu[i] + (zzv[zz] < i) * sumv[i];
-                ex = (sumu[zzu[zz]] * (2 + zzu[zz]) + sumv[zzv[zz]] * (2 + zzv[zz]) - ex * 2) * 4 /
-                     (zzu[zz] + zzv[zz] + 16);
+                ex = (sumu[zzu[zz]] * (2 + zzu[zz]) + sumv[zzv[zz]] * (2 + zzv[zz]) - ex * 2) * 4 / (zzu[zz] + zzv[zz] + 16);
                 ex /= (images[idx].qtab[q + zz] + 1) * 185;
                 if( zz == 0 && (norst || ls[acomp] == 64))
                   ex -= cbuf2[cpos_dc - ls[acomp]];
@@ -686,12 +654,10 @@ public:
                   ex = (images[idx].qtab[q + zz2] + 1) * cbuf2[cpos_dc + zz2] / (images[idx].qtab[q + zz] + 1);
                   lcp[4] = (ex < 0 ? -1 : +1) * (ilog(abs(ex) + 1) + (ex != 0 ? 17 : 0));
 
-                  ex = (images[idx].qtab[q + zpos[8 * zzv[zz]]] + 1) * cbuf2[cpos_dc + zpos[8 * zzv[zz]]] /
-                       (images[idx].qtab[q + zz] + 1);
+                  ex = (images[idx].qtab[q + zpos[8 * zzv[zz]]] + 1) * cbuf2[cpos_dc + zpos[8 * zzv[zz]]] / (images[idx].qtab[q + zz] + 1);
                   lcp[5] = (ex < 0 ? -1 : +1) * (ilog(abs(ex) + 1) + (ex != 0 ? 17 : 0));
 
-                  ex = (images[idx].qtab[q + zpos[zzu[zz]]] + 1) * cbuf2[cpos_dc + zpos[zzu[zz]]] /
-                       (images[idx].qtab[q + zz] + 1);
+                  ex = (images[idx].qtab[q + zpos[zzu[zz]]] + 1) * cbuf2[cpos_dc + zpos[zzu[zz]]] / (images[idx].qtab[q + zz] + 1);
                   lcp[6] = (ex < 0 ? -1 : +1) * (ilog(abs(ex) + 1) + (ex != 0 ? 17 : 0));
                 } else
                   lcp[4] = lcp[5] = lcp[6] = 65535;
@@ -741,8 +707,7 @@ public:
         m.set(buf(1), 1024);
         return true;
       }
-      if( rstlen > 0 && rstlen == column + row * width - rstpos && mcupos == 0 &&
-          (int) huffcode == (1 << huffbits) - 1 ) {
+      if( rstlen > 0 && rstlen == column + row * width - rstpos && mcupos == 0 && (int) huffcode == (1 << huffbits) - 1 ) {
         m.add(2047); //network bias
         m.set(0, 1 + 8);
         m.set(0, 1 + 1024);
@@ -784,15 +749,13 @@ public:
         cxt[i++] = hash(++n, zv / 2, lcp[1] / 13, lcp[3] / 30, prev_coef / 40 + ((prev_coef2 / 28) << 20));
         cxt[i++] = hash(++n, rs1, prev_coef / 42, prev_coef2 / 34, lcp[0] / 60, lcp[2] / 14, lcp[1] / 60, lcp[3] / 14);
         cxt[i++] = hash(++n, mcupos & 63, column >> 1);
-        cxt[i++] = hash(++n, column >> 3, min(5 + 2 * (!comp), zu + zv), lcp[0] / 10, lcp[2] / 40, lcp[1] / 10,
-                        lcp[3] / 40);
+        cxt[i++] = hash(++n, column >> 3, min(5 + 2 * (!comp), zu + zv), lcp[0] / 10, lcp[2] / 40, lcp[1] / 10, lcp[3] / 40);
         cxt[i++] = hash(++n, ssum >> 3, mcupos & 63);
         cxt[i++] = hash(++n, rs1, mcupos & 63, run_pred[1]);
         cxt[i++] = hash(++n, coef, ssum2 >> 5, adv_pred[3] / 30,
                         (comp) ? hash(prev_coef / 22, prev_coef2 / 50) : ssum / ((mcupos & 0x3F) + 1));
-        cxt[i++] = hash(++n, lcp[0] / 40, lcp[1] / 40, adv_pred[1] / 28,
-                        (comp) ? prev_coef / 40 + ((prev_coef2 / 40) << 20) : lcp[4] / 22, min(7, zu + zv),
-                        ssum / (2 * (zu + zv) + 1));
+        cxt[i++] = hash(++n, lcp[0] / 40, lcp[1] / 40, adv_pred[1] / 28, (comp) ? prev_coef / 40 + ((prev_coef2 / 40) << 20) : lcp[4] / 22,
+                        min(7, zu + zv), ssum / (2 * (zu + zv) + 1));
         cxt[i++] = hash(++n, zv, cbuf[cpos - blockN[mcupos >> 6]], adv_pred[2] / 28, run_pred[2]);
         cxt[i++] = hash(++n, zu, cbuf[cpos - blockW[mcupos >> 6]], adv_pred[0] / 28, run_pred[0]);
         cxt[i++] = hash(++n, adv_pred[2] / 7, run_pred[2]);
@@ -804,8 +767,7 @@ public:
         cxt[i++] = hash(++n, coef, prev_coef / 10, prev_coef2 / 20);
         cxt[i++] = hash(++n, coef, ssum >> 2, prev_coef_rs);
         cxt[i++] = hash(++n, coef, adv_pred[1] / 17, lcp[(zu < zv)] / 24, lcp[2] / 20, lcp[3] / 24);
-        cxt[i++] = hash(++n, coef, adv_pred[3] / 11, lcp[(zu < zv)] / 50, lcp[2 + 3 * (zu * zv > 1)] / 50,
-                        lcp[3 + 3 * (zu * zv > 1)] / 50);
+        cxt[i++] = hash(++n, coef, adv_pred[3] / 11, lcp[(zu < zv)] / 50, lcp[2 + 3 * (zu * zv > 1)] / 50, lcp[3 + 3 * (zu * zv > 1)] / 50);
         assert(i == N);
       }
 

@@ -56,8 +56,8 @@ public:
  * - Instead of floats we use fixed point arithmetic.
  * - The threshold for cloning a state increases gradually as memory is used up.
  * - For probability estimation each state maintains both a 0,1 count ("c0" and "c1")
- * and a bit history ("state"). The 0,1 counts are updated adaptively favoring newer events.
- * The bit history state is mapped to a probability adaptively using a StateMap.
+ *   and a bit history ("state"). The 0,1 counts are updated adaptively favoring newer events.
+ *   The bit history state is mapped to a probability adaptively using a StateMap.
  * - The predictions of multiple "DmcModel"s are combined and stabilized in "dmcForest". See below.
  */
 class DmcModel {
@@ -73,31 +73,32 @@ private:
     // this is the number of skipped cloning events when the counts were already large enough (>1.0)
 
     // helper function: adaptively increment a counter
-    [[nodiscard]] uint32_t incrementCounter(const uint32_t x,
-                                            const uint32_t increment) const { // x is a fixed point number as c0,c1 ; "increment"  is 0 or 1
+    [[nodiscard]] uint32_t
+    incrementCounter(const uint32_t x, const uint32_t increment) const { // x is a fixed point number as c0,c1 ; "increment"  is 0 or 1
       return (((x << 6U) - x) >> 6U) + (increment << 10U); // x * (1-1/64) + increment
     }
 
 public:
     DmcModel(const Shared *const sh, const uint64_t dmcNodes, const uint32_t thStart) : shared(sh),
-                                                                                        t(min(dmcNodes + DMC_NODES_BASE,
-                                                                                              DMC_NODES_MAX)),
-                                                                                        sm(sh, 1, 256,
-                                                                                           256 /*64-512 are all fine*/,
+                                                                                        t(min(dmcNodes + DMC_NODES_BASE, DMC_NODES_MAX)),
+                                                                                        sm(sh, 1, 256, 256 /*64-512 are all fine*/,
                                                                                            StateMap::BIT_HISTORY) //StateMap: s, n, limit, init
     {
       resetStateGraph(thStart);
     }
 
-    // Initialize the state graph to a bytewise order 1 model
-    // See an explanation of the initial structure in:
-    // http://wing.comp.nus.edu.sg/~junping/docs/njp-icita2005.pdf
+    /**
+     * Initialize the state graph to a bytewise order 1 model
+     * See an explanation of the initial structure in:
+     * http://wing.comp.nus.edu.sg/~junping/docs/njp-icita2005.pdf
+     * @param thStart
+     */
     void resetStateGraph(const uint32_t thStart) {
       assert(((t.size() - 1) >> 28) ==
              0); // the top 4 bits must be unused by nx0 and nx1 for storing the 4+4 bits of the bit history state byte
       top = curr = extra = 0;
       threshold = thStart;
-      thresholdFine = thStart << 11;
+      thresholdFine = thStart << 11U;
       for( int j = 0; j < 256; ++j ) { //256 trees
         for( int i = 0; i < 255; ++i ) { //255 nodes in each tree
           if( i < 127 ) { //internal tree nodes
@@ -115,7 +116,9 @@ public:
       }
     }
 
-    //update state graph
+    /**
+     * update state graph
+     */
     void update() {
       uint32_t c0 = t[curr].c0;
       uint32_t c1 = t[curr].c1;
@@ -190,42 +193,43 @@ public:
     }
 };
 
-// This class solves two problems of the DMC model
-// 1) The DMC model is a memory hungry algorithm. In theory it works best when it can clone
-//    nodes forever. But when the state graph is full you can't clone nodes anymore.
-//    You can either i) reset the model (the state graph) and start over
-//    or ii) you can keep updating the counts forever in the already fixed state graph. Both
-//    choices are troublesome: i) resetting the model degrades the predictive power significantly
-//    until the graph becomes large enough again and ii) a fixed structure can't adapt anymore.
-//    To solve this issue:
-//    Ten models with different arguments work in tandem. Only eight of the ten models
-//    are reset periodically. Due to their different cloning threshold arguments and
-//    different state graph sizes they are reset at different points in time.
-//    The remaining two models (having the highest threshold and largest state graph) are
-//    never reset and are beneficial for semi-stationary files.
-// 2) The DMC model is sensitive to the cloning threshold parameter. Some files prefer
-//    a smaller threshold other files prefer a larger threshold.
-//    The difference in terms of compression is significant.
-//    To solve this issue DMC models with different thresholds are used and their
-//    predictions are combined.
-//
-//    Disadvantages: with the same memory requirements we have less number of nodes
-//    in each model. Also keeping more models updated at all times requires more
-//    calculations and more memory access than updating one model only.
-//    Advantage: more stable and better compression - even with reduced number of nodes.
-//
-// Further notes:
-//    Extremely small initial threshold arguments (i) help the state graph become large faster
-//    and model longer input bit sequences sooner. Moreover (ii) when using a small threshold
-//    parameter the split counts c0 and c1 will be small after cloning, and after updating them
-//    with 0 and 1 the prediction p=c1/(c0+c1) will be biased towards these latest events.
+/**
+ * This class solves two problems of the DMC model
+ * 1) The DMC model is a memory hungry algorithm. In theory it works best when it can clone
+ *    nodes forever. But when the state graph is full you can't clone nodes anymore.
+ *    You can either i) reset the model (the state graph) and start over
+ *    or ii) you can keep updating the counts forever in the already fixed state graph. Both
+ *    choices are troublesome: i) resetting the model degrades the predictive power significantly
+ *    until the graph becomes large enough again and ii) a fixed structure can't adapt anymore.
+ *    To solve this issue:
+ *    Ten models with different arguments work in tandem. Only eight of the ten models
+ *    are reset periodically. Due to their different cloning threshold arguments and
+ *    different state graph sizes they are reset at different points in time.
+ *    The remaining two models (having the highest threshold and largest state graph) are
+ *    never reset and are beneficial for semi-stationary files.
+ * 2) The DMC model is sensitive to the cloning threshold parameter. Some files prefer
+ *    a smaller threshold other files prefer a larger threshold.
+ *    The difference in terms of compression is significant.
+ *    To solve this issue DMC models with different thresholds are used and their
+ *    predictions are combined.
+ *
+ *    Disadvantages: with the same memory requirements we have less number of nodes
+ *    in each model. Also keeping more models updated at all times requires more
+ *    calculations and more memory access than updating one model only.
+ *    Advantage: more stable and better compression - even with reduced number of nodes.
+ *
+ * Further notes:
+ *    Extremely small initial threshold arguments (i) help the state graph become large faster
+ *    and model longer input bit sequences sooner. Moreover (ii) when using a small threshold
+ *    parameter the split counts c0 and c1 will be small after cloning, and after updating them
+ *    with 0 and 1 the prediction p=c1/(c0+c1) will be biased towards these latest events.
+ */
 
 class DmcForest {
 private:
     static constexpr uint32_t MODELS = 10; // 8 fast and 2 slow models
 public:
-    static constexpr int MIXERINPUTS =
-            2 + 8 / 2; // 6 : fast models (2 individually) + slow models (8 combined pairwise)
+    static constexpr int MIXERINPUTS = 2 + 8 / 2; // 6 : fast models (2 individually) + slow models (8 combined pairwise)
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
 
@@ -246,7 +250,10 @@ public:
         delete dmcModels[i];
     }
 
-    // update and predict
+    /**
+     * update and predict
+     * @param m
+     */
     void mix(Mixer &m) {
       int i = MODELS;
       // the slow models predict individually

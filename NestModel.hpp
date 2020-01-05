@@ -1,8 +1,6 @@
 #ifndef PAQ8PX_NESTMODEL_HPP
 #define PAQ8PX_NESTMODEL_HPP
 
-//////////////////////////// NestModel //////////////////////////
-
 class NestModel {
 private:
     static constexpr int nCM = 12;

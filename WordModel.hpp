@@ -1,22 +1,21 @@
 #ifndef PAQ8PX_WORDMODEL_HPP
 #define PAQ8PX_WORDMODEL_HPP
 
-//////////////////////////// WordModel /////////////////////////
-
-// Model words, expressions, numbers, paragraphs/lines, etc.
-// simple processing of pdf text
-// simple modeling of some binary content
-
 #ifdef USE_TEXTMODEL
 
+/**
+ * Model words, expressions, numbers, paragraphs/lines, etc.
+ * simple processing of pdf text
+ * simple modeling of some binary content
+ */
 class WordModel {
 private:
     static constexpr int nCM1 = 17; // pdf / non_pdf contexts
     static constexpr int nCM2 = 41; // common contexts
     static constexpr int nCM = nCM1 + nCM2; // 58
 public:
-    static constexpr int MIXERINPUTS = nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS +
-                                              ContextMap2::MIXERINPUTS_BYTE_HISTORY); // 406
+    static constexpr int MIXERINPUTS =
+            nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS + ContextMap2::MIXERINPUTS_BYTE_HISTORY); // 406
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
 
@@ -55,8 +54,7 @@ private:
         uint32_t mask, expr0Chars, mask2, f4;
 
     public:
-        Info(const Shared *const sh, ModelStats const *st, ContextMap2 &contextmap) : shared(sh), stats(st),
-                                                                                      cm(contextmap) {
+        Info(const Shared *const sh, ModelStats const *st, ContextMap2 &contextmap) : shared(sh), stats(st), cm(contextmap) {
           reset();
         }
 
@@ -114,8 +112,8 @@ private:
           }
 
           isLetter = (c >= 'a' && c <= 'z') || is_extended_char;
-          const bool is_number = (c >= '0' && c <= '9') || (pC >= '0' && pC <= '9' && c ==
-                                                                                      '.' /* decimal point (english) or thousand separator (misc) */);
+          const bool is_number =
+                  (c >= '0' && c <= '9') || (pC >= '0' && pC <= '9' && c == '.' /* decimal point (english) or thousand separator (misc) */);
           const bool is_newline = c == NEW_LINE || c == 0;
           const bool is_newline_pC = pC == NEW_LINE || pC == 0;
 
@@ -345,8 +343,7 @@ private:
           const uint32_t lastPos = wchk[w] != chk ? 0 : wpos[w]; //last occurrence (position) of a whole word or number
           const uint32_t dist = lastPos == 0 ? 0 : min(llog(pos - lastPos + 120) >> 4, 20);
           const bool word0MayEndNow = lastPos != 0;
-          const uint8_t mayBeCaps =
-                  uint8_t(c4 >> 8) >= 'A' && uint8_t(c4 >> 8) <= 'Z' && uint8_t(c4) >= 'A' && uint8_t(c4) <= 'Z';
+          const uint8_t mayBeCaps = uint8_t(c4 >> 8) >= 'A' && uint8_t(c4 >> 8) <= 'Z' && uint8_t(c4) >= 'A' && uint8_t(c4) <= 'Z';
           const bool isTextBlock = stats->blockType == TEXT || stats->blockType == TEXT_EOL;
 
           uint64_t i = 2048 * isTextBlock;
@@ -487,9 +484,8 @@ private:
           cm.set(hash(++i, mask & 0x1ff, f4 & 0x00fff0)); // for some binary files
 
           if( isTextBlock ) {
-            cm.set(hash(++i, word0, c1, llog(wordGap), mask & 0x1FF,
-                        ((wordLen1 > 3) << 2) | ((lastUpper < lastLetter + wordLen1) << 1) |
-                        (lastUpper < wordLen0 + wordLen1 + wordGap))); //weak
+            cm.set(hash(++i, word0, c1, llog(wordGap), mask & 0x1FF, ((wordLen1 > 3) << 2) | ((lastUpper < lastLetter + wordLen1) << 1) |
+                                                                     (lastUpper < wordLen0 + wordLen1 + wordGap))); //weak
           } else {
             cm.skip();
             i++;
@@ -502,12 +498,10 @@ private:
     Info info_pdf; //used only in case of pdf text - in place of info_normal
     uint8_t pdf_text_parser_state; // 0..7
 public:
-    WordModel(const Shared *const sh, ModelStats const *st, const uint64_t size) : shared(sh), stats(st),
-                                                                                   cm(sh, size, nCM, 74,
-                                                                                      CM_USE_RUN_STATS |
-                                                                                      CM_USE_BYTE_HISTORY),
-                                                                                   info_normal(sh, st, cm),
-                                                                                   info_pdf(sh, st, cm),
+    WordModel(const Shared *const sh, ModelStats const *st, const uint64_t size) : shared(sh), stats(st), cm(sh, size, nCM, 74,
+                                                                                                             CM_USE_RUN_STATS |
+                                                                                                             CM_USE_BYTE_HISTORY),
+                                                                                   info_normal(sh, st, cm), info_pdf(sh, st, cm),
                                                                                    pdf_text_parser_state(0) {}
 
     void reset() {

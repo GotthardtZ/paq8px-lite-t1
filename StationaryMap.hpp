@@ -1,20 +1,19 @@
 #ifndef PAQ8PX_STATIONARYMAP_HPP
 #define PAQ8PX_STATIONARYMAP_HPP
 
-/*
-  map for modelling contexts of (nearly-)stationary data.
-  The context is looked up directly. For each bit modelled, a 32bit element stores
-  a 22 bit prediction and a 10 bit adaptation rate offset.
-
-  - BitsOfContext: How many bits to use for each context. Higher bits are discarded.
-  - InputBits: How many bits [1..8] of input are to be modelled for each context.
-    New contexts must be set at those intervals.
-  - Rate: Initial adaptation rate offset [0..1023]. Lower offsets mean faster adaptation.
-    Will be increased on every occurrence until the higher bound is reached.
-
-    Uses (2^(BitsOfContext+2))*((2^InputBits)-1) bytes of memory.
-*/
-
+/**
+ * map for modelling contexts of (nearly-)stationary data.
+ * The context is looked up directly. For each bit modelled, a 32bit element stores
+ * a 22 bit prediction and a 10 bit adaptation rate offset.
+ *
+ * - BitsOfContext: How many bits to use for each context. Higher bits are discarded.
+ * - InputBits: How many bits [1..8] of input are to be modelled for each context.
+ * New contexts must be set at those intervals.
+ * - Rate: Initial adaptation rate offset [0..1023]. Lower offsets mean faster adaptation.
+ * Will be increased on every occurrence until the higher bound is reached.
+ *
+ * Uses (2^(BitsOfContext+2))*((2^InputBits)-1) bytes of memory.
+ */
 class StationaryMap : IPredictor {
 public:
     static constexpr int MIXERINPUTS = 2;
@@ -30,11 +29,25 @@ private:
     int *dt;
 
 public:
-    StationaryMap(const Shared *const sh, const int bitsOfContext, const int inputBits, const int scale,
-                  const uint16_t limit) : shared(sh),
-                                          data((UINT64_C(1) << bitsOfContext) * ((UINT64_C(1) << inputBits) - 1)),
-                                          mask((1U << bitsOfContext) - 1), maskBits(bitsOfContext),
-                                          stride((1U << inputBits) - 1), bTotal(inputBits), scale(scale), limit(limit) {
+    StationaryMap(const Shared *const sh, const int bitsOfContext, const int inputBits, const int scale, const uint16_t limit) : shared(sh),
+                                                                                                                                 data((UINT64_C(
+                                                                                                                                         1)
+                                                                                                                                         << bitsOfContext) *
+                                                                                                                                      ((UINT64_C(
+                                                                                                                                              1)
+                                                                                                                                              << inputBits) -
+                                                                                                                                       1)),
+                                                                                                                                 mask((1U
+                                                                                                                                         << bitsOfContext) -
+                                                                                                                                      1),
+                                                                                                                                 maskBits(
+                                                                                                                                         bitsOfContext),
+                                                                                                                                 stride((1U
+                                                                                                                                         << inputBits) -
+                                                                                                                                        1),
+                                                                                                                                 bTotal(inputBits),
+                                                                                                                                 scale(scale),
+                                                                                                                                 limit(limit) {
       assert(inputBits > 0 && inputBits <= 8);
       assert(bitsOfContext + inputBits <= 24);
       dt = DivisionTable::getDT();

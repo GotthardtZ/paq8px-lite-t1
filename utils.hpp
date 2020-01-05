@@ -15,19 +15,21 @@
 
 // Platform-specific includes
 #ifdef UNIX
+
 #include <cstring> //strlen(), strcpy(), strcat(), strerror(), memset(), memcpy(), memmove()
 #include <climits> //PATH_MAX (for OSX)
 #include <unistd.h> //isatty()
 #include <cerrno>  //errno
+
 #else
 #ifndef NOMINMAX
-  #define NOMINMAX
-  #endif
-  #include <windows.h>   //CreateDirectoryW, CommandLineToArgvW, GetConsoleOutputCP, SetConsoleOutputCP
-                         //GetCommandLineW, GetModuleFileNameW, GetStdHandle, GetTempFileName
-                         //MultiByteToWideChar, WideCharToMultiByte,
-                         //FileType, FILE_TYPE_PIPE, FILE_TYPE_DISK,
-                         //uRetVal, DWORD, UINT, TRUE, MAX_PATH, CP_UTF8, etc.
+#define NOMINMAX
+#endif
+#include <windows.h>   //CreateDirectoryW, CommandLineToArgvW, GetConsoleOutputCP, SetConsoleOutputCP
+//GetCommandLineW, GetModuleFileNameW, GetStdHandle, GetTempFileName
+//MultiByteToWideChar, WideCharToMultiByte,
+//FileType, FILE_TYPE_PIPE, FILE_TYPE_DISK,
+//uRetVal, DWORD, UINT, TRUE, MAX_PATH, CP_UTF8, etc.
 #endif
 
 
@@ -96,7 +98,7 @@ static bool isOutputDirected() {
   return (FileType == FILE_TYPE_PIPE) || (FileType == FILE_TYPE_DISK);
 #endif
 #ifdef UNIX
-  return ! isatty(fileno(stdout));
+  return !isatty(fileno(stdout));
 #endif
 }
 
@@ -138,13 +140,13 @@ inline bool hasRecursion(BlockType ft) {
 }
 
 inline bool hasInfo(BlockType ft) {
-  return ft == IMAGE1 || ft == IMAGE4 || ft == IMAGE8 || ft == IMAGE8GRAY || ft == IMAGE24 || ft == IMAGE32 ||
-         ft == AUDIO || ft == AUDIO_LE || ft == PNG8 || ft == PNG8GRAY || ft == PNG24 || ft == PNG32;
+  return ft == IMAGE1 || ft == IMAGE4 || ft == IMAGE8 || ft == IMAGE8GRAY || ft == IMAGE24 || ft == IMAGE32 || ft == AUDIO ||
+         ft == AUDIO_LE || ft == PNG8 || ft == PNG8GRAY || ft == PNG24 || ft == PNG32;
 }
 
 inline bool hasTransform(BlockType ft) {
-  return ft == IMAGE24 || ft == IMAGE32 || ft == AUDIO_LE || ft == EXE || ft == CD || ft == ZLIB || ft == BASE64 ||
-         ft == GIF || ft == TEXT_EOL || ft == RLE || ft == LZW;
+  return ft == IMAGE24 || ft == IMAGE32 || ft == AUDIO_LE || ft == EXE || ft == CD || ft == ZLIB || ft == BASE64 || ft == GIF ||
+         ft == TEXT_EOL || ft == RLE || ft == LZW;
 }
 
 inline bool isPNG(BlockType ft) { return ft == PNG8 || ft == PNG8GRAY || ft == PNG24 || ft == PNG32; }

@@ -9,7 +9,7 @@ ARITHMETIC CODING
 The binary data is arithmetic coded as the shortest base 256 fixed point
 number x = SUM_i x_i 256^-1-i such that p(<y) <= x < p(<=y), where y is the
 input string, x_i is the i'th coded byte, p(<y) (and p(<=y)) means the
-probability that a string is lexicographcally less than (less than
+probability that a string is lexicographically less than (less than
 or equal to) y according to the model, _ denotes subscript, and ^ denotes
 exponentiation.
 
@@ -24,7 +24,7 @@ MODEL MIXING
 paq8px uses a neural network to combine a large number of models.  The
 i'th model independently predicts
 p1_i = p(y_j = 1 | y_0..j-1), p0_i = 1 - p1_i.
-The network computes the next bit probabilty
+The network computes the next bit probability
 
   p1 = squash(SUM_i w_i t_i), p0 = 1 - p1                        (1)
 
@@ -85,7 +85,7 @@ There are several types of bit history states:
       the last bit seen (0 or 1) if 5 <= n <= 15,
       0 for n >= 16.
 
-  The primaty output is t_i := stretch(sm(n0,n1,h)), where sm(.) is
+  The primary output is t_i := stretch(sm(n0,n1,h)), where sm(.) is
   a stationary map with K = 1/256, initialized to
   sm(n0,n1,h) = (n1+(1/64))/(n+2/64).  Four additional inputs are also
   be computed to improve compression slightly:
@@ -163,7 +163,7 @@ modeled with both a run map and a nonstationary map unless indicated.
   current word.
 
 - Formatted text.  The column number (determined by the position of
-  the last linefeed) is combined with other contexts: the charater to
+  the last linefeed) is combined with other contexts: the character to
   the left and the character above it.
 
 - Fixed record length.  The record length is determined by searching for
@@ -188,7 +188,7 @@ modeled with both a run map and a nonstationary map unless indicated.
 - JPEG.  Files are further compressed by partially uncompressing back
   to the DCT coefficients to provide context for the next Huffman code.
   Only baseline DCT-Huffman coded files are modeled.  (This ia about
-  90% of images, the others are usually progresssive coded).  JPEG images
+  90% of images, the others are usually progressive coded).  JPEG images
   embedded in other files (quite common) are detected by headers.  The
   baseline JPEG coding process is:
   - Convert to grayscale and 2 chroma colorspace.
@@ -273,7 +273,7 @@ of this size.  The preprocessor has 3 parts:
   input file.  The file type is stored (as one byte) during compression.
 
 - Decoder.  Performs the inverse transform of the coder.  It uses few
-  resorces (fast, low memory) and runs in a single pass (stream oriented).
+  resources (fast, low memory) and runs in a single pass (stream oriented).
   It takes input either from a file or the arithmetic decoder.  Each call
   to the decoder returns a single decoded byte.
 
@@ -290,7 +290,7 @@ The following transforms are used:
 
 - JPEG: detected by SOI and SOF and ending with EOI or any nondecodable
   data.  No transform is applied.  The purpose is to separate images
-  embedded in execuables to block the EXE transform, and for a future
+  embedded in executables to block the EXE transform, and for a future
   place to insert a transform.
 
 

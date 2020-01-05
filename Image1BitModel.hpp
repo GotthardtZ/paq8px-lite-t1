@@ -1,10 +1,9 @@
 #ifndef PAQ8PX_IMAGE1BITMODEL_HPP
 #define PAQ8PX_IMAGE1BITMODEL_HPP
 
-//////////////////////////// Image1BitModel /////////////////////////////////
-
-// Model for 1-bit image data
-
+/**
+ * Model for 1-bit image data
+ */
 class Image1BitModel {
 private:
     static constexpr int S = 11;
@@ -23,8 +22,8 @@ public:
     void mix(Mixer &m);
 };
 
-Image1BitModel::Image1BitModel(const Shared *const sh) : shared(sh), sm {sh, S, 256, 1023,
-                                                                         StateMap::BIT_HISTORY} // StateMap: s, n, limit, init
+Image1BitModel::Image1BitModel(const Shared *const sh) : shared(sh),
+                                                         sm {sh, S, 256, 1023, StateMap::BIT_HISTORY} // StateMap: s, n, limit, init
 {}
 
 void Image1BitModel::setParam(int info0) {

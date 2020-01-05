@@ -4,6 +4,9 @@
 #include <cstdint>
 #include "Array.hpp"
 
+/**
+ * Move To Front List
+ */
 class MTFList {
 private:
     int root, Index;

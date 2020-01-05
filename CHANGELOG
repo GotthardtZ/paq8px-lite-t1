@@ -1471,7 +1471,7 @@ Paq8px_v179fix2
 - All models are classes now
 - A new model factory, so that unused models do not consume memory (preparation*)
 - Scaling in Mixer: multipliers instead of shifts (preparation*)
-- Update() is now a standalone function in all maps (preparation*)
+- update() is now a standalone function in all maps (preparation*)
 - Other minor/cosmetic changes
 - Eliminated some compiler warnings (VC++)
 

@@ -151,10 +151,8 @@ public:
       }
 
       const auto B = short(
-              (wMode < 4) ? (lsb) ? uint8_t(c0 << (8 - bpos)) : (c0 << (16 - bpos)) | c1 : (lsb) ? (c1 << 8U) |
-                                                                                                   uint8_t(c0 << (8 -
-                                                                                                                  bpos))
-                                                                                                 : c0 << (16 - bpos));
+              (wMode < 4) ? (lsb) ? uint8_t(c0 << (8 - bpos)) : (c0 << (16 - bpos)) | c1 : (lsb) ? (c1 << 8U) | uint8_t(c0 << (8 - bpos)) :
+                                                                                           c0 << (16 - bpos));
 
       for( int i = 0; i < nSSM; i++ ) {
         const uint32_t ctx0 = uint16_t(prd[i][ch][0] - B);

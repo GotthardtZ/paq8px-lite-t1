@@ -26,7 +26,7 @@ private:
     /**
      * code(i) in COMPRESS mode compresses bit i (0 or 1) to file f.
      * code() in DECOMPRESS mode returns the next decompressed bit from file f.
-     *   Global y is set to the last bit coded or decoded by code().
+     * Global y is set to the last bit coded or decoded by code().
      * @param i the bit to be compressed
      * @return
      */
@@ -35,17 +35,17 @@ private:
       if( p == 0 )
         p++;
       assert(p > 0 && p < 4096);
-      uint32_t xMid = x1 + ((x2 - x1) >> 12) * p + (((x2 - x1) & 0xfff) * p >> 12);
+      uint32_t xMid = x1 + ((x2 - x1) >> 12U) * p + (((x2 - x1) & 0xfffu) * p >> 12);
       assert(xMid >= x1 && xMid < x2);
       uint8_t y = (mode == DECOMPRESS) ? x <= xMid : i;
       y ? (x2 = xMid) : (x1 = xMid + 1);
       while(((x1 ^ x2) & 0xff000000) == 0 ) { // pass equal leading bytes of range
         if( mode == COMPRESS )
-          archive->putChar(x2 >> 24);
-        x1 <<= 8;
-        x2 = (x2 << 8) + 255;
+          archive->putChar(x2 >> 24U);
+        x1 <<= 8U;
+        x2 = (x2 << 8U) + 255;
         if( mode == DECOMPRESS )
-          x = (x << 8) + (archive->getchar() & 255); // EOF is OK
+          x = (x << 8U) + (archive->getchar() & 255U); // EOF is OK
       }
       predictor.update(y);
       return y;
@@ -69,7 +69,7 @@ public:
     [[nodiscard]] uint64_t size() const;
     /**
      * flush() should be called exactly once after compression is done and
-     * before closing f.  It does nothing in DECOMPRESS mode.
+     * before closing f. It does nothing in DECOMPRESS mode.
      */
     void flush();
     /**

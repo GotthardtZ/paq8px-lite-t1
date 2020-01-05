@@ -10,11 +10,9 @@ private:
     static constexpr int NUM_VOWELS = 9;
     static constexpr char Vowels[NUM_VOWELS] = {'a', 'e', 'i', 'o', 'u', 'y', '\xE4', '\xF6', '\xFC'};
     static constexpr int NUM_COMMON_WORDS = 10;
-    const char *CommonWords[NUM_COMMON_WORDS] = {"der", "die", "das", "und", "sie", "ich", "mit", "sich", "auf",
-                                                 "nicht"};
+    const char *CommonWords[NUM_COMMON_WORDS] = {"der", "die", "das", "und", "sie", "ich", "mit", "sich", "auf", "nicht"};
     static constexpr int NUM_ENDINGS = 10;
-    static constexpr char Endings[NUM_ENDINGS] = {'b', 'd', 'f', 'g', 'h', 'k', 'l', 'm', 'n',
-                                                  't'}; //plus 'r' for words ending in 's'
+    static constexpr char Endings[NUM_ENDINGS] = {'b', 'd', 'f', 'g', 'h', 'k', 'l', 'm', 'n', 't'}; //plus 'r' for words ending in 's'
     static constexpr int NUM_SUFFIXES_STEP1 = 6;
     const char *SuffixesStep1[NUM_SUFFIXES_STEP1] = {"em", "ern", "er", "e", "en", "es"};
     static constexpr int NUM_SUFFIXES_STEP2 = 3;
@@ -108,8 +106,7 @@ private:
         }
       }
       for( ; i < 5; i++ ) {
-        if( w->endsWith(SuffixesStep3[i]) && suffixInRn(w, r2, SuffixesStep3[i]) &&
-            (*w)((uint8_t) strlen(SuffixesStep3[i])) != 'e' ) {
+        if( w->endsWith(SuffixesStep3[i]) && suffixInRn(w, r2, SuffixesStep3[i]) && (*w)((uint8_t) strlen(SuffixesStep3[i])) != 'e' ) {
           w->end -= uint8_t(strlen(SuffixesStep3[i]));
           if( i > 2 )
             w->type |= German::Adjective;

@@ -1,18 +1,10 @@
 #ifndef PAQ8PX_STATEMAP_HPP
 #define PAQ8PX_STATEMAP_HPP
 
-//////////////////////////// StateMap, APM //////////////////////////
-
-// A StateMap maps a context to a probability.  Methods:
-//
-// Statemap sm(n) creates a StateMap with n contexts using 4*n bytes memory.
-// sm.p(y, cx, limit) converts state cx (0..n-1) to a probability (0..4095).
-//     that the next y=1, updating the previous prediction with y (0..1).
-//     limit (1..1023, default 1023) is the maximum count for computing a
-//     prediction.  Larger values are better for stationary sources.
-
-// This class provides a static (common) 1024-element lookup table for integer division
-// Initialization will run multiple times, but the table is created only once
+/**
+ * This class provides a static (common) 1024-element lookup table for integer division
+ * Initialization will run multiple times, but the table is created only once
+ */
 class DivisionTable {
 public:
     static int *getDT() {
@@ -23,8 +15,10 @@ public:
     }
 };
 
-// This is the base class for StateMap and APM
-// Purpose: common members are here
+/**
+ * This is the base class for StateMap and APM.
+ * Purpose: common members are here
+ */
 class AdaptiveMap : protected IPredictor {
 protected:
     const Shared *const shared;
@@ -47,8 +41,7 @@ protected:
         p0 = (p0 & 0xfffffc00U) | limit;
       INJECT_SHARED_y
       const int target = y << 22U; //(22-bit fractional part)
-      const int delta =
-              ((target - pr) >> 3U) * dt[n]; //the larger the count (n) the less it should adapt pr+=(target-pr)/(n+1.5)
+      const int delta = ((target - pr) >> 3U) * dt[n]; //the larger the count (n) the less it should adapt pr+=(target-pr)/(n+1.5)
       p0 += delta & 0xfffffc00U;
       p[0] = p0;
     }
@@ -57,6 +50,9 @@ public:
     void setLimit(const int lim) { limit = lim; };
 };
 
+/**
+ * A StateMap maps a context to a probability.
+ */
 class StateMap : public AdaptiveMap {
 protected:
     const uint32_t S; // Number of context sets
@@ -68,12 +64,16 @@ public:
         GENERIC, BIT_HISTORY, RUN
     };
 
-    StateMap(const Shared *const sh, const int s, const int n, const int lim, const MAPTYPE mapType) : AdaptiveMap(sh,
-                                                                                                                   n *
-                                                                                                                   s,
-                                                                                                                   lim),
-                                                                                                       S(s), N(n),
-                                                                                                       ncxt(0), cxt(s) {
+    /**
+     * creates a StateMap with \n contexts using 4*n bytes memory.
+     * @param sh
+     * @param s
+     * @param n number of contexts
+     * @param lim
+     * @param mapType
+     */
+    StateMap(const Shared *const sh, const int s, const int n, const int lim, const MAPTYPE mapType) : AdaptiveMap(sh, n * s, lim), S(s),
+                                                                                                       N(n), ncxt(0), cxt(s) {
       assert(S > 0 && N > 0);
       assert(limit > 0 && limit < 1024);
       if( mapType == BIT_HISTORY ) { // when the context is a bit history byte, we have a-priory for p
@@ -133,6 +133,16 @@ public:
 
     //call p2() for each context when there is more context sets
     //and call subscribe() once
+    /**
+     * TODO: Update this documentation
+     * sm.p(y, cx, limit) converts state cx (0..n-1) to a probability (0..4095).
+     * that the next y=1, updating the previous prediction with y (0..1).
+     * limit (1..1023, default 1023) is the maximum count for computing a
+     * prediction.  Larger values are better for stationary sources.
+     * @param s
+     * @param cx
+     * @return
+     */
     int p2(const uint32_t s, const uint32_t cx) {
       assert(s >= 0 && s < S);
       assert(cx >= 0 && cx < N);
@@ -140,15 +150,18 @@ public:
       const uint32_t idx = ncxt * N + cx;
       cxt[ncxt] = idx;
       ncxt++;
-      return t[idx] >> 20;
+      return t[idx] >> 20U;
     }
 
     void subscribe() {
       updater.subscribe(this);
     }
 
-    //call skip() instead of p2() when the context is unknown or uninteresting
-    //remark: no need to call skip() when there is only 1 context or all contexts will be skipped
+    /**
+     * Call skip() instead of p2() when the context is unknown or uninteresting.
+     * \remark no need to call skip() when there is only 1 context or all contexts will be skipped
+     * @param s
+     */
     void skip(const uint32_t s) {
       assert(s >= 0 && s < S);
       assert(s == ncxt);
@@ -165,23 +178,21 @@ public:
 };
 
 
-// An APM maps a probability and a context to a new probability.  Methods:
-//
-// APM a(n,STEPS) creates with n contexts using 4*STEPS*n bytes memory.
-// a.update() updates probability map. y=(0..1) is the last bit
-// a.p(pr, cx, limit) returns a new probability (0..4095) like with StateMap.
-//     cx=(0..n-1) is the context.
-//     pr=(0..4095) is considered part of the context.
-//     The output is computed by interpolating pr into STEPS ranges nonlinearly
-//     with smaller ranges near the ends.  The initial output is pr.
-//     limit=(0..1023): set a lower limit (like 255) for faster adaptation.
-
+/**
+ * An APM maps a probability and a context to a new probability.
+ */
 class APM : public AdaptiveMap {
 private:
     const int N; // Number of contexts
     const int steps;
     int cxt; // context index of last prediction
 public:
+    /**
+     * APM a(n,STEPS) creates with n contexts using 4*STEPS*n bytes memory.
+     * @param sh
+     * @param n
+     * @param s
+     */
     APM(const Shared *const sh, const int n, const int s) : AdaptiveMap(sh, n * s, 1023), N(n * s), steps(s), cxt(0) {
       assert(s > 4); // number of steps - must be a positive integer bigger than 4
       for( int i = 0; i < N; ++i ) {
@@ -190,11 +201,26 @@ public:
       }
     }
 
+    /**
+     * a.update() updates probability map. y=(0..1) is the last bit
+     */
     void update() override {
       assert(cxt >= 0 && cxt < N);
       AdaptiveMap::update(&t[cxt]);
     }
 
+    /**
+     * a.p(pr, cx, limit) returns a new probability (0..4095) like with StateMap.
+     * cx=(0..n-1) is the context.
+     * pr=(0..4095) is considered part of the context.
+     * The output is computed by interpolating pr into STEPS ranges nonlinearly
+     * with smaller ranges near the ends.  The initial output is pr.
+     * limit=(0..1023): set a lower limit (like 255) for faster adaptation.
+     * @param pr
+     * @param cx
+     * @param lim
+     * @return
+     */
     int p(int pr, int cx, const int lim) {
       updater.subscribe(this);
       assert(pr >= 0 && pr < 4096);

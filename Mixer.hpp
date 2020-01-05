@@ -3,8 +3,6 @@
 
 #include "utils.hpp"
 
-//////////////////////////// Mixer /////////////////////////////
-
 // Mixer m(n, M, s=1, w=0) combines models using M neural networks with
 //   n inputs each, of which up to s may be selected.  If s > 1 then
 //   the outputs of these neural networks are combined using another
@@ -137,9 +135,8 @@ protected:
     uint32_t nx; // number of inputs in tx, 0 to n
     Array<int> pr; // last result (scaled 12 bits)
 public:
-    Mixer(const Shared *const sh, const int n, const int m, const int s) : shared(sh), N(n), M(m), S(s), scaleFactor(0),
-                                                                           tx(N), wx(N * M), cxt(S), info(S), rates(S),
-                                                                           pr(S) {
+    Mixer(const Shared *const sh, const int n, const int m, const int s) : shared(sh), N(n), M(m), S(s), scaleFactor(0), tx(N), wx(N * M),
+                                                                           cxt(S), info(S), rates(S), pr(S) {
       for( uint64_t i = 0; i < S; ++i ) {
         pr[i] = 2048; //initial p=0.5
         rates[i] = DEFAULT_LEARNING_RATE;
@@ -207,8 +204,7 @@ private:
 
     SIMDMixer *mp; // points to a Mixer to combine results
 public:
-    SIMDMixer(const Shared *sh, const int n, const int m, const int s) : Mixer(sh, ((n + (simdWidth() - 1)) &
-                                                                                    -(simdWidth())), m, s) {
+    SIMDMixer(const Shared *sh, const int n, const int m, const int s) : Mixer(sh, ((n + (simdWidth() - 1)) & -(simdWidth())), m, s) {
       assert(n > 0 && N > 0 && (N & (simdWidth() - 1)) == 0 && M > 0 && S >= 1);
       mp = (S > 1) ? new SIMDMixer<simd>(sh, S, 1, 1) : nullptr;
     }
@@ -249,12 +245,11 @@ public:
             info[i].mask <<= 1;
             info[i].mask |= (logErr <= ((info[i].data[0] >> 4) & 0xF));
             const uint32_t count = bitCount(info[i].mask);
-            if( info[i].collected >= 64 &&
-                (info[i].sum > 1500 + uint32_t(rates[i]) * 64 || count < 9 || (info[i].mask & 0xFF) == 0)) {
+            if( info[i].collected >= 64 && (info[i].sum > 1500 + uint32_t(rates[i]) * 64 || count < 9 || (info[i].mask & 0xFF) == 0)) {
               rates[i] = DEFAULT_LEARNING_RATE;
               memset(&info[i], 0, sizeof(ErrorInfo));
-            } else if( info[i].collected == 4096 && info[i].sum >= 56 && info[i].sum <= 144 &&
-                       count > 28 - uint32_t(rates[i]) && ((info[i].mask & 0xFF) == 0xFF)) {
+            } else if( info[i].collected == 4096 && info[i].sum >= 56 && info[i].sum <= 144 && count > 28 - uint32_t(rates[i]) &&
+                       ((info[i].mask & 0xFF) == 0xFF)) {
               rates[i] -= rates[i] > 2;
               info[i].reset();
             }

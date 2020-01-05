@@ -1,10 +1,9 @@
 #ifndef PAQ8PX_IMAGE4BITMODEL_HPP
 #define PAQ8PX_IMAGE4BITMODEL_HPP
 
-//////////////////////////// Image4BitModel /////////////////////////////////
-
-//  Model for 4-bit image data
-
+/**
+ * Model for 4-bit image data
+ */
 class Image4BitModel {
 private:
     static constexpr int S = 14; //number of contexts

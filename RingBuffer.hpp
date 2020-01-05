@@ -4,21 +4,18 @@
 #include <cstdint>
 #include <cassert>
 
-////////////////////////////// RingBuffer /////////////////////////////
-
-// RingBuffer(n) buf; creates an array of n bytes (must be a power of 2).
-// buf[i] returns a reference to the i'th byte with wrap (no out of bounds).
-// buf(i) returns i'th byte back from pos (i>0) with wrap (no out of bounds)
-// buf.size() returns n.
-
 template<class T>
 class RingBuffer {
 private:
     Array<T> b;
-    uint32_t offset; // Number of input bytes in buffer (not wrapped), will be masked when used for indexing
+    uint32_t offset; /**< Number of input bytes in buffer (not wrapped), will be masked when used for indexing */
     uint32_t mask;
 
 public:
+    /**
+     * RingBuffer(size) buf; creates an array of \size bytes (must be a power of 2).
+     * @param size
+     */
     RingBuffer(const uint32_t size = 0) : b(size), offset(0), mask(size - 1) {
       assert(isPowerOf2(size));
     }
@@ -45,6 +42,11 @@ public:
       offset++;
     }
 
+    /**
+     * Returns a reference to the i'th byte with wrap (no out of bounds).
+     * @param i
+     * @return
+     */
     T operator[](const uint32_t i) const {
       return b[i & mask];
     }
@@ -53,6 +55,11 @@ public:
       b[i & mask] = B;
     }
 
+    /**
+     * Returns i'th byte back from pos (i>0) with wrap (no out of bounds)
+     * @param i
+     * @return
+     */
     T operator()(const uint32_t i) const {
       //assert(i!=0);
       return b[(offset - i) & mask];
@@ -63,6 +70,9 @@ public:
       offset = 0;
     }
 
+    /**
+     * @return the size of the \RingBuffer
+     */
     uint32_t size() {
       return (uint32_t) b.size();
     }

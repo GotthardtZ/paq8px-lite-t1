@@ -1,8 +1,6 @@
 #ifndef PAQ8PX_XMLMODEL_HPP
 #define PAQ8PX_XMLMODEL_HPP
 
-//////////////////////////// XMLModel //////////////////////////
-
 #define CacheSize 32
 
 #if (CacheSize & (CacheSize - 1)) || (CacheSize < 8)
@@ -46,14 +44,7 @@ enum ContentFlags {
 };
 
 enum XMLState {
-    None = 0,
-    ReadTagName = 1,
-    ReadTag = 2,
-    ReadAttributeName = 3,
-    ReadAttributeValue = 4,
-    ReadContent = 5,
-    ReadCDATA = 6,
-    ReadComment = 7,
+    None = 0, ReadTagName = 1, ReadTag = 2, ReadAttributeName = 3, ReadAttributeValue = 4, ReadContent = 5, ReadCDATA = 6, ReadComment = 7,
 };
 
 class XMLModel {
@@ -81,12 +72,11 @@ private:
         int i = 0, j = 0;
         while((i < 4) && ((j = (c4 >> (8 * i)) & 0xFF) >= 0x30 && j <= 0x39))
           i++;
-        if( i == 4 /*????dddd*/ &&
-            (((c8 & 0xFDF0F0FD) == 0x2D30302D && buf(9) >= 0x30 && buf(9) <= 0x39 /*d-dd-dddd or d.dd.dddd*/) ||
-             ((c8 & 0xF0FDF0FD) == 0x302D302D) /*d-d-dddd or d.d.dddd*/))
+        if( i == 4 /*????dddd*/ && (((c8 & 0xFDF0F0FD) == 0x2D30302D && buf(9) >= 0x30 && buf(9) <= 0x39 /*d-dd-dddd or d.dd.dddd*/) ||
+                                    ((c8 & 0xF0FDF0FD) == 0x302D302D) /*d-d-dddd or d.d.dddd*/))
           (*Content).type |= ContentFlags::Date;
-      } else if(((c8 & 0xF0F0FDF0) == 0x30302D30 /*dd.d???? or dd-d????*/ || (c8 & 0xF0F0F0FD) == 0x3030302D) &&
-                buf(9) >= 0x30 && buf(9) <= 0x39 /*dddd-???? or dddd.????*/) {
+      } else if(((c8 & 0xF0F0FDF0) == 0x30302D30 /*dd.d???? or dd-d????*/ || (c8 & 0xF0F0F0FD) == 0x3030302D) && buf(9) >= 0x30 &&
+                buf(9) <= 0x39 /*dddd-???? or dddd.????*/) {
         int i = 2, j = 0;
         while((i < 4) && ((j = (c8 >> (8 * i)) & 0xFF) >= 0x30 && j <= 0x39))
           i++;
@@ -95,16 +85,15 @@ private:
           (*Content).type |= ContentFlags::Date;
       }
 
-      if((c4 & 0xF0FFF0F0) == 0x303A3030 && buf(5) >= 0x30 && buf(5) <= 0x39 &&
-         ((buf(6) < 0x30 || buf(6) > 0x39) /*?dd:dd*/ ||
-          ((c8 & 0xF0F0FF00) == 0x30303A00 && (buf(9) < 0x30 || buf(9) > 0x39) /*?dd:dd:dd*/)))
+      if((c4 & 0xF0FFF0F0) == 0x303A3030 && buf(5) >= 0x30 && buf(5) <= 0x39 && ((buf(6) < 0x30 || buf(6) > 0x39) /*?dd:dd*/ ||
+                                                                                 ((c8 & 0xF0F0FF00) == 0x30303A00 &&
+                                                                                  (buf(9) < 0x30 || buf(9) > 0x39) /*?dd:dd:dd*/)))
         (*Content).type |= ContentFlags::Time;
 
       if((*Content).length >= 8 && (c8 & 0x80808080) == 0 && (c4 & 0x80808080) == 0 ) //8 ~ascii
         (*Content).type |= ContentFlags::Text;
 
-      if((c8 & 0xF0F0FF) == 0x3030C2 &&
-         (c4 & 0xFFF0F0FF) == 0xB0303027 ) { //dd {utf8 C2B0: degree sign} dd {apostrophe}
+      if((c8 & 0xF0F0FF) == 0x3030C2 && (c4 & 0xFFF0F0FF) == 0xB0303027 ) { //dd {utf8 C2B0: degree sign} dd {apostrophe}
         int i = 2;
         while((i < 7) && buf(i) >= 0x30 && buf(i) <= 0x39 )
           i += (i & 1U) * 2 + 1;
@@ -132,8 +121,7 @@ public:
       INJECT_SHARED_c1
       INJECT_SHARED_c4
       INJECT_SHARED_c8
-      XMLTag *pTag = &cache.tags[(cache.Index - 1) & (CacheSize - 1)], *Tag = &cache.tags[cache.Index &
-                                                                                          (CacheSize - 1)];
+      XMLTag *pTag = &cache.tags[(cache.Index - 1) & (CacheSize - 1)], *Tag = &cache.tags[cache.Index & (CacheSize - 1)];
       XMLAttribute *Attribute = &((*Tag).attributes.items[(*Tag).attributes.Index & 3]);
       XMLContent *Content = &(*Tag).content;
       pState = state;
@@ -141,8 +129,8 @@ public:
         whiteSpaceRun++;
         indentTab = (c1 == TAB);
       } else {
-        if((state == None || (state == ReadContent && (*Content).length <= lineEnding + whiteSpaceRun)) &&
-           whiteSpaceRun > 1 + indentTab && whiteSpaceRun != pWSRun ) {
+        if((state == None || (state == ReadContent && (*Content).length <= lineEnding + whiteSpaceRun)) && whiteSpaceRun > 1 + indentTab &&
+           whiteSpaceRun != pWSRun ) {
           indentStep = abs((int) (whiteSpaceRun - pWSRun));
           pWSRun = whiteSpaceRun;
         }

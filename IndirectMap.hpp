@@ -1,8 +1,6 @@
 #ifndef PAQ8PX_INDIRECTMAP_HPP
 #define PAQ8PX_INDIRECTMAP_HPP
 
-/////////////////////////// IndirectMap /////////////////////////
-
 class IndirectMap : IPredictor {
 public:
     static constexpr int MIXERINPUTS = 2;
@@ -18,11 +16,19 @@ private:
     int scale;
 
 public:
-    IndirectMap(const Shared *const sh, const int bitsOfContext, const int inputBits, const int scale, const int limit)
-            : shared(sh), data((UINT64_C(1) << bitsOfContext) * ((UINT64_C(1) << inputBits) - 1)),
-              sm {sh, 1, 256, 1023, StateMap::BIT_HISTORY}, /* StateMap : s, n, lim, init */
-              mask((1U << bitsOfContext) - 1), maskBits(bitsOfContext), stride((1U << inputBits) - 1),
-              bTotal(inputBits), scale(scale) {
+    IndirectMap(const Shared *const sh, const int bitsOfContext, const int inputBits, const int scale, const int limit) : shared(sh),
+                                                                                                                          data((UINT64_C(1)
+                                                                                                                                  << bitsOfContext) *
+                                                                                                                               ((UINT64_C(1)
+                                                                                                                                       << inputBits) -
+                                                                                                                                1)),
+                                                                                                                          sm {sh, 1, 256,
+                                                                                                                              1023,
+                                                                                                                              StateMap::BIT_HISTORY}, /* StateMap : s, n, lim, init */
+                                                                                                                          mask((1U
+                                                                                                                                  << bitsOfContext) -
+                                                                                                                               1), maskBits(
+                    bitsOfContext), stride((1U << inputBits) - 1), bTotal(inputBits), scale(scale) {
       assert(inputBits > 0 && inputBits <= 8);
       assert(bitsOfContext + inputBits <= 24);
       cp = &data[0];

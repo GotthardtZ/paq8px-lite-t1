@@ -1,13 +1,9 @@
 #ifndef PAQ8PX_PREDICTOR_HPP
 #define PAQ8PX_PREDICTOR_HPP
 
-//////////////////////////// Predictor /////////////////////////
-
-// A Predictor estimates the probability that the next bit of
-// uncompressed data is 1.  Methods:
-// p() returns P(1) as a 12 bit number (0-4095).
-// update() trains the models with the actual bit (0 or 1).
-
+/**
+ * A Predictor estimates the probability that the next bit of uncompressed data is 1.
+ */
 class Predictor {
     Shared shared;
     ModelStats stats;
@@ -19,8 +15,7 @@ class Predictor {
     void trainText(const char *const Dictionary, int Iterations) {
       NormalModel &normalModel = models.normalModel();
       WordModel &wordModel = models.wordModel();
-      DummyMixer m_dummy(&shared, normalModel.MIXERINPUTS + wordModel.MIXERINPUTS,
-                         normalModel.MIXERCONTEXTS + wordModel.MIXERCONTEXTS,
+      DummyMixer m_dummy(&shared, normalModel.MIXERINPUTS + wordModel.MIXERINPUTS, normalModel.MIXERCONTEXTS + wordModel.MIXERCONTEXTS,
                          normalModel.MIXERCONTEXTSETS + wordModel.MIXERCONTEXTSETS);
       assert(shared.buf.getpos() == 0 && stats.blpos == 0);
       FileDisk f;
@@ -103,9 +98,7 @@ class Predictor {
     }
 
 public:
-    Predictor()
-            : shared(), stats(), models(&shared, &stats), contextModel(&shared, &stats, models), sse(&shared, &stats),
-              pr(2048) {
+    Predictor() : shared(), stats(), models(&shared, &stats), contextModel(&shared, &stats, models), sse(&shared, &stats), pr(2048) {
       shared.reset();
       shared.buf.setSize(MEM * 8);
       //initiate pre-training
@@ -117,10 +110,18 @@ public:
         trainExe();
     }
 
+    /**
+     * returns P(1) as a 12 bit number (0-4095).
+     * @return the prediction
+     */
     int p() const { return pr; }
 
+    /**
+     * Trains the models with the actual bit (0 or 1).
+     * @param y the actual bit
+     */
     void update(uint8_t y) {
-      stats.misses += stats.misses + ((pr >> 11) != y);
+      stats.misses += stats.misses + ((pr >> 11U) != y);
 
       // update global context: pos, bitPosition, c0, c4, c8, buf
       shared.y = y;
@@ -130,7 +131,7 @@ public:
 
       const uint8_t bpos = shared.bitPosition;
       const uint8_t c0 = shared.c0;
-      const uint8_t chargrp = (bpos > 0) ? AsciiGroupC0[0][(1 << bpos) - 2 + (c0 & ((1 << bpos) - 1))] : 0;
+      const uint8_t chargrp = (bpos > 0) ? AsciiGroupC0[0][(1U << bpos) - 2 + (c0 & ((1U << bpos) - 1))] : 0;
       stats.Text.chargrp = chargrp;
 
       // predict

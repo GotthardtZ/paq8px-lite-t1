@@ -1,18 +1,17 @@
 #ifndef PAQ8PX_SMALLSTATIONARYCONTEXTMAP_HPP
 #define PAQ8PX_SMALLSTATIONARYCONTEXTMAP_HPP
 
-/*
-map for modelling contexts of (nearly-)stationary data.
-The context is looked up directly. For each bit modelled, a 16bit prediction is stored.
-The adaptation rate is controlled by the caller, see mix().
-
-- BitsOfContext: How many bits to use for each context. Higher bits are discarded.
-- InputBits: How many bits [1..8] of input are to be modelled for each context.
-New contexts must be set at those intervals.
-
-Uses (2^(BitsOfContext+1))*((2^InputBits)-1) bytes of memory.
-*/
-
+/**
+ * map for modelling contexts of (nearly-)stationary data.
+ * The context is looked up directly. For each bit modelled, a 16bit prediction is stored.
+ * The adaptation rate is controlled by the caller, see mix().
+ *
+ * - BitsOfContext: How many bits to use for each context. Higher bits are discarded.
+ * - InputBits: How many bits [1..8] of input are to be modelled for each context.
+ * New contexts must be set at those intervals.
+ *
+ * Uses (2^(BitsOfContext+1))*((2^InputBits)-1) bytes of memory.
+ */
 class SmallStationaryContextMap : IPredictor {
 public:
     static constexpr int MIXERINPUTS = 2;
@@ -27,11 +26,9 @@ private:
     int scale;
 
 public:
-    SmallStationaryContextMap(const Shared *const sh, const int bitsOfContext, const int inputBits, const int rate,
-                              const int scale) : shared(sh), data((UINT64_C(1) << bitsOfContext) *
-                                                                  ((UINT64_C(1) << inputBits) - 1)),
-                                                 mask((1 << bitsOfContext) - 1), stride((1 << inputBits) - 1),
-                                                 bTotal(inputBits), rate(rate), scale(scale) {
+    SmallStationaryContextMap(const Shared *const sh, const int bitsOfContext, const int inputBits, const int rate, const int scale)
+            : shared(sh), data((UINT64_C(1) << bitsOfContext) * ((UINT64_C(1) << inputBits) - 1)), mask((1 << bitsOfContext) - 1),
+              stride((1 << inputBits) - 1), bTotal(inputBits), rate(rate), scale(scale) {
       assert(inputBits > 0 && inputBits <= 8);
       reset();
       set(0);

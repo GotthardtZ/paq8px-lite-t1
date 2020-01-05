@@ -17,12 +17,11 @@
 
 static constexpr uint8_t AsciiGroupC0[2][254] = {{0, 10, 0, 1, 10, 10, 0, 4, 2, 3, 10, 10, 10, 10, 0, 0, 5, 4, 2, 2, 3, 3, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 5, 5, 9, 4, 2, 2, 2, 2, 3, 3, 3, 3, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 0, 0, 0, 0, 5, 8, 8, 5, 9, 9, 6, 5, 2, 2, 2, 2, 2, 2, 2, 8, 3, 3, 3, 3, 3, 3, 3, 8, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 8, 8, 8, 8, 8, 5, 5, 9, 9, 9, 9, 9, 7, 8, 5, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 8, 8, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 8, 8, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10},
                                                  {0, 6,  0, 1, 6,  6,  4, 5, 1, 1, 6,  6,  6,  6,  4, 0, 3, 2, 1, 1, 1, 1, 6,  6,  6,  6,  6,  6,  6,  6,  0, 4, 0, 0, 3, 3, 2, 5, 1, 1, 1, 1, 1, 1, 1, 1, 6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  0, 0, 4, 4, 0, 0, 0, 0, 3, 3, 3, 3, 2, 2, 5, 5, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 1, 1, 1, 1, 1, 3, 6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  0, 0, 0, 0, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6}};
-static constexpr uint8_t AsciiGroup[128] = {0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 5, 5, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
-                                            5, 5, 5, 5, 5, 5, 5, 6, 7, 8, 17, 17, 9, 17, 10, 11, 12, 17, 17, 13, 14, 15,
-                                            16, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 18, 19, 20, 23, 21, 22, 23, 2, 2, 2, 2, 2,
-                                            2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 24, 27, 25,
-                                            27, 26, 27, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-                                            3, 3, 3, 3, 3, 28, 30, 29, 30, 30};
+static constexpr uint8_t AsciiGroup[128] = {0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 5, 5, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
+                                            6, 7, 8, 17, 17, 9, 17, 10, 11, 12, 17, 17, 13, 14, 15, 16, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 18,
+                                            19, 20, 23, 21, 22, 23, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+                                            2, 2, 24, 27, 25, 27, 26, 27, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+                                            3, 3, 3, 3, 28, 30, 29, 30, 30};
 
 #ifdef USE_TEXTMODEL
 
@@ -31,8 +30,8 @@ private:
     static constexpr int nCM2 = 28;
 
 public:
-    static constexpr int MIXERINPUTS = nCM2 * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS +
-                                               ContextMap2::MIXERINPUTS_BYTE_HISTORY); // 196
+    static constexpr int MIXERINPUTS =
+            nCM2 * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS + ContextMap2::MIXERINPUTS_BYTE_HISTORY); // 196
     static constexpr int MIXERCONTEXTS = 2048 + 2048 + 4096 + 4096 + 2048 + 2048 + 4096 + 8192 + 2048; //30720
     static constexpr int MIXERCONTEXTSETS = 9;
 
@@ -60,19 +59,11 @@ private:
     Sentence *cSentence; // current sentence
     Paragraph *cParagraph; // current paragraph
     enum Parse {
-        Unknown,
-        ReadingWord,
-        PossibleHyphenation,
-        WasAbbreviation,
-        AfterComma,
-        AfterQuote,
-        AfterAbbreviation,
-        ExpectDigit
+        Unknown, ReadingWord, PossibleHyphenation, WasAbbreviation, AfterComma, AfterQuote, AfterAbbreviation, ExpectDigit
     } State, pState;
     struct {
         uint32_t Count[Language::Count - 1]; // number of recognized words of each language in the last 64 words seen
-        uint64_t Mask[
-                Language::Count - 1]; // binary mask with the recognition status of the last 64 words for each language
+        uint64_t Mask[Language::Count - 1]; // binary mask with the recognition status of the last 64 words for each language
         int Id; // current detected language
         int pId; // detected language of the previous word
     } Lang;
@@ -110,15 +101,11 @@ private:
 
 public:
     TextModel(const Shared *const sh, ModelStats *st, const uint64_t Size) : shared(sh), stats(st),
-                                                                             cm(sh, Size, nCM2, 64,
-                                                                                CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY),
-                                                                             stemmers(Language::Count - 1),
-                                                                             languages(Language::Count - 1),
-                                                                             dictionaries(Language::Count - 1),
-                                                                             wordPos(0x10000), State(Parse::Unknown),
-                                                                             pState(State),
-                                                                             Lang {{0}, {0}, Language::Unknown,
-                                                                                   Language::Unknown}, Info {},
+                                                                             cm(sh, Size, nCM2, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY),
+                                                                             stemmers(Language::Count - 1), languages(Language::Count - 1),
+                                                                             dictionaries(Language::Count - 1), wordPos(0x10000),
+                                                                             State(Parse::Unknown), pState(State),
+                                                                             Lang {{0}, {0}, Language::Unknown, Language::Unknown}, Info {},
                                                                              ParseCtx(0) {
       stemmers[Language::English - 1] = new EnglishStemmer();
       stemmers[Language::French - 1] = new FrenchStemmer();
@@ -155,32 +142,23 @@ public:
       const uint8_t chargrp = stats->Text.chargrp;
       INJECT_SHARED_c1
       INJECT_SHARED_c0
-      m.set(finalize64(
-              hash((Lang.Id != Language::Unknown) ? 1 + stemmers[Lang.Id - 1]->isVowel(c1) : 0, Info.masks[1] & 0xFF,
-                   c0), 11), 2048);
-      m.set(finalize64(hash(ilog2(Info.wordLength[0] + 1), c0, (Info.lastDigit < Info.wordLength[0] + Info.wordGap) |
-                                                               ((Info.lastUpper < Info.lastLetter + Info.wordLength[1])
-                                                                       << 1) |
-                                                               ((Info.lastPunct < Info.wordLength[0] + Info.wordGap)
-                                                                       << 2) |
-                                                               ((Info.lastUpper < Info.wordLength[0]) << 3)), 11),
+      m.set(finalize64(hash((Lang.Id != Language::Unknown) ? 1 + stemmers[Lang.Id - 1]->isVowel(c1) : 0, Info.masks[1] & 0xFF, c0), 11),
             2048);
+      m.set(finalize64(hash(ilog2(Info.wordLength[0] + 1), c0, (Info.lastDigit < Info.wordLength[0] + Info.wordGap) |
+                                                               ((Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1) |
+                                                               ((Info.lastPunct < Info.wordLength[0] + Info.wordGap) << 2) |
+                                                               ((Info.lastUpper < Info.wordLength[0]) << 3)), 11), 2048);
       m.set(finalize64(hash(Info.masks[1] & 0x3FF, chargrp, Info.lastUpper < Info.wordLength[0],
                             Info.lastUpper < Info.lastLetter + Info.wordLength[1]), 12), 4096);
-      m.set(finalize64(hash(Info.spaces & 0x1FF, chargrp, (Info.lastUpper < Info.wordLength[0]) |
-                                                          ((Info.lastUpper < Info.lastLetter + Info.wordLength[1])
-                                                                  << 1) | ((Info.lastPunct < Info.lastLetter) << 2) |
-                                                          ((Info.lastPunct < Info.wordLength[0] + Info.wordGap) << 3) |
-                                                          ((Info.lastPunct <
-                                                            Info.lastLetter + Info.wordLength[1] + Info.wordGap) << 4)),
-                       12), 4096);
+      m.set(finalize64(hash(Info.spaces & 0x1FF, chargrp,
+                            (Info.lastUpper < Info.wordLength[0]) | ((Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1) |
+                            ((Info.lastPunct < Info.lastLetter) << 2) | ((Info.lastPunct < Info.wordLength[0] + Info.wordGap) << 3) |
+                            ((Info.lastPunct < Info.lastLetter + Info.wordLength[1] + Info.wordGap) << 4)), 12), 4096);
       m.set(finalize64(hash(Info.firstLetter * (Info.wordLength[0] < 4), min(6, Info.wordLength[0]), c0), 11), 2048);
-      m.set(finalize64(hash((*pWord)[0], (*pWord)(0), min(4, Info.wordLength[0]), Info.lastPunct < Info.lastLetter),
-                       11), 2048);
+      m.set(finalize64(hash((*pWord)[0], (*pWord)(0), min(4, Info.wordLength[0]), Info.lastPunct < Info.lastLetter), 11), 2048);
       m.set(finalize64(hash(min(4, Info.wordLength[0]), chargrp, Info.lastUpper < Info.wordLength[0],
                             (Info.nestHash > 0) ? Info.nestHash & 0xFF : 0x100 | (Info.firstLetter *
-                                                                                  (Info.wordLength[0] > 0 &&
-                                                                                   Info.wordLength[0] < 4))), 12),
+                                                                                  (Info.wordLength[0] > 0 && Info.wordLength[0] < 4))), 12),
             4096);
       m.set(finalize64(hash(chargrp, Info.masks[4] & 0x1F, (Info.masks[4] >> 5) & 0x1F), 13), 8192);
       m.set(finalize64(hash(chargrp, uint8_t(pWord->embedding), Lang.Id, State), 11), 2048);
@@ -221,8 +199,8 @@ void TextModel::Update() {
   if((c >= 'a' && c <= 'z') || c == APOSTROPHE || c == '-' || c > 0x7F ) {
     if( Info.wordLength[0] == 0 ) {
       // check for hyphenation with "+" (book1 from Calgary)
-      if( pC == NEW_LINE && ((Info.lastLetter == 3 && buf(3) == '+') ||
-                             (Info.lastLetter == 4 && buf(3) == CARRIAGE_RETURN && buf(4) == '+'))) {
+      if( pC == NEW_LINE &&
+          ((Info.lastLetter == 3 && buf(3) == '+') || (Info.lastLetter == 4 && buf(3) == CARRIAGE_RETURN && buf(4) == '+'))) {
         Info.wordLength[0] = Info.wordLength[1];
         for( int i = Language::Unknown; i < Language::Count; i++ )
           words[i]--;
@@ -240,8 +218,8 @@ void TextModel::Update() {
     }
     Info.lastLetter = 0;
     Info.wordLength[0]++;
-    Info.masks[0] += (Lang.Id != Language::Unknown) ? 1 + stemmers[Lang.Id - 1]->isVowel(c)
-                                                    : 1, Info.masks[1]++, Info.masks[3] += Info.masks[0] & 3;
+    Info.masks[0] += (Lang.Id != Language::Unknown) ? 1 + stemmers[Lang.Id - 1]->isVowel(c) : 1, Info.masks[1]++, Info.masks[3] +=
+            Info.masks[0] & 3;
     if( c == APOSTROPHE ) {
       Info.masks[2] += 12;
       if( Info.wordLength[0] == 1 ) {
@@ -362,8 +340,7 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
     bool skip = false;
     switch( c ) {
       case '.': {
-        if( Lang.Id != Language::Unknown && Info.lastUpper == Info.wordLength[1] &&
-            languages[Lang.Id - 1]->isAbbreviation(pWord)) {
+        if( Lang.Id != Language::Unknown && Info.lastUpper == Info.wordLength[1] && languages[Lang.Id - 1]->isAbbreviation(pWord)) {
           State = Parse::WasAbbreviation;
           ParseCtx = hash(State, pWord->Hash[0]);
           break;
@@ -405,8 +382,7 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
         Info.commas = 0;
         if( Info.prevNewLine == 1 || (Info.prevNewLine == 2 && pC == CARRIAGE_RETURN))
           cParagraph = &paragraphs.next();
-        else if((Info.lastLetter == 2 && pC == '+') ||
-                (Info.lastLetter == 3 && pC == CARRIAGE_RETURN && buf(3) == '+')) {
+        else if((Info.lastLetter == 2 && pC == '+') || (Info.lastLetter == 3 && pC == CARRIAGE_RETURN && buf(3) == '+')) {
           ParseCtx = hash(Parse::ReadingWord, pWord->Hash[0]);
           State = Parse::PossibleHyphenation;
         }
@@ -502,8 +478,7 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
       Info.numbers[0] = Info.numbers[0] * 10 + (c & 0xF), Info.numLength[0] = min(19, Info.numLength[0] + 1);
       Info.numHashes[0] = combine64(Info.numHashes[0], c);
       Info.expectedDigit = -1;
-      if( Info.numLength[0] < Info.numLength[1] &&
-          (pState == Parse::ExpectDigit || ((Info.numDiff & 3) == 0 && Info.numLength[0] <= 1))) {
+      if( Info.numLength[0] < Info.numLength[1] && (pState == Parse::ExpectDigit || ((Info.numDiff & 3) == 0 && Info.numLength[0] <= 1))) {
         uint64_t ExpectedNum = Info.numbers[1] + (Info.numMask & 3) - 2, PlaceDivisor = 1;
         for( int i = 0; i < Info.numLength[1] - Info.numLength[0]; i++, PlaceDivisor *= 10 );
         if( ExpectedNum / PlaceDivisor == Info.numbers[0] ) {
@@ -519,8 +494,7 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
       Info.lastDigit = 0;
       Info.masks[3] += 7;
     } else if( Info.numbers[0] > 0 ) {
-      Info.numMask <<= 2, Info.numMask |=
-                                  1 + (Info.numbers[0] >= Info.numbers[1]) + (Info.numbers[0] > Info.numbers[1]);
+      Info.numMask <<= 2, Info.numMask |= 1 + (Info.numbers[0] >= Info.numbers[1]) + (Info.numbers[0] > Info.numbers[1]);
       Info.numDiff <<= 2, Info.numDiff |= min(3, ilog2(abs((int) (Info.numbers[0] - Info.numbers[1]))));
       Info.numbers[1] = Info.numbers[0], Info.numbers[0] = 0;
       Info.numHashes[1] = Info.numHashes[0], Info.numHashes[0] = 0;
@@ -539,11 +513,9 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
   if( Info.UTF8Remaining > 0 && leadingBitsSet == 1 )
     Info.UTF8Remaining--;
   else
-    Info.UTF8Remaining = (leadingBitsSet != 1) ? (c != 0xC0 && c != 0xC1 && c < 0xF5) ? (leadingBitsSet -
-                                                                                         (leadingBitsSet > 0)) : -1 : 0;
-  Info.maskPunct =
-          (bytePos[','] > bytePos['.']) | ((bytePos[','] > bytePos['!']) << 1) | ((bytePos[','] > bytePos['?']) << 2) |
-          ((bytePos[','] > bytePos[':']) << 3) | ((bytePos[','] > bytePos[';']) << 4);
+    Info.UTF8Remaining = (leadingBitsSet != 1) ? (c != 0xC0 && c != 0xC1 && c < 0xF5) ? (leadingBitsSet - (leadingBitsSet > 0)) : -1 : 0;
+  Info.maskPunct = (bytePos[','] > bytePos['.']) | ((bytePos[','] > bytePos['!']) << 1) | ((bytePos[','] > bytePos['?']) << 2) |
+                   ((bytePos[','] > bytePos[':']) << 3) | ((bytePos[','] > bytePos[';']) << 4);
 
   stats->Text.firstLetter = Info.firstLetter;
   stats->Text.mask = Info.masks[1] & 0xFF;
@@ -566,8 +538,8 @@ void TextModel::SetContexts() {
               (Info.lastUpper < Info.lastLetter + Info.wordLength[1]) | ((Info.lastLetter > 3) << 1) |
               ((Info.lastLetter > 0 && Info.wordLength[1] < 3) << 2)));
   cm.set(hash(++i, cWordHash0, Info.masks[1] & 0x3FF, words[Lang.pId](3).Hash[1],
-              (Info.lastDigit < Info.wordLength[0] + Info.wordGap) |
-              ((Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1) | ((Info.spaces & 0x7F) << 2)));
+              (Info.lastDigit < Info.wordLength[0] + Info.wordGap) | ((Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1) |
+              ((Info.spaces & 0x7F) << 2)));
   cm.set(hash(++i, cWordHash0, pWordHash1));
   cm.set(hash(++i, cWordHash0, pWordHash1, words[Lang.pId](2).Hash[1]));
   cm.set(hash(++i, w, words[Lang.pId](2).Hash[0], words[Lang.pId](3).Hash[0]));
@@ -579,21 +551,19 @@ void TextModel::SetContexts() {
   cm.set(hash(++i, max(31, lc), Info.masks[1] & 0xFFC, (Info.spaces & 0xFE) | (Info.lastPunct < Info.lastLetter),
               (Info.maskUpper & 0xFF) | (((0x100 | Info.firstLetter) * (Info.wordLength[0] > 1)) << 8)));
   cm.set(hash(++i, column, min(7, ilog2(Info.lastUpper + 1)), ilog2(Info.lastPunct + 1)));
-  cm.set(hash(++i, (column & 0xF8) | (Info.masks[1] & 3) | ((Info.prevNewLine - Info.lastNewLine > 63) << 2) |
-                   (min(3, Info.lastLetter) << 8) | (Info.firstChar << 10) | ((Info.commas > 4) << 18) |
-                   ((m2 >= 1 && m2 <= 5) << 19) | ((m2 >= 6 && m2 <= 10) << 20) | ((m2 == 11 || m2 == 12) << 21) |
-                   ((Info.lastUpper < column) << 22) | ((Info.lastDigit < column) << 23) |
-                   ((column < Info.prevNewLine - Info.lastNewLine) << 24)));
-  cm.set(hash(++i, (2 * column) / 3,
-              min(13, Info.lastPunct) + (Info.lastPunct > 16) + (Info.lastPunct > 32) + Info.maskPunct * 16,
+  cm.set(hash(++i,
+              (column & 0xF8) | (Info.masks[1] & 3) | ((Info.prevNewLine - Info.lastNewLine > 63) << 2) | (min(3, Info.lastLetter) << 8) |
+              (Info.firstChar << 10) | ((Info.commas > 4) << 18) | ((m2 >= 1 && m2 <= 5) << 19) | ((m2 >= 6 && m2 <= 10) << 20) |
+              ((m2 == 11 || m2 == 12) << 21) | ((Info.lastUpper < column) << 22) | ((Info.lastDigit < column) << 23) |
+              ((column < Info.prevNewLine - Info.lastNewLine) << 24)));
+  cm.set(hash(++i, (2 * column) / 3, min(13, Info.lastPunct) + (Info.lastPunct > 16) + (Info.lastPunct > 32) + Info.maskPunct * 16,
               ilog2(Info.lastUpper + 1), ilog2(Info.prevNewLine - Info.lastNewLine),
               ((Info.masks[1] & 3) == 0) | ((m2 < 6) << 1) | ((m2 < 11) << 2)));
   cm.set(hash(++i, column >> 1, Info.spaces & 0xF));
   cm.set(hash(++i, Info.masks[3] & 0x3F, min((max(Info.wordLength[0], 3) - 2) * (Info.wordLength[0] < 8), 3),
               Info.firstLetter * (Info.wordLength[0] < 5), w,
               (c == buf(2)) | ((Info.masks[2] > 0) << 1) | ((Info.lastPunct < Info.wordLength[0] + Info.wordGap) << 2) |
-              ((Info.lastUpper < Info.wordLength[0]) << 3) |
-              ((Info.lastDigit < Info.wordLength[0] + Info.wordGap) << 4) |
+              ((Info.lastUpper < Info.wordLength[0]) << 3) | ((Info.lastDigit < Info.wordLength[0] + Info.wordGap) << 4) |
               ((Info.lastPunct < 2 + Info.wordLength[0] + Info.wordGap + Info.wordLength[1]) << 5)));
   cm.set(hash(++i, w, c, Info.numHashes[1]));
   INJECT_SHARED_pos
@@ -607,14 +577,13 @@ void TextModel::SetContexts() {
               ((Info.lastPunct >= Info.lastLetter + Info.wordLength[1] + Info.wordGap) << 2) |
               ((Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1) |
               (Info.lastUpper < Info.wordLength[0] + Info.wordGap + Info.wordLength[1])));
-  cm.set(hash(++i, c, pWordHash1, Info.firstLetter * (Info.wordLength[0] < 6),
-              ((Info.lastPunct < Info.wordLength[0] + Info.wordGap) << 1) |
-              (Info.lastPunct >= Info.lastLetter + Info.wordLength[1] + Info.wordGap)));
-  cm.set(hash(++i, w, c, words[Lang.pId](1 + (Info.wordLength[0] == 0)).letters[words[Lang.pId](
-          1 + (Info.wordLength[0] == 0)).start], Info.firstLetter * (Info.wordLength[0] < 7)));
+  cm.set(hash(++i, c, pWordHash1, Info.firstLetter * (Info.wordLength[0] < 6), ((Info.lastPunct < Info.wordLength[0] + Info.wordGap) << 1) |
+                                                                               (Info.lastPunct >=
+                                                                                Info.lastLetter + Info.wordLength[1] + Info.wordGap)));
+  cm.set(hash(++i, w, c, words[Lang.pId](1 + (Info.wordLength[0] == 0)).letters[words[Lang.pId](1 + (Info.wordLength[0] == 0)).start],
+              Info.firstLetter * (Info.wordLength[0] < 7)));
   cm.set(hash(++i, column, Info.spaces & 7, Info.nestHash & 0x7FF));
-  cm.set(hash(++i, cWordHash0, (Info.lastUpper < column) | ((Info.lastUpper < Info.wordLength[0]) << 1),
-              min(5, Info.wordLength[0])));
+  cm.set(hash(++i, cWordHash0, (Info.lastUpper < column) | ((Info.lastUpper < Info.wordLength[0]) << 1), min(5, Info.wordLength[0])));
   cm.set(hash(++i, Lang.Id, w, uint8_t(words[Lang.Id](1 + (State != Parse::ReadingWord)).embedding),
               (Info.lastUpper < Info.wordLength[0]) | ((cSegment->WordCount == 0) << 1)));
   assert(i - State * 64 + 1 == nCM2);

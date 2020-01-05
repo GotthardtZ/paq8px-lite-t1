@@ -1,5 +1,6 @@
 #ifndef PAQ8PX_WORDEMBEDDINGDICTIONARY_HPP
 #define PAQ8PX_WORDEMBEDDINGDICTIONARY_HPP
+
 class WordEmbeddingDictionary {
 private:
     static constexpr int HashSize = 81929;

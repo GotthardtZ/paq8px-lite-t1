@@ -1,8 +1,6 @@
 #ifndef PAQ8PX_OLS_HPP
 #define PAQ8PX_OLS_HPP
 
-///////////////// Ordinary Least Squares predictor /////////////////
-
 #include <cstdint>
 #include "Mixer.hpp"
 

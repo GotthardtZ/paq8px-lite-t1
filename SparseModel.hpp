@@ -4,10 +4,9 @@
 #include <cassert>
 #include <cstdint>
 
-//////////////////////////// SparseModel ///////////////////////
-
-// Model order 1-2-3 contexts with gaps.
-
+/**
+ * Model order 1-2-3 contexts with gaps.
+ */
 class SparseModel {
 private:
     static constexpr int nCM = 38; //17+3*7

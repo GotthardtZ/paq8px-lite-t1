@@ -1,16 +1,12 @@
 #ifndef PAQ8PX_MATCHMODEL_HPP
 #define PAQ8PX_MATCHMODEL_HPP
 
-//////////////////////////// MatchModel ///////////////////////////
-
-//
-// predict the next bit based on a preceding long matching byte sequence
-//
-// This model monitors byte sequences and keeps their most recent
-// positions in a hashtable.
-// When the current byte sequence matches an older sequence (having
-// the same hash) the model predicts the forthcoming bits.
-
+/**
+ * Predict the next bit based on a preceding long matching byte sequence
+ *
+ * This model monitors byte sequences and keeps their most recent positions in a hashtable.
+ * When the current byte sequence matches an older sequence (having the same hash) the model predicts the forthcoming bits.
+ */
 class MatchModel {
 private:
     static constexpr int NumHashes = 3;
@@ -21,8 +17,7 @@ private:
 
 public:
     static constexpr int MIXERINPUTS = 2 + nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS) + nST +
-                                       nSSM * SmallStationaryContextMap::MIXERINPUTS +
-                                       nSM * StationaryMap::MIXERINPUTS; // 23
+                                       nSSM * SmallStationaryContextMap::MIXERINPUTS + nSM * StationaryMap::MIXERINPUTS; // 23
     static constexpr int MIXERCONTEXTS = 8;
     static constexpr int MIXERCONTEXTSETS = 1;
 
@@ -52,31 +47,25 @@ private:
     const int hashBits;
 
 public:
-    MatchModel(const Shared *const sh, ModelStats *st, const uint64_t Size) : shared(sh), stats(st),
-                                                                              Table(Size / sizeof(uint32_t)),
+    MatchModel(const Shared *const sh, ModelStats *st, const uint64_t Size) : shared(sh), stats(st), Table(Size / sizeof(uint32_t)),
                                                                               StateMaps {//StateMap:  s, n, lim,
-                                                                                      {sh, 1, 56 *
-                                                                                              256,               1023, StateMap::GENERIC},
-                                                                                      {sh, 1, 8 * 256 * 256 +
-                                                                                              1,                 1023, StateMap::GENERIC},
-                                                                                      {sh, 1, 256 *
-                                                                                              256,               1023, StateMap::GENERIC}},
-                                                                              cm(sh, MEM / 32, nCM, 74,
-                                                                                 CM_USE_RUN_STATS), SCM {sh, 6, 1, 6,
-                                                                                                         64}, /* SmallStationaryContextMap: BitsOfContext, InputBits, Rate, Scale */
+                                                                                      {sh, 1, 56 * 256,          1023, StateMap::GENERIC},
+                                                                                      {sh, 1, 8 * 256 * 256 + 1, 1023, StateMap::GENERIC},
+                                                                                      {sh, 1, 256 * 256,         1023, StateMap::GENERIC}},
+                                                                              cm(sh, MEM / 32, nCM, 74, CM_USE_RUN_STATS), SCM {sh, 6, 1, 6,
+                                                                                                                                64}, /* SmallStationaryContextMap: BitsOfContext, InputBits, Rate, Scale */
                                                                               Maps {/* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
                                                                                       {sh, 23, 1, 64, 1023},
                                                                                       {sh, 15, 1, 64, 1023}}, iCtx {15,
                                                                                                                     1}, // IndirectContext<uint8_t>: BitsPerContext, InputBits
-                                                                              mask(uint32_t(
-                                                                                      Size / sizeof(uint32_t) - 1)),
+                                                                              mask(uint32_t(Size / sizeof(uint32_t) - 1)),
                                                                               hashBits(ilog2(mask + 1)) {
       assert(isPowerOf2(Size));
     }
 
-    void Update() {
+    void update() {
       INJECT_SHARED_bpos
-              INJECT_SHARED_buf
+      INJECT_SHARED_buf
       if( length != 0 ) {
         const int expectedBit = (expectedByte >> ((8 - bpos) & 7)) & 1;
         INJECT_SHARED_y
@@ -104,8 +93,7 @@ public:
         }
 
         // recover match after a 1-byte mismatch
-        if( length == 0 && !delta &&
-            length_bak != 0 ) { //match failed (2 bytes ago), no new match found, and we have a backup
+        if( length == 0 && !delta && length_bak != 0 ) { //match failed (2 bytes ago), no new match found, and we have a backup
           index_bak++;
           if( length_bak < mask )
             length_bak++;
@@ -156,13 +144,13 @@ public:
     }
 
     void mix(Mixer &m) {
-      Update();
+      update();
 
       for( uint32_t i = 0; i < nST; i++ ) // reset contexts
         ctx[i] = 0;
 
       INJECT_SHARED_bpos
-              INJECT_SHARED_c1
+      INJECT_SHARED_c1
       INJECT_SHARED_c0
       const int expectedBit = length != 0 ? (expectedByte >> (7 - bpos)) & 1 : 0;
       if( length != 0 ) {
@@ -199,8 +187,7 @@ public:
       //length=15..30: length_ilog2=4
 
       const uint8_t length3 = min(length_ilog2, 3); // 2 bits
-      const uint8_t rm = length_bak != 0 &&
-                         length - length_bak == 1; // predicting the first byte in recovery mode is still uncertain
+      const uint8_t rm = length_bak != 0 && length - length_bak == 1; // predicting the first byte in recovery mode is still uncertain
       const uint8_t length3Rm = length3 << 1 | rm; // 3 bits
 
       //bytewise contexts

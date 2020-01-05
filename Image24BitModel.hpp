@@ -1,8 +1,6 @@
 #ifndef PAQ8PX_IMAGE24BITMODEL_HPP
 #define PAQ8PX_IMAGE24BITMODEL_HPP
 
-//////////////////////////// Image24bitModel /////////////////////////////////
-
 inline uint8_t paeth(uint8_t const W, uint8_t const N, uint8_t const NW) {
   int p = W + N - NW;
   int pW = abs(p - (int) W), pN = abs(p - (int) N), pNW = abs(p - (int) NW);
@@ -13,8 +11,9 @@ inline uint8_t paeth(uint8_t const W, uint8_t const N, uint8_t const NW) {
   return NW;
 }
 
-// Model for filtered (PNG) or unfiltered 24/32-bit image data
-
+/**
+ * Model for filtered (PNG) or unfiltered 24/32-bit image data
+ */
 class Image24bitModel {
 private:
     static constexpr int nSM0 = 18;
@@ -25,11 +24,9 @@ private:
     static constexpr int nCM = 45;
 
 public:
-    static constexpr int MIXERINPUTS =
-            nSSM * SmallStationaryContextMap::MIXERINPUTS + nSM * StationaryMap::MIXERINPUTS +
-            nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS);
-    static constexpr int MIXERCONTEXTS =
-            6 + 256 + 512 + 2048 + 8 * 32 + 6 * 64 + 256 * 2 + 1024 + 8192 + 8192 + 8192 + 8192 + 256; //38022
+    static constexpr int MIXERINPUTS = nSSM * SmallStationaryContextMap::MIXERINPUTS + nSM * StationaryMap::MIXERINPUTS +
+                                       nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS);
+    static constexpr int MIXERCONTEXTS = 6 + 256 + 512 + 2048 + 8 * 32 + 6 * 64 + 256 * 2 + 1024 + 8192 + 8192 + 8192 + 8192 + 256; //38022
     static constexpr int MIXERCONTEXTSETS = 13;
 
     const Shared *const shared;
@@ -67,22 +64,19 @@ public:
                                          {{num[3], 1, lambda[3]}, {num[3], 1, lambda[3]}, {num[3], 1, lambda[3]}, {num[3], 1, lambda[3]}},
                                          {{num[4], 1, lambda[4]}, {num[4], 1, lambda[4]}, {num[4], 1, lambda[4]}, {num[4], 1, lambda[4]}},
                                          {{num[5], 1, lambda[5]}, {num[5], 1, lambda[5]}, {num[5], 1, lambda[5]}, {num[5], 1, lambda[5]}}};
-    const uint8_t *ols_ctx1[32] = {&WWWWWW, &WWWWW, &WWWW, &WWW, &WW, &W, &NWWWW, &NWWW, &NWW, &NW, &N, &NE, &NEE,
-                                   &NEEE, &NEEEE, &NNWWW, &NNWW, &NNW, &NN, &NNE, &NNEE, &NNEEE, &NNNWW, &NNNW, &NNN,
-                                   &NNNE, &NNNEE, &NNNNW, &NNNN, &NNNNE, &NNNNN, &NNNNNN};
+    const uint8_t *ols_ctx1[32] = {&WWWWWW, &WWWWW, &WWWW, &WWW, &WW, &W, &NWWWW, &NWWW, &NWW, &NW, &N, &NE, &NEE, &NEEE, &NEEEE, &NNWWW,
+                                   &NNWW, &NNW, &NN, &NNE, &NNEE, &NNEEE, &NNNWW, &NNNW, &NNN, &NNNE, &NNNEE, &NNNNW, &NNNN, &NNNNE, &NNNNN,
+                                   &NNNNNN};
     const uint8_t *ols_ctx2[12] = {&WWW, &WW, &W, &NWW, &NW, &N, &NE, &NEE, &NNW, &NN, &NNE, &NNN};
-    const uint8_t *ols_ctx3[15] = {&N, &NE, &NEE, &NEEE, &NEEEE, &NN, &NNE, &NNEE, &NNEEE, &NNN, &NNNE, &NNNEE, &NNNN,
-                                   &NNNNE, &NNNNN};
+    const uint8_t *ols_ctx3[15] = {&N, &NE, &NEE, &NEEE, &NEEEE, &NN, &NNE, &NNEE, &NNEEE, &NNN, &NNNE, &NNNEE, &NNNN, &NNNNE, &NNNNN};
     const uint8_t *ols_ctx4[10] = {&N, &NE, &NEE, &NEEE, &NN, &NNE, &NNEE, &NNN, &NNNE, &NNNN};
     const uint8_t *ols_ctx5[14] = {&WWWW, &WWW, &WW, &W, &NWWW, &NWW, &NW, &N, &NNWW, &NNW, &NN, &NNNW, &NNN, &NNNN};
     const uint8_t *ols_ctx6[8] = {&WWW, &WW, &W, &NNN, &NN, &N, &p1, &p2};
-    const uint8_t **ols_ctxs[nOLS] = {&ols_ctx1[0], &ols_ctx2[0], &ols_ctx3[0], &ols_ctx4[0], &ols_ctx5[0],
-                                      &ols_ctx6[0]};
+    const uint8_t **ols_ctxs[nOLS] = {&ols_ctx1[0], &ols_ctx2[0], &ols_ctx3[0], &ols_ctx4[0], &ols_ctx5[0], &ols_ctx6[0]};
 
 public:
     Image24bitModel(const Shared *const sh, ModelStats *st, const uint64_t size) : shared(sh), stats(st),
-                                                                                   cm(sh, size, nCM, 64,
-                                                                                      CM_USE_RUN_STATS),
+                                                                                   cm(sh, size, nCM, 64, CM_USE_RUN_STATS),
                                                                                    SCMap {/* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
                                                                                            {sh, 11, 1, 9, 86},
                                                                                            {sh, 11, 1, 9, 86},
@@ -297,8 +291,7 @@ public:
                 buffer.add((uint8_t) (c1 + paeth(buffer(stride) * (x > stride + 1 || !x), buffer(w) * (line > 0),
                                                  buffer(w + stride) * (line > 0 && (x > stride + 1 || !x)))));
                 filterOn = (x > stride || line > 0);
-                px = paeth(buffer(stride) * (x > stride), buffer(w) * (line > 0),
-                           buffer(w + stride) * (x > stride && line > 0));
+                px = paeth(buffer(stride) * (x > stride), buffer(w) * (line > 0), buffer(w + stride) * (x > stride && line > 0));
                 break;
               }
               default:
@@ -315,23 +308,21 @@ public:
         if( x > 0 || !isPNG ) {
           column[0] = (x - isPNG) / columns[0];
           column[1] = (x - isPNG) / columns[1];
-          WWWWWW = buffer(6 * stride), WWWWW = buffer(5 * stride), WWWW = buffer(4 * stride), WWW = buffer(
-                  3 * stride), WW = buffer(2 * stride), W = buffer(stride);
-          NWWWW = buffer(w + 4 * stride), NWWW = buffer(w + 3 * stride), NWW = buffer(w + 2 * stride), NW = buffer(
-                  w + stride), N = buffer(w), NE = buffer(w - stride), NEE = buffer(w - 2 * stride), NEEE = buffer(
-                  w - 3 * stride), NEEEE = buffer(w - 4 * stride);
-          NNWWW = buffer(w * 2 + stride * 3), NNWW = buffer((w + stride) * 2), NNW = buffer(
-                  w * 2 + stride), NN = buffer(w * 2), NNE = buffer(w * 2 - stride), NNEE = buffer(
-                  (w - stride) * 2), NNEEE = buffer(w * 2 - stride * 3);
+          WWWWWW = buffer(6 * stride), WWWWW = buffer(5 * stride), WWWW = buffer(4 * stride), WWW = buffer(3 * stride), WW = buffer(
+                  2 * stride), W = buffer(stride);
+          NWWWW = buffer(w + 4 * stride), NWWW = buffer(w + 3 * stride), NWW = buffer(w + 2 * stride), NW = buffer(w + stride), N = buffer(
+                  w), NE = buffer(w - stride), NEE = buffer(w - 2 * stride), NEEE = buffer(w - 3 * stride), NEEEE = buffer(w - 4 * stride);
+          NNWWW = buffer(w * 2 + stride * 3), NNWW = buffer((w + stride) * 2), NNW = buffer(w * 2 + stride), NN = buffer(
+                  w * 2), NNE = buffer(w * 2 - stride), NNEE = buffer((w - stride) * 2), NNEEE = buffer(w * 2 - stride * 3);
           NNNWW = buffer(w * 3 + stride * 2), NNNW = buffer(w * 3 + stride), NNN = buffer(w * 3), NNNE = buffer(
                   w * 3 - stride), NNNEE = buffer(w * 3 - stride * 2);
           NNNNW = buffer(w * 4 + stride), NNNN = buffer(w * 4), NNNNE = buffer(w * 4 - stride);
           NNNNN = buffer(w * 5);
           NNNNNN = buffer(w * 6);
-          WWp1 = buffer(stride * 2 + 1), Wp1 = buffer(stride + 1), p1 = buffer(1), NWp1 = buffer(
-                  w + stride + 1), Np1 = buffer(w + 1), NEp1 = buffer(w - stride + 1), NNp1 = buffer(w * 2 + 1);
-          WWp2 = buffer(stride * 2 + 2), Wp2 = buffer(stride + 2), p2 = buffer(2), NWp2 = buffer(
-                  w + stride + 2), Np2 = buffer(w + 2), NEp2 = buffer(w - stride + 2), NNp2 = buffer(w * 2 + 2);
+          WWp1 = buffer(stride * 2 + 1), Wp1 = buffer(stride + 1), p1 = buffer(1), NWp1 = buffer(w + stride + 1), Np1 = buffer(
+                  w + 1), NEp1 = buffer(w - stride + 1), NNp1 = buffer(w * 2 + 1);
+          WWp2 = buffer(stride * 2 + 2), Wp2 = buffer(stride + 2), p2 = buffer(2), NWp2 = buffer(w + stride + 2), Np2 = buffer(
+                  w + 2), NEp2 = buffer(w - stride + 2), NNp2 = buffer(w * 2 + 2);
 
           int j = -1;
           mapCtxs[++j] = clamp4(N + p1 - Np1, W, NW, N, NE);
@@ -340,24 +331,16 @@ public:
           mapCtxs[++j] = clamp4((W + clip(NE * 2 - NNE)) / 2, W, NW, N, NE);
           mapCtxs[++j] = (W + NEE) / 2;
           mapCtxs[++j] = clip((WWW - 4 * WW + 6 * W + clip(NE * 4 - NNE * 6 + NNNE * 4 - NNNNE)) / 4);
+          mapCtxs[++j] = clip((-WWWW + 5 * WWW - 10 * WW + 10 * W + clamp4(NE * 4 - NNE * 6 + NNNE * 4 - NNNNE, N, NE, NEE, NEEE)) / 5);
           mapCtxs[++j] = clip(
-                  (-WWWW + 5 * WWW - 10 * WW + 10 * W + clamp4(NE * 4 - NNE * 6 + NNNE * 4 - NNNNE, N, NE, NEE, NEEE)) /
-                  5);
-          mapCtxs[++j] = clip((-4 * WW + 15 * W + 10 * clip(NE * 3 - NNE * 3 + NNNE) -
-                               clip(NEEE * 3 - NNEEE * 3 + buffer(w * 3 - 3 * stride))) / 20);
+                  (-4 * WW + 15 * W + 10 * clip(NE * 3 - NNE * 3 + NNNE) - clip(NEEE * 3 - NNEEE * 3 + buffer(w * 3 - 3 * stride))) / 20);
           mapCtxs[++j] = clip((-3 * WW + 8 * W + clamp4(NEE * 3 - NNEE * 3 + NNNEE, NE, NEE, NEEE, NEEEE)) / 6);
-          mapCtxs[++j] = clip(
-                  (W + clip(NE * 2 - NNE)) / 2 + p1 - (Wp1 + clip(NEp1 * 2 - buffer(w * 2 - stride + 1))) / 2);
-          mapCtxs[++j] = clip(
-                  (W + clip(NE * 2 - NNE)) / 2 + p2 - (Wp2 + clip(NEp2 * 2 - buffer(w * 2 - stride + 2))) / 2);
-          mapCtxs[++j] = clip((-3 * WW + 8 * W + clip(NEE * 2 - NNEE)) / 6 + p1 - (-3 * WWp1 + 8 * Wp1 +
-                                                                                   clip(buffer(w - stride * 2 + 1) * 2 -
-                                                                                        buffer(w * 2 - stride * 2 +
-                                                                                               1))) / 6);
-          mapCtxs[++j] = clip((-3 * WW + 8 * W + clip(NEE * 2 - NNEE)) / 6 + p2 - (-3 * WWp2 + 8 * Wp2 +
-                                                                                   clip(buffer(w - stride * 2 + 2) * 2 -
-                                                                                        buffer(w * 2 - stride * 2 +
-                                                                                               2))) / 6);
+          mapCtxs[++j] = clip((W + clip(NE * 2 - NNE)) / 2 + p1 - (Wp1 + clip(NEp1 * 2 - buffer(w * 2 - stride + 1))) / 2);
+          mapCtxs[++j] = clip((W + clip(NE * 2 - NNE)) / 2 + p2 - (Wp2 + clip(NEp2 * 2 - buffer(w * 2 - stride + 2))) / 2);
+          mapCtxs[++j] = clip((-3 * WW + 8 * W + clip(NEE * 2 - NNEE)) / 6 + p1 -
+                              (-3 * WWp1 + 8 * Wp1 + clip(buffer(w - stride * 2 + 1) * 2 - buffer(w * 2 - stride * 2 + 1))) / 6);
+          mapCtxs[++j] = clip((-3 * WW + 8 * W + clip(NEE * 2 - NNEE)) / 6 + p2 -
+                              (-3 * WWp2 + 8 * Wp2 + clip(buffer(w - stride * 2 + 2) * 2 - buffer(w * 2 - stride * 2 + 2))) / 6);
           mapCtxs[++j] = clip((W + NEE) / 2 + p1 - (Wp1 + buffer(w - stride * 2 + 1)) / 2);
           mapCtxs[++j] = clip((W + NEE) / 2 + p2 - (Wp2 + buffer(w - stride * 2 + 2)) / 2);
           mapCtxs[++j] = clip((WW + clip(NEE * 2 - NNEE)) / 2 + p1 -
@@ -414,10 +397,8 @@ public:
           mapCtxs[++j] = clamp4(N * 2 - NN, W, NW, N, NE);
           mapCtxs[++j] = clip((NNNNN - 6 * NNNN + 15 * NNN - 20 * NN + 15 * N +
                                clamp4(W * 4 - NWW * 6 + NNWWW * 4 - buffer(w * 3 + 4 * stride), W, NW, N, NN)) / 6);
-          mapCtxs[++j] = clip(
-                  (buffer(w * 3 - 3 * stride) - 4 * NNEE + 6 * NE + clip(W * 4 - NW * 6 + NNW * 4 - NNNW)) / 4);
-          mapCtxs[++j] = clip(
-                  ((N + 3 * NW) / 4) * 3 - ((NNW + NNWW) / 2) * 3 + (NNNWW * 3 + buffer(w * 3 + 3 * stride)) / 4);
+          mapCtxs[++j] = clip((buffer(w * 3 - 3 * stride) - 4 * NNEE + 6 * NE + clip(W * 4 - NW * 6 + NNW * 4 - NNNW)) / 4);
+          mapCtxs[++j] = clip(((N + 3 * NW) / 4) * 3 - ((NNW + NNWW) / 2) * 3 + (NNNWW * 3 + buffer(w * 3 + 3 * stride)) / 4);
           mapCtxs[++j] = clip((W * 2 + NW) - (WW + 2 * NWW) + NWWW);
           mapCtxs[++j] = (clip(W * 2 - NW) + clip(W * 2 - NWW) + N + NE) / 4;
           mapCtxs[++j] = NNNNNN;
@@ -507,8 +488,9 @@ public:
             cm.set(hash(++i, (NNN + N + 4) / 8, clip(N * 3 - NN * 3 + NNN) >> 1));
             cm.set(hash(++i, (WWW + W + 4) / 8, clip(W * 3 - WW * 3 + WWW) >> 1));
             cm.set(hash(++i, color, (W + clip(NE * 3 - NNE * 3 + NNNE)) / 4, logMeanDiffQt(N, (NW + NE) / 2)));
-            cm.set(hash(++i, color, clip((-WWWW + 5 * WWW - 10 * WW + 10 * W +
-                                          clamp4(NE * 4 - NNE * 6 + NNNE * 4 - NNNNE, N, NE, NEE, NEEE)) / 5) / 4));
+            cm.set(hash(++i, color,
+                        clip((-WWWW + 5 * WWW - 10 * WW + 10 * W + clamp4(NE * 4 - NNE * 6 + NNNE * 4 - NNNNE, N, NE, NEE, NEEE)) / 5) /
+                        4));
             cm.set(hash(++i, clip(NEE + N - NNEE), logMeanDiffQt(W, clip(NW + NE - NNE))));
             cm.set(hash(++i, clip(NN + W - NNW), logMeanDiffQt(W, clip(NNW + WW - NNWW))));
             cm.set(hash(++i, color, p1));
@@ -518,8 +500,8 @@ public:
             cm.set(hash(++i, clip(W * 2 - WW) / 2, logMeanDiffQt(W, clip(WW * 2 - WWW))));
             cm.set(hash(++i, clamp4(N * 3 - NN * 3 + NNN, W, NW, N, NE) / 2));
             cm.set(hash(++i, clamp4(W * 3 - WW * 3 + WWW, W, N, NE, NEE) / 2));
-            cm.set(hash(++i, color, logMeanDiffQt(W, Wp1), clamp4((p1 * W) / (Wp1 < 1 ? 1 : Wp1), W, N, NE,
-                                                                  NEE))); //using max(1,Wp1) results in division by zero in VC2015
+            cm.set(hash(++i, color, logMeanDiffQt(W, Wp1),
+                        clamp4((p1 * W) / (Wp1 < 1 ? 1 : Wp1), W, N, NE, NEE))); //using max(1,Wp1) results in division by zero in VC2015
             cm.set(hash(++i, color, clamp4(N + p2 - Np2, W, NW, N, NE)));
             cm.set(hash(++i, color, clip(W + N - NW), column[0]));
             cm.set(hash(++i, color, clip(N * 2 - NN), logMeanDiffQt(W, clip(NW * 2 - NNW))));
@@ -550,9 +532,8 @@ public:
             cm.set(hash(++i, color, N + p1 - Np1));
             cm.set(hash(++i, color, mean, logvar >> 4));
 
-            ctx[0] = (min(color, stride - 1) << 9) | ((abs(W - N) > 3) << 8) | ((W > N) << 7) | ((W > NW) << 6) |
-                     ((abs(N - NW) > 3) << 5) | ((N > NW) << 4) | ((abs(N - NE) > 3) << 3) | ((N > NE) << 2) |
-                     ((W > WW) << 1) | (N > NN);
+            ctx[0] = (min(color, stride - 1) << 9) | ((abs(W - N) > 3) << 8) | ((W > N) << 7) | ((W > NW) << 6) | ((abs(N - NW) > 3) << 5) |
+                     ((N > NW) << 4) | ((abs(N - NE) > 3) << 3) | ((N > NE) << 2) | ((W > WW) << 1) | (N > NN);
             ctx[1] = ((logMeanDiffQt(p1, clip(Np1 + NEp1 - buffer(w * 2 - stride + 1))) >> 1) << 5) |
                      ((logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) >> 1) << 2) | min(color, stride - 1);
           } else {
@@ -586,8 +567,8 @@ public:
             cm.set(hash(++i, clip(NN + W - NNW) - px, logMeanDiffQt(N, clip(NNN + NW - NNNW))));
             cm.set(hash(++i, clip(W + NEE - NE) - px, logMeanDiffQt(W, clip(WW + NE - N))));
             cm.set(hash(++i, color, clip(N + NN - NNN + buffer(1 + (!color)) -
-                                         clip(buffer(w + 1 + (!color)) + buffer(w * 2 + 1 + (!color)) -
-                                              buffer(w * 3 + 1 + (!color)))) - px));
+                                         clip(buffer(w + 1 + (!color)) + buffer(w * 2 + 1 + (!color)) - buffer(w * 3 + 1 + (!color)))) -
+                                    px));
             cm.set(hash(++i, clip(N + NN - NNN) - px, clip(5 * N - 10 * NN + 10 * NNN - 5 * NNNN + NNNNN) - px));
             cm.set(hash(++i, color, clip(N * 2 - NN) - px, logMeanDiffQt(N, clip(NN * 2 - NNN))));
             cm.set(hash(++i, color, clip(W * 2 - WW) - px, logMeanDiffQt(W, clip(WW * 2 - WWW))));
@@ -597,16 +578,14 @@ public:
             cm.set(hash(++i, color, clip(W * 3 - WW * 3 + WWW) - px, logMeanDiffQt(N, clip(NW * 2 - NWW))));
             cm.set(hash(++i, clip((35 * N - 35 * NNN + 21 * NNNNN - 5 * buffer(w * 7)) / 16) - px));
             cm.set(hash(++i, color, (W + clip(NE * 3 - NNE * 3 + NNNE)) / 2 - px, R2));
-            cm.set(hash(++i, color, (W + clamp4(NE * 3 - NNE * 3 + NNNE, W, N, NE, NEE)) / 2 - px,
-                        logMeanDiffQt(N, (NW + NE) / 2)));
+            cm.set(hash(++i, color, (W + clamp4(NE * 3 - NNE * 3 + NNNE, W, N, NE, NEE)) / 2 - px, logMeanDiffQt(N, (NW + NE) / 2)));
             cm.set(hash(++i, color, (W + NEE) / 2 - px, R1 / 2));
-            cm.set(hash(++i, color,
-                        clamp4(clip(W * 2 - WW) + clip(N * 2 - NN) - clip(NW * 2 - NNWW), W, NW, N, NE) - px));
+            cm.set(hash(++i, color, clamp4(clip(W * 2 - WW) + clip(N * 2 - NN) - clip(NW * 2 - NNWW), W, NW, N, NE) - px));
             cm.set(hash(++i, color, buf(stride + (x <= stride)), buf(1 + (x < 2)), buf(2 + (x < 3))));
             cm.set(hash(++i, color, buf(1 + (x < 2)), px));
             cm.set(hash(++i, buf(w + 1), buf((w + 1) * 2), buf((w + 1) * 3), px));
-            ctx[0] = (min(color, stride - 1) << 9) | ((abs(W - N) > 3) << 8) | ((W > N) << 7) | ((W > NW) << 6) |
-                     ((abs(N - NW) > 3) << 5) | ((N > NW) << 4) | ((N > NE) << 3) | min(5, filterOn ? filter + 1 : 0);
+            ctx[0] = (min(color, stride - 1) << 9) | ((abs(W - N) > 3) << 8) | ((W > N) << 7) | ((W > NW) << 6) | ((abs(N - NW) > 3) << 5) |
+                     ((N > NW) << 4) | ((N > NE) << 3) | min(5, filterOn ? filter + 1 : 0);
             ctx[1] = ((logMeanDiffQt(p1, clip(Np1 + NEp1 - buffer(w * 2 - stride + 1))) >> 1) << 5) |
                      ((logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) >> 1) << 2) | min(color, stride - 1);
           }
@@ -632,16 +611,12 @@ public:
         uint8_t B = (c0 << (8 - bpos));
         int i = 4;
 
-        map[++i].set_direct((((uint8_t) (clip(W + N - NW) - px - B)) * 8 + bpos) |
-                           (logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) << 11));
         map[++i].set_direct(
-                (((uint8_t) (clip(N * 2 - NN) - px - B)) * 8 + bpos) | (logMeanDiffQt(W, clip(NW * 2 - NNW)) << 11));
-        map[++i].set_direct(
-                (((uint8_t) (clip(W * 2 - WW) - px - B)) * 8 + bpos) | (logMeanDiffQt(N, clip(NW * 2 - NWW)) << 11));
-        map[++i].set_direct((((uint8_t) (clip(W + N - NW) - px - B)) * 8 + bpos) |
-                           (logMeanDiffQt(p1, clip(Wp1 + Np1 - NWp1)) << 11));
-        map[++i].set_direct((((uint8_t) (clip(W + N - NW) - px - B)) * 8 + bpos) |
-                           (logMeanDiffQt(p2, clip(Wp2 + Np2 - NWp2)) << 11));
+                (((uint8_t) (clip(W + N - NW) - px - B)) * 8 + bpos) | (logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) << 11));
+        map[++i].set_direct((((uint8_t) (clip(N * 2 - NN) - px - B)) * 8 + bpos) | (logMeanDiffQt(W, clip(NW * 2 - NNW)) << 11));
+        map[++i].set_direct((((uint8_t) (clip(W * 2 - WW) - px - B)) * 8 + bpos) | (logMeanDiffQt(N, clip(NW * 2 - NWW)) << 11));
+        map[++i].set_direct((((uint8_t) (clip(W + N - NW) - px - B)) * 8 + bpos) | (logMeanDiffQt(p1, clip(Wp1 + Np1 - NWp1)) << 11));
+        map[++i].set_direct((((uint8_t) (clip(W + N - NW) - px - B)) * 8 + bpos) | (logMeanDiffQt(p2, clip(Wp2 + Np2 - NWp2)) << 11));
         map[++i].set(hash(W - px - B, N - px - B) * 8 + bpos);
         map[++i].set(hash(W - px - B, WW - px - B) * 8 + bpos);
         map[++i].set(hash(N - px - B, NN - px - B) * 8 + bpos);
@@ -725,9 +700,7 @@ public:
         m.set(((isPNG ? p1 : 0) >> 4) * stride + (x % stride) + min(5, filterOn ? filter + 1 : 0) * 64, 6 * 64);
         m.set(c0 + 256 * (isPNG && abs(R1 - 128) > 8), 256 * 2);
         m.set((ctx[1] << 2) | (bpos >> 1), 1024);
-        m.set(finalize64(
-                hash(logMeanDiffQt(W, WW, 5), logMeanDiffQt(N, NN, 5), logMeanDiffQt(W, N, 5), ilog2(W), color), 13),
-              8192);
+        m.set(finalize64(hash(logMeanDiffQt(W, WW, 5), logMeanDiffQt(N, NN, 5), logMeanDiffQt(W, N, 5), ilog2(W), color), 13), 8192);
         m.set(finalize64(hash(ctx[0], column[0] / 8), 13), 8192);
         m.set(finalize64(hash(logQt(N, 5), logMeanDiffQt(N, NN, 3), c0), 13), 8192);
         m.set(finalize64(hash(logQt(W, 5), logMeanDiffQt(W, WW, 3), c0), 13), 8192);

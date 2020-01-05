@@ -85,8 +85,7 @@ void eccedc_init() {
   luts_init = 1;
 }
 
-void ecc_compute(uint8_t *src, uint32_t major_count, uint32_t minor_count, uint32_t major_mult, uint32_t minor_inc,
-                 uint8_t *dest) {
+void ecc_compute(uint8_t *src, uint32_t major_count, uint32_t minor_count, uint32_t major_mult, uint32_t minor_inc, uint8_t *dest) {
   uint32_t size = major_count * minor_count;
   uint32_t major, minor;
   for( major = 0; major < major_count; major++ ) {
@@ -533,8 +532,8 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
       }
     }
     if( zh == -1 && zbuf[(zbufpos - 32) & 0xFF] == 'P' && zbuf[(zbufpos - 32 + 1) & 0xFF] == 'K' &&
-        zbuf[(zbufpos - 32 + 2) & 0xFF] == '\x3' && zbuf[(zbufpos - 32 + 3) & 0xFF] == '\x4' &&
-        zbuf[(zbufpos - 32 + 8) & 0xFF] == '\x8' && zbuf[(zbufpos - 32 + 9) & 0xFF] == '\0' ) {
+        zbuf[(zbufpos - 32 + 2) & 0xFF] == '\x3' && zbuf[(zbufpos - 32 + 3) & 0xFF] == '\x4' && zbuf[(zbufpos - 32 + 8) & 0xFF] == '\x8' &&
+        zbuf[(zbufpos - 32 + 9) & 0xFF] == '\0' ) {
       int nlen = (int) zbuf[(zbufpos - 32 + 26) & 0xFF] + ((int) zbuf[(zbufpos - 32 + 27) & 0xFF]) * 256 +
                  (int) zbuf[(zbufpos - 32 + 28) & 0xFF] + ((int) zbuf[(zbufpos - 32 + 29) & 0xFF]) * 256;
       if( nlen < 256 && i + 30 + nlen < n )
@@ -637,8 +636,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
       } else if( wavtype ) {
         if( wavtype == 1 ) {
           if( p == 16 + wavlen && (buf1 != 0x666d7420 /*"fmt "*/ || ((wavm = bswap(buf0) - 16) & 0xFFFFFFFD) != 0))
-            wavlen = ((bswap(buf0) + 1) & (-2)) + 8, wavi *= (buf1 == 0x666d7420 /*"fmt "*/ &&
-                                                              (wavm & 0xFFFFFFFD) != 0);
+            wavlen = ((bswap(buf0) + 1) & (-2)) + 8, wavi *= (buf1 == 0x666d7420 /*"fmt "*/ && (wavm & 0xFFFFFFFD) != 0);
           else if( p == 22 + wavlen )
             wavch = bswap(buf0) & 0xffff; // number of channels: 1 or 2
           else if( p == 34 + wavlen )
@@ -666,8 +664,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
             else if( p == 12 ) {
               int wavd = bswap(buf0);
               if( wavd && (wavd + 12) == wavlen )
-                AUD_DET(AUDIO_LE, wavi - 3, (12 + wavlist - (wavi - 3) + 1) & ~1, wavd,
-                        1 + 16 / 4 - 3 /*mono, 16-bit*/);
+                AUD_DET(AUDIO_LE, wavi - 3, (12 + wavlist - (wavi - 3) + 1) & ~1, wavd, 1 + 16 / 4 - 3 /*mono, 16-bit*/);
               wavi = 0;
             }
           }
@@ -763,7 +760,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
       if((buf0 & 0xffff) == 16973 ) { // 'BM'
         bmpi = i; // header start: bmpi-1
         dibi = i - 1 + 18; // we expect a DIB header to come
-      } else if(buf0 == 0x28000000) // headerless (DIB-only)
+      } else if( buf0 == 0x28000000 ) // headerless (DIB-only)
         dibi = i + 1;
     } else {
       const uint32_t p = i - dibi + 1 + 18;
@@ -779,8 +776,8 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
       else if( p == 26 + 2 )
         bmpi = ((bswap(buf0 << 16)) != 1) ? (dibi = 0) : bmpi; //number of color planes (must be 1)
       else if( p == 28 + 2 )
-        imgbpp = bswap(buf0 << 16), bmpi = ((imgbpp != 1 && imgbpp != 4 && imgbpp != 8 && imgbpp != 24 && imgbpp != 32)
-                                            ? (dibi = 0) : bmpi); //color depth
+        imgbpp = bswap(buf0 << 16), bmpi = ((imgbpp != 1 && imgbpp != 4 && imgbpp != 8 && imgbpp != 24 && imgbpp != 32) ? (dibi = 0)
+                                                                                                                        : bmpi); //color depth
       else if( p == 30 + 4 )
         bmpi = ((buf0 != 0) ? (dibi = 0) : bmpi); //compression method must be: BI_RGB (uncompressed)
       else if( p == 34 + 4 )
@@ -796,11 +793,13 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
       } else if( p == 50 + 4 ) { //the number of important colors used
         if( bswap(buf0) <= n_colors || bswap(buf0) == 0x10000000 ) {
           if( bmpi == 0 /*headerless*/ && (bmpx * 2 == bmpy) && imgbpp > 1 && // possible icon/cursor?
-              ((bmps > 0 && bmps == ((bmpx * bmpy * (imgbpp + 1)) >> 4)) ||
-               ((!bmps || bmps < ((bmpx * bmpy * imgbpp) >> 3)) &&
-                ((bmpx == 8) || (bmpx == 10) || (bmpx == 14) || (bmpx == 16) || (bmpx == 20) || (bmpx == 22) ||
-                 (bmpx == 24) || (bmpx == 32) || (bmpx == 40) || (bmpx == 48) || (bmpx == 60) || (bmpx == 64) ||
-                 (bmpx == 72) || (bmpx == 80) || (bmpx == 96) || (bmpx == 128) || (bmpx == 256)))))
+              ((bmps > 0 && bmps == ((bmpx * bmpy * (imgbpp + 1)) >> 4)) || ((!bmps || bmps < ((bmpx * bmpy * imgbpp) >> 3)) &&
+                                                                             ((bmpx == 8) || (bmpx == 10) || (bmpx == 14) || (bmpx == 16) ||
+                                                                              (bmpx == 20) || (bmpx == 22) || (bmpx == 24) ||
+                                                                              (bmpx == 32) || (bmpx == 40) || (bmpx == 48) ||
+                                                                              (bmpx == 60) || (bmpx == 64) || (bmpx == 72) ||
+                                                                              (bmpx == 80) || (bmpx == 96) || (bmpx == 128) ||
+                                                                              (bmpx == 256)))))
             bmpy = bmpx;
 
           BlockType blockType = DEFAULT;
@@ -836,15 +835,13 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
           const uint32_t headersize = bmpi > 0 ? bmpof : minheadersize;
 
           // some final sanity checks
-          if( bmps != 0 && bmps < widthInBytes *
-                                  bmpy ) { /*printf("\nBMP guard: image is larger than reported in header\n",bmps,widthInBytes*bmpy);*/
-          } else if( start + blockSize <
-                     headerpos + headersize + widthInBytes * bmpy ) { /*printf("\nBMP guard: cropped data\n");*/
-          } else if( headersize == (bmpi > 0 ? 54 : 54 - 14) &&
-                     n_colors > 0 ) { /*printf("\nBMP guard: missing palette\n");*/
+          if( bmps != 0 &&
+              bmps < widthInBytes * bmpy ) { /*printf("\nBMP guard: image is larger than reported in header\n",bmps,widthInBytes*bmpy);*/
+          } else if( start + blockSize < headerpos + headersize + widthInBytes * bmpy ) { /*printf("\nBMP guard: cropped data\n");*/
+          } else if( headersize == (bmpi > 0 ? 54 : 54 - 14) && n_colors > 0 ) { /*printf("\nBMP guard: missing palette\n");*/
           } else if( bmpi > 0 && bmpof < minheadersize ) { /*printf("\nBMP guard: overlapping color palette\n");*/
-          } else if( bmpi > 0 && uint64_t(bmpi) - 1 + bmpof + widthInBytes * bmpy > start +
-                                                                                    blockSize ) { /*printf("\nBMP guard: reported pixel data offset is incorrect\n");*/
+          } else if( bmpi > 0 && uint64_t(bmpi) - 1 + bmpof + widthInBytes * bmpy >
+                                 start + blockSize ) { /*printf("\nBMP guard: reported pixel data offset is incorrect\n");*/
           } else if( widthInBytes * bmpy <= 64 ) { /*printf("\nBMP guard: too small\n");*/
           } // too small - not worthy to use the image models
           else
@@ -1139,8 +1136,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
         else if( !gifw )
           gif = 2, gifi = i + 3;
         else
-          return in->setpos(start + gifa - 1), detd = i - gifa + 2, info =
-                  ((gifgray ? IMAGE8GRAY : IMAGE8) << 24) | gifw, dett = GIF;
+          return in->setpos(start + gifa - 1), detd = i - gifa + 2, info = ((gifgray ? IMAGE8GRAY : IMAGE8) << 24) | gifw, dett = GIF;
       }
       if( gif == 5 && i == gifi ) {
         if( c > 0 )
@@ -1271,8 +1267,8 @@ void encode_cd(File *in, File *out, uint64_t size, int info) {
       if( info == 3 )
         blk[15] = 3; //indicate Mode2/Form2
       if( offset == 0 )
-        out->blockWrite(&blk[12], 4 + 4 * (blk[15] !=
-                                           1)); //4-byte address + 4 bytes from the 8-byte subheader goes only to the first sector
+        out->blockWrite(&blk[12],
+                        4 + 4 * (blk[15] != 1)); //4-byte address + 4 bytes from the 8-byte subheader goes only to the first sector
       out->blockWrite(&blk[16 + 8 * (blk[15] != 1)], 2048 + 276 * (info == 3)); //user data goes to all sectors
       if( offset + BLOCK * 2 > size && blk[15] != 1 )
         out->blockWrite(&blk[16], 4); //in Mode2 4 bytes from the 8-byte subheader goes after the last sector
@@ -1351,8 +1347,7 @@ void encode_bmp(File *in, File *out, uint64_t len, int width) {
       if( isPossibleRGB565 ) {
         int pTotal = total;
         total = min(total + 1, 0xFFFF) *
-                ((b & 7) == ((b & 8) - ((b >> 3) & 1)) && (g & 3) == ((g & 4) - ((g >> 2) & 1)) &&
-                 (r & 7) == ((r & 8) - ((r >> 3) & 1)));
+                ((b & 7) == ((b & 8) - ((b >> 3) & 1)) && (g & 3) == ((g & 4) - ((g >> 2) & 1)) && (r & 7) == ((r & 8) - ((r >> 3) & 1)));
         if( total > RGB565_MIN_RUN || pTotal >= RGB565_MIN_RUN ) {
           b ^= (b & 8) - ((b >> 3) & 1);
           g ^= (g & 4) - ((g >> 2) & 1);
@@ -1389,8 +1384,7 @@ uint64_t decode_bmp(Encoder &en, uint64_t size, int width, File *out, FMode mode
           r ^= (r & 8) - ((r >> 3) & 1);
         }
         total = min(total + 1, 0xFFFF) *
-                ((b & 7) == ((b & 8) - ((b >> 3) & 1)) && (g & 3) == ((g & 4) - ((g >> 2) & 1)) &&
-                 (r & 7) == ((r & 8) - ((r >> 3) & 1)));
+                ((b & 7) == ((b & 8) - ((b >> 3) & 1)) && (g & 3) == ((g & 4) - ((g >> 2) & 1)) && (r & 7) == ((r & 8) - ((r >> 3) & 1)));
         isPossibleRGB565 = total > 0;
       }
       if( mode == FDECOMPRESS ) {
@@ -1725,8 +1719,7 @@ public:
       while( true ) {
         if( table[i] < 0 ) //free slot?
           return -i - 1;
-        else if( dictionary[table[i]].prefix == prefix &&
-                 dictionary[table[i]].suffix == suffix ) //is it the entry we want?
+        else if( dictionary[table[i]].prefix == prefix && dictionary[table[i]].suffix == suffix ) //is it the entry we want?
           return table[i];
         i -= offset;
         if( i < 0 )
@@ -1799,9 +1792,8 @@ int encode_lzw(File *in, File *out, uint64_t size, int &hdrsize) {
   return 1;
 }
 
-inline void
-writeCode(File *f, const FMode mode, int *buffer, uint64_t *pos, int *bitsUsed, const int bitsPerCode, const int code,
-          uint64_t *diffFound) {
+inline void writeCode(File *f, const FMode mode, int *buffer, uint64_t *pos, int *bitsUsed, const int bitsPerCode, const int code,
+                      uint64_t *diffFound) {
   *buffer <<= bitsPerCode;
   *buffer |= code;
   (*bitsUsed) += bitsPerCode;
@@ -2556,11 +2548,9 @@ void direct_encode_block(BlockType type, File *in, uint64_t len, Encoder &en, in
   fprintf(stderr, "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
 }
 
-void
-compressRecursive(File *in, uint64_t blockSize, Encoder &en, String &blstr, int recursionLevel, float p1, float p2);
+void compressRecursive(File *in, uint64_t blockSize, Encoder &en, String &blstr, int recursionLevel, float p1, float p2);
 
-uint64_t decode_func(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File *out, FMode mode,
-                     uint64_t &diffFound) {
+uint64_t decode_func(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File *out, FMode mode, uint64_t &diffFound) {
   if( type == IMAGE24 )
     return decode_bmp(en, len, info, out, mode, diffFound);
   else if( type == IMAGE32 )
@@ -2620,8 +2610,8 @@ uint64_t encode_func(BlockType type, File *in, File *tmp, uint64_t len, int info
   return 0;
 }
 
-void transform_encode_block(BlockType type, File *in, uint64_t len, Encoder &en, int info, String &blstr,
-                            int recursion_level, float p1, float p2, uint64_t begin) {
+void transform_encode_block(BlockType type, File *in, uint64_t len, Encoder &en, int info, String &blstr, int recursion_level, float p1,
+                            float p2, uint64_t begin) {
   if( hasTransform(type)) {
     FileTmp tmp;
     int hdrsize = 0;
@@ -2656,14 +2646,12 @@ void transform_encode_block(BlockType type, File *in, uint64_t len, Encoder &en,
           String blstr_sub2;
           blstr_sub2 += blstr.c_str();
           blstr_sub2 += "-->";
-          printf(" %-11s | ->  exploded     |%10d bytes [%d - %d]\n", blstr_sub0.c_str(), int(tmpsize), 0,
-                 int(tmpsize - 1));
+          printf(" %-11s | ->  exploded     |%10d bytes [%d - %d]\n", blstr_sub0.c_str(), int(tmpsize), 0, int(tmpsize - 1));
           printf(" %-11s | --> added header |%10d bytes [%d - %d]\n", blstr_sub1.c_str(), hdrsize, 0, hdrsize - 1);
           direct_encode_block(HDR, &tmp, hdrsize, en);
-          printf(" %-11s | --> data         |%10d bytes [%d - %d]\n", blstr_sub2.c_str(), int(tmpsize - hdrsize),
-                 hdrsize, int(tmpsize - 1));
-          transform_encode_block(type2, &tmp, tmpsize - hdrsize, en, info & 0xffffff, blstr, recursion_level, p1, p2,
-                                 hdrsize);
+          printf(" %-11s | --> data         |%10d bytes [%d - %d]\n", blstr_sub2.c_str(), int(tmpsize - hdrsize), hdrsize,
+                 int(tmpsize - 1));
+          transform_encode_block(type2, &tmp, tmpsize - hdrsize, en, info & 0xffffff, blstr, recursion_level, p1, p2, hdrsize);
         } else {
           compressRecursive(&tmp, tmpsize, en, blstr, recursion_level + 1, p1, p2);
         }
@@ -2677,12 +2665,10 @@ void transform_encode_block(BlockType type, File *in, uint64_t len, Encoder &en,
   }
 }
 
-void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, String &blstr, int recursionLevel, float p1,
-                       float p2) {
-  static const char *typenames[25] = {"default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image",
-                                      "8b-img-grayscale", "24b-image", "32b-image", "audio", "audio - le", "exe", "cd",
-                                      "zlib", "base64", "gif", "png-8b", "png-8b-grayscale", "png-24b", "png-32b",
-                                      "text", "text - eol", "rle", "lzw"};
+void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, String &blstr, int recursionLevel, float p1, float p2) {
+  static const char *typenames[25] = {"default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
+                                      "24b-image", "32b-image", "audio", "audio - le", "exe", "cd", "zlib", "base64", "gif", "png-8b",
+                                      "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol", "rle", "lzw"};
   static const char *audiotypes[4] = {"8b-mono", "8b-stereo", "16b-mono", "16b-stereo"};
   BlockType type = DEFAULT;
   int blnum = 0, info = 0; // image width or audio type
@@ -2719,8 +2705,7 @@ void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, String &
     if( type == DEFAULT && textStart < textEnd ) { // only DEFAULT blocks may be overridden
       if( textStart == begin && textEnd == nextblockStart - 1 ) { // whole first block is text
         type = (textparser._EOLType[0] == 1) ? TEXT_EOL : TEXT; // DEFAULT -> TEXT
-      } else if( textEnd - textStart + 1 >=
-                 TEXT_MIN_SIZE ) { // we have one (or more) large enough text portion that splits DEFAULT
+      } else if( textEnd - textStart + 1 >= TEXT_MIN_SIZE ) { // we have one (or more) large enough text portion that splits DEFAULT
         if( textStart != begin ) { // text is not the first block
           nextblockStart = textStart; // first block is still DEFAULT
           nextblockTypeBak = nextblockType;
@@ -2753,12 +2738,11 @@ void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, String &
       blnum++;
 
       printf(" %-11s | %-16s |%10" PRIu64 " bytes [%" PRIu64 " - %" PRIu64 "]", blstrSub.c_str(),
-             typenames[(type == ZLIB && isPNG(BlockType(info >> 24))) ? info >> 24 : type], len, begin,
-             nextblockStart - 1);
+             typenames[(type == ZLIB && isPNG(BlockType(info >> 24))) ? info >> 24 : type], len, begin, nextblockStart - 1);
       if( type == AUDIO || type == AUDIO_LE )
         printf(" (%s)", audiotypes[info % 4]);
-      else if( type == IMAGE1 || type == IMAGE4 || type == IMAGE8 || type == IMAGE8GRAY || type == IMAGE24 ||
-               type == IMAGE32 || (type == ZLIB && isPNG(BlockType(info >> 24))))
+      else if( type == IMAGE1 || type == IMAGE4 || type == IMAGE8 || type == IMAGE8GRAY || type == IMAGE24 || type == IMAGE32 ||
+               (type == ZLIB && isPNG(BlockType(info >> 24))))
         printf(" (width: %d)", (type == ZLIB) ? (info & 0xFFFFFF) : info);
       else if( hasRecursion(type) && (info >> 24) != DEFAULT )
         printf(" (%s)", typenames[info >> 24]);

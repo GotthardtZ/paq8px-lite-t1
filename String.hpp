@@ -1,12 +1,11 @@
 #ifndef PAQ8PX_STRING_HPP
 #define PAQ8PX_STRING_HPP
 
-/////////////////// String and FileName /////////////////////
-
-// A specialized string class
-// size() includes NUL terminator.
-// strsize() does not include NUL terminator.
-
+/**
+ * A specialized string class
+ * size() includes NUL terminator.
+ * strsize() does not include NUL terminator.
+ */
 class String : public Array<char> {
 private:
     void appendIntRecursive(uint64_t x) {

@@ -1,11 +1,6 @@
 #ifndef PAQ8PX_RECORDMODEL_HPP
 #define PAQ8PX_RECORDMODEL_HPP
 
-//////////////////////////// RecordModel ///////////////////////
-
-// Model 2-D data with fixed record length.  Also order 1-2 models
-// that include the distance to the last match.
-
 inline uint8_t clip(int const px) {
   if( px > 255 )
     return 255;
@@ -54,6 +49,9 @@ struct dBASE {
     uint32_t start, end;
 };
 
+/**
+ * Model 2-D data with fixed record length. Also order 1-2 models that include the distance to the last match.
+ */
 class RecordModel {
 private:
     static constexpr int nCM = 3 + 3 + 3 + 16; //cm,cn,co,cp
@@ -63,9 +61,9 @@ private:
     static constexpr int nIndCtxs = 5;
 
 public:
-    static constexpr int MIXERINPUTS = nCM * ContextMap::MIXERINPUTS + nSM * StationaryMap::MIXERINPUTS +
-                                       nSSM * SmallStationaryContextMap::MIXERINPUTS +
-                                       nIM * IndirectMap::MIXERINPUTS; // 149
+    static constexpr int MIXERINPUTS =
+            nCM * ContextMap::MIXERINPUTS + nSM * StationaryMap::MIXERINPUTS + nSSM * SmallStationaryContextMap::MIXERINPUTS +
+            nIM * IndirectMap::MIXERINPUTS; // 149
     static constexpr int MIXERCONTEXTS = 1024 + 512 + 11 * 32; //1888
     static constexpr int MIXERCONTEXTSETS = 3;
 
@@ -91,30 +89,27 @@ private:
 
 public:
     RecordModel(const Shared *const sh, ModelStats *st, const uint64_t size) : shared(sh), stats(st), cm(sh, 32768, 3),
-                                                                               cn(sh, 32768 / 2, 3),
-                                                                               co(sh, 32768 * 2, 3), cp(sh, size, 16),
+                                                                               cn(sh, 32768 / 2, 3), co(sh, 32768 * 2, 3), cp(sh, size, 16),
                                                                                maps {{sh, 10, 8, 86, 1023},
                                                                                      {sh, 10, 8, 86, 1023},
                                                                                      {sh, 8,  8, 86, 1023},
                                                                                      {sh, 8,  8, 86, 1023},
                                                                                      {sh, 8,  8, 86, 1023},
-                                                                                     {sh, 11, 1, 86, 1023}},
-                                                                               sMap {{sh, 11, 1, 6, 86},
-                                                                                     {sh, 3,  1, 6, 86},
-                                                                                     {sh, 19, 1, 5, 128},
-                                                                                     {sh, 8,  8, 5, 64} // pos&255
-                                                                               }, iMap {{sh, 8, 8, 86, 255},
-                                                                                        {sh, 8, 8, 86, 255},
-                                                                                        {sh, 8, 8, 86, 255}},
-                                                                               iCtx {{16, 8},
-                                                                                     {16, 8},
-                                                                                     {16, 8},
-                                                                                     {20, 8},
-                                                                                     {11, 1}} {}
+                                                                                     {sh, 11, 1, 86, 1023}}, sMap {{sh, 11, 1, 6, 86},
+                                                                                                                   {sh, 3,  1, 6, 86},
+                                                                                                                   {sh, 19, 1, 5, 128},
+                                                                                                                   {sh, 8,  8, 5, 64} // pos&255
+            }, iMap {{sh, 8, 8, 86, 255},
+                     {sh, 8, 8, 86, 255},
+                     {sh, 8, 8, 86, 255}}, iCtx {{16, 8},
+                                                 {16, 8},
+                                                 {16, 8},
+                                                 {20, 8},
+                                                 {11, 1}} {}
 
     void mix(Mixer &m) {
       INJECT_SHARED_bpos
-// find record length
+      // find record length
       if( bpos == 0 ) {
         INJECT_SHARED_c4
         INJECT_STATS_blpos
@@ -125,20 +120,18 @@ public:
           rlen[0] = stats->Wav;
           rcount[0] = rcount[1] = 0;
         } else {
-// detect dBASE tables
+          // detect dBASE tables
           if( blpos == 0 || (dbase.version > 0 && blpos >= dbase.end))
             dbase.version = 0;
           else if( dbase.version == 0 && stats->blockType == DEFAULT && blpos >= 31 ) {
             uint8_t b = buf(32);
             if(((b & 7) == 3 || (b & 7) == 4 || (b >> 4) == 3 || b == 0xF5) && ((b = buf(30)) > 0 && b < 13) &&
                ((b = buf(29)) > 0 && b < 32) &&
-               ((dbase.nRecords = buf(28) | (buf(27) << 8) | (buf(26) << 16) | (buf(25) << 24)) > 0 &&
-                dbase.nRecords < 0xFFFFF) && ((dbase.headerLength = buf(24) | (buf(23) << 8)) > 32 &&
-                                              (((dbase.headerLength - 32 - 1) % 32) == 0 ||
-                                               (dbase.headerLength > 255 + 8 &&
-                                                (((dbase.headerLength -= 255 + 8) - 32 - 1) % 32) == 0))) &&
-               ((dbase.recordLength = buf(22) | (buf(21) << 8)) > 8) &&
-               (buf(20) == 0 && buf(19) == 0 && buf(17) <= 1 && buf(16) <= 1)) {
+               ((dbase.nRecords = buf(28) | (buf(27) << 8) | (buf(26) << 16) | (buf(25) << 24)) > 0 && dbase.nRecords < 0xFFFFF) &&
+               ((dbase.headerLength = buf(24) | (buf(23) << 8)) > 32 && (((dbase.headerLength - 32 - 1) % 32) == 0 ||
+                                                                         (dbase.headerLength > 255 + 8 &&
+                                                                          (((dbase.headerLength -= 255 + 8) - 32 - 1) % 32) == 0))) &&
+               ((dbase.recordLength = buf(22) | (buf(21) << 8)) > 8) && (buf(20) == 0 && buf(19) == 0 && buf(17) <= 1 && buf(16) <= 1)) {
               dbase.version = (((b = buf(32)) >> 4) == 3) ? 3 : b & 7;
               dbase.start = blpos - 32 + dbase.headerLength;
               dbase.end = dbase.start + dbase.nRecords * dbase.recordLength;
@@ -165,7 +158,7 @@ public:
               rlen[1] = r, rcount[0] = 1;
           }
 
-// check candidate lengths
+          // check candidate lengths
           for( int i = 0; i < 2; i++ ) {
             if((int) rcount[i] > max(0, 12 - (int) ilog2(rlen[i + 1]))) {
               if( rlen[0] != rlen[i + 1] ) {
@@ -174,10 +167,10 @@ public:
                   rcount[1] >>= 1;
                   continue;
                 } else if((rlen[i + 1] > rlen[0]) && (rlen[i + 1] % rlen[0] == 0)) {
-// maybe we found a multiple of the real record size..?
-// in that case, it is probably an immediate multiple (2x).
-// that is probably more likely the bigger the length, so
-// check for small lengths too
+                  // maybe we found a multiple of the real record size..?
+                  // in that case, it is probably an immediate multiple (2x).
+                  // that is probably more likely the bigger the length, so
+                  // check for small lengths too
                   if((rlen[0] > 32) && (rlen[i + 1] == rlen[0] * 2)) {
                     rcount[0] >>= 1;
                     rcount[1] >>= 1;
@@ -185,21 +178,21 @@ public:
                   }
                 }
                 rlen[0] = rlen[i + 1];
-//printf("\nrecordModel: detected rlen: %d\n",rlen[0]); // for debugging
+                //printf("\nrecordModel: detected rlen: %d\n",rlen[0]); // for debugging
                 rcount[i] = 0;
                 mayBeImg24B = (rlen[0] > 30 && (rlen[0] % 3) == 0);
                 nTransition = 0;
               } else
-// we found the same length again, that's positive reinforcement that
-// this really is the correct record size, so give it a little boost
+                // we found the same length again, that's positive reinforcement that
+                // this really is the correct record size, so give it a little boost
                 rcount[i] >>= 2;
 
-// if the other candidate record length is orders of
-// magnitude larger, it will probably never have enough time
-// to increase its counter before it's reset again. and if
-// this length is not a multiple of the other, than it might
-// really be worthwhile to investigate it, so we won't set its
-// counter to 0
+              // if the other candidate record length is orders of
+              // magnitude larger, it will probably never have enough time
+              // to increase its counter before it's reset again. and if
+              // this length is not a multiple of the other, than it might
+              // really be worthwhile to investigate it, so we won't set its
+              // counter to 0
               if( rlen[i + 1] << 4 > rlen[1 + (i ^ 1)] )
                 rcount[i ^ 1] = 0;
             }
@@ -216,24 +209,24 @@ public:
         iCtx[2] = (c << 8) | buf(rlen[0] - 1);
         iCtx[3] = finalize64(hash(c, N, buf(rlen[0] + 1)), 20);
 
-/*
-Consider record structures that include fixed-length strings.
-These usually contain the text followed by either spaces or 0's,
-depending on whether they're to be trimmed or they're null-terminated.
-That means we can guess the length of the string field by looking
-for small repetitions of one of these padding bytes followed by a
-different byte. By storing the last position where this transition
-occurred, and what was the padding byte, we are able to model these
-runs of padding bytes.
-Special care is taken to skip record structures of less than 9 bytes,
-since those may be little-endian 64 bit integers. If they contain
-relatively low values (<2^40), we may consistently get runs of 3 or
-even more 0's at the end of each record, and so we could assume that
-to be the general case. But with integers, we can't be reasonably sure
-that a number won't have 3 or more 0's just before a final non-zero MSB.
-And with such simple structures, there's probably no need to be fancy
-anyway
-*/
+        /*
+        Consider record structures that include fixed-length strings.
+        These usually contain the text followed by either spaces or 0's,
+        depending on whether they're to be trimmed or they're null-terminated.
+        That means we can guess the length of the string field by looking
+        for small repetitions of one of these padding bytes followed by a
+        different byte. By storing the last position where this transition
+        occurred, and what was the padding byte, we are able to model these
+        runs of padding bytes.
+        Special care is taken to skip record structures of less than 9 bytes,
+        since those may be little-endian 64 bit integers. If they contain
+        relatively low values (<2^40), we may consistently get runs of 3 or
+        even more 0's at the end of each record, and so we could assume that
+        to be the general case. But with integers, we can't be reasonably sure
+        that a number won't have 3 or more 0's just before a final non-zero MSB.
+        And with such simple structures, there's probably no need to be fancy
+        anyway
+        */
 
         if( !col )
           nTransition = 0;
@@ -246,8 +239,8 @@ anyway
 
         uint64_t i = 0;
 
-// Set 2-3 dimensional contexts
-// assuming rlen[0]<1024; col<4096
+        // Set 2-3 dimensional contexts
+        // assuming rlen[0]<1024; col<4096
         cm.set(hash(++i, c << 8 | (min(255, pos - cPos1[c]) >> 2)));
         cm.set(hash(++i, w << 9 | llog(pos - wpos1[w]) >> 2));
         cm.set(hash(++i, rlen[0] | N << 10 | NN << 18));
@@ -265,14 +258,13 @@ anyway
         cp.set(hash(++i, col | rlen[0] << 12));
 
         if( rlen[0] > 8 ) {
-          cp.set(hash(++i, min(min(0xFF, rlen[0]), pos - prevTransition), min(0x3FF, col),
-                      (w & 0xF0F0) | (w == ((padding << 8) | padding)), nTransition));
+          cp.set(hash(++i, min(min(0xFF, rlen[0]), pos - prevTransition), min(0x3FF, col), (w & 0xF0F0) | (w == ((padding << 8) | padding)),
+                      nTransition));
           cp.set(hash(++i, w, (buf(rlen[0] + 1) == padding && N == padding), col / max(1, rlen[0] / 32)));
         } else
           cp.set(0), cp.set(0);
 
-        cp.set(hash(++i, N | ((NN & 0xF0) << 4) | ((NNN & 0xE0) << 7) | ((NNNN & 0xE0) << 10) |
-                         ((col / max(1, rlen[0] / 16)) << 18)));
+        cp.set(hash(++i, N | ((NN & 0xF0) << 4) | ((NNN & 0xE0) << 7) | ((NNNN & 0xE0) << 10) | ((col / max(1, rlen[0] / 16)) << 18)));
         cp.set(hash(++i, (N & 0xF8) | ((NN & 0xF8) << 8) | (col << 16)));
         cp.set(hash(++i, N, NN));
 
@@ -303,7 +295,7 @@ anyway
 
         sMap[3].set(pos & 255); // mozilla
 
-// update last context positions
+        // update last context positions
         cpos4[c] = cpos3[c];
         cpos3[c] = cpos2[c];
         cpos2[c] = cPos1[c];

@@ -1,9 +1,10 @@
 #ifndef PAQ8PX_MODELSTATS_HPP
 #define PAQ8PX_MODELSTATS_HPP
 
-// Information shared by models
-// Order: in appearance -> models may use information
-// from models that appears above them
+/**
+ * Information shared by models
+ * Order: in appearance -> models may use information from models that appears above them
+ */
 struct ModelStats {
     //General shared information
     BlockType blockType {}; //used by wordModel, recordModel, SSE stage

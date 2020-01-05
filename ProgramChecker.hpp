@@ -7,10 +7,10 @@
 #include <cassert>
 #include <cstdio>
 
-//////////////////////// Program Checker /////////////////////
-
-// Track time and memory used
-// Remark: only Array<T> reports its memory usage, we don't know about other types
+/**
+ * Track time and memory used
+ * Remark: only Array<T> reports its memory usage, we don't know about other types
+ */
 class ProgramChecker {
 private:
     uint64_t memUsed;  // Bytes currently in use (all allocated minus all freed)
@@ -37,7 +37,10 @@ public:
       return std::chrono::duration<double>(finishTime - startTime).count();
     }
 
-    void print() const {  // Print elapsed time and used memory
+    /**
+     * Print elapsed time and used memory
+     */
+    void print() const {
       const double runtime = getRuntime();
       printf("Time %1.2f sec, used %" PRIu64 " MB (%" PRIu64 " bytes) of memory\n", runtime, maxMem >> 20U, maxMem);
     }

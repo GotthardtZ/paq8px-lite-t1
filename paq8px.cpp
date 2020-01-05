@@ -141,7 +141,6 @@ static_assert(sizeof(short) == 2, "sizeof(short)");
 static_assert(sizeof(int) == 4, "sizeof(int)");
 
 
-
 #include "ProgramChecker.hpp"
 #include "Array.hpp"
 #include "String.hpp"
@@ -485,8 +484,7 @@ int main_utf8(int argc, char **argv) {
       printf("\nHighest SIMD vectorization support on this system: ");
       if( detectedSimdIset < 0 || detectedSimdIset > 9 )
         quit("Oops, sorry. Unexpected result.");
-      static const char *vectorizationString[10] = {"None", "MMX", "SSE", "SSE2", "SSE3", "SSSE3", "SSE4.1", "SSE4.2",
-                                                    "AVX", "AVX2"};
+      static const char *vectorizationString[10] = {"None", "MMX", "SSE", "SSE2", "SSE3", "SSSE3", "SSE4.1", "SSE4.2", "AVX", "AVX2"};
       printf("%s.\n", vectorizationString[detectedSimdIset]);
 
       printf("Using ");
@@ -521,13 +519,10 @@ int main_utf8(int argc, char **argv) {
       quit("A command switch is required: -0..-9 to compress, -d to decompress, -t to test, -l to list.");
     if( input.strsize() == 0 ) {
       printf("\nAn %s is required %s.\n", whattodo == doCompress ? "input file or filelist" : "archive filename",
-             whattodo == doCompress ? "for compressing" : whattodo == doExtract ? "for decompressing" : whattodo ==
-                                                                                                        doCompare
-                                                                                                        ? "for testing"
-                                                                                                        : whattodo ==
-                                                                                                          doList
-                                                                                                          ? "to list its contents"
-                                                                                                          : "");
+             whattodo == doCompress ? "for compressing" : whattodo == doExtract ? "for decompressing" : whattodo == doCompare
+                                                                                                        ? "for testing" : whattodo == doList
+                                                                                                                          ? "to list its contents"
+                                                                                                                          : "");
       quit();
     }
     if( whattodo == doList && output.strsize() != 0 )
@@ -602,8 +597,7 @@ int main_utf8(int argc, char **argv) {
     //determine archive name
     if( whattodo == doCompress ) {
       archiveName += outputpath.c_str();
-      if( output.strsize() ==
-          0 ) { // If no archive name is provided, construct it from input (append PROGNAME extension to input filename)
+      if( output.strsize() == 0 ) { // If no archive name is provided, construct it from input (append PROGNAME extension to input filename)
         archiveName += input.c_str();
         archiveName += "." PROGNAME PROGVERSION;
       } else
@@ -642,8 +636,7 @@ int main_utf8(int argc, char **argv) {
       f.close();
       //Verify input files
       for( int i = 0; i < listoffiles.getCount(); i++ )
-        getfileSize(listoffiles.getfilename(
-                i)); // Does file exist? Is it readable? (we don't actually need the filesize now)
+        getfileSize(listoffiles.getfilename(i)); // Does file exist? Is it readable? (we don't actually need the filesize now)
     } else { //single file mode or extract/compare/list
       FileName fn(inputpath.c_str());
       fn += input.c_str();
@@ -687,11 +680,9 @@ int main_utf8(int argc, char **argv) {
       printf(" Brute      (b) = %s\n", options & OPTION_BRUTE ? "On  (Brute-force detection of DEFLATE streams)"
                                                               : "Off"); //this is a compression-only option, but we put/get it for reproducibility
       printf(" Train exe  (e) = %s\n", options & OPTION_TRAINEXE ? "On  (Pre-train x86/x64 model)" : "Off");
-      printf(" Train txt  (t) = %s\n",
-             options & OPTION_TRAINTXT ? "On  (Pre-train main model with word and expression list)" : "Off");
+      printf(" Train txt  (t) = %s\n", options & OPTION_TRAINTXT ? "On  (Pre-train main model with word and expression list)" : "Off");
       printf(" Adaptive   (a) = %s\n", options & OPTION_ADAPTIVE ? "On  (Adaptive learning rate)" : "Off");
-      printf(" Skip RGB   (s) = %s\n",
-             options & OPTION_SKIPRGB ? "On  (Skip the color transform, just reorder the RGB channels)" : "Off");
+      printf(" Skip RGB   (s) = %s\n", options & OPTION_SKIPRGB ? "On  (Skip the color transform, just reorder the RGB channels)" : "Off");
       printf(" File mode      = %s\n", options & OPTION_MULTIPLE_FILE_MODE ? "Multiple" : "Single");
     }
     printf("\n");
@@ -720,8 +711,7 @@ int main_utf8(int argc, char **argv) {
         if( output.endswith(file_extension))
           output.stripEnd((int) strlen(file_extension));
         else {
-          printf("Can't construct output filename from archive filename.\nArchive file extension must be: '%s'",
-                 file_extension);
+          printf("Can't construct output filename from archive filename.\nArchive file extension must be: '%s'", file_extension);
           quit();
         }
       }

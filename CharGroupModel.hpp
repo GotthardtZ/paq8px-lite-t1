@@ -20,13 +20,13 @@ private:
     ContextMap2 cm;
     uint32_t gAscii3 = 0, gAscii2 = 0, gAscii1 = 0; // group identifiers of the last 12 (4+4+4) characters; the most recent is 'gAscii1'
 public:
-    static constexpr int MIXERINPUTS = nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS +
-                                              ContextMap2::MIXERINPUTS_BYTE_HISTORY); // 35
+    static constexpr int MIXERINPUTS =
+            nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS + ContextMap2::MIXERINPUTS_BYTE_HISTORY); // 35
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
 
-    CharGroupModel(const Shared *const sh, const uint64_t size) : shared(sh), cm(sh, size, nCM, 64, CM_USE_RUN_STATS |
-                                                                                                    CM_USE_BYTE_HISTORY) {}
+    CharGroupModel(const Shared *const sh, const uint64_t size) : shared(sh),
+                                                                  cm(sh, size, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY) {}
 
     void mix(Mixer &m) {
       INJECT_SHARED_bpos

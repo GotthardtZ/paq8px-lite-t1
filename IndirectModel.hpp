@@ -3,11 +3,9 @@
 
 #include "RingBuffer.hpp"
 
-//////////////////////////// IndirectModel /////////////////////
-
-// The context is a byte string history that occurs within a
-// 1 or 2 byte context.
-
+/**
+ * The context is a byte string history that occurs within a 1 or 2 byte context.
+ */
 class IndirectModel {
 private:
     static constexpr int nCM = 15;
@@ -49,9 +47,8 @@ public:
         const uint32_t tc = d3 | t4[d3] << 16;
         const uint8_t pc = tolower(uint8_t(c4 >> 8));
         iCtx += (c = tolower(c)), iCtx = (pc << 8) | c;
-        const uint32_t ctx0 = iCtx(), mask =
-                (uint8_t(t1[c]) == uint8_t(t2[d])) | ((uint8_t(t1[c]) == uint8_t(t3[d2])) << 1) |
-                ((uint8_t(t1[c]) == uint8_t(t4[d3])) << 2) | ((uint8_t(t1[c]) == uint8_t(ctx0)) << 3);
+        const uint32_t ctx0 = iCtx(), mask = (uint8_t(t1[c]) == uint8_t(t2[d])) | ((uint8_t(t1[c]) == uint8_t(t3[d2])) << 1) |
+                                             ((uint8_t(t1[c]) == uint8_t(t4[d3])) << 2) | ((uint8_t(t1[c]) == uint8_t(ctx0)) << 3);
         uint64_t i = 0;
         cm.set(hash(++i, t));
         cm.set(hash(++i, t0));
