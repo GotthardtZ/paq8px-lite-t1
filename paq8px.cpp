@@ -1,629 +1,42 @@
-/* paq8px file compressor/archiver.  Released on February 25, 2018
-
-    Copyright (C) 2008 Matt Mahoney, Serge Osnach, Alexander Ratushnyak,
-    Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
-    Jan Ondrus, Andreas Morphis, Pavel L. Holoborodko, Kaido Orav, Simon Berger,
-    Neill Corlett, Márcio Pais
-
-    LICENSE
-
-    This program is free software; you can redistribute it and/or
-    modify it under the terms of the GNU General Public License as
-    published by the Free Software Foundation; either version 2 of
-    the License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful, but
-    WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-    General Public License for more details at
-    Visit <http://www.gnu.org/copyleft/gpl.html>.
-
-To install and use in Windows:
-
-- To install, put paq8px.exe or a shortcut to it on your desktop.
-- To compress a file or folder, drop it on the paq8px icon.
-- To decompress, drop a .paq8px file on the icon.
-
-A .paq8px extension is added for compression, removed for decompression.
-The output will go in the same folder as the input.
-
-While paq8px is working, a command window will appear and report
-progress.  When it is done you can close the window by pressing
-ENTER or clicking [X].
-
-
-COMMAND LINE INTERFACE
-
-- To install, put paq8px.exe somewhere in your PATH.
-- To compress:      paq8px [-N] file1 [file2...]
-- To decompress:    paq8px [-d] file1.paq8px [dir2]
-- To view contents: more < file1.paq8px
-
-The compressed output file is named by adding ".paq8px" extension to
-the first named file (file1.paq8px).  Each file that exists will be
-added to the archive and its name will be stored without a path.
-The option -N specifies a compression level ranging from -0
-(fastest) to -9 (smallest).  The default is -5.  If there is
-no option and only one file, then the program will pause when
-finished until you press the ENTER key (to support drag and drop).
-If file1.paq8px exists then it is overwritten.
-
-If the first named file ends in ".paq8px" then it is assumed to be
-an archive and the files within are extracted to the same directory
-as the archive unless a different directory (dir2) is specified.
-The -d option forces extraction even if there is not a ".paq8px"
-extension.  If any output file already exists, then it is compared
-with the archive content and the first byte that differs is reported.
-No files are overwritten or deleted.  If there is only one argument
-(no -d or dir2) then the program will pause when finished until
-you press ENTER.
-
-For compression, if any named file is actually a directory, then all
-files and subdirectories are compressed, preserving the directory
-structure, except that empty directories are not stored, and file
-attributes (timestamps, permissions, etc.) are not preserved.
-During extraction, directories are created as needed.  For example:
-
-  paq8px -4 c:\tmp\foo bar
-
-compresses foo and bar (if they exist) to c:\tmp\foo.paq8px at level 4.
-
-  paq8px -d c:\tmp\foo.paq8px .
-
-extracts foo and compares bar in the current directory.  If foo and bar
-are directories then their contents are extracted/compared.
-
-There are no commands to update an existing archive or to extract
-part of an archive.  Files and archives larger than 2GB are not
-supported (but might work on 64-bit machines, not tested).
-File names with nonprintable characters are not supported (spaces
-are OK).
-
-
-TO COMPILE
-
-There are 2 files: paq8px.cpp (C++) and paq7asm.asm (NASM/YASM).
-paq7asm.asm is the same as in paq7 and paq8x.  paq8px.cpp recognizes the
-following compiler options:
-
-  -DWINDOWS           (to compile in Windows)
-  -DUNIX              (to compile in Unix, Linux, Solairs, MacOS/Darwin, etc)
-  -DNOASM             (to replace paq7asm.asm with equivalent C++)
-  -DDEFAULT_OPTION=N  (to change the default compression level from 5 to N).
-
-If you compile without -DWINDOWS or -DUNIX, you can still compress files,
-but you cannot compress directories or create them during extraction.
-You can extract directories if you manually create the empty directories
-first.
-
-Use -DEFAULT_OPTION=N to change the default compression level to support
-drag and drop on machines with less than 256 MB of memory.  Use
--DDEFAULT_OPTION=4 for 128 MB, 3 for 64 MB, 2 for 32 MB, etc.
-
-Use -DNOASM for non x86-32 machines, or older than a Pentium-MMX (about
-1997), or if you don't have NASM or YASM to assemble paq7asm.asm.  The
-program will still work but it will be slower.  For NASM in Windows,
-use the options "--prefix _" and either "-f win32" or "-f obj" depending
-on your C++ compiler.  In Linux, use "-f elf".
-
-Recommended compiler commands and optimizations:
-
-  MINGW g++:
-    g++ paq8px.cpp -DWINDOWS -lz -Wall -Wextra -O3 -static -static-libgcc -opaq8px.exe
-
-
-ARCHIVE FILE FORMAT
-
-An archive has the following format.  It is intended to be both
-human and machine readable.  The header ends with CTRL-Z (Windows EOF)
-so that the binary compressed data is not displayed on the screen.
-
-  paq8px -N CR LF
-  size TAB filename CR LF
-  size TAB filename CR LF
-  ...
-  CTRL-Z
-  compressed binary data
-
--N is the option (-0 to -9), even if a default was used.
-Plain file names are stored without a path.  Files in compressed
-directories are stored with path relative to the compressed directory
-(using UNIX style forward slashes "/").  For example, given these files:
-
-  123 C:\dir1\file1.txt
-  456 C:\dir2\file2.txt
-
-Then
-
-  paq8px archive \dir1\file1.txt \dir2
-
-will create archive.paq8px with the header:
-
-  paq8px -5
-  123     file1.txt
-  456     dir2/file2.txt
-
-The command:
-
-  paq8px archive.paq8px C:\dir3
-
-will create the files:
-
-  C:\dir3\file1.txt
-  C:\dir3\dir2\file2.txt
-
-Decompression will fail if the first 7 bytes are not "paq8px -".  Sizes
-are stored as decimal numbers.  CR, LF, TAB, CTRL-Z are ASCII codes
-13, 10, 9, 26 respectively.
-
-
-ARITHMETIC CODING
-
-The binary data is arithmetic coded as the shortest base 256 fixed point
-number x = SUM_i x_i 256^-1-i such that p(<y) <= x < p(<=y), where y is the
-input string, x_i is the i'th coded byte, p(<y) (and p(<=y)) means the
-probability that a string is lexicographcally less than (less than
-or equal to) y according to the model, _ denotes subscript, and ^ denotes
-exponentiation.
-
-The model p(y) for y is a conditional bit stream,
-p(y) = PROD_j p(y_j | y_0..j-1) where y_0..j-1 denotes the first j
-bits of y, and y_j is the next bit.  Compression depends almost entirely
-on the ability to predict the next bit accurately.
-
-
-MODEL MIXING
-
-paq8px uses a neural network to combine a large number of models.  The
-i'th model independently predicts
-p1_i = p(y_j = 1 | y_0..j-1), p0_i = 1 - p1_i.
-The network computes the next bit probabilty
-
-  p1 = squash(SUM_i w_i t_i), p0 = 1 - p1                        (1)
-
-where t_i = stretch(p1_i) is the i'th input, p1_i is the prediction of
-the i'th model, p1 is the output prediction, stretch(p) = ln(p/(1-p)),
-and squash(s) = 1/(1+exp(-s)).  Note that squash() and stretch() are
-inverses of each other.
-
-After bit y_j (0 or 1) is received, the network is trained:
-
-  w_i := w_i + eta t_i (y_j - p1)                                (2)
-
-where eta is an ad-hoc learning rate, t_i is the i'th input, (y_j - p1)
-is the prediction error for the j'th input but, and w_i is the i'th
-weight.  Note that this differs from back propagation:
-
-  w_i := w_i + eta t_i (y_j - p1) p0 p1                          (3)
-
-which is a gradient descent in weight space to minimize root mean square
-error.  Rather, the goal in compression is to minimize coding cost,
-which is -log(p0) if y = 1 or -log(p1) if y = 0.  Taking
-the partial derivative of cost with respect to w_i yields (2).
-
-
-MODELS
-
-Most models are context models.  A function of the context (last few
-bytes) is mapped by a lookup table or hash table to a state which depends
-on the bit history (prior sequence of 0 and 1 bits seen in this context).
-The bit history is then mapped to p1_i by a fixed or adaptive function.
-There are several types of bit history states:
-
-- Run Map. The state is (b,n) where b is the last bit seen (0 or 1) and
-  n is the number of consecutive times this value was seen.  The initial
-  state is (0,0).  The output is computed directly:
-
-    t_i = (2b - 1)K log(n + 1).
-
-  where K is ad-hoc, around 4 to 10.  When bit y_j is seen, the state
-  is updated:
-
-    (b,n) := (b,n+1) if y_j = b, else (y_j,1).
-
-- Stationary Map.  The state is p, initially 1/2.  The output is
-  t_i = stretch(p).  The state is updated at ad-hoc rate K (around 0.01):
-
-    p := p + K(y_j - p)
-
-- Nonstationary Map.  This is a compromise between a stationary map, which
-  assumes uniform statistics, and a run map, which adapts quickly by
-  discarding old statistics.  An 8 bit state represents (n0,n1,h), initially
-  (0,0,0) where:
-
-    n0 is the number of 0 bits seen "recently".
-    n1 is the number of 1 bits seen "recently".
-    n = n0 + n1.
-    h is the full bit history for 0 <= n <= 4,
-      the last bit seen (0 or 1) if 5 <= n <= 15,
-      0 for n >= 16.
-
-  The primaty output is t_i := stretch(sm(n0,n1,h)), where sm(.) is
-  a stationary map with K = 1/256, initialized to
-  sm(n0,n1,h) = (n1+(1/64))/(n+2/64).  Four additional inputs are also
-  be computed to improve compression slightly:
-
-    p1_i = sm(n0,n1,h)
-    p0_i = 1 - p1_i
-    t_i   := stretch(p_1)
-    t_i+1 := K1 (p1_i - p0_i)
-    t_i+2 := K2 stretch(p1) if n0 = 0, -K2 stretch(p1) if n1 = 0, else 0
-    t_i+3 := K3 (-p0_i if n1 = 0, p1_i if n0 = 0, else 0)
-    t_i+4 := K3 (-p0_i if n0 = 0, p1_i if n1 = 0, else 0)
-
-  where K1..K4 are ad-hoc constants.
-
-  h is updated as follows:
-    If n < 4, append y_j to h.
-    Else if n <= 16, set h := y_j.
-    Else h = 0.
-
-  The update rule is biased toward newer data in a way that allows
-  n0 or n1, but not both, to grow large by discarding counts of the
-  opposite bit.  Large counts are incremented probabilistically.
-  Specifically, when y_j = 0 then the update rule is:
-
-    n0 := n0 + 1, n < 29
-          n0 + 1 with probability 2^(27-n0)/2 else n0, 29 <= n0 < 41
-          n0, n = 41.
-    n1 := n1, n1 <= 5
-          round(8/3 lg n1), if n1 > 5
-
-  swapping (n0,n1) when y_j = 1.
-
-  Furthermore, to allow an 8 bit representation for (n0,n1,h), states
-  exceeding the following values of n0 or n1 are replaced with the
-  state with the closest ratio n0:n1 obtained by decrementing the
-  smaller count: (41,0,h), (40,1,h), (12,2,h), (5,3,h), (4,4,h),
-  (3,5,h), (2,12,h), (1,40,h), (0,41,h).  For example:
-  (12,2,1) 0-> (7,1,0) because there is no state (13,2,0).
-
-- Match Model.  The state is (c,b), initially (0,0), where c is 1 if
-  the context was previously seen, else 0, and b is the next bit in
-  this context.  The prediction is:
-
-    t_i := (2b - 1)Kc log(m + 1)
-
-  where m is the length of the context.  The update rule is c := 1,
-  b := y_j.  A match model can be implemented efficiently by storing
-  input in a buffer and storing pointers into the buffer into a hash
-  table indexed by context.  Then c is indicated by a hash table entry
-  and b can be retrieved from the buffer.
-
-
-CONTEXTS
-
-High compression is achieved by combining a large number of contexts.
-Most (not all) contexts start on a byte boundary and end on the bit
-immediately preceding the predicted bit.  The contexts below are
-modeled with both a run map and a nonstationary map unless indicated.
-
-- Order n.  The last n bytes, up to about 16.  For general purpose data.
-  Most of the compression occurs here for orders up to about 6.
-  An order 0 context includes only the 0-7 bits of the partially coded
-  byte and the number of these bits (255 possible values).
-
-- Sparse.  Usually 1 or 2 of the last 8 bytes preceding the byte containing
-  the predicted bit, e.g (2), (3),..., (8), (1,3), (1,4), (1,5), (1,6),
-  (2,3), (2,4), (3,6), (4,8).  The ordinary order 1 and 2 context, (1)
-  or (1,2) are included above.  Useful for binary data.
-
-- Text.  Contexts consists of whole words (a-z, converted to lower case
-  and skipping other values).  Contexts may be sparse, e.g (0,2) meaning
-  the current (partially coded) word and the second word preceding the
-  current one.  Useful contexts are (0), (0,1), (0,1,2), (0,2), (0,3),
-  (0,4).  The preceding byte may or may not be included as context in the
-  current word.
-
-- Formatted text.  The column number (determined by the position of
-  the last linefeed) is combined with other contexts: the charater to
-  the left and the character above it.
-
-- Fixed record length.  The record length is determined by searching for
-  byte sequences with a uniform stride length.  Once this is found, then
-  the record length is combined with the context of the bytes immediately
-  preceding it and the corresponding byte locations in the previous
-  one or two records (as with formatted text).
-
-- Context gap.  The distance to the previous occurrence of the order 1
-  or order 2 context is combined with other low order (1-2) contexts.
-
-- FAX.  For 2-level bitmapped images.  Contexts are the surrounding
-  pixels already seen.  Image width is assumed to be 1728 bits (as
-  in calgary/pic).
-
-- Image.  For uncompressed 24-bit color BMP, TIFF and TGA images.  Contexts
-  are the high order bits of the surrounding pixels and linear
-  combinations of those pixels, including other color planes.  The
-  image width is detected from the file header.  When an image is
-  detected, other models are turned off to improve speed.
-
-- JPEG.  Files are further compressed by partially uncompressing back
-  to the DCT coefficients to provide context for the next Huffman code.
-  Only baseline DCT-Huffman coded files are modeled.  (This ia about
-  90% of images, the others are usually progresssive coded).  JPEG images
-  embedded in other files (quite common) are detected by headers.  The
-  baseline JPEG coding process is:
-  - Convert to grayscale and 2 chroma colorspace.
-  - Sometimes downsample the chroma images 2:1 or 4:1 in X and/or Y.
-  - Divide each of the 3 images into 8x8 blocks.
-  - Convert using 2-D discrete cosine transform (DCT) to 64 12-bit signed
-    coefficients.
-  - Quantize the coefficients by integer division (lossy).
-  - Split the image into horizontal slices coded independently, separated
-    by restart codes.
-  - Scan each block starting with the DC (0,0) coefficient in zigzag order
-    to the (7,7) coefficient, interleaving the 3 color components in
-    order to scan the whole image left to right starting at the top.
-  - Subtract the previous DC component from the current in each color.
-  - Code the coefficients using RS codes, where R is a run of R zeros (0-15)
-    and S indicates 0-11 bits of a signed value to follow.  (There is a
-    special RS code (EOB) to indicate the rest of the 64 coefficients are 0).
-  - Huffman code the RS symbol, followed by S literal bits.
-  The most useful contexts are the current partially coded Huffman code
-  (including S following bits) combined with the coefficient position
-  (0-63), color (0-2), and last few RS codes.
-
-- Match.  When a context match of 400 bytes or longer is detected,
-  the next bit of the match is predicted and other models are turned
-  off to improve speed.
-
-- Exe.  When a x86 file (.exe, .obj, .dll) is detected, sparse contexts
-  with gaps of 1-12 selecting only the prefix, opcode, and the bits
-  of the modR/M byte that are relevant to parsing are selected.
-  This model is turned off otherwise.
-
-- Indirect.  The history of the last 1-3 bytes in the context of the
-  last 1-2 bytes is combined with this 1-2 byte context.
-
-- DMC. A bitwise n-th order context is built from a state machine using
-  DMC, described in http://plg.uwaterloo.ca/~ftp/dmc/dmc.c
-  The effect is to extend a single context, one bit at a time and predict
-  the next bit based on the history in this context.  The model here differs
-  in that two predictors are used.  One is a pair of counts as in the original
-  DMC.  The second predictor is a bit history state mapped adaptively to
-  a probability as as in a Nonstationary Map.
-
-ARCHITECTURE
-
-The context models are mixed by several of several hundred neural networks
-selected by a low-order context.  The outputs of these networks are
-combined using a second neural network, then fed through several stages of
-adaptive probability maps (APM) before arithmetic coding.
-
-For images, only one neural network is used and its context is fixed.
-
-An APM is a stationary map combining a context and an input probability.
-The input probability is stretched and divided into 32 segments to
-combine with other contexts.  The output is interpolated between two
-adjacent quantized values of stretch(p1).  There are 2 APM stages in series:
-
-  p1 := (p1 + 3 APM(order 0, p1)) / 4.
-  p1 := (APM(order 1, p1) + 2 APM(order 2, p1) + APM(order 3, p1)) / 4.
-
-PREPROCESSING
-
-paq8px uses preprocessing transforms on certain data types to improve
-compression.  To improve reliability, the decoding transform is
-tested during compression to ensure that the input file can be
-restored.  If the decoder output is not identical to the input file
-due to a bug, then the transform is abandoned and the data is compressed
-without a transform so that it will still decompress correctly.
-
-The input is split into blocks with the format <type> <decoded size> <data>
-where <type> is 1 byte (0 = no transform), <decoded size> is the size
-of the data after decoding, which may be different than the size of <data>.
-Blocks do not span file boundaries, and have a maximum size of 4MB to
-2GB depending on compression level.  Large files are split into blocks
-of this size.  The preprocessor has 3 parts:
-
-- Detector.  Splits the input into smaller blocks depending on data type.
-
-- Coder.  Input is a block to be compressed.  Output is a temporary
-  file.  The coder determines whether a transform is to be applied
-  based on file type, and if so, which one.  A coder may use lots
-  of resources (memory, time) and make multiple passes through the
-  input file.  The file type is stored (as one byte) during compression.
-
-- Decoder.  Performs the inverse transform of the coder.  It uses few
-  resorces (fast, low memory) and runs in a single pass (stream oriented).
-  It takes input either from a file or the arithmetic decoder.  Each call
-  to the decoder returns a single decoded byte.
-
-The following transforms are used:
-
-- EXE:  CALL (0xE8) and JMP (0xE9) address operands are converted from
-  relative to absolute address.  The transform is to replace the sequence
-  E8/E9 xx xx xx 00/FF by adding file offset modulo 2^25 (signed range,
-  little-endian format).  Data to transform is identified by trying the
-  transform and applying a crude compression test: testing whether the
-  byte following the E8/E8 (LSB of the address) occurred more recently
-  in the transformed data than the original and within 4KB 4 times in
-  a row.  The block ends when this does not happen for 4KB.
-
-- JPEG: detected by SOI and SOF and ending with EOI or any nondecodable
-  data.  No transform is applied.  The purpose is to separate images
-  embedded in execuables to block the EXE transform, and for a future
-  place to insert a transform.
-
-
-IMPLEMENTATION
-
-Hash tables are designed to minimize cache misses, which consume most
-of the CPU time.
-
-Most of the memory is used by the nonstationary context models.
-Contexts are represented by 32 bits, possibly a hash.  These are
-mapped to a bit history, represented by 1 byte.  The hash table is
-organized into 64-byte buckets on cache line boundaries.  Each bucket
-contains 7 x 7 bit histories, 7 16-bit checksums, and a 2 element LRU
-queue packed into one byte.  Each 7 byte element represents 7 histories
-for a context ending on a 3-bit boundary plus 0-2 more bits.  One
-element (for bits 0-1, which have 4 unused bytes) also contains a run model
-consisting of the last byte seen and a count (as 1 byte each).
-
-Run models use 4 byte hash elements consisting of a 2 byte checksum, a
-repeat count (0-255) and the byte value.  The count also serves as
-a priority.
-
-Stationary models are most appropriate for small contexts, so the
-context is used as a direct table lookup without hashing.
-
-The match model maintains a pointer to the last match until a mismatching
-bit is found.  At the start of the next byte, the hash table is referenced
-to find another match.  The hash table of pointers is updated after each
-whole byte.  There is no checksum.  Collisions are detected by comparing
-the current and matched context in a rotating buffer.
-
-The inner loops of the neural network prediction (1) and training (2)
-algorithms are implemented in MMX assembler, which computes 4 elements
-at a time.  Using assembler is 8 times faster than C++ for this code
-and 1/3 faster overall.  (However I found that SSE2 code on an AMD-64,
-which computes 8 elements at a time, is not any faster).
-
-
-DIFFERENCES FROM PAQ7
-
-An .exe model and filter are added.  Context maps are improved using 16-bit
-checksums to reduce collisions.  The state table uses probabilistic updates
-for large counts, more states that remember the last bit, and decreased
-discounting of the opposite count.  It is implemented as a fixed table.
-There are also many minor changes.
-
-DIFFERENCES FROM PAQ8A
-
-The user interface supports directory compression and drag and drop.
-The preprocessor segments the input into blocks and uses more robust
-EXE detection.  An indirect context model was added.  There is no
-dictionary preprocesor like PAQ8B/C/D/E.
-
-DIFFERENCES FROM PAQ8F
-
-Different models, usually from paq8hp*. Also changed rate from 8 to 7. A bug
-in Array was fixed that caused the program to silently crash upon exit.
-
-DIFFERENCES FROM PAQ8J
-
-1) Slightly improved sparse model.
-2) Added new family of sparse contexts. Each byte mapped to 3-bit value, where
-different values corresponds to different byte classes. For example, input
-byte 0x00 transformed into 0, all bytes that less then 16 -- into 5, all
-punctuation marks (ispunct(c)!=0) -- into 2 etc. Then this flags from 11
-previous bytes combined into 32-bit pseudo-context.
-
-All this improvements gives only 62 byte on BOOK1, but on binaries archive size
-reduced on 1-2%.
-
-DIFFERENCES FROM PAQ8JA
-
-Introduced distance model. Distance model uses distance to last occurence
-of some anchor char (0x00, space, newline, 0xff), combined with previous
-charactes as context. This slightly improves compression of files with
-variable-width record data.
-
-DIFFERENCES FROM PAQ8JB
-
-Restored recordModel(), broken in paq8hp*. Slightly tuned indirectModel().
-
-DIFFERENCES FROM PAQ8JC
-
-Changed the APMs in the Predictor. Up to a 0.2% improvement for some files.
-
-DIFFERENCES FROM PAQ8JD
-
-Added DMCModel.  Removed some redundant models from SparseModel and other
-minor tuneups.  Changes introduced in PAQ8K were not carried over.
-
-PAQ8L v.2
-
-Changed Mixer::p() to p() to fix a compiler error in Linux
-(patched by Indrek Kruusa, Apr. 15, 2007).
-
-DIFFERENCES FROM PAQ8L, PAQ8M
-
-Modified JPEG model by Jan Ondrus (paq8fthis2).  The new model improves
-compression by using decoded pixel values of current and adjacent blocks
-as context.  PAQ8M was an earlier version of the new JPEG model
-(from paq8fthis).
-
-DIFFERENCES FROM PAQ8N
-
-Improved bmp model. Slightly faster.
-
-DIFFERENCES FROM PAQ8O
-
-Modified JPEG model by Jan Ondrus (paq8fthis4).
-Added PGM (grayscale image) model form PAQ8I.
-Added grayscale BMP model to PGM model.
-Ver. 2 can be compiled using either old or new "for" loop scoping rules.
-Added APM and StateMap from LPAQ1
-Code optimizations from Enrico Zeidler
-Detection of BMP 4,8,24 bit and PGM 8 bit images before compress
-On non BMP,PGM,JPEG data mem is lower
-Fixed bug in BMP 8-bit detection in other files like .exe
-15. oct 2007
-Updates JPEG model by Jan Ondrus
-PGM detection bug fix
-22. oct 2007
-improved JPEG model by Jan Ondrus
-16. feb 2008
-fixed bmp detection bug
-added .rgb file support (uncompressed grayscale)
-
-DIFFERENCES FROM PAQ8O9
-
-Added wav Model. Slightly improved bmp model.
-
-DIFFERENCES FROM PAQ8P
-
-Added nestModel from paq8p3
-Modified wordModel from paq8p3
-Modified .pbm, .pgm, .ppm, .bmp, .rgb detection (from paq8p3)
-Modified WAV model (from paq8p_)
-Modified JPEG model (from paq8p2)
-Added im1bitModel (1-bit) (from paq8p3)
-Added compression of PPM, PBM images (from paq8p3)
-Removed pic model
-Modified EXE transformation (e8/e9)
-Changed image and audio data handling (separated in blocks)
-Added compression of (8-bit, 24-bit) TGA image data
-Improved TIFF image detection
-Added zlib stream recompression
-Added base64 transform (from paq8pxd)
-Modified im8bitModel (8-bit) (from paq8pxd)
-Added gif recompression
+/*
+  PAQ8PX file compressor/archiver
+  see README for information
+  see DOC for technical details
+  see CHANGELOG for version history
 */
-
 
 //////////////////////// Versioning ////////////////////////////////////////
 
-//Change the following values on a new build if applicable
-#define PROGNAME     "paq8px"  // Change this if you make a branch
-#define PROGVERSION  "139"
-#define PROGYEAR     "2018"
-
+#define PROGNAME     "paq8px"
+#define PROGVERSION  "183"  //update version here before publishing your changes
+#define PROGYEAR     "2019"
 
 //////////////////////// Build options /////////////////////////////////////
 
 // Uncomment one or more of the following #define-s to disable compilation of certain models/transformations
 // This is useful when
-// - you'd like to slim the executable by eliminating unnecessary code for benchmarks where exe size matters or
+// - you would like to slim the executable by eliminating unnecessary code for benchmarks where exe size matters or
 // - you would like to experiment with the model-mixture
 // TODO: make more models "optional"
 #define USE_ZLIB
-#define USE_WAVMODEL
-#define USE_TEXTMODEL //if you uncomment this line, you must uncomment the next line (USE_WORDMODEL) as well
-#define USE_WORDMODEL
+#define USE_AUDIOMODEL
+#define USE_TEXTMODEL
 
+#define NHASHCONFIG  //Remove (comment out) this line to enable hash configuration from the command line (somewhat slower compression)
 
 //////////////////////// Debug options /////////////////////////////////////
 
-#define NVERBOSE // Remove (comment out) this line for more on-screen progress information
-#define NDEBUG   // Remove (comment out) this line for debugging (turns on Array bound checks and asserts)
+#define NDEBUG    // Remove (comment out) this line for debugging (turns on Array bound checks and asserts)
 #include <assert.h>
 
+#define NVERBOSE  // Remove (comment out) this line for more on-screen progress information
 
-//////////////////////// Target OS /////////////////////////////////////////
+//
+//  User specified options are above
+//  Automatic definitions are below = for compiling no need to change anything below this line
+//
+
+//////////////////////// Target OS/Compiler ////////////////////////////////
 
 #if defined(_WIN32) || defined(_MSC_VER)
 #ifndef WINDOWS
@@ -641,6 +54,21 @@ Added gif recompression
 #error Unknown target system
 #endif
 
+// Floating point operations need IEEE compliance
+// Do not use compiler optimization options such as the following:
+// gcc : -ffast-math (and -Ofast, -funsafe-math-optimizations, -fno-rounding-math)
+// vc++: /fp:fast
+#if defined(__FAST_MATH__) || defined(_M_FP_FAST) // gcc vc++
+#error Avoid using aggressive floating-point compiler optimization flags
+#endif
+
+#if defined(_MSC_VER)
+#define ALWAYS_INLINE  __forceinline
+#elif defined(__GNUC__)
+#define ALWAYS_INLINE inline __attribute__((always_inline))
+#else 
+#define ALWAYS_INLINE inline
+#endif
 
 //////////////////////// Includes /////////////////////////////////////////
 
@@ -648,11 +76,10 @@ Added gif recompression
 // - on Windows MSVC and MinGW-w64 use the MSVCRT runtime where it is "%I64u"
 // - on Linux it is "%llu"
 // The correct value is provided by the PRIu64 macro which is defined here:
-#include <cinttypes> //PRIu64   (C99 standard, available since VS 2013 RTM)
+#include <cinttypes> //PRIu64
 
 // Platform-specific includes
 #ifdef UNIX
-  #include <dirent.h> //opendir(), readdir(), dirent()
   #include <string.h> //strlen(), strcpy(), strcat(), strerror(), memset(), memcpy(), memmove()
   #include <limits.h> //PATH_MAX (for OSX)
   #include <unistd.h> //isatty()
@@ -661,23 +88,28 @@ Added gif recompression
   #ifndef NOMINMAX
   #define NOMINMAX
   #endif
-  #include <windows.h>
-  #include <time.h>   //clock_t, CLOCKS_PER_SEC
+  #include <windows.h>   //CreateDirectoryW, CommandLineToArgvW, GetConsoleOutputCP, SetConsoleOutputCP
+                         //GetCommandLineW, GetModuleFileNameW, GetStdHandle, GetTempFileName
+                         //MultiByteToWideChar, WideCharToMultiByte,
+                         //FileType, FILE_TYPE_PIPE, FILE_TYPE_DISK, 
+                         //uRetVal, DWORD, UINT, TRUE, MAX_PATH, CP_UTF8, etc.
 #endif
 
 // Platform-independent includes
-#include <sys/stat.h> //stat(), mkdir(), stat()
+#include <sys/stat.h> //stat(), mkdir()
 #include <math.h>     //floor(), sqrt()
 #include <stdexcept>  //std::exception
+#include <algorithm>  //std::min, std::max
+#include <chrono>     //std::chrono::high_resolution_clock
 
+// zlib
 #ifdef USE_ZLIB
 #include <zlib.h>
 #endif
 
+//////////////////// Cross-platform definitions /////////////////////////////////////
 
-//////////////////// Cross platform definitions /////////////////////////////////////
-
-#ifdef _MSC_VER  
+#ifdef _MSC_VER
 #define fseeko(a,b,c) _fseeki64(a,b,c)
 #define ftello(a) _ftelli64(a)
 #else
@@ -695,6 +127,28 @@ Added gif recompression
 #define strcasecmp _stricmp
 #endif
 
+#if defined(__GNUC__) || defined(__clang__)
+#define bswap(x)   __builtin_bswap32(x)
+#define bswap64(x) __builtin_bswap64(x)
+#elif defined(_MSC_VER)
+#define bswap(x)   _byteswap_ulong(x)
+#define bswap64(x) _byteswap_uint64(x)
+#else
+#define bswap(x) \
++   ((((x) & 0xff000000) >> 24) | \
++    (((x) & 0x00ff0000) >>  8) | \
++    (((x) & 0x0000ff00) <<  8) | \
++    (((x) & 0x000000ff) << 24))
+#define bswap64(x) \
++    ((x)>>56) |
++   (((x)<<40) & 0x00FF000000000000) | \
++   (((x)<<24) & 0x0000FF0000000000) | \
++   (((x)<<8 ) & 0x000000FF00000000) | \
++   (((x)>>8 ) & 0x00000000FF000000) | \
++   (((x)>>24) & 0x0000000000FF0000) | \
++   (((x)>>40) & 0x000000000000FF00) | \
++   ((x) << 56))
+#endif
 
 ///////////////////////// SIMD Vectorization detection //////////////////////////////////
 
@@ -711,7 +165,7 @@ Added gif recompression
 //#include <zmmintrin.h> //AVX512
 
 //define CPUID
-#ifdef _MSC_VER  
+#ifdef _MSC_VER
 #include <intrin.h>
 #define cpuid(info, x) __cpuidex(info, x, 0)
 #elif defined(__GNUC__)
@@ -722,7 +176,7 @@ Added gif recompression
 #endif
 
 // Define interface to xgetbv instruction
-static inline int64_t xgetbv (int ctr) {	
+static inline unsigned long long xgetbv (unsigned long ctr) {
 #if (defined (_MSC_FULL_VER) && _MSC_FULL_VER >= 160040000) || (defined (__INTEL_COMPILER) && __INTEL_COMPILER >= 1200)
   return _xgetbv(ctr);
 #elif defined(__GNUC__)
@@ -776,28 +230,36 @@ int simd_detect() {
   return 9;
 }
 
-
 //////////////////////// Type definitions /////////////////////////////////////////
 
-// shortcuts for 8, 16, 32 bit integer types
-typedef unsigned char      U8;
-typedef unsigned short     U16;
-typedef unsigned int       U32;
-typedef unsigned long long U64;
-typedef signed char        int8_t;
+// shortcuts for unsigned 8, 16, 32 bit integer types
+typedef uint8_t  U8;
+typedef uint16_t U16;
+typedef uint32_t U32;
+typedef uint64_t U64;
+
+static_assert(sizeof(U8)==1,"sizeof(U8)");
+static_assert(sizeof(U16)==2,"sizeof(U16)");
+static_assert(sizeof(U32)==4,"sizeof(U32)");
+static_assert(sizeof(U64)==8,"sizeof(U64)");
+static_assert(sizeof(short)==2,"sizeof(short)");
+static_assert(sizeof(int)==4,"sizeof(int)");
 
 //////////////////////// Helper functions /////////////////////////////////////////
 
 // min, max functions
-inline int min(int a, int b) {return a<b?a:b;}
-inline int max(int a, int b) {return a<b?b:a;}
+static inline int min(int a, int b) {return std::min<int>(a,b);}
+static inline U64 min(U64 a, U64 b) {return std::min<U64>(a,b);}
+static inline int max(int a, int b) {return std::max<int>(a,b);}
 
-// A basic exception class to let catch() in main() know 
+#define ispowerof2(x) ((x&(x-1))==0)
+
+// A basic exception class to let catch() in main() know
 // that the exception was thrown intentionally.
 class IntentionalException : public std::exception {};
 
 // Error handler: print message if any, and exit
-void quit(const char* const message=0) {
+void quit(const char* const message=nullptr) {
   if(message)
     printf("\n%s",message);
   printf("\n");
@@ -828,9 +290,9 @@ void quit(const char* const message=0) {
 // Remark: only Array<T> reports its memory usage, we don't know about other types
 class ProgramChecker {
 private:
-  U64 memused;  // Bytes currently in use (all allocated-all freed)
+  U64 memused;  // Bytes currently in use (all allocated minus all freed)
   U64 maxmem;   // Most bytes allocated ever
-  clock_t start_time;  // in ticks
+  std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
 public:
   void alloc(U64 n) {
     memused+=n;
@@ -841,19 +303,14 @@ public:
     memused-=n;
   }
   ProgramChecker(): memused(0), maxmem(0) {
-    start_time=clock();
-    assert(sizeof(U8)==1);
-    assert(sizeof(U16)==2);
-    assert(sizeof(U32)==4);
-    assert(sizeof(U64)==8);
-    assert(sizeof(short)==2);
-    assert(sizeof(int)==4);
+    start_time=std::chrono::high_resolution_clock::now();
   }
   double get_runtime() const {
-    return double(clock()-start_time)/CLOCKS_PER_SEC;
+    const std::chrono::time_point<std::chrono::high_resolution_clock> finish_time=std::chrono::high_resolution_clock::now();
+    return std::chrono::duration<double>(finish_time - start_time).count();
   }
   void print() const {  // Print elapsed time and used memory
-      double runtime=get_runtime();
+      const double runtime=get_runtime();
       printf("Time %1.2f sec, used %" PRIu64 " MB (%" PRIu64 " bytes) of memory\n",runtime,maxmem>>20,maxmem);
   }
   ~ProgramChecker() {
@@ -875,15 +332,18 @@ public:
 // a.resize(newsize): grows or shrinks the array.
 // a.append(x): appends x to the end of the array and reserving space for more elements if needed.
 // a.pop_back(): removes the last element by reducing the size by one (but does not free memory).
-#ifndef NDEBUG
-static void chkindex(U64 index, U64 upper_bound)
-{
-  if (index>=upper_bound) {
-    fprintf(stderr, "%" PRIu64 " out of upper bound %" PRIu64 "\n", index, upper_bound);
-    BACKTRACE();
-    quit();
+
+#ifdef NDEBUG
+  #define chkindex(index, upper_bound)((void) 0)
+#else
+  static void chkindex(U64 index, U64 upper_bound)
+  {
+    if (index>=upper_bound) {
+      fprintf(stderr, "%" PRIu64 " out of upper bound %" PRIu64 "\n", index, upper_bound);
+      BACKTRACE();
+      quit();
+    }
   }
-}
 #endif
 
 template <class T, const int Align=16> class Array {
@@ -899,36 +359,31 @@ public:
   explicit Array(U64 requested_size) {create(requested_size);}
   ~Array();
   T& operator[](U64 i) {
-    #ifndef NDEBUG
     chkindex(i,used_size);
-    #endif
     return data[i];
   }
   const T& operator[](U64 i) const {
-    #ifndef NDEBUG
     chkindex(i,used_size);
-    #endif
     return data[i];
   }
   U64 size() const {return used_size;}
   void resize(U64 new_size);
   void pop_back() {assert(used_size>0); --used_size; }  // decrement size
   void push_back(const T& x);  // increment size, append x
-  Array(const Array&) { assert(false); } //prevent copying - this method must be public (gcc must see it but actually won't use it)
-private:
+  Array(const Array&); //prevent copying
   Array& operator=(const Array&); //prevent assignment
 };
 
 template<class T, const int Align> void Array<T,Align>::create(U64 requested_size) {
-  assert((Align&(Align-1))==0);
+  assert(ispowerof2(Align));
   used_size=reserved_size=requested_size;
   if (requested_size==0) {
-    data=0;ptr=0;
+    data=nullptr;ptr=nullptr;
     return;
   }
-  U64 bytes_to_allocate=allocated_bytes();
+  const U64 bytes_to_allocate=allocated_bytes();
   ptr=(char*)calloc(bytes_to_allocate,1);
-  if(!ptr)quit("Out of memory.");
+  if(ptr==nullptr)quit("Out of memory.");
   U64 pad=padding();
   data=(T*)(((uintptr_t)ptr+pad) & ~(uintptr_t)pad);
   assert(ptr<=(char*)data && (char*)data<=ptr+Align);
@@ -943,20 +398,20 @@ template<class T, const int Align> void Array<T,Align>::resize(U64 new_size) {
   }
   char *old_ptr=ptr;
   T *old_data=data;
-  U64 old_size=used_size;
+  const U64 old_size=used_size;
   programChecker.free(allocated_bytes());
   create(new_size);
   if(old_size>0) {
-    assert(old_ptr && old_data);
+    assert(old_ptr!=nullptr && old_data!=nullptr);
     memcpy(data, old_data, sizeof(T)*old_size);
   }
-  if(old_ptr){free(old_ptr);old_ptr=0;}
+  if(old_ptr!=nullptr){free(old_ptr);old_ptr=nullptr;}
 }
 
 template<class T, const int Align> void Array<T,Align>::push_back(const T& x) {
   if(used_size==reserved_size) {
-    U64 old_size=used_size;
-    U64 new_size=used_size*2+16;
+    const U64 old_size=used_size;
+    const U64 new_size=used_size*2+16;
     resize(new_size);
     used_size=old_size;
   }
@@ -967,7 +422,7 @@ template<class T, const int Align> Array<T, Align>::~Array() {
   programChecker.free(allocated_bytes());
   free(ptr);
   used_size=reserved_size=0;
-  data=0;ptr=0;
+  data=nullptr;ptr=nullptr;
 }
 
 
@@ -983,7 +438,7 @@ private:
     if(x<=9)
       push_back('0'+char(x));
     else {
-      U64 rem= x % 10;
+      const U64 rem= x % 10;
       x = x / 10;
       if(x!=0)append_int_recursive(x);
       push_back('0'+char(rem));
@@ -991,25 +446,25 @@ private:
   }
 protected:
   #ifdef NDEBUG
-  void chk_consistency() const {}
+  #define chk_consistency() ((void) 0)
   #else
   void chk_consistency() const {
-    for(int i=0;i<size()-1;i++)
+    for(U32 i=0;i<size()-1;i++)
       if((*this)[i]==0)quit("Internal error - string consistency check failed (1).");
     if(((*this)[size()-1])!=0)quit("Internal error - string consistency check failed (2).");
   }
   #endif
 public:
   const char* c_str() const {return &(*this)[0];}
-  int strsize() const {chk_consistency();assert(size()>0);return (int)size()-1;}
+  U64 strsize() const {chk_consistency();assert(size()>0);return size()-1;}
   void operator=(const char* s) {
-    resize((int)strlen(s)+1);
+    resize(strlen(s)+1);
     memcpy(&(*this)[0], s, size());
     chk_consistency();
   }
   void operator+=(const char* s) {
-    U64 pos=size();
-    int len=(int)strlen(s);
+    const U64 pos=size();
+    const U64 len=strlen(s);
     resize(pos+len);
     memcpy(&(*this)[pos-1], s, len+1);
     chk_consistency();
@@ -1024,43 +479,44 @@ public:
     pop_back(); //Remove NUL
     if(x==0)
       push_back('0');
-    else 
+    else
       append_int_recursive(x);
     push_back(0); //Append NUL
     chk_consistency();
   }
   bool endswith(const char * ending) const {
-    int endingsize=int(strlen(ending));
+    const U64 endingsize=strlen(ending);
     if(endingsize>strsize())return false;
-    int cmp=memcmp(ending,&(*this)[strsize()-endingsize],endingsize);
+    const int cmp=memcmp(ending,&(*this)[strsize()-endingsize],endingsize);
     return(cmp==0);
   }
-  void stripend(int count) {
-    int newsize=strsize()-count;
-    assert(newsize>=0);
+  void stripend(U64 count) {
+    assert(strsize()>=count);
+    const U64 newsize=strsize()-count;
     resize(newsize);
     push_back(0); //Append NUL
     chk_consistency();
   }
   bool beginswith(const char * beginning) const {
-    int beginningsize=(int)strlen(beginning);
+    const U64 beginningsize=strlen(beginning);
     if(beginningsize>strsize())return false;
-    int cmp=memcmp(beginning,&(*this)[0],beginningsize);
+    const int cmp=memcmp(beginning,&(*this)[0],beginningsize);
     return(cmp==0);
   }
-  void stripstart(int count) {
-    int newsize=strsize()-count;
-    assert(newsize>=0);
+  void stripstart(U64 count) {
+    assert(strsize()>=count);
+    const U64 newsize=strsize()-count;
     memmove(&(*this)[0],&(*this)[count],newsize);
     resize(newsize);
     push_back(0); //Append NUL
     chk_consistency();
   }
   int findlast (char c) const {
-    for(int i=strsize()-1;i>=0;i--)if((*this)[i]==c)return i;
+    U64 i=strsize();
+    while(i-->0)if((*this)[i]==c)return (int)i;
     return -1; //not found
   }
-  String(const char* s=""): Array<char>(U64(strlen(s)+1)) {
+  String(const char* s=""): Array<char>(strlen(s)+1) {
     memcpy(&(*this)[0], s, size());
     chk_consistency();
   }
@@ -1086,15 +542,16 @@ public:
     return pos; //has no path when -1
   }
   void keepfilename() {
-    int pos=lastslashpos();
+    const int pos=lastslashpos();
     stripstart(pos+1); //don't keep last slash
   }
   void keeppath() {
-    int pos=lastslashpos();
+    const int pos=lastslashpos();
     stripend(strsize()-pos-1); //keep last slash
   }
   void replaceslashes() { //prepare path string for screen output
-    for(int i=strsize()-1;i>=0;i--)
+    const U64 ssize=strsize();
+    for(U64 i=0;i<ssize;i++)
       if((*this)[i]==BADSLASH)
         (*this)[i]=GOODSLASH;
     chk_consistency();
@@ -1106,22 +563,104 @@ public:
 // These functions/classes are responsible for all the file
 // and directory operations.
 
+
+// Wrappers to utf8 vs. wchar functions
+// Linux i/o works with utf8 char* but on windows it's wchar_t*.
+// We'll be using utf8 char* in all our functions, so we need to convert to/from 
+// wchar_t* when on windows.
+
+//only for Windows: a class encapsulating a wchar string converted from a utf8 string
+//purpose: to properly free the allocated string buffer on destruction
+#ifdef WINDOWS
+class WcharStr {
+private:
+  //convert a utf8 string to a wchar string
+wchar_t* utf8_to_wchar_str(const char *utf8_str) {
+  int buffersize = MultiByteToWideChar(CP_UTF8,0,utf8_str,-1,NULL,0);
+  wchar_t* wchar_str = new wchar_t[buffersize];
+  MultiByteToWideChar(CP_UTF8,0,utf8_str,-1,wchar_str,buffersize);
+  return wchar_str;
+}
+public:
+  wchar_t* wchar_str;
+  WcharStr(const char *utf8_str) {
+    wchar_str=utf8_to_wchar_str(utf8_str);
+  }
+  ~WcharStr() {
+    delete[] wchar_str;
+  }
+};
+#endif
+
+//only for Windows: a class encapsulating a utf8 string converted from a wchar string
+//purpose: to properly free the allocated string buffer on destruction
+#ifdef WINDOWS
+class Utf8Str {
+private:
+  //convert a wchar string to a utf8 string
+  char* wchar_to_utf8_str(const wchar_t *wchar_str) {
+    int buffersize = WideCharToMultiByte(CP_UTF8,0,wchar_str,-1,NULL,0,NULL,NULL);
+    char* utf8_str = new char[buffersize];
+    WideCharToMultiByte(CP_UTF8,0,wchar_str,-1,utf8_str,buffersize,NULL,NULL);
+    return utf8_str;
+  }
+public:
+  char* utf8_str;
+  Utf8Str(const wchar_t *wchar_str) {
+    utf8_str=wchar_to_utf8_str(wchar_str);
+  }
+  ~Utf8Str() {
+    delete[] utf8_str;
+  }
+};
+#endif
+
+static constexpr int READ=0;
+static constexpr int WRITE=1;
+static constexpr int APPEND=2;
+
+// Wrapper function (Linux vs Windows) to open a file
+FILE* openfile(const char *filename, const int mode) {
+  FILE* file;
+#ifdef WINDOWS
+  file = _wfopen(WcharStr(filename).wchar_str, mode==READ ? L"rb" : mode==WRITE ? L"wb+" : L"a");
+#else
+  file = fopen(filename, mode==READ ? "rb" : mode==WRITE ? "wb+" : "a");
+#endif
+  return file;
+}
+
+#ifdef WINDOWS
+#define STAT _stat
+#else
+#define STAT stat
+#endif
+
+// Wrapper function (Linux vs Windows) to examine a path
+bool statpath(const char* path, struct STAT &status) {
+#ifdef WINDOWS
+  return _wstat(WcharStr(path).wchar_str,&status);
+#else
+  return stat(path,&status);
+#endif
+}
+
 //////////////////// Folder operations ///////////////////////////
 
-//examines given "path" and returns: 
+//examines given "path" and returns:
 //0: on error
 //1: when exists and is a file
 //2: when exists and is a directory
 //3: when does not exist, but looks like a file       /abcd/efgh
 //4: when does not exist, but looks like a directory  /abcd/efgh/
 static int examinepath(const char* path) {
-  struct stat status;
-  bool success = stat(path, &status)==0;
+  struct STAT status;
+  const bool success = statpath(path, status)==0;
   if(!success) {
     if(errno==ENOENT){ //no such file or directory
-      int len=(int)strlen(path);
+      const int len=(int)strlen(path);
       if(len==0)return 0; //error: path is an empty string
-      char lastchar=path[len-1];
+      const char lastchar=path[len-1];
       if(lastchar!='/' && lastchar!='\\')return 3; //looks like a file
       else return 4; //looks like a directory
     }
@@ -1137,10 +676,10 @@ static int makedir(const char* dir) {
   if(examinepath(dir)==2)//existing directory
     return 2; //2: directory already exists, no need to create
   #ifdef WINDOWS
-    bool created = (CreateDirectory(dir, 0) == TRUE);
+    const bool created = (CreateDirectoryW(WcharStr(dir).wchar_str, nullptr) == TRUE);
   #else
   #ifdef UNIX
-    bool created = (mkdir(dir, 0777) == 0);
+    const bool created = (mkdir(dir, 0777) == 0);
   #else
     #error Unknown target system
   #endif
@@ -1151,15 +690,15 @@ static int makedir(const char* dir) {
 //creates directories recusively if they don't exist
 static void makedirectories(const char* filename) {
   String path(filename);
-  int start = 0;
+  U64 start = 0;
   if(path[1]==':')start=2; //skip drive letter (c:)
   if(path[start] == '/' || path[start] == '\\')start++; //skip leading slashes (root dir)
-  for (int i = start; path[i]; ++i) {
+  for (U64 i = start; path[i]!=0; ++i) {
     if (path[i] == '/' || path[i] == '\\') {
       char savechar = path[i];
       path[i] = 0;
       const char* dirname = path.c_str();
-      int created = makedir(dirname);
+      const int created = makedir(dirname);
       if (created==0) {
         printf("Unable to create directory %s", dirname);
         quit();
@@ -1173,24 +712,24 @@ static void makedirectories(const char* filename) {
 
 
 /////////////////////////// File /////////////////////////////
-// The main purpose of these classes is to keep temporary files in 
-// RAM as mush as possible. The default behaviour is to simply pass 
-// function calls to the operating system - except in case of temporary 
+// The main purpose of these classes is to keep temporary files in
+// RAM as mush as possible. The default behaviour is to simply pass
+// function calls to the operating system - except in case of temporary
 // files.
 
 // Helper function: create a temporary file
 //
-// On Windows when using tmpfile() the temporary file may be created 
+// On Windows when using tmpfile() the temporary file may be created
 // in the root directory causing access denied error when User Account Control (UAC) is on.
 // To avoid this issue with tmpfile() we simply use fopen() instead.
-// We create the temporary file in the directory where the executable is launched from. 
+// We create the temporary file in the directory where the executable is launched from.
 // Luckily the MS C runtime library provides two (MS specific) fopen() flags: "T"emporary and "D"elete.
 
 FILE* maketmpfile(void) {
-#if defined(WINDOWS)  
+#if defined(WINDOWS)
   char szTempFileName[MAX_PATH];
-  UINT uRetVal = GetTempFileName(TEXT("."), TEXT("tmp"), 0, szTempFileName);
-  if(uRetVal==0)return 0;
+  const UINT uRetVal = GetTempFileName(TEXT("."), TEXT("tmp"), 0, szTempFileName);
+  if(uRetVal==0)return nullptr;
   return fopen(szTempFileName, "w+bTD");
 #else
   return tmpfile();
@@ -1208,11 +747,29 @@ public:
   virtual void close() = 0;
   virtual int getchar() = 0;
   virtual void putchar(U8 c) = 0;
-  void append(const char* s) {for (int i = 0; s[i]; i++)putchar(s[i]);}
+  void append(const char* s) {for (int i = 0; s[i]; i++)putchar((U8)s[i]);}
   virtual U64 blockread(U8 *ptr, U64 count) = 0;
   virtual void blockwrite(U8 *ptr, U64 count) = 0;
   U32 get32(){return (getchar() << 24) | (getchar() << 16) | (getchar() << 8) | (getchar());}
   void put32(U32 x){putchar((x >> 24) & 255); putchar((x >> 16) & 255); putchar((x >> 8) & 255); putchar(x & 255);}
+  U64 getVLI(){
+    U64 i=0;
+    int k=0;
+    U8 B=0;
+    do {
+      B=getchar();
+      i|=U64((B&0x7F)<<k);
+      k+=7;
+    } while ((B>>7)>0);
+    return i;
+  }
+  void putVLI(U64 i) {
+    while (i>0x7F) {
+      putchar(0x80|(i&0x7F));
+      i>>=7;
+    }
+    putchar(U8(i));
+  }
   virtual void setpos(U64 newpos) = 0;
   virtual void setend() = 0;
   virtual U64 curpos() = 0;
@@ -1222,47 +779,47 @@ public:
 // This class is responsible for files on disk
 // It simply passes function calls to stdio
 
-class FileDisk :public File {
+class FileDisk : public File {
 protected:
   FILE *file;
 public:
-  FileDisk() {file=0;}
+  FileDisk() {file=nullptr;}
   ~FileDisk() {close();}
-  bool open(const char *filename, bool must_succeed) { 
-    assert(file==0); 
-    file = fopen(filename, "rb"); 
-    bool success=(file!=0);
+  bool open(const char *filename, bool must_succeed) override {
+    assert(file==nullptr);
+    file = openfile(filename,READ);
+    const bool success=(file!=nullptr);
     if(!success && must_succeed){printf("Unable to open file %s (%s)", filename, strerror(errno));quit();}
-    return success; 
+    return success;
   }
-  void create(const char *filename) { 
-    assert(file==0); 
-    makedirectories(filename); 
-    file=fopen(filename, "wb+");
-    if (!file) {printf("Unable to create file %s (%s)", filename, strerror(errno));quit();} 
+  void create(const char *filename) override {
+    assert(file==nullptr);
+    makedirectories(filename);
+    file=openfile(filename,WRITE);
+    if (!file) {printf("Unable to create file %s (%s)", filename, strerror(errno));quit();}
   }
-  void createtmp() { 
-    assert(file==0); 
-    file = maketmpfile(); 
+  void createtmp() {
+    assert(file==nullptr);
+    file = maketmpfile();
     if (!file) {printf("Unable to create temporary file (%s)", strerror(errno));quit();}
   }
-  void close() { if(file) fclose(file); file=0;}
-  int getchar() { return fgetc(file); }
-  void putchar(U8 c) { fputc(c, file); }
-  U64 blockread(U8 *ptr, U64 count) {return fread(ptr,1,count,file);}
-  void blockwrite(U8 *ptr, U64 count) {fwrite(ptr,1,count,file);}
-  void setpos(U64 newpos) { fseeko(file, newpos, SEEK_SET); }
-  void setend() { fseeko(file, 0, SEEK_END); }
-  U64 curpos() { return ftello(file); }
-  bool eof() { return feof(file)!=0; }
+  void close() override { if(file) fclose(file); file=nullptr;}
+  int getchar() override { return fgetc(file); }
+  void putchar(U8 c) override { fputc(c, file); }
+  U64 blockread(U8 *ptr, U64 count) override {return fread(ptr,1,count,file);}
+  void blockwrite(U8 *ptr, U64 count) override {fwrite(ptr,1,count,file);}
+  void setpos(U64 newpos) override { fseeko(file, newpos, SEEK_SET); }
+  void setend() override { fseeko(file, 0, SEEK_END); }
+  U64 curpos() override { return ftello(file); }
+  bool eof() override { return feof(file)!=0; }
 };
 
 // This class is responsible for temporary files in RAM or on disk
 // Initially it uses RAM for temporary file content.
-// In case of the content size in RAM grows too large, it is written to disk, 
+// In case of the content size in RAM grows too large, it is written to disk,
 // the RAM is freed and all subsequent file operations will use the file on disk.
 
-class FileTmp :public File {
+class FileTmp : public File {
 private:
   //file content in ram
   Array<U8> *content_in_ram; //content of file
@@ -1271,7 +828,7 @@ private:
   void forget_content_in_ram() {
     if (content_in_ram) {
       delete content_in_ram;
-      content_in_ram = 0;
+      content_in_ram = nullptr;
       filepos = 0;
       filesize = 0;
     }
@@ -1280,19 +837,19 @@ private:
   FileDisk *file_on_disk;
   void forget_file_on_disk() {
     if (file_on_disk) {
-      file_on_disk->close(); 
+      file_on_disk->close();
       delete file_on_disk;
-      file_on_disk = 0;
+      file_on_disk = nullptr;
     }
   }
   //switch: ram->disk
-  #ifdef NDEBUG 
-  static const U32 MAX_RAM_FOR_TMP_CONTENT = 64 * 1024 * 1024; //64 MB (per file)
+  #ifdef NDEBUG
+  static constexpr U32 MAX_RAM_FOR_TMP_CONTENT = 64 * 1024 * 1024; //64 MB (per file)
   #else
-  static const U32 MAX_RAM_FOR_TMP_CONTENT = 64; // to trigger switching to disk earlier - for testing
+  static constexpr U32 MAX_RAM_FOR_TMP_CONTENT = 64; // to trigger switching to disk earlier - for testing
   #endif
   void ram_to_disk() {
-    assert(file_on_disk==0);
+    assert(file_on_disk==nullptr);
     file_on_disk = new FileDisk();
     file_on_disk->createtmp();
     if(filesize>0)
@@ -1301,31 +858,31 @@ private:
     forget_content_in_ram();
   }
 public:
-  FileTmp() {content_in_ram=new Array<U8>(0); filepos=0; filesize=0; file_on_disk = 0;}
+  FileTmp() {content_in_ram=new Array<U8>(0); filepos=0; filesize=0; file_on_disk = nullptr;}
   ~FileTmp() {close();}
-  bool open(const char *filename, bool must_succeed) { assert(false); return false; } //this method is forbidden for temporary files
-  void create(const char *filename) { assert(false); } //this method is forbidden for temporary files
-  void close() {
+  bool open(const char *, bool) override { assert(false); return false; } //this method is forbidden for temporary files
+  void create(const char *) override { assert(false); } //this method is forbidden for temporary files
+  void close() override {
     forget_content_in_ram();
     forget_file_on_disk();
   }
-  int getchar() {
+  int getchar() override {
     if(content_in_ram) {
       if (filepos >= filesize)
-        return EOF; 
+        return EOF;
       else {
-        U8 c = (*content_in_ram)[(U32)filepos];
-        filepos++; 
-        return c; 
+        const U8 c = (*content_in_ram)[filepos];
+        filepos++;
+        return c;
       }
     }
     else return file_on_disk->getchar();
   }
-  void putchar(U8 c) {
+  void putchar(U8 c) override {
     if(content_in_ram) {
       if (filepos < MAX_RAM_FOR_TMP_CONTENT) {
         if (filepos == filesize) { content_in_ram->push_back(c); filesize++; }
-        else (*content_in_ram)[(U32)filepos] = c;
+        else (*content_in_ram)[filepos] = c;
         filepos++;
         return;
       }
@@ -1333,21 +890,21 @@ public:
     }
     file_on_disk->putchar(c);
   }
-  U64 blockread(U8 *ptr, U64 count) {
+  U64 blockread(U8 *ptr, U64 count) override {
     if(content_in_ram) {
-      U64 available = filesize - filepos;
+      const U64 available = filesize - filepos;
       if (available<count)count = available;
-      if(count>0)memcpy(ptr, &((*content_in_ram)[(U32)filepos]), count);
+      if(count>0)memcpy(ptr, &((*content_in_ram)[filepos]), count);
       filepos += count;
       return count;
     }
     else return file_on_disk->blockread(ptr,count);
   }
-  void blockwrite(U8 *ptr, U64 count) {
+  void blockwrite(U8 *ptr, U64 count) override {
     if(content_in_ram) {
-      if (filepos+count <= MAX_RAM_FOR_TMP_CONTENT) { 
-        content_in_ram->resize((U32)(filepos + count));
-        if(count>0)memcpy(&((*content_in_ram)[(U32)filepos]), ptr, count);
+      if (filepos+count <= MAX_RAM_FOR_TMP_CONTENT) {
+        content_in_ram->resize((filepos + count));
+        if(count>0)memcpy(&((*content_in_ram)[filepos]), ptr, count);
         filesize += count;
         filepos += count;
         return;
@@ -1356,22 +913,22 @@ public:
     }
     file_on_disk->blockwrite(ptr,count);
   }
-  void setpos(U64 newpos) { 
+  void setpos(U64 newpos) override {
     if(content_in_ram) {
       if(newpos>filesize)ram_to_disk(); //panic: we don't support seeking past end of file (but stdio does) - let's switch to disk
       else {filepos = newpos; return;}
-    }  
+    }
     file_on_disk->setpos(newpos);
   }
-  void setend() { 
+  void setend() override {
     if(content_in_ram) filepos = filesize;
     else file_on_disk->setend();
   }
-  U64 curpos() { 
+  U64 curpos() override {
     if(content_in_ram) return filepos;
     else return file_on_disk->curpos();
   }
-  bool eof() { 
+  bool eof() override {
     if(content_in_ram)return filepos >= filesize;
     else return file_on_disk->eof();
   }
@@ -1384,31 +941,33 @@ static char mypatherror[]="Can't determine my path.";
 class OpenFromMyFolder {
 private:
 public:
-  //this static method will open the executable itself
+  //this static method will open the executable itself for reading
   static void myself(FileDisk *f) {
   #ifdef WINDOWS
     int i;
-    Array<char> myfilename(MAX_PATH+1);
-    if((i=GetModuleFileName(NULL, &myfilename[0], MAX_PATH)) && i<=MAX_PATH)
-  #endif
-  #ifdef UNIX
+    Array<wchar_t> myfilename(MAX_PATH);
+    if((i=GetModuleFileNameW(nullptr, &myfilename[0], MAX_PATH)) && i<MAX_PATH && i!=0) {
+      f->open(Utf8Str(&myfilename[0]).utf8_str,true);
+    }
+    else
+      quit(mypatherror);
+  #else
     Array<char> myfilename(PATH_MAX+1);
     if(readlink("/proc/self/exe", &myfilename[0], PATH_MAX)!=-1)
-  #endif
       f->open(&myfilename[0],true);
-    else {
-      strerror(errno);
+    else
       quit(mypatherror);
-    }
+  #endif
   }
 
   //this static method will open a file from the executable's folder
+  //only ASCII filenames are supported
   static void anotherfile(FileDisk *f, const char* filename) {
-    int flength=(int)strlen(filename)+1;
+    const U64 flength=strlen(filename)+1;
     #ifdef WINDOWS
       int i;
       Array<char> myfilename(MAX_PATH+flength);
-      if((i=GetModuleFileName(NULL, &myfilename[0], MAX_PATH)) && i<=MAX_PATH) {
+      if((i=GetModuleFileName(nullptr, &myfilename[0], MAX_PATH)) && i<MAX_PATH && i!=0) {
         char *endofpath=strrchr(&myfilename[0], '\\');
     #endif
     #ifdef UNIX
@@ -1416,15 +975,13 @@ public:
       if(readlink("/proc/self/exe", myfilename, PATH_MAX)!=-1) {
         char *endofpath=strrchr(&myfilename[0], '/');
     #endif
-        if (endofpath==0)quit(mypatherror);
+        if (endofpath==nullptr)quit(mypatherror);
         endofpath++;
         strcpy(endofpath, filename); //append filename to my path
         f->open(&myfilename[0],true);
       }
-      else {
-        strerror(errno);
+      else
         quit(mypatherror);
-      }
   }
 };
 
@@ -1433,14 +990,14 @@ static U64 getfilesize(const char * filename) {
   FileDisk f;
   f.open(filename,true);
   f.setend();
-  U64 filesize=f.curpos();
+  const U64 filesize=f.curpos();
   f.close();
   if((filesize>>31)!=0)quit("Large files not supported.");
   return filesize;
 }
 
 static void appendtofile(const char *filename, const char* s) {
-  FILE *f=fopen(filename,"a");
+  FILE *f=openfile(filename,APPEND);
   if (f==nullptr)
     printf("Warning: could not log compression results to %s\n",filename);
   else {
@@ -1467,72 +1024,93 @@ static bool to_screen=!isoutputdirected();
 // 32-bit pseudo random number generator
 class Random{
   Array<U32> table;
-  int i;
+  U64 i;
 public:
   Random(): table(64) {
     table[0]=123456789;
     table[1]=987654321;
-    for (int j=0; j<62; j++) table[j+2]=table[j+1]*11+table[j]*23/16;
+    for (U64 j=0; j<62; j++) table[j+2]=table[j+1]*11+table[j]*23/16;
     i=0;
   }
   U32 operator()() {
     return ++i, table[i&63]=table[(i-24)&63]^table[(i-55)&63];
   }
-} rnd;
+};
 
-////////////////////////////// Buf /////////////////////////////
 
-// Buf(n) buf; creates an array of n bytes (must be a power of 2).
+////////////////////////////// RingBuffer /////////////////////////////
+
+// RingBuffer(n) buf; creates an array of n bytes (must be a power of 2).
 // buf[i] returns a reference to the i'th byte with wrap (no out of bounds).
 // buf(i) returns i'th byte back from pos (i>0) with wrap (no out of bounds)
 // buf.size() returns n.
 
-int pos;  // Number of input bytes in buf (not wrapped), must be masked for indexing
-
-class Buf {
-  Array<U8> b;
+template <class T> class RingBuffer {
+private:
+  Array<T> b;
+  U32 offset; // Number of input bytes in buffer (not wrapped), will be masked when used for indexing
+  U32 mask;
 public:
-  Buf(U64 size=0): b(size) {}
-  void setsize(U64 newsize) {
-    if (newsize==0) return;
-    assert(newsize>0 && (newsize&(newsize-1))==0); //power of 2?
+  RingBuffer(const U32 size=0): b(size), offset(0), mask(size-1) {
+    assert(ispowerof2(size));
+  }
+  void setsize(U32 newsize) {
+    assert(newsize>0 && ispowerof2(newsize));
     b.resize(newsize);
+    offset=0;
+    mask=newsize-1;
   }
-  U8& operator[](U64 i) {
-    return b[i&(b.size()-1)];
+  U32 getpos() const {
+    return offset;
   }
-  U8 operator()(U64 i) const {
-    return (i>0)?b[(pos-i)&(b.size()-1)]:0;
+  void fill(const T B) {
+    const U32 n=(U32)b.size();
+    for(U32 i=0;i<n;i++)
+      b[i]=B;
   }
-  U64 size() const {
-    return b.size();
+  void add(const T B) {
+    b[offset&mask] = B;
+    offset++;
+  }
+  T operator[](const U32 i) const {
+    return b[i&mask];
+  }
+  void set(const U32 i,const T B) {
+    b[i&mask]=B;
+  }
+  T operator()(const U32 i) const {
+    //assert(i!=0);
+    return b[(offset-i)&mask];
+  }
+  void reset() {
+    fill(0);
+    offset=0;
+  }
+  U32 size() {
+    return (U32)b.size();
+  }
+  void copyto(RingBuffer &dst) {
+    dst.setsize(size());
+    dst.offset=offset;
+    U32 n=(U32)b.size();
+    for(U32 i=0;i<n;i++)
+      dst.b[i]=b[i];
   }
 };
 
-// IntBuf(n) is a buffer of n ints (n must be a power of 2).
-// intBuf[i] returns a reference to i'th element with wrap.
-
-class IntBuf {
-  Array<int> b;
-public:
-  IntBuf(int size): b(size) {}
-  int& operator[](int i) {
-    return b[i&(b.size()-1)];
-  }
-};
+typedef RingBuffer<U8> Buf;
 
 /////////////////////// Global context /////////////////////////
 
-typedef enum {DEFAULT=0, FILECONTAINER, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, EXE, CD, ZLIB, BASE64, GIF, PNG8, PNG8GRAY, PNG24, PNG32} Blocktype;
+typedef enum {DEFAULT=0, FILECONTAINER, JPEG, HDR, IMAGE1, IMAGE4, IMAGE8, IMAGE8GRAY, IMAGE24, IMAGE32, AUDIO, AUDIO_LE, EXE, CD, ZLIB, BASE64, GIF, PNG8, PNG8GRAY, PNG24, PNG32, TEXT, TEXT_EOL, RLE, LZW} Blocktype;
 
-inline bool hasRecursion(Blocktype ft) { return ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft== FILECONTAINER; }
-inline bool hasInfo(Blocktype ft) { return ft==IMAGE1 || ft==IMAGE4 || ft==IMAGE8 || ft==IMAGE8GRAY || ft==IMAGE24 || ft==IMAGE32 || ft==AUDIO || ft==PNG8 || ft==PNG8GRAY || ft==PNG24 || ft==PNG32; }
-inline bool hasTransform(Blocktype ft) { return ft==IMAGE24 || ft==IMAGE32 || ft==EXE || ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF; }
+inline bool hasRecursion(Blocktype ft) { return ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft==RLE || ft==LZW || ft== FILECONTAINER; }
+inline bool hasInfo(Blocktype ft) { return ft==IMAGE1 || ft==IMAGE4 || ft==IMAGE8 || ft==IMAGE8GRAY || ft==IMAGE24 || ft==IMAGE32 || ft==AUDIO || ft==AUDIO_LE || ft==PNG8 || ft==PNG8GRAY || ft==PNG24 || ft==PNG32; }
+inline bool hasTransform(Blocktype ft) { return ft==IMAGE24 || ft==IMAGE32 || ft==AUDIO_LE || ft==EXE || ft==CD || ft==ZLIB || ft==BASE64 || ft==GIF || ft==TEXT_EOL || ft==RLE || ft==LZW; }
+inline bool isPNG(Blocktype ft) { return ft==PNG8 || ft==PNG8GRAY || ft==PNG24 || ft==PNG32; }
 
 int level=0; //this value will be overwritten at the beginning of compression/decompression
 #define MEM (U64(65536)<<level)
-
-int y=0;  // Last bit, 0 or 1, set by encoder
 
 U8 options=0;
 #define OPTION_MULTIPLE_FILE_MODE 1
@@ -1542,17 +1120,144 @@ U8 options=0;
 #define OPTION_ADAPTIVE 16
 #define OPTION_SKIPRGB 32
 
-struct ModelStats{
-  U32 XML, x86_64, Record;
+#define INJECT_STATS_blpos   const U32 blpos=stats->blpos;
+
+// Information shared by models
+// Order: in appearance -> models may use information 
+// from models that appears above them
+struct ModelStats {
+
+  //General shared information
+  Blocktype blockType{};  //used by wordModel, recordModel, SSE stage
+  U32 blpos{};            //relative position in block, used by many models
+  U64 Misses{};           //used by SSE stage
+
+  //MatchModel
+  struct {
+    U32 length3;     //used by SSE stage and RecordModel
+    U8 expectedByte; //used by SSE stage
+  } Match{};
+
+  //NormalModel
+  int order{};
+
+  //image models
+  struct {
+    struct {
+      U8 WW, W, NN, N, Wp1, Np1; 
+    } pixels;        //used by SSE stage
+    U8 plane;        //used by SSE stage
+    U8 ctx;          //used by SSE stage
+  } Image{};
+
+  //AudioModel
+  U32 Wav{};           //used by recordModel
+  U8 Audio{};
+
+  //JpegModel
+  //SparseMatchModel
+  //SparseModel
+  //CharGroupModel
+  //WordModel
+  //IndirectModel
+  //Dmcforest
+  //NestModel
+  //XMLModel
+
+  //TextModel
+  struct {
+    U8 chargrp;      //used by RecordModel, TextModel - Quantized partial byte as ASCII group
+    U8 firstLetter;  //used by SSE stage
+    U8 mask;         //used by SSE stage
+  } Text{};
+
+  //RecordModel
+  //ExeModel
+  
+  void reset() {
+    memset(this, 0, sizeof(ModelStats));
+  }
 };
 
-// Global context set by Predictor and available to all models.
+// helper #defines to access shared variables
+#define INJECT_SHARED_buf   const Buf &buf=shared->buf;
+#define INJECT_SHARED_pos   const U32 pos=shared->buf.getpos();
+#define INJECT_SHARED_y     const U8  y=shared->y;
+#define INJECT_SHARED_c0    const U8  c0=shared->c0;
+#define INJECT_SHARED_c1    const U8  c1=shared->c1;
+#define INJECT_SHARED_bpos  const U8  bpos=shared->bpos;
+#define INJECT_SHARED_c4    const U32 c4=shared->c4;
+#define INJECT_SHARED_c8    const U32 c8=shared->c8;
 
-int c0=1; // Last 0-7 bits of the partial byte with a leading 1 bit (1-255)
-U32 c4=0, f4=0, b2=0; // Last 4 whole bytes, packed.  Last byte is bits 0-7.
-int bpos=0; // bits in c0 (0 to 7)
-Buf buf;  // Rotating input queue set by Predictor
-int blpos=0; // Relative position in block
+// Global context available to all models.
+struct Shared {
+  Buf buf;     // Rotating input queue set by Predictor
+  U8 y=0;      // Last bit, 0 or 1
+  U8 c0=1;     // Last 0-7 bits of the partial byte with a leading 1 bit (1-255)
+  U8 c1=0;     // Last whole byte, also c4&0xff or buf(1)
+  U8 bpos=0;   // Bits in c0 (0 to 7), in other words the position of the bit to be predicted (0=MSB)
+  U32 c4=0;    // Last 4 whole bytes (buf(4)..buf(1)), packed.  Last byte is bits 0-7.
+  U32 c8=0;    // Another 4 bytes (buf(8)..buf(5))
+  void update() {
+    c0+=c0+y;
+    bpos=(bpos+1)&7;
+    if (bpos==0) {
+      c1=c0;
+      buf.add(c1);
+      c8=(c8<<8)|(c4>>24);
+      c4=(c4<<8)|c0;
+      c0=1;
+    }
+  }
+  void reset() {
+    buf.reset();
+    y=0;
+    c0=1;
+    c1=bpos=0;
+    c4=c8=0;
+  }
+  void copyto(Shared *dst) {
+    this->buf.copyto(dst->buf);
+    dst->y=y;
+    dst->c0=c0;
+    dst->c1=c1;
+    dst->bpos=bpos;
+    dst->c4=c4;
+    dst->c8=c8;
+  }
+};
+
+// UTF8 validator
+// Based on: http://bjoern.hoehrmann.de/utf-8/decoder/dfa/
+// Control caracters (0x00-0x1f) and 0x7f are not allowed (except for 0/tab/cr/lf)
+
+#define UTF8_ACCEPT 0
+#define UTF8_REJECT 12
+
+static const U8 utf8_state_table[] = {
+  // byte -> character class
+  // character_class = utf8_state_table[byte]
+  1,1,1,1,1,1,1,1,1,0,0,1,1,0,1,1,  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 00..1f  
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, // 20..3f
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, // 40..5f
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1, // 60..7f
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9, // 80..9f
+  7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,  7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7, // a0..bf
+  8,8,2,2,2,2,2,2,2,2,2,2,2,2,2,2,  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, // c0..df
+ 10,3,3,3,3,3,3,3,3,3,3,3,3,4,3,3, 11,6,6,6,5,8,8,8,8,8,8,8,8,8,8,8, // e0..ff
+  // validating automaton
+  // new_state = utf8_state_table[256*old_state + character_class]
+   0,12,24,36,60,96,84,12,12,12,48,72, // state  0-11
+  12,12,12,12,12,12,12,12,12,12,12,12, // state 12-23
+  12, 0,12,12,12,12,12, 0,12, 0,12,12, // state 24-35
+  12,24,12,12,12,12,12,24,12,24,12,12, // state 36-47
+  12,12,12,12,12,12,12,24,12,12,12,12, // state 48-59
+  12,24,12,12,12,12,12,12,12,24,12,12, // state 60-71
+  12,12,12,12,12,12,12,36,12,36,12,12, // state 72-83
+  12,36,12,12,12,12,12,36,12,36,12,12, // state 84-95
+  12,36,12,12,12,12,12,12,12,12,12,12  // state 96-108
+};
+
 
 #define CacheSize 32
 
@@ -1567,27 +1272,25 @@ int blpos=0; // Relative position in block
 class Ilog {
   Array<U8> t;
 public:
-  int operator()(U16 x) const {return t[x];}
-  Ilog();
-} ilog;
-
-// Compute lookup table by numerical integration of 1/x
-Ilog::Ilog(): t(65536) {
-  U32 x=14155776;
-  for (int i=2; i<65536; ++i) {
-    x+=774541002/(i*2-1);  // numerator is 2^29/ln 2
-    t[i]=x>>24;
+  int operator()(U16 x) const {return (int)t[x];}
+  Ilog(): t(65536) {
+    // Compute lookup table by numerical integration of 1/x
+    U32 x=14155776;
+    for (U32 i=2; i<65536; ++i) {
+      x+=774541002/(i*2-1);  // numerator is 2^29/ln 2
+      t[i]=x>>24;
+    }
   }
-}
+} ilog;
 
 // llog(x) accepts 32 bits
 inline int llog(U32 x) {
   if (x>=0x1000000)
-    return 256+ilog(x>>16);
+    return 256+ilog(U16(x>>16));
   else if (x>=0x10000)
-    return 128+ilog(x>>8);
+    return 128+ilog(U16(x>>8));
   else
-    return ilog(x);
+    return ilog(U16(x));
 }
 
 inline U32 BitCount(U32 v) {
@@ -1599,8 +1302,18 @@ inline U32 BitCount(U32 v) {
   return v;
 }
 
+inline int VLICost(U64 n) {
+  int cost = 1;
+  while (n>0x7F) {
+    n>>=7;
+    cost++;
+  }
+  return cost;
+}
+
 // ilog2
-// returns floor(log2(x)), e.g. 30->4  31->4  32->5,  33->5
+// returns floor(log2(x))
+// 0/1->0, 2->1, 3->1, 4->2 ..., 30->4,  31->4, 32->5,  33->5
 #ifdef _MSC_VER
 #include <intrin.h>
 inline U32 ilog2(U32 x) {
@@ -1621,10 +1334,15 @@ inline U32 ilog2(U32 x) {
   x |= (x >> 4);
   x |= (x >> 8);
   x |= (x >>16);
-  //how many trailing bits do we have (except the first)? 
+  //how many trailing bits do we have (except the first)?
   return BitCount(x >> 1);
 }
 #endif
+
+inline float rsqrt(const float x) {
+  float r = _mm_cvtss_f32(_mm_rsqrt_ss(_mm_set_ss(x))); //SSE
+  return (0.5f * (r + 1.0f/(x * r)));
+}
 
 ///////////////////////// state table ////////////////////////
 
@@ -1646,8 +1364,8 @@ inline U32 ilog2(U32 x) {
 // Also, when a bit is observed and the count of the opposite bit is large,
 // then part of this count is discarded to favor newer data over old.
 
-#if 1 // change to #if 0 to generate this table at run time (4% slower)
-static const U8 State_table[256][4]={
+class StateTable {
+  static constexpr U8 State_table[256][4]={
   {  1,  2, 0, 0},{  3,  5, 1, 0},{  4,  6, 0, 1},{  7, 10, 2, 0}, // 0-3
   {  8, 12, 1, 1},{  9, 13, 1, 1},{ 11, 14, 0, 2},{ 15, 19, 3, 0}, // 4-7
   { 16, 23, 2, 1},{ 17, 24, 2, 1},{ 18, 25, 2, 1},{ 20, 27, 1, 2}, // 8-11
@@ -1711,156 +1429,74 @@ static const U8 State_table[256][4]={
   {130,244, 0,38},{245,135,39, 0},{246,137,38, 1},{138,247, 1,38}, // 240-243
   {140,248, 0,39},{249,135,40, 0},{250, 69,39, 1},{ 80,251, 1,39}, // 244-247
   {140,252, 0,40},{249,135,41, 0},{250, 69,40, 1},{ 80,251, 1,40}, // 248-251
-  {140,252, 0,41}};  // 252, 253-255 are reserved
+  {140,252, 0,41}, // 252
+  {0,0, 0,0},{0,0, 0,0},{255,255, 0,0}};   // 253-255 are reserved
 
-#define nex(state,sel) State_table[state][sel]
+  static constexpr U8 State_group[256]=
+  { 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14, // 0-14
+    18,23,24,24,26,25,27,26,26,25,27,26,28,28,29,15, //15-30
+    18,23,25,25,26,26,27,27,29,15, //31-40
+    18,23,25,24,25,26,26,27,28,27,29,15, //41-52
+    18,23,24,24,24,25,25,27,27,28,28,28,29,15, //53-66
+    19,22,24,23,24,25,25,26,26,27,27,28,29,28,30,16, //67-82
+    19,22,24,23,24,28,29,28,30,16, //83-92
+    19,22,24,23,24,28,29,28,30,16, //93-102
+    19,22,24,23,24,28,29,28,30,16, //103-112
+    19,22,24,23,24,28,29,28,30,16, //113-122
+    19,22,24,22,23,29,30,28,30,16, //123-132
+    19,22,23,22,23,29,30,29,30,16, //133-142
+    19,22, 0, 0,30,16, //143-148
+    19,22,30,16, 19,22,30,16, 19,22,30,16, 19,22,30,16, 19,22,30,16, //149-152 153-156 157-160 161-164 165-168 
+    19,21,31,16, 19,21,31,16, 19,21,31,16, 19,21,31,16, 19,21,31,16, //169-172 173-176 177-180 181-184 185-188 
+    19,21,31,16, 19,21,31,16, 19,21,31,16, 19,21,31,16, 19,21,31,17, //189-192 193-196 197-200 201-204 205-208 
+    20,21,31,17, 20,21,31,17, 20,21,31,17, 20,21,31,17, 20,21,31,17, //209-212 213-216 217-220 221-224 225-228
+    20,21,31,17, 20,21,31,17, 20,21,31,17, 20,21,31,17, 20,21,31,17, //229-232 233-236 237-240 241-244 245-248
+    20,21,31,17, 0,0,0, //249-252 253-255
+  };
 
-// The code used to generate the above table at run time (4% slower).
-// To print the table, uncomment the 4 lines of print statements below.
-// In this code x,y = n0,n1 is the number of 0,1 bits represented by a state.
-#else
-
-class StateTable {
-  Array<U8> ns;  // state*4 -> next state if 0, if 1, n0, n1
-  enum {B=5, N=64}; // sizes of b, t
-  static const int b[B];  // x -> max y, y -> max x
-  static U8 t[N][N][2];  // x,y -> state number, number of states
-  int num_states(int x, int y);  // compute t[x][y][1]
-  void discount(int& x);  // set new value of x after 1 or y after 0
-  void next_state(int& x, int& y, int b);  // new (x,y) after bit b
 public:
-  int operator()(int state, int sel) {return ns[state*4+sel];}
-  StateTable();
-} nex;
-
-const int StateTable::b[B]={42,41,13,6,5};  // x -> max y, y -> max x
-U8 StateTable::t[N][N][2];
-
-int StateTable::num_states(int x, int y) {
-  if (x<y) return num_states(y, x);
-  if (x<0 || y<0 || x>=N || y>=N || y>=B || x>=b[y]) return 0;
-
-  // States 0-30 are a history of the last 0-4 bits
-  if (x+y<=4) {  // x+y choose x = (x+y)!/x!y!
-    int r=1;
-    for (int i=x+1; i<=x+y; ++i) r*=i;
-    for (int i=2; i<=y; ++i) r/=i;
-    return r;
+  static U8 next(U8 const state, const int y) {
+    return State_table[state][y];
   }
 
-  // States 31-255 represent a 0,1 count and possibly the last bit
-  // if the state is reachable by either a 0 or 1.
-  else
-    return 1+(y>0 && x+y<16);
-}
-
-// New value of count x if the opposite bit is observed
-void StateTable::discount(int& x) {
-  if (x>2) x=ilog(x)/6-1;
-}
-
-// compute next x,y (0 to N) given input b (0 or 1)
-void StateTable::next_state(int& x, int& y, int b) {
-  if (x<y)
-    next_state(y, x, 1-b);
-  else {
-    if (b) {
-      ++y;
-      discount(x);
-    }
-    else {
-      ++x;
-      discount(y);
-    }
-    while (!t[x][y][1]) {
-      if (y<2) --x;
-      else {
-        x=(x*(y-1)+(y/2))/y;
-        --y;
+  // Probabilistic increment (approximate counting)
+  // For states 205..208, 209..212, ... 249..252 a group of 4 states is not represented by
+  // the counts indicated in the state table. An exponential scale is used instead.
+  // The highest group (249..252) represents the top of this scale, where we can not increment anymore.
+  static U8 next(U8 const old_state, const int y, Random &rnd) {
+    U8 new_state = State_table[old_state][y];
+    if(new_state>=205) { // for all groups of four states higher than idx 205
+      if(old_state<249) { // still climbing
+        const int shift=(460-new_state)>>3;
+        //for each group the probability to advance to a higher state is less and less as we climb higher and higher
+        if((rnd()<<shift)!=0) 
+          new_state-=4; 
       }
     }
-  }
-}
-
-// Initialize next state table ns[state*4] -> next if 0, next if 1, x, y
-StateTable::StateTable(): ns(1024) {
-
-  // Assign states
-  int state=0;
-  for (int i=0; i<256; ++i) {
-    for (int y=0; y<=i; ++y) {
-      int x=i-y;
-      int n=num_states(x, y);
-      if (n) {
-        t[x][y][0]=state;
-        t[x][y][1]=n;
-        state+=n;
-      }
-    }
+    return new_state;
   }
 
-  // Print/generate next state table
-  state=0;
-  for (int i=0; i<N; ++i) {
-    for (int y=0; y<=i; ++y) {
-      int x=i-y;
-      for (int k=0; k<t[x][y][1]; ++k) {
-        int x0=x, y0=y, x1=x, y1=y;  // next x,y for input 0,1
-        int ns0=0, ns1=0;
-        if (state<15) {
-          ++x0;
-          ++y1;
-          ns0=t[x0][y0][0]+state-t[x][y][0];
-          ns1=t[x1][y1][0]+state-t[x][y][0];
-          if (x>0) ns1+=t[x-1][y+1][1];
-          ns[state*4]=ns0;
-          ns[state*4+1]=ns1;
-          ns[state*4+2]=x;
-          ns[state*4+3]=y;
-        }
-        else if (t[x][y][1]) {
-          next_state(x0, y0, 0);
-          next_state(x1, y1, 1);
-          ns[state*4]=ns0=t[x0][y0][0];
-          ns[state*4+1]=ns1=t[x1][y1][0]+(t[x1][y1][1]>1);
-          ns[state*4+2]=x;
-          ns[state*4+3]=y;
-        }
-          // uncomment to print table above
-//        printf("{%3d,%3d,%2d,%2d},", ns[state*4], ns[state*4+1],
-//          ns[state*4+2], ns[state*4+3]);
-//        if (state%4==3) printf(" // %d-%d\n  ", state-3, state);
-        assert(state>=0 && state<256);
-        assert(t[x][y][1]>0);
-        assert(t[x][y][0]<=state);
-        assert(t[x][y][0]+t[x][y][1]>state);
-        assert(t[x][y][1]<=6);
-        assert(t[x0][y0][1]>0);
-        assert(t[x1][y1][1]>0);
-        assert(ns0-t[x0][y0][0]<t[x0][y0][1]);
-        assert(ns0-t[x0][y0][0]>=0);
-        assert(ns1-t[x1][y1][0]<t[x1][y1][1]);
-        assert(ns1-t[x1][y1][0]>=0);
-        ++state;
-      }
-    }
+  static void update(U8 *const state, const int y, Random &rnd) {
+    *state=next(*state,y,rnd);
   }
-//  printf("%d states\n", state); exit(0);  // uncomment to print table above
-}
 
-#endif
+  static U8 group(const U8 state) {
+    return State_group[state];
+  }
+};
+
 
 ///////////////////////////// Squash //////////////////////////////
 
 // return p = 1/(1 + exp(-d)), d scaled by 8 bits, p scaled by 12 bits
 int squash(int d) {
-  static const int t[33]={
+  static constexpr int t[33]={
     1,2,3,6,10,16,27,45,73,120,194,310,488,747,1101,
     1546,2047,2549,2994,3348,3607,3785,3901,3975,4022,
     4050,4068,4079,4085,4089,4092,4093,4094};
   if (d>2047) return 4095;
   if (d<-2047) return 0;
-  int w=d&127;
+  const int w=d&127;
   d=(d>>7)+16;
   return (t[d]*(128-w)+t[(d+1)]*w+64) >> 7;
 }
@@ -1883,20 +1519,71 @@ public:
 Stretch::Stretch(): t(4096) {
   int pi=0;
   for (int x=-2047; x<=2047; ++x) {  // invert squash()
-    int i=squash(x);
+    const int i=squash(x);
     for (int j=pi; j<=i; ++j)
-      t[j]=x;
+      t[j]=(short)x;
     pi=i+1;
   }
   t[4095]=2047;
 }
+
+//////////////////////////// IPredictor //////////////////////////
+
+// Common interface for all probability predictors (probability map
+// and mixer classes).
+//
+// A probability predictor predicts the probability that the 
+// next bit is 1.
+//
+// After each bit becomes known, all probability predictors participated 
+// in the prediction must update their internal state to improve future 
+// predictions (adapting). In order to achieve this, a probability 
+// predictor must 
+// 1) inherit from the IPredictor intercace, 
+// 2) implement the update() interface method,
+// 3) subscribe for the broadcast in p() or mix(),
+// 4) receive the update event from UpdateBroadcaster 
+//    and update its internal state in update().
+
+// Interface class for all predictors (probability maps, mixers, models)
+// It declares the update() event handler.
+class IPredictor {
+public:
+  virtual void update() = 0;
+  virtual ~IPredictor() {}
+};
+
+///////////////////////// UpdateBroadcaster ///////////////////////
+
+// The purpose of this class is to inform probability predictors when
+// then next bit is known by calling the update() method of each predictor.
+class UpdateBroadcaster {
+private:
+  int n; // number of subscribed predictors, (number of items in "subscribers" array)
+  IPredictor *subscribers[1024];
+public:
+  UpdateBroadcaster() : n(0) {}
+  void subscribe(IPredictor *subscriber) { 
+    subscribers[n] = subscriber;
+    n++;
+    assert(n < 1024);
+  }
+  void broadcast_update() {
+    for (int i=0;i<n;i++) {
+      IPredictor *subscriber = subscribers[i];
+      subscriber->update();
+    }
+    n=0;
+  }
+} updater;
+
 
 //////////////////////////// Mixer /////////////////////////////
 
 // Mixer m(N, M, S=1, w=0) combines models using M neural networks with
 //   N inputs each, of which up to S may be selected.  If S > 1 then
 //   the outputs of these neural networks are combined using another
-//   neural network (with parameters S, 1, 1).  If S = 1 then the
+//   neural network (with arguments S, 1, 1).  If S = 1 then the
 //   output is direct.  The weights are initially w (+-32K).
 //   It is used as follows:
 // m.update() trains the network where the expected output is the
@@ -1912,10 +1599,9 @@ Stretch::Stretch(): t(4096) {
 //   12 bit number (0 to 4095).
 
 #ifdef __GNUC__
-#pragma GCC target ("avx2")
+__attribute__ ((target ("avx2")))
 #endif
-
-static inline int dot_product_simd_avx2 (const short* const t, const short* const w, int n) {
+static int dot_product_simd_avx2 (const short* const t, const short* const w, int n) {
   __m256i sum = _mm256_setzero_si256();
 
   while ((n-=16)>=0) {
@@ -1933,7 +1619,10 @@ static inline int dot_product_simd_avx2 (const short* const t, const short* cons
   return _mm_cvtsi128_si32(newsum);
 }
 
-static inline void train_simd_avx2 (const short* const t, short* const w, int n, const int e)  {
+#ifdef __GNUC__
+__attribute__ ((target ("avx2")))
+#endif
+static void train_simd_avx2 (const short* const t, short* const w, int n, const int e)  {
   const __m256i one = _mm256_set1_epi16(1);
   const __m256i err = _mm256_set1_epi16(short(e));
 
@@ -1948,11 +1637,9 @@ static inline void train_simd_avx2 (const short* const t, short* const w, int n,
 }
 
 #ifdef __GNUC__
-#pragma GCC reset_options
-#pragma GCC target ("sse2")
+__attribute__ ((target ("sse2")))
 #endif
-
-static inline int dot_product_simd_sse2(const short* const t, const short* const w, int n) {
+static int dot_product_simd_sse2(const short* const t, const short* const w, int n) {
   __m128i sum = _mm_setzero_si128();
 
   while ((n-=8)>=0) {
@@ -1966,7 +1653,10 @@ static inline int dot_product_simd_sse2(const short* const t, const short* const
   return _mm_cvtsi128_si32(sum);
 }
 
-static inline void train_simd_sse2(const short* const t, short* const w, int n, const int e) {
+#ifdef __GNUC__
+__attribute__ ((target ("sse2")))
+#endif
+static void train_simd_sse2(const short* const t, short* const w, int n, const int e) {
   const __m128i one = _mm_set1_epi16(1);
   const __m128i err = _mm_set1_epi16(short(e));
 
@@ -1980,11 +1670,7 @@ static inline void train_simd_sse2(const short* const t, short* const w, int n, 
   }
 }
 
-#ifdef __GNUC__
-#pragma GCC reset_options
-#endif
-
-static inline int dot_product_simd_none(const short* const t, const short* const w, int n) {
+static int dot_product_simd_none(const short* const t, const short* const w, int n) {
   int sum = 0;
   while ((n -= 2) >= 0) {
     sum += (t[n] * w[n] + t[n + 1] * w[n + 1]) >> 8;
@@ -1992,68 +1678,128 @@ static inline int dot_product_simd_none(const short* const t, const short* const
   return sum;
 }
 
-static inline void train_simd_none(const short* const t, short* const w, int n, const int err) {
+static void train_simd_none(const short* const t, short* const w, int n, const int err) {
   while ((n -= 1) >= 0) {
     int wt = w[n] + ((((t[n] * err * 2) >> 16) + 1) >> 1);
-    if (wt < -32768) {
-      w[n] = -32768;
-    } else if (wt > 32767) {
-      w[n] = 32767;
-    } else {
-      w[n] = wt;
-    }
+    if (wt < -32768) wt = -32768;
+    else if (wt > 32767) wt = 32767;
+    w[n] = (short)wt;
   }
 }
 
 struct ErrorInfo {
   U32 Data[2], Sum, Mask, Collected;
+  void reset() {
+    memset(this,0,sizeof(*this));
+  }
 };
 
-inline U32 SQR(U32 x) {
+static inline U32 SQR(U32 x) {
   return x*x;
 }
 
 #define DEFAULT_LEARNING_RATE 7
 
 typedef enum {SIMD_NONE, SIMD_SSE2, SIMD_AVX2} SIMD;
-class Mixer {
+class Mixer : protected IPredictor {
+protected:
+  const Shared * const shared;
+  const U32 N, M, S;     // max inputs, max contexts, max context sets
+  int scalefactor;       // scale factor for dot product
+  Array<short, 32> tx;   // N inputs from add()
+  Array<short, 32> wx;   // N*M weights
+  Array<U32> cxt;        // S contexts
+  Array<ErrorInfo> info; // stats for the adaptive learning rates
+  Array<int> rates;      // learning rates
+  U32 ncxt;              // number of contexts (0 to S)
+  U32 base;              // offset of next context
+  U32 nx;                // number of inputs in tx, 0 to N
+  Array<int> pr;         // last result (scaled 12 bits)
 public:
+  Mixer(const Shared * const sh, const int n, const int m, const int s):
+    shared(sh), N(n), M(m), S(s), scalefactor(0), tx(N), wx(N*M), cxt(S), info(S), rates(S), pr(S)
+  {
+    for (U64 i=0; i<S; ++i) {
+      pr[i]=2048; //initial p=0.5
+      rates[i] = DEFAULT_LEARNING_RATE;
+      info[i].reset();
+    }
+    reset();
+  }
   virtual ~Mixer() {};
-  virtual void update()=0;
-  virtual void add(int x)=0;
-  virtual void set(int cx, int range)=0;
-  virtual int p()=0;
+  virtual int p() = 0;
+  virtual void set_scalefactor(const int sf0, const int sf1) = 0;
+
+  // Input x (call up to N times)
+  void add(const int x) {
+    assert(nx<N);
+    assert(x==short(x));
+    tx[nx++]=(short)x;
+  }
+
+  // Set a context (call S times, sum of ranges <= M)
+  void set(const U32 cx, const U32 range, const int rate = DEFAULT_LEARNING_RATE) {
+    assert(ncxt<S);
+    assert(cx<range);
+    assert(base+range<=M);
+    if (!(options&OPTION_ADAPTIVE))
+      rates[ncxt] = rate;
+    cxt[ncxt++]=base+cx;
+    base+=range;
+    //printf("ncxt: %d base: %d\n",ncxt,range); //for debugging: how many input sets do we have?
+  }
+
+  void reset() {
+    nx=base=ncxt=0;
+  }
+};
+
+// for training NormalModel, WordModel and ExeModel
+class DummyMixer : public Mixer {
+public:
+  DummyMixer(const Shared * const sh, const int n, const int m, const int s):Mixer(sh, n, m, s){}
+  void update() override {reset();}
+  int p() override {
+    updater.subscribe(this);
+    return 2048;
+  }
+  void set_scalefactor(const int, const int) override {};
 };
 
 template <SIMD simd> class SIMDMixer: public Mixer {
 private:
   //define padding requirements
-  const inline int simd_width() const {
+  constexpr inline int simd_width() const {
     if(simd==SIMD_AVX2)return 32/sizeof(short); //256 bit (32 byte) data size
     if(simd==SIMD_SSE2)return 16/sizeof(short); //128 bit (16 byte) data size
     if(simd==SIMD_NONE)return  4/sizeof(short); //processes 2 shorts at once -> width is 4 bytes
     assert(false);
   }
-  const int N, M, S;   // max inputs, max contexts, max context sets
-  Array<short, 32> tx; // N inputs from add()
-  Array<short, 32> wx; // N*M weights
-  Array<int> cxt;      // S contexts
-  Array<ErrorInfo> info; // stats for the adaptive learning rates
-  Array<int> rates; // learning rates
-  int ncxt;        // number of contexts (0 to S)
-  int base;        // offset of next context
-  int nx;          // Number of inputs in tx, 0 to N
-  Array<int> pr;   // last result (scaled 12 bits)
-  SIMDMixer* mp;       // points to a SIMDMixer to combine results
+  SIMDMixer *mp; // points to a Mixer to combine results
 public:
-  SIMDMixer(int n, int m, int s=1, int w=0);
+  SIMDMixer(const Shared *sh, const int n, const int m, const int s) :
+    Mixer(sh, ((n+(simd_width()-1))&-(simd_width())), m, s)
+  {
+    assert(n>0 && N>0 && (N&(simd_width()-1))==0 && M>0 && S>=1);
+    mp = (S>1) ? new SIMDMixer<simd>(sh, S, 1, 1) : nullptr;
+  }
+
+  ~SIMDMixer() {
+    delete mp;
+  }
+
+  void set_scalefactor(const int sf0, const int sf1) override {
+    scalefactor=sf0;
+    if(mp){mp->set_scalefactor(sf1,0);}
+  }
 
   // Adjust weights to minimize coding cost of last prediction
-  void update() {
-    int target=y<<12;
+  void update() override {
+    INJECT_SHARED_y
+    const int target=y<<12;
     if(nx>0)
-    for (int i=0; i<ncxt; ++i) {
-      int err=target-pr[i];
+    for (U64 i=0; i<ncxt; ++i) {
+      const int err=target-pr[i];
       if(simd==SIMD_NONE)
         train_simd_none(&tx[0], &wx[cxt[i]*N], nx, err*rates[i]);
       if(simd==SIMD_SSE2)
@@ -2061,57 +1807,43 @@ public:
       if(simd==SIMD_AVX2)
         train_simd_avx2(&tx[0], &wx[cxt[i]*N], nx, err*rates[i]);
       if (options&OPTION_ADAPTIVE){
-        U32 logErr = min(0xF,ilog2(abs(err)));
+        const U32 logErr=min(0xF,ilog2(abs(err)));
         info[i].Sum-=SQR(info[i].Data[1]>>28);
         info[i].Data[1]<<=4; info[i].Data[1]|=info[i].Data[0]>>28;
         info[i].Data[0]<<=4; info[i].Data[0]|=logErr;
         info[i].Sum+=SQR(logErr);
-        info[i].Collected = min(info[i].Collected+1, 2048);
-        info[i].Mask<<=1; info[i].Mask|= (logErr <= ((info[i].Data[0]>>4)&0xF) );
-        U32 count = BitCount( info[i].Mask );
-        if (info[i].Collected>=64 && (info[i].Sum>1700 || ((info[i].Mask&0xFF)==0))){
-          rates[i] = DEFAULT_LEARNING_RATE;
+        info[i].Collected+=info[i].Collected<4096;
+        info[i].Mask<<=1; info[i].Mask|=(logErr<=((info[i].Data[0]>>4)&0xF));
+        const U32 count=BitCount(info[i].Mask);
+        if (info[i].Collected>=64 && (info[i].Sum>1500+U32(rates[i])*64 || count<9 || (info[i].Mask&0xFF)==0)){
+          rates[i]=DEFAULT_LEARNING_RATE;
           memset(&info[i], 0, sizeof(ErrorInfo));
         }
-        else if (info[i].Collected==2048 && info[i].Sum>=56 && info[i].Sum<=144 && count>24 && ((info[i].Mask&0xFF)==0xFF) ){
-          rates[i] = max(1, rates[i]-1 );
-          memset(&info[i], 0, sizeof(ErrorInfo));
+        else if (info[i].Collected==4096 && info[i].Sum>=56 && info[i].Sum<=144 && count>28-U32(rates[i]) && ((info[i].Mask&0xFF)==0xFF)){
+          rates[i]-=rates[i]>2;
+          info[i].reset();
         }
       }
     }
-    nx=base=ncxt=0;
-  }
-
-  // Input x (call up to N times)
-  void add(int x) {
-    assert(nx<N);
-    assert(x==short(x));
-    tx[nx++]=(short)x;
-  }
-
-  // Set a context (call S times, sum of ranges <= M)
-  void set(int cx, int range) {
-    assert(range>=0);
-    assert(ncxt<S);
-    assert(0<=cx && cx<range);
-    assert(base+range<=M);
-    cxt[ncxt++]=base+cx;
-    base+=range;
+    reset();
   }
 
   // predict next bit
   int p() {
+    updater.subscribe(this);
+    assert(scalefactor>0);
+    //if(mp)printf("nx: %d, ncxt: %d, base: %d\n",nx, ncxt, base); //for debugging: how many inputs do we have?
     while (nx&(simd_width()-1)) tx[nx++]=0;  // pad
     if (mp) {  // combine outputs
-      mp->update();
-      for (int i=0; i<ncxt; ++i) {
+      for (U64 i=0; i<ncxt; ++i) {
         int dp;
         if(simd==SIMD_NONE)
-          dp=dot_product_simd_none(&tx[0], &wx[cxt[i]*N], nx)>>5;
+          dp=dot_product_simd_none(&tx[0], &wx[cxt[i]*N], nx);
         if(simd==SIMD_SSE2)
-          dp=dot_product_simd_sse2(&tx[0], &wx[cxt[i]*N], nx)>>5;
+          dp=dot_product_simd_sse2(&tx[0], &wx[cxt[i]*N], nx);
         if(simd==SIMD_AVX2)
-          dp=dot_product_simd_avx2(&tx[0], &wx[cxt[i]*N], nx)>>5;
+          dp=dot_product_simd_avx2(&tx[0], &wx[cxt[i]*N], nx);
+        dp=(dp*scalefactor)>>16;
         if(dp<-2047)dp=-2047;else if(dp>2047)dp=2047;
         mp->add(dp);
         pr[i]=squash(dp);
@@ -2122,35 +1854,16 @@ public:
     else {  // S=1 context
       int dp;
       if(simd==SIMD_NONE)
-        dp=dot_product_simd_none(&tx[0], &wx[0], nx)>>8;
+        dp=dot_product_simd_none(&tx[0], &wx[cxt[0]*N], nx);
       if(simd==SIMD_SSE2)
-        dp=dot_product_simd_sse2(&tx[0], &wx[0], nx)>>8;
+        dp=dot_product_simd_sse2(&tx[0], &wx[cxt[0]*N], nx);
       if(simd==SIMD_AVX2)
-        dp=dot_product_simd_avx2(&tx[0], &wx[0], nx)>>8;
+        dp=dot_product_simd_avx2(&tx[0], &wx[cxt[0]*N], nx);
+      dp=(dp*scalefactor)>>16;
       return pr[0]=squash(dp);
     }
   }
-  ~SIMDMixer();
 };
-
-template<SIMD simd> SIMDMixer<simd>::~SIMDMixer() {
-  delete mp;
-}
-
-template<SIMD simd> SIMDMixer<simd>::SIMDMixer(int n, int m, int s, int w):
-    N((n+(simd_width()-1))&-(simd_width())), M(m), S(s), tx(N), wx(N*M), cxt(S), info(S), rates(S), 
-    ncxt(0), base(0), nx(0), pr(S), mp(0) {
-  assert(n>0 && N>0 && (N&(simd_width()-1))==0 && M>0);
-  int i;
-  for (i=0; i<S; ++i){
-    pr[i]=2048; //initial p=0.5
-    rates[i] = DEFAULT_LEARNING_RATE;
-    memset(&info[i], 0, sizeof(ErrorInfo));
-  }
-  for (i=0; i<N*M; ++i)
-    wx[i]=w;
-  if (S>1) mp=new SIMDMixer<simd>(S, 1, 1);
-}
 
 static SIMD chosen_simd=SIMD_NONE; //default value, will be overriden by the CPU dispatcher, and may be overriden from the command line
 class MixerFactory {
@@ -2158,10 +1871,10 @@ public:
   static void set_simd(SIMD simd) {
     chosen_simd=simd;
   }
-  static Mixer* CreateMixer(int n, int m, int s=1, int w=0) {
-    if(chosen_simd==SIMD_NONE)return new SIMDMixer<SIMD_NONE>(n, m, s, w);
-    if(chosen_simd==SIMD_SSE2)return new SIMDMixer<SIMD_SSE2>(n, m, s, w);
-    if(chosen_simd==SIMD_AVX2)return new SIMDMixer<SIMD_AVX2>(n, m, s, w);
+  static Mixer* CreateMixer(const Shared * const sh, const int n, const int m, const int s) {
+    if(chosen_simd==SIMD_NONE)return new SIMDMixer<SIMD_NONE>(sh, n, m, s);
+    if(chosen_simd==SIMD_SSE2)return new SIMDMixer<SIMD_SSE2>(sh, n, m, s);
+    if(chosen_simd==SIMD_AVX2)return new SIMDMixer<SIMD_AVX2>(sh, n, m, s);
     assert(false);
     return nullptr;
   }
@@ -2178,19 +1891,33 @@ public:
 //   N-1).  rate determines the learning rate (smaller = faster, default 7).
 //   Probabilities are scaled 12 bits (0-4095).
 
-class APM1 {
+class APM1 : IPredictor {
+private:
+  const Shared * const shared;
   int index;     // last p, context
   const int N;   // number of contexts
   Array<U16> t;  // [N][33]:  p, context -> p
+  const int rate;
 public:
-  APM1(int n);
-  int p(int pr=2048, int cxt=0, int rate=7) {
-    assert(pr>=0 && pr<4096 && cxt>=0 && cxt<N && rate>0 && rate<32);
-    //adapt (update prediction from previous pass)
-    int g=(y<<16)+(y<<rate)-y-y;
+  
+  APM1(const Shared * const sh, const int n, const int r): shared(sh), 
+    index(0), N(n), t(n*33), rate(r)
+  {
+    assert(n>0 && rate>0 && rate<32);
+    // maps p, cxt -> p initially
+    for (int i=0; i<N; ++i)
+      for (int j=0; j<33; ++j)
+        t[i*33+j] = i==0 ? squash((j-16)*128)*16 : t[j];
+  }
+  void update() override {
+    INJECT_SHARED_y
+    const int g=(y<<16)+(y<<rate)-y-y;
     t[index] += (g-t[index]) >> rate;
     t[index+1] += (g-t[index+1]) >> rate;
-    //predict
+  }
+  int p(int pr, const int cxt) {
+    updater.subscribe(this);
+    assert(pr>=0 && pr<4096 && cxt>=0 && cxt<N);
     pr = stretch(pr);
     const int w=pr&127;  // interpolation weight (33 points)
     index=((pr+2048)>>7)+cxt*33;
@@ -2198,12 +1925,6 @@ public:
   }
 };
 
-// maps p, cxt -> p initially
-APM1::APM1(int n): index(0), N(n), t(n*33) {
-  for (int i=0; i<N; ++i)
-    for (int j=0; j<33; ++j)
-      t[i*33+j] = i==0 ? squash((j-16)*128)*16 : t[j];
-}
 
 //////////////////////////// StateMap, APM //////////////////////////
 
@@ -2215,91 +1936,374 @@ APM1::APM1(int n): index(0), N(n), t(n*33) {
 //     limit (1..1023, default 1023) is the maximum count for computing a
 //     prediction.  Larger values are better for stationary sources.
 
-static int dt[1024];  // i -> 16K/(i+i+3)
-
-class StateMap {
-protected:
-  const int N;  // Number of contexts
-  int cxt;      // Context of last prediction
-  Array<U32> t;       // cxt -> prediction in high 22 bits, count in low 10 bits
-  inline void update(int limit) {
-    assert(cxt>=0 && cxt<N);
-    U32 *p=&t[cxt], p0=p[0];
-    int n=p0&1023;  //count
-    int pr=p0>>10;  //prediction
-    if (n<limit) ++p0;
-    else p0=(p0&0xfffffc00)|limit;
-    int target=y<<22;
-    int delta=((target-pr)>>3)*dt[n]; //the larger the count (n) the less it should adapt
-    p0+=delta&0xfffffc00; 
-    p[0]=p0;
-  }
-
+// This class provides a static (common) 1024-element lookup table for integer division
+// Initialization will run multiple times, but the table is created only once
+class DivisionTable {
 public:
-  StateMap(int n=256);
-  void Reset(int Rate=0){
-    for (int i=0; i<N; ++i)
-      t[i]=(t[i]&0xfffffc00)|min(Rate, t[i]&0x3FF);
-  }
-  // update bit y (0..1), predict next bit in context cx
-  int p(int cx, int limit=1023) {
-    assert(cx>=0 && cx<N);
-    assert(limit>0 && limit<1024);
-    update(limit);
-    return t[cxt=cx]>>20;
+  static int* getdt() {
+    static int dt[1024];  // i -> 16K/(i+i+3)
+    for (int i = 0; i<1024; ++i)
+      dt[i] = 16384 / (i + i + 3); 
+    return dt;
   }
 };
 
-StateMap::StateMap(int n): N(n), cxt(0), t(n) {
-  for (int i=0; i<N; ++i)
-    t[i]=(1u<<31)+0;  //initial p=0.5, initial count=0
-}
+// This is the base class for StateMap and APM
+// Purpose: common members are here
+class AdaptiveMap : protected IPredictor {
+protected:
+  const Shared * const shared;
+  Array<U32> t; // cxt -> prediction in high 22 bits, count in low 10 bits
+  int limit;
+  int* dt;      // Pointer to division table
+  AdaptiveMap(const Shared * const sh, const int n, const int lim) : shared(sh), t(n), limit(lim) {
+    dt=DivisionTable::getdt();
+  }
+  virtual ~AdaptiveMap() {};
+  void update(U32 * const p) {
+    U32 p0=p[0];
+    const int n=p0&1023;  //count
+    const int pr=p0>>10;  //prediction (22-bit fractional part)
+    if (n<limit) ++p0;
+    else p0=(p0&0xfffffc00)|limit;
+    INJECT_SHARED_y
+    const int target=y<<22; //(22-bit fractional part)
+    const int delta=((target-pr)>>3)*dt[n]; //the larger the count (n) the less it should adapt pr+=(target-pr)/(n+1.5)
+    p0+=delta&0xfffffc00;
+    p[0]=p0;
+  }
+public:
+  void setlimit(const int lim){limit=lim;};
+};
+
+class StateMap : public AdaptiveMap {
+protected:
+  const U32 S;    // Number of context sets
+  const U32 N;    // Number of contexts in each context set
+  U32 ncxt;       // Number of context indexes present in cxt array (0..S-1)
+  Array<U32> cxt; // Context index of last prediction per context set
+public:
+  enum MAPTYPE {GENERIC, BITHISTORY, RUN};
+  StateMap(const Shared * const sh, const int s, const int n, const int lim, const MAPTYPE maptype): 
+    AdaptiveMap(sh, n*s,lim), S(s), N(n), ncxt(0), cxt(s)
+  {
+    assert(S>0 && N>0);
+    assert(limit>0 && limit<1024);
+    if (maptype==BITHISTORY) { // when the context is a bit history byte, we have a-priory for p
+      assert((N&255)==0);
+      for (U32 cx=0; cx<N; ++cx) {
+        U8 state=U8(cx&255);
+        U32 n0=StateTable::next(state,2)*3+1;
+        U32 n1=StateTable::next(state,3)*3+1;
+        for (U32 s=0; s<S; ++s)
+          t[s*N+cx] = ((n1<<20)/(n0+n1))<<12;
+      }
+    }
+    else if (maptype==RUN) { // when the context is a run count: we have a-priory for p
+      for (U32 cx=0; cx<N; ++cx){
+        const int predicted_bit = (cx)&1;
+        const int uncertainity = (cx>>1)&1;
+      //const int bp = (cx>>2)&1; // unused in calculation - a-priory does not seem to depend on bpos in the general case
+        const int runcount = (cx>>4); // 0..254
+        U32 n0 = uncertainity*16+16;
+        U32 n1 = runcount*128+16;
+        if(predicted_bit==0)std::swap(n0,n1);
+        for (U32 s=0; s<S; ++s)
+          t[s*N+cx] = ((n1<<20)/(n0+n1))<<12 | min(runcount,limit);
+      }
+    }
+    else { // no a-priory
+      for (U32 i=0; i<N*S; ++i)
+        t[i]=(1u<<31)+0;  //initial p=0.5, initial count=0
+    }
+  }
+  void Reset(const int Rate) {
+    for (U32 i=0; i<N*S; ++i)
+      t[i]=(t[i]&0xfffffc00)|min(Rate, t[i]&0x3FF);
+  }
+  void update() override {
+    assert(ncxt<=S);
+    while(ncxt>0) {
+      ncxt--;
+      const U32 idx=cxt[ncxt];
+      if(idx+1==0)continue; // UINT32_MAX: skipped context
+      assert(ncxt*N<=idx && idx<(ncxt+1)*N);
+      AdaptiveMap::update(&t[idx]);
+    }
+  }
+  //call p1() when there is only 1 context set
+  //no need to call subscribe()
+  int p1(const U32 cx) {
+    updater.subscribe(this);
+    assert(cx>=0 && cx<N);
+    cxt[0]=cx;
+    ncxt++;
+    return t[cx]>>20;
+  }
+  //call p2() for each context when there is more context sets
+  //and call subscribe() once
+  int p2(const U32 s, const U32 cx) {
+    assert(s>=0 && s<S);
+    assert(cx>=0 && cx<N);
+    assert(s==ncxt);
+    const U32 idx=ncxt*N+cx;
+    cxt[ncxt]=idx;
+    ncxt++;
+    return t[idx]>>20;
+  }
+  void subscribe() {
+    updater.subscribe(this);
+  }
+  //call skip() instead of p2() when the context is unknown or uninteresting
+  //remark: no need to call skip() when there is only 1 context or all contexts will be skipped
+  void skip(const U32 s) {
+    assert(s>=0 && s<S);
+    assert(s==ncxt);
+    cxt[ncxt]=0-1; // UINT32_MAX: mark for skipping
+    ncxt++;
+  }
+  void print() const {
+    for(U32 i=0;i<t.size();i++){
+      U32 p0=t[i]>>10;
+      printf("%d\t%d\n",i,p0);
+    }
+  }
+};
+
 
 // An APM maps a probability and a context to a new probability.  Methods:
 //
-// APM a(n) creates with n contexts using 96*n bytes memory.
-// a.pp(y, pr, cx, limit) updates and returns a new probability (0..4095)
-//     like with StateMap.  pr (0..4095) is considered part of the context.
-//     The output is computed by interpolating pr into 24 ranges nonlinearly
+// APM a(N,STEPS) creates with N contexts using 4*STEPS*N bytes memory.
+// a.update() updates probability map. y=(0..1) is the last bit
+// a.p(pr, cx, limit) returns a new probability (0..4095) like with StateMap. 
+//     cx=(0..n-1) is the context.
+//     pr=(0..4095) is considered part of the context.
+//     The output is computed by interpolating pr into STEPS ranges nonlinearly
 //     with smaller ranges near the ends.  The initial output is pr.
-//     y=(0..1) is the last bit.  cx=(0..n-1) is the other context.
-//     limit=(0..1023) defaults to 255.
+//     limit=(0..1023): set a lower limit (like 255) for faster adaptation.
 
-class APM: public StateMap {
+class APM : public AdaptiveMap {
+private:
+  const int N;  // Number of contexts
+  const int steps;
+  int cxt;      // Context index of last prediction
 public:
-  APM(int n);
-  int p(int pr, int cx, int limit=255) {
+  APM(const Shared * const sh, const int n, const int s) :  AdaptiveMap(sh,n*s,1023), N(n*s), steps(s), cxt(0)  {
+    assert(s>4); // number of steps - must be a positive integer bigger than 4
+    for (int i=0; i<N; ++i) {
+      int p = ((i%steps*2+1)*4096)/(steps*2)-2048;
+      t[i] = (U32(squash(p))<<20)+6; //initial count: 6
+    }
+  }
+  void update() override {
+    assert(cxt>=0 && cxt<N);
+    AdaptiveMap::update(&t[cxt]);
+  }
+  int p(int pr, int cx, const int lim) {
+    updater.subscribe(this);
     assert(pr>=0 && pr<4096);
-    assert(cx>=0 && cx<N/24);
+    assert(cx>=0 && cx<N/steps);
     assert(limit>0 && limit<1024);
-    //adapt (update prediction from previous pass)
-    update(limit);
-    //predict
-    pr=(stretch(pr)+2048)*23;
-    int wt=pr&0xfff;  // interpolation weight (0..4095)
-    cx=cx*24+(pr>>12);
+    AdaptiveMap::setlimit(lim);
+    pr = (stretch(pr)+2048)*(steps-1);
+    int wt = pr&0xfff;  // interpolation weight (0..4095)
+    cx = cx*steps+(pr>>12);
     assert(cx>=0 && cx<N-1);
-    cxt=cx+(wt>>11);
-    pr=((t[cx]>>13)*(4096-wt)+(t[cx+1]>>13)*wt)>>19;
+    cxt = cx+(wt>>11);
+    pr = ((t[cx]>>13)*(4096-wt)+(t[cx+1]>>13)*wt)>>19;
     return pr;
   }
 };
 
-APM::APM(int n): StateMap(n*24) {
-  for (int i=0; i<N; ++i) {
-    int p=((i%24*2+1)*4096)/48-2048;
-    t[i]=(U32(squash(p))<<20)+6; //initial count: 6
+
+//////////////////////// Hash functions //////////////////////////
+//
+// All hash functions are constructed using multiplicative hashes
+// - We usually hash small values
+// - Multiplicative hashes promote entropy to the higher bits 
+// - When combining ( H(x) + H(y) ) entropy is still in higher bits
+// - After combining they must be finalized by taking the higher
+//   bits only to reduce the range to the desired hash table size
+
+// Multipliers
+// - They don't need to be prime, just large odd numbers
+// - The golden ratio is usually preferred as a multiplier (PHI64)
+
+#ifdef NHASHCONFIG
+#define HASHEXPR constexpr
+#else 
+#define HASHEXPR
+#endif
+
+static HASHEXPR U64 hashes[14] = {
+  UINT64_C(0x9E3779B97F4A7C15),
+  UINT64_C(0x993DDEFFB1462949),
+  UINT64_C(0xE9C91DC159AB0D2D),
+  UINT64_C(0x83D6A14F1B0CED73),
+  UINT64_C(0xA14F1B0CED5A841F),
+  UINT64_C(0xC0E51314A614F4EF),
+  UINT64_C(0xDA9CC2600AE45A27),
+  UINT64_C(0x826797AA04A65737),
+  UINT64_C(0x2375BE54C41A08ED),
+  UINT64_C(0xD39104E950564B37),
+  UINT64_C(0x3091697D5E685623),
+  UINT64_C(0x20EB84EE04A3C7E1),
+  UINT64_C(0xF501F1D0944B2383),
+  UINT64_C(0xE3E4E8AA829AB9B5)
+};
+
+#ifndef NHASHCONFIG
+void loadHashesFromCmd(const char* hashes_from_commandline) {
+  if(strlen(hashes_from_commandline)!=16*14+13 /*237*/)quit("Bad hash config.");
+  for(int i=0;i<14;i++) { // for each specified hash value
+    U64 hashval=0;
+    for(int j=0;j<16;j++) { // for each hex char
+      U8 c=hashes_from_commandline[i*17+j];
+      if(c>='a' && c<='f')c=c+'A'-'a';
+      if(c>='0' && c<='9')c-='0';
+      else if(c>='A' && c<='F')c=c-'A'+10;
+      else quit("Bad hash config.");
+      hashval=hashval<<4|c;
+    }
+    hashes[i]=hashval;
   }
 }
+#endif //NHASHCONFIG
 
+// Golden ratio of 2^64 (not a prime)
+#define PHI64 hashes[0] // 11400714819323198485
 
-//////////////////////////// hash //////////////////////////////
+// Some more arbitrary magic (prime) numbers
+#define MUL64_1  hashes[1]
+#define MUL64_2  hashes[2]
+#define MUL64_3  hashes[3]
+#define MUL64_4  hashes[4]
+#define MUL64_5  hashes[5] 
+#define MUL64_6  hashes[6]
+#define MUL64_7  hashes[7]
+#define MUL64_8  hashes[8]
+#define MUL64_9  hashes[9]
+#define MUL64_10 hashes[10]
+#define MUL64_11 hashes[11]
+#define MUL64_12 hashes[12]
+#define MUL64_13 hashes[13]
 
-// Hash 2-5 ints.
-inline U32 hash(U32 a, U32 b, U32 c=0xffffffff, U32 d=0xffffffff,
-    U32 e=0xffffffff) {
-  U32 h=a*200002979u+b*30005491u+c*50004239u+d*70004807u+e*110002499u;
-  return h^h>>9^a>>2^b>>3^c>>4^d>>5^e>>6;
+// Finalizers (range reduction)
+// - Keep the necessary number of bits after performing a
+//   (combination of) multiplicative hash(es)
+
+static ALWAYS_INLINE 
+U32 finalize64(const U64 hash, const int hashbits) {
+  assert(U32(hashbits)<=32); // just a reasonable upper limit
+  return U32(hash>>(64-hashbits));
+}
+
+// Get the next 8 or 16 bits following "hasbits" for checksum
+static ALWAYS_INLINE 
+U64 checksum64(const U64 hash, const int hashbits, const int checksumbits) {
+  assert(0<checksumbits && U32(checksumbits)<=32); //32 is just a reasonable upper limit
+  return (hash>>(64-hashbits-checksumbits))&((1<<checksumbits)-1); 
+}
+
+//
+// Value hashing
+//
+// - Hash 1-13 64-bit (usually small) integers
+
+static ALWAYS_INLINE 
+U64 hash(const U64 x0) {
+  return (x0+1)*PHI64;
+}
+static ALWAYS_INLINE 
+U64 hash(const U64 x0, const U64 x1) {
+  return (x0+1)*PHI64   + (x1+1)*MUL64_1;
+}
+static ALWAYS_INLINE 
+U64 hash(const U64 x0, const U64 x1, const U64 x2) {
+  return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2;
+}
+static ALWAYS_INLINE 
+U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3) {
+  return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
+         (x3+1)*MUL64_3;
+}
+static ALWAYS_INLINE 
+U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4) {
+  return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
+         (x3+1)*MUL64_3 + (x4+1)*MUL64_4;
+}
+static ALWAYS_INLINE 
+U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
+         const U64 x5) {
+  return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
+         (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5;
+}
+static ALWAYS_INLINE 
+U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
+         const U64 x5, const U64 x6) {
+  return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
+         (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5 +
+         (x6+1)*MUL64_6;
+}
+static ALWAYS_INLINE 
+U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
+         const U64 x5, const U64 x6, const U64 x7) {
+  return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
+         (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5 +
+         (x6+1)*MUL64_6 + (x7+1)*MUL64_7;
+}
+static ALWAYS_INLINE 
+U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
+         const U64 x5, const U64 x6, const U64 x7, const U64 x8) {
+  return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
+         (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5 +
+         (x6+1)*MUL64_6 + (x7+1)*MUL64_7 + (x8+1)*MUL64_8;
+}
+static ALWAYS_INLINE 
+U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
+         const U64 x5, const U64 x6, const U64 x7, const U64 x8, const U64 x9) {
+  return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
+         (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5 +
+         (x6+1)*MUL64_6 + (x7+1)*MUL64_7 + (x8+1)*MUL64_8 +
+         (x9+1)*MUL64_9;
+}
+static ALWAYS_INLINE 
+U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
+         const U64 x5, const U64 x6, const U64 x7, const U64 x8, const U64 x9,
+         const U64 x10) {
+  return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
+         (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5 +
+         (x6+1)*MUL64_6 + (x7+1)*MUL64_7 + (x8+1)*MUL64_8 +
+         (x9+1)*MUL64_9 + (x10+1)*MUL64_10;
+}
+static ALWAYS_INLINE 
+U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
+         const U64 x5, const U64 x6, const U64 x7, const U64 x8, const U64 x9,
+         const U64 x10,const U64 x11) {
+  return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
+         (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5 +
+         (x6+1)*MUL64_6 + (x7+1)*MUL64_7 + (x8+1)*MUL64_8 +
+         (x9+1)*MUL64_9 + (x10+1)*MUL64_10 + (x11+1)*MUL64_11;
+}
+static ALWAYS_INLINE 
+U64 hash(const U64 x0, const U64 x1, const U64 x2, const U64 x3, const U64 x4,
+         const U64 x5, const U64 x6, const U64 x7, const U64 x8, const U64 x9,
+         const U64 x10,const U64 x11,const U64 x12) {
+  return (x0+1)*PHI64   + (x1+1)*MUL64_1 + (x2+1)*MUL64_2 +
+         (x3+1)*MUL64_3 + (x4+1)*MUL64_4 + (x5+1)*MUL64_5 +
+         (x6+1)*MUL64_6 + (x7+1)*MUL64_7 + (x8+1)*MUL64_8 +
+         (x9+1)*MUL64_9 + (x10+1)*MUL64_10 + (x11+1)*MUL64_11 + (x12+1)*MUL64_12;
+}
+
+//
+// String hashing
+//
+
+// Call this function repeatedly for string hashing, or to combine 
+// a hash value and a (non-hash) value, or two hash values
+static ALWAYS_INLINE 
+U64 combine64(const U64 seed, const U64 x) {
+  return hash(seed+x);
 }
 
 ///////////////////////////// BH ////////////////////////////////
@@ -2315,36 +2319,41 @@ inline U32 hash(U32 a, U32 b, U32 c=0xffffffff, U32 d=0xffffffff,
 // bh[i] returns a pointer to the i'th element, such that
 //   bh[i][0] is a checksum of i, bh[i][1] is the priority, and
 //   bh[i][2..B-1] are other values (0-255).
-//   The low lg(n) bits as an index into the table.
-//   If a collision is detected, up to M nearby locations in the same
-//   cache line are tested and the first matching checksum or
-//   empty element is returned.
-//   If no match or empty element is found, then the lowest priority
-//   element is replaced.
+//
+// The index must be a multiplicative hash.
+//
+// If a collision is detected, up to M nearby locations in the same
+// cache line are tested and the first matching checksum or
+// empty element is returned.
+//
+// Collision detection and resolution policy:
+// 2 byte checksum with LRU replacement
+// If neither a match nor an empty element is found the lowest priority
+// element is replaced by the new element (except last 2 by priority).
 
-// 2 byte checksum with LRU replacement (except last 2 by priority)
-template <int B> class BH {
+template <U64 B> class BH {
   enum {M=8};  // search limit
   Array<U8> t; // elements
-  U32 n; // size-1
+  const U32 mask; // size-1
+  const int hashbits;
 public:
-  BH(int i): t(i*B), n(i-1) {
-    assert(B>=2 && i>0 && (i&(i-1))==0); // size a power of 2?
+  BH(U64 i): t(i*B), mask(U32(i-1)), hashbits(ilog2(mask+1)) {
+    assert(B>=2 && i>0 && ispowerof2(i));
   }
-  U8* operator[](U32 i);
+  U8* operator[](const U64 i);
 };
 
-template <int B>
-inline  U8* BH<B>::operator[](U32 i) {
-  U16 chk=(i>>16^i)&0xffff;
-  i=i*M&n;
+template <U64 B>
+inline U8* BH<B>::operator[](const U64 ctx) {
+  const U16 chk=(U16)checksum64(ctx,hashbits,16);
+  const U32 i=finalize64(ctx,hashbits)*M & mask;
   U8 *p;
   U16 *cp;
   int j;
   for (j=0; j<M; ++j) {
     p=&t[(i+j)*B];
     cp=(U16*)p;
-    if (p[2]==0) {*cp=chk;break;}
+    if (p[2]==0) {*cp=chk;break;} // empty slot
     if (*cp==chk) break;  // found
   }
   if (j==0) return p+1;  // front
@@ -2364,44 +2373,43 @@ inline  U8* BH<B>::operator[](U32 i) {
 //////////////////////////// HashTable /////////////////////////
 
 // A HashTable is an array of n items representing n contexts.
-// Each item is a storage area of B bytes. In every slot the first 
-// byte is a checksum using the upper 8 bits of the context 
+// Each item is a storage area of B bytes. In every slot the first
+// byte is a checksum using the upper 8 bits of the context
 // selector. The second byte is a priority (0 = empty) for hash
-// replacement. Priorities must be set by the caller (0: lowest, 
-// 255: highest). Items with lower priorities will be replaced in 
-// case of a collision. Only 2 additional items are probed for the 
+// replacement. Priorities must be set by the caller (0: lowest,
+// 255: highest). Items with lower priorities will be replaced in
+// case of a collision. Only 2 additional items are probed for the
 // given checksum.
 // The caller can store any information about the given context
 // in bytes [2..B-1].
 // Checksums must not be modified by the caller.
-// The index need not be a hash.
 
 // HashTable<B> h(n) - creates a hashtable with n slots where
 //     n and B must be powers of 2 with n >= B*4, and B >= 2.
-// h[i] returns a pointer to the storage area starting from 
+// h[i] returns a pointer to the storage area starting from
 //     position 1 (e.g. without the checksum)
+// The index must be a multiplicative hash.
 
 template <int B>
 class HashTable {
 private:
   Array<U8,64> t;  // storage area for n items (1 item = B bytes): 0:checksum 1:priority 2:data 3:data  ... B-1:data
-  const int N;     // number of items in table
+  const int mask;
+  const int hashbits;
 public:
-  HashTable(int n): t(n), N(n) {
-    assert(B>=2 && (B&(B-1))==0);
-    assert(N>=B*4 && (N&(N-1))==0);
+  HashTable(U64 n): t(n), mask((int)n-1), hashbits(ilog2(mask+1))  {
+    assert(B>=2   && ispowerof2(B));
+    assert(n>=B*4 && ispowerof2(n));
+    assert(n<(UINT64_C(1)<<31));
   }
-  U8* operator[](U32 i);
+  U8* operator[](U64 i);
 };
 
 template <int B>
-inline U8* HashTable<B>::operator[](U32 i) { //i: context selector
-  i*=123456791;
-  i=i<<16|i>>16;
-  i*=234567891;
-  int chk=i>>24; //8-bit checksum
-  i=(i*B)&(N-B); //force bounds
-  //search for the checksum in t
+inline U8* HashTable<B>::operator[](U64 i) { //i: context selector
+  U8 chk=(U8)checksum64(i,hashbits,8); // 8-bit checksum
+  i=finalize64(i,hashbits)*B & mask;    // index: force bounds
+                                        //search for the checksum in t
   U8 *p = &t[0];
   if (p[i]==chk) return p+i+1;
   if (p[i^B]==chk) return p+(i^B)+1;
@@ -2416,7 +2424,7 @@ inline U8* HashTable<B>::operator[](U32 i) { //i: context selector
 
 /////////////////////////// ContextMap /////////////////////////
 //
-// A ContextMap maps contexts to a bit histories and makes predictions
+// A ContextMap maps contexts to bit histories and makes predictions
 // to a Mixer.  Methods common to all classes:
 //
 // ContextMap cm(M, C); creates using about M bytes of memory (a power
@@ -2434,86 +2442,69 @@ inline U8* HashTable<B>::operator[](U32 i) { //i: context selector
 //
 // The different types are as follows:
 //
-// - RunContextMap.  The bit history is a count of 0-255 consecutive
-//     zeros or ones.  Uses 4 bytes per whole byte context.  C=1.
-//     The context should be a hash.
+
 // - SmallStationaryContextMap.  0 <= cx*256 < M.
 //     The state is a 16-bit probability that is adjusted after each
 //     prediction.  C=1.
-// - ContextMap.  For large contexts, C >= 1.  Context need not be hashed.
+// - ContextMap.  For large contexts, C >= 1.  Context must be hashed.
 
-// Predict to mixer m from bit history state s, using sm to map s to
-// a probability.
-inline void mix2(Mixer& m, int s, StateMap& sm) {
-  int p1=sm.p(s);
-  int n0=-!nex(s,2);
-  int n1=-!nex(s,3);
-  int st=stretch(p1)>>2;
-  m.add(st);
-  p1>>=4;
-  int p0=255-p1;
-  m.add(p1-p0);
-  m.add(st*(n1-n0));
-  m.add((p1&n0)-(p0&n1));
-  m.add((p1&n1)-(p0&n0));
-}
+/*
+Map for modelling contexts of (nearly-)stationary data.
+The context is looked up directly. For each bit modelled, a 16bit prediction is stored.
+The adaptation rate is controlled by the caller, see mix().
 
-// A RunContextMap maps a context into the next byte and a repeat
-// count up to M.  Size should be a power of 2.  Memory usage is 3M/4.
-class RunContextMap {
-  BH<4> t;
-  U8* cp;
+- BitsOfContext: How many bits to use for each context. Higher bits are discarded.
+- InputBits: How many bits [1..8] of input are to be modelled for each context.
+New contexts must be set at those intervals.
+
+Uses (2^(BitsOfContext+1))*((2^InputBits)-1) bytes of memory.
+*/
+
+class SmallStationaryContextMap : IPredictor {
 public:
-  RunContextMap(int m): t(m/4) {cp=t[0]+1;}
-  void set(U32 cx) {  // update count
-    if (cp[0]==0 || cp[1]!=buf(1)) cp[0]=1, cp[1]=buf(1);
-    else if (cp[0]<255) ++cp[0];
-    cp=t[cx]+1;
-  }
-  int stretched_p() {  // predict next bit
-    if ((cp[1]+256)>>(8-bpos)==c0) {
-      int sign=(cp[1]>>(7-bpos)&1)*2-1;
-      return sign*ilog(cp[0]+1)*8;
-    }
-    else
-      return 0; //p=0.5
-  }
-  int mix(Mixer& m) {  // return run length
-    m.add(stretched_p());
-    return cp[0]!=0;
-  }
-};
-
-// Context is looked up directly.
-// m: Count of (bit) contexts. m must be a power of 2.
-// c0 (the partial byte) and some of the lower bits of cx are used for context selection.
-// For example with m=65536 (=2^16) c0 (8 bits) and the lowest 8 bits of cx are used thus giving the total of 16 bits.
-class SmallStationaryContextMap {
+  static constexpr int MIXERINPUTS = 2;
 private:
-  Array<U16> t; // 0..65535 representing p = 0.0 .. 1.0
-  U32 cxt;      // selected bit context
-  U16 *cp;      // pointer to last context (to update in next pass)
-  const int mask;
+  const Shared * const shared;
+  Array<U16> Data;
+  const U32 mask, stride, bTotal;
+  U32 Context, bCount, B;
+  U16 *cp;
+  const int rate;
+  int scale;
 public:
-  SmallStationaryContextMap(int m): t(m), cxt(0), mask(m-1) {
-    assert((m&mask)==0); // power of 2?
-    for (U32 i=0; i<t.size(); ++i)
-      t[i]=32768; // initial p=0.5
-    cp=&t[0];
+  SmallStationaryContextMap(const Shared * const sh, const int BitsOfContext, 
+    const int InputBits, const int Rate, const int Scale) : shared(sh), 
+    Data((UINT64_C(1)<<BitsOfContext)*((UINT64_C(1)<<InputBits)-1)), 
+    mask((1<<BitsOfContext)-1), stride((1<<InputBits)-1), bTotal(InputBits), 
+    rate(Rate), scale(Scale)
+  {
+    assert(InputBits>0 && InputBits<=8);
+    Reset();
+    set(0);
   }
-  void set(U32 cx) {
-    cxt=cx;
+  void set(U32 ctx) {
+    Context = (ctx&mask)*stride;
+    bCount=B=0;
   }
-  void mix(Mixer& m, int rate=7) {
-    //adapt (update prediction from previous pass)
-    *cp += ((y<<16)-(*cp)+(1<<(rate-1))) >> rate;
-    //predict
-    U32 idx=(cxt*256+c0)&mask;  //c0: the partial byte
-    assert(idx<t.size());
-    cp=&t[idx];
-    int p=(*cp)>>4;
-    int stretched_p=stretch(p);
-    m.add(stretched_p/2);
+  void Reset() {
+    for (U32 i=0; i<Data.size(); ++i)
+      Data[i]=0x7FFF;
+    cp=&Data[0];
+  }
+  void update() override {
+    INJECT_SHARED_y
+    *cp+=((y<<16)-(*cp)+(1<<(rate-1)))>>rate;
+    B+=(y && B>0);
+  }
+  void setscale(const int Scale){scale=Scale;}
+  void mix(Mixer& m) {
+    updater.subscribe(this);
+    cp = &Data[Context+B];
+    const int Prediction = (*cp)>>4;
+    m.add((stretch(Prediction)*scale)>>8);
+    m.add(((Prediction-2048)*scale)>>9);
+    bCount++; B+=B+1;
+    assert(bCount<=bTotal);
   }
 };
 
@@ -2523,50 +2514,127 @@ public:
   a 22 bit prediction and a 10 bit adaptation rate offset.
 
   - BitsOfContext: How many bits to use for each context. Higher bits are discarded.
-  - BitsPerContext: How many bits [1..8] of input are to be modelled for each context.
+  - InputBits: How many bits [1..8] of input are to be modelled for each context.
     New contexts must be set at those intervals.
   - Rate: Initial adaptation rate offset [0..1023]. Lower offsets mean faster adaptation.
     Will be increased on every occurrence until the higher bound is reached.
 
-  Uses 2^(BitsOfContext+BitsPerContext+2) bytes of memory.
+    Uses (2^(BitsOfContext+2))*((2^InputBits)-1) bytes of memory.
 */
 
-class StationaryMap {
-  Array<U32> Data;
-  int Context, Mask, bCount, B;
-  U32 *cp;
+class StationaryMap : IPredictor {
 public:
-  StationaryMap(int BitsOfContext, int BitsPerContext = 8, int Rate = 0): Data(1ull<<(BitsOfContext+BitsPerContext)), Context(0), Mask(1<<BitsPerContext), bCount(1), B(1) {
-    assert(BitsOfContext<16);
-    assert(BitsPerContext && BitsPerContext<=8);
-    Reset(Rate);
+  static constexpr int MIXERINPUTS = 2;
+private:
+  const Shared * const shared;
+  Array<U32> Data;
+  const U32 mask, maskbits, stride, bTotal;
+  U32 Context, bCount,  B;
+  U32 *cp;
+  int scale;
+  const U16 limit;
+  int* dt;
+public:
+  StationaryMap(const Shared * const sh, const int BitsOfContext, const int InputBits, 
+                const int Scale, const U16 Limit) : shared(sh), 
+  Data((UINT64_C(1)<<BitsOfContext)*((UINT64_C(1)<<InputBits)-1)), 
+  mask((1<<BitsOfContext)-1), maskbits(BitsOfContext), stride((1<<InputBits)-1), bTotal(InputBits),
+  scale(Scale), limit(Limit)
+ {
+    assert(InputBits>0 && InputBits<=8);
+    assert(BitsOfContext+InputBits<=24);
+    dt=DivisionTable::getdt();
+    Reset(0);
+    set(0);
+  }
+  void set_direct(U32 ctx) { // ctx must be a direct context (no hash)
+    Context = (ctx&mask)*stride;
+    bCount=B=0;
+  }
+  void set(U64 ctx) { // ctx must be a hash
+    Context = (finalize64(ctx,maskbits)&mask)*stride;
+    bCount=B=0;
+  }
+  void Reset(const int Rate){
+    for (U32 i=0; i<Data.size(); ++i)
+      Data[i]=(0x7FF<<20)|min(1023,Rate);
     cp=&Data[0];
   }
-  void set(U32 ctx) {
-    Context = (ctx*Mask)&(Data.size()-Mask);
-  }
-  void Reset( int Rate = 0 ){
-    for (U32 i=0; i<Data.size(); ++i)
-      Data[i]=(0x7FF<<20)|min(0x3FF,Rate);
-  }
-  void mix(Mixer& m, const U16 Limit = 0x3FF) {
-    U32 Count = min(min(Limit,0x3FF), ((*cp)&0x3FF)+1);
+  void update() override {
+    U32 Count = min(min(limit,0x3FF), ((*cp)&0x3FF)+1);
+    INJECT_SHARED_y
     int Prediction = (*cp)>>10, Error = (y<<22)-Prediction;
     Error = ((Error/8)*dt[Count])/1024;
     Prediction = min(0x3FFFFF,max(0,Prediction+Error));
     *cp = (Prediction<<10)|Count;
-    B+=(y && B>1);
+    B+=(y && B>0);
+  }
+  void setscale(const int Scale){scale=Scale;}
+  void mix(Mixer& m) {
+    updater.subscribe(this);
     cp=&Data[Context+B];
-    Prediction = (*cp)>>20;
-    m.add(stretch(Prediction)/4);
-    m.add((Prediction-2048)/8);
-    bCount<<=1; B<<=1;
-    if (bCount==Mask){
-      bCount=1;
-      B=1;
-    }
+    int Prediction = (*cp)>>20;
+    m.add((stretch(Prediction)*scale)>>8);
+    m.add(((Prediction-2048)*scale)>>9);
+    bCount++; B+=B+1;
+    assert(bCount<=bTotal);
   }
 };
+
+
+/////////////////////////// IndirectMap /////////////////////////
+
+class IndirectMap : IPredictor {
+public:
+  static constexpr int MIXERINPUTS = 2;
+private:
+  const Shared * const shared;
+  Random rnd;
+  Array<U8> Data;
+  StateMap sm;
+  const U32 mask, maskbits, stride, bTotal;
+  U32 Context, bCount, B;
+  U8 *cp;
+  int scale;
+public:
+  IndirectMap(const Shared * const sh, const int BitsOfContext, const int InputBits, const int Scale, const int Limit): 
+    shared(sh), Data((UINT64_C(1)<<BitsOfContext)*((UINT64_C(1)<<InputBits)-1)), 
+    sm {sh,1,256,1023,StateMap::BITHISTORY}, /* StateMap : s, n, lim, init */
+    mask((1<<BitsOfContext)-1), maskbits(BitsOfContext), stride((1<<InputBits)-1), bTotal(InputBits),
+    scale(Scale)
+  {
+    assert(InputBits>0 && InputBits<=8);
+    assert(BitsOfContext+InputBits<=24);
+    cp=&Data[0];
+    set_direct(0);
+    sm.setlimit(Limit);
+  }
+  void set_direct(const U32 ctx) {
+    Context = (ctx&mask)*stride;
+    bCount=B=0;
+  }
+  void set(const U64 ctx) {
+    Context = (finalize64(ctx,maskbits))*stride;
+    bCount=B=0;
+  }
+  void update() override {
+    INJECT_SHARED_y
+    StateTable::update(cp, y, rnd);
+    B+=(y && B>0);
+  }
+  void setscale(const int Scale){scale=Scale;}
+  void mix(Mixer& m) {
+    updater.subscribe(this);
+    cp=&Data[Context+B];
+    const U8 state = *cp;
+    const int p1 = sm.p1(state);
+    m.add((stretch(p1)*scale)>>8);
+    m.add(((p1-2048)*scale)>>9);
+    bCount++; B+=B+1;
+    assert(bCount<=bTotal);
+  }
+};
+
 
 // Context map for large contexts.  Most modeling uses this type of context
 // map.  It includes a built in RunContextMap to predict the last byte seen
@@ -2609,7 +2677,12 @@ public:
 // a second time.  This is indicated by <count,d> = <1,0> (2).  After update,
 // <count,d> is updated to <2,0> or <1,1> (4 or 3).
 
-class ContextMap {
+class ContextMap : IPredictor {
+public:
+  static constexpr int MIXERINPUTS = 5;
+private:
+  const Shared * const shared;
+  Random rnd;
   const int C;  // max number of contexts
   class E {  // hash element, 64 bytes
     U16 chk[7];  // byte context checksums
@@ -2618,218 +2691,188 @@ class ContextMap {
     U8 bh[7][7]; // byte context, 3-bit context -> bit history state
       // bh[][0] = 1st bit, bh[][1,2] = 2nd bit, bh[][3..6] = 3rd bit
       // bh[][0] is also a replacement priority, 0 = empty
-    U8* get(U16 chk);  // Find element (0-6) matching checksum.
+    inline U8* get(const U16 chksum) { // Find element (0-6) matching checksum.
       // If not found, insert or replace lowest priority (not last).
+      // Find or create hash element matching checksum ch
+      if (chk[last&15]==chksum) return &bh[last&15][0];
+      int b=0xffff, bi=0;
+      for (int i=0; i<7; ++i) {
+        if (chk[i]==chksum) {last=last<<4|i; return (U8*)&bh[i][0];}
+        int pri=bh[i][0];
+        if (pri<b && (last&15)!=i && last>>4!=i) {b=pri; bi=i;}
+      }
+      return last=0xf0|bi, chk[bi]=chksum, (U8*)memset(&bh[bi][0], 0, 7);
+    }
   };
   Array<E,64> t;  // bit histories for bits 0-1, 2-4, 5-7
     // For 0-1, also contains a run count in bh[][4] and value in bh[][5]
     // and pending update count in bh[7]
   Array<U8*> cp;   // C pointers to current bit history
   Array<U8*> cp0;  // First element of 7 element array containing cp[i]
-  Array<U32> cxt;  // C whole byte contexts (hashes)
+  Array<U32> cxt;  // C whole byte context hashes
+  Array<U16> chk;  // C whole byte context checksums
   Array<U8*> runp; // C [0..3] = count, value, unused, unused
-  StateMap *sm;    // C maps of state -> p
-  int cn;          // Next context to set by set()
-  U8 bit, lastByte;
+  StateMap sm;   // C maps of state -> p
+  int cn;        // Next context to set by set()
+  const U32 mask;
+  const int hashbits;
+  U64 validflags;
 public:
-  ContextMap(int m, int c=1);  // m = memory in bytes, a power of 2, C = c
-  ~ContextMap();
-  void Train(U8 B);
-  void set(U32 cx, int next=-1);   // set next whole byte context to cx; if "next" is 0 then set order does not matter
-  int mix(Mixer& m);
+  // Construct using m bytes of memory for c contexts                                                    
+  ContextMap(const Shared * const sh, U64 m, const int c): shared(sh), C(c), t(m>>6), cp(c), cp0(c),
+    cxt(c), chk(c), runp(c), sm(sh,c,256,1023,StateMap::BITHISTORY), cn(0),
+    mask(U32(t.size()-1)), hashbits(ilog2(mask+1)), validflags(0) {
+    assert(m>=64 && ispowerof2(m));
+    assert(sizeof(E)==64);
+    assert(C<=(int)sizeof(validflags)*8); // validflags is 64 bits - it can't support more than 64 contexts
+  }
+
+  // set next whole byte context to cx
+  inline void set(const U64 cx) {
+    assert(cn>=0 && cn<C);
+    const U32 ctx = cxt[cn] = finalize64(cx,hashbits);
+    const U16 checksum = chk[cn] = (U16)checksum64(cx,hashbits,16);
+    U8* base = cp0[cn]=cp[cn]=t[ctx&mask].get(checksum);
+    runp[cn]=base+3;
+    // Update pending bit histories for bits 2-7
+    if (base[3]==2) {
+      const int c=base[4]+256;
+      U8 *p=t[(ctx+(c>>6))&mask].get(checksum);
+      p[0]=1+((c>>5)&1);
+      p[1+((c>>5)&1)]=1+((c>>4)&1);
+      p[3+((c>>4)&3)]=1+((c>>3)&1);
+      p=t[(ctx+(c>>3))&mask].get(checksum);
+      p[0]=1+((c>>2)&1);
+      p[1+((c>>2)&1)]=1+((c>>1)&1);
+      p[3+((c>>1)&3)]=1+(c&1);
+    }
+    cn++;
+    validflags=(validflags<<1)+1;
+  }
+
+  inline void skip() {
+    assert(cn>=0 && cn<C);
+    cn++;
+    validflags<<=1;
+  }
+
+  void update() override {
+    INJECT_SHARED_bpos INJECT_SHARED_c0 INJECT_SHARED_c1 INJECT_SHARED_y
+    for (int i=0; i<cn; ++i) {
+      if(((validflags>>(cn-1-i))&1)!=0) {
+        // Update bit history state byte
+        if (cp[i]!=nullptr) {
+          assert(cp[i]>=&t[0].bh[0][0] && cp[i]<=&t[t.size()-1].bh[6][6]);
+          assert((uintptr_t(cp[i])&63)>=15);
+          StateTable::update(cp[i],y,rnd);
+        }
+
+        // Update context pointers
+        if (bpos>1 && runp[i][0]==0)
+          cp[i]=nullptr;
+        else {
+          switch(bpos) {
+            case 1: case 3: case 6: cp[i]=cp0[i]+1+(c0&1); break;
+            case 4: case 7: cp[i]=cp0[i]+3+(c0&3); break;
+            case 2: case 5: {
+              const U16 checksum = chk[i];
+              const U32 ctx = cxt[i];
+              cp0[i]=cp[i]=t[(ctx+c0)&mask].get(checksum); break;
+            }
+            case 0:
+            {
+              // Update run count of previous context
+              if (runp[i][0]==0)  // new context
+                runp[i][0]=2, runp[i][1]=c1;
+              else if (runp[i][1]!=c1)  // different byte in context
+                runp[i][0]=1, runp[i][1]=c1;
+              else if (runp[i][0]<254)  // same byte in context
+                runp[i][0]+=2;
+              else if (runp[i][0]==255)
+                runp[i][0]=128;
+              break;
+            }
+          }
+        }
+      }
+    }
+    if (bpos==0) {cn = 0; validflags = 0;}
+  }
+
+  void mix(Mixer& m) {
+    updater.subscribe(this);
+    sm.subscribe();
+    INJECT_SHARED_bpos INJECT_SHARED_c0
+    for (int i=0; i<cn; ++i) {
+      if(((validflags>>(cn-1-i))&1)!=0) {
+        // predict from last byte in context
+        if ((runp[i][1]+256)>>(8-bpos)==c0) {
+          int rc=runp[i][0];  // count*2, +1 if 2 different bytes seen
+          int sign=(runp[i][1]>>(7-bpos)&1)*2-1;  // predicted bit + for 1, - for 0
+          int c=ilog(rc+1)<<(2+(~rc&1));
+          m.add(sign*c);
+        }
+        else
+          m.add(0); //p=0.5
+
+        // predict from bit context
+        const int s = cp[i]!=nullptr ?  *cp[i] : 0;
+        if (s==0) {  //skip context
+          sm.skip(i);
+          m.add(0);
+          m.add(0);
+          m.add(0);
+          m.add(0);
+        } else {
+          const int p1=sm.p2(i,s);
+          const int st=stretch(p1)>>2;
+          const int context_is_young=int(s<=2);
+          m.add(st>>context_is_young);
+          m.add((p1-2048)>>3);
+          const int n0=-!StateTable::next(s,2);
+          const int n1=-!StateTable::next(s,3);
+          m.add((n0|n1)&st); // when both counts are nonzero add(0) otherwise add(st)
+          const int p0=4095-p1;
+          m.add(((p1&n0)-(p0&n1))>>4);
+        }
+      } else { //skipped context
+        sm.skip(i);
+        m.add(0);m.add(0);m.add(0);m.add(0);m.add(0);
+      }
+    }
+  }
 };
 
-// Find or create hash element matching checksum ch
-inline U8* ContextMap::E::get(U16 ch) {
-  if (chk[last&15]==ch) return &bh[last&15][0];
-  int b=0xffff, bi=0;
-  for (int i=0; i<7; ++i) {
-    if (chk[i]==ch) return last=last<<4|i, (U8*)&bh[i][0];
-    int pri=bh[i][0];
-    if (pri<b && (last&15)!=i && last>>4!=i) b=pri, bi=i;
-  }
-  return last=0xf0|bi, chk[bi]=ch, (U8*)memset(&bh[bi][0], 0, 7);
-}
-
-// Construct using m bytes of memory for c contexts
-ContextMap::ContextMap(int m, int c): C(c), t(m>>6), cp(c), cp0(c),
-    cxt(c), runp(c), cn(0) {
-  assert(m>=64 && (m&(m-1))==0);  // power of 2?
-  assert(sizeof(E)==64);
-  sm=new StateMap[C];
-  for (int i=0; i<C; ++i) {
-    cp0[i]=cp[i]=&t[0].bh[0][0];
-    runp[i]=cp[i]+3;
-  }
-  bit=lastByte=0;
-}
-
-ContextMap::~ContextMap() {
-  delete[] sm;
-}
-
-// Set the i'th context to cx
-inline void ContextMap::set(U32 cx, int next) {
-  int i=cn++;
-  i&=next;
-  assert(i>=0 && i<C);
-  cx=cx*987654323+i;  // permute (don't hash) cx to spread the distribution
-  cx=cx<<16|cx>>16;
-  cxt[i]=cx*123456791+i;
-}
-
-void ContextMap::Train(U8 B){
-  U8 bits = 1;
-  for (int k=0;k<8;k++){
-    for (int i=0; i<cn; ++i){
-      if (cp[i])
-        *cp[i]=nex(*cp[i], bit);
-
-      // Update context pointers
-      if (k>1 && runp[i][0]==0)
-        cp[i]=0;
-      else
-      {
-       U16 chksum=cxt[i]>>16;
-       U64 tmask=t.size()-1;
-       switch(k)
-       {
-        case 1: case 3: case 6: cp[i]=cp0[i]+1+(bits&1); break;
-        case 4: case 7: cp[i]=cp0[i]+3+(bits&3); break;
-        case 2: case 5: cp0[i]=cp[i]=t[(cxt[i]+bits)&tmask].get(chksum); break;
-        default:
-        {
-         cp0[i]=cp[i]=t[(cxt[i]+bits)&tmask].get(chksum);
-         // Update pending bit histories for bits 2-7
-         if (cp0[i][3]==2) {
-           const int c=cp0[i][4]+256;
-           U8 *p=t[(cxt[i]+(c>>6))&tmask].get(chksum);
-           p[0]=1+((c>>5)&1);
-           p[1+((c>>5)&1)]=1+((c>>4)&1);
-           p[3+((c>>4)&3)]=1+((c>>3)&1);
-           p=t[(cxt[i]+(c>>3))&tmask].get(chksum);
-           p[0]=1+((c>>2)&1);
-           p[1+((c>>2)&1)]=1+((c>>1)&1);
-           p[3+((c>>1)&3)]=1+(c&1);
-           cp0[i][6]=0;
-         }
-         // Update run count of previous context
-         if (runp[i][0]==0)  // new context
-           runp[i][0]=2, runp[i][1]=lastByte;
-         else if (runp[i][1]!=lastByte)  // different byte in context
-           runp[i][0]=1, runp[i][1]=lastByte;
-         else if (runp[i][0]<254)  // same byte in context
-           runp[i][0]+=2;
-         else if (runp[i][0]==255)
-           runp[i][0]=128;
-         runp[i]=cp0[i]+3;
-        } break;
-       }
-      }
-    }
-    bit = (B>>(7-k))&1;
-    bits+=bits + bit;
-  }
-  cn=0;
-  lastByte=B;
-}
-
-// Update the model with bit y, and predict next bit to mixer m.
-int ContextMap::mix(Mixer& m) {
-  // Update model with y
-  U8 c1=buf(1);
-  int result=0;
-  for (int i=0; i<cn; ++i) {
-    if (cp[i]) {
-      assert(cp[i]>=&t[0].bh[0][0] && cp[i]<=&t[t.size()-1].bh[6][6]);
-      assert((uintptr_t(cp[i])&63)>=15);
-      int ns=nex(*cp[i], y);
-      if (ns>=204 && rnd() << ((452-ns)>>3)) ns-=4;  // probabilistic increment
-      *cp[i]=ns;
-    }
-
-    // Update context pointers
-    if (bpos>1 && runp[i][0]==0)
-      cp[i]=0;
-    else
-    {
-      U16 chksum=cxt[i]>>16;
-      U64 tmask=t.size()-1; 
-      switch(bpos)
-      {
-        case 1: case 3: case 6: cp[i]=cp0[i]+1+(c0&1); break;
-        case 4: case 7: cp[i]=cp0[i]+3+(c0&3); break;
-        case 2: case 5: cp0[i]=cp[i]=t[(cxt[i]+c0)&tmask].get(chksum); break;
-        default:
-        {
-          cp0[i]=cp[i]=t[(cxt[i]+c0)&tmask].get(chksum);
-          // Update pending bit histories for bits 2-7
-          if (cp0[i][3]==2) {
-            const int c=cp0[i][4]+256;
-            U8 *p=t[(cxt[i]+(c>>6))&tmask].get(chksum);
-            p[0]=1+((c>>5)&1);
-            p[1+((c>>5)&1)]=1+((c>>4)&1);
-            p[3+((c>>4)&3)]=1+((c>>3)&1);
-            p=t[(cxt[i]+(c>>3))&tmask].get(chksum);
-            p[0]=1+((c>>2)&1);
-            p[1+((c>>2)&1)]=1+((c>>1)&1);
-            p[3+((c>>1)&3)]=1+(c&1);
-            cp0[i][6]=0;
-          }
-          // Update run count of previous context
-          if (runp[i][0]==0)  // new context
-            runp[i][0]=2, runp[i][1]=c1;
-          else if (runp[i][1]!=c1)  // different byte in context
-            runp[i][0]=1, runp[i][1]=c1;
-          else if (runp[i][0]<254)  // same byte in context
-            runp[i][0]+=2;
-          else if (runp[i][0]==255)
-            runp[i][0]=128;
-          runp[i]=cp0[i]+3;
-        } break;
-      }
-    }
-
-    // predict from last byte in context
-    if ((runp[i][1]+256)>>(8-bpos)==c0) {
-      int rc=runp[i][0];  // count*2, +1 if 2 different bytes seen
-      int sign=(runp[i][1]>>(7-bpos)&1)*2-1;  // predicted bit + for 1, - for 0
-      int c=ilog(rc+1)<<(2+(~rc&1));
-      m.add(sign*c);
-    }
-    else
-      m.add(0); //p=0.5
-
-    // predict from bit context
-    int s = 0;
-    if (cp[i]) s = *cp[i];
-    mix2(m,s,sm[i]);
-    
-    if(s>0)result++;
-
-  }
-  if (bpos==7) cn=0;
-  return result;
-}
 
 /*
-Context map for large contexts (32bits).
+Context map for large contexts.
 Maps to a bit history state, a 3 MRU byte history, and 1 byte RunStats.
 
-Bit and byte histories are stored in a hash table with 64 byte buckets. 
+Bit and byte histories are stored in a hash table with 64 byte buckets.
 The buckets are indexed by a context ending after 0, 2 or 5 bits of the
 current byte. Thus, each byte modeled results in 3 main memory accesses
 per context, with all other accesses to cache.
 
 On a byte boundary (bit 0), only 3 of the 7 bit history states are used.
-Of the remaining 4 bytes, 3 are then used to store the last bytes seen
-in this context, 7 bits to store the length of consecutive occurrences of
-the previously seen byte, and 1 bit to signal if more than 1 byte as been
-seen in this context. The byte history is then combined with the bit history
-states to provide additional states that are then mapped to predictions.
+Of the remaining 4 bytes, 1 byte is used as a run length (the consecutive
+occurrences of the previously seen byte), 3 are used to store the last
+3 distinct bytes seen in this context. The byte history is then combined
+with the bit history states to provide additional states that are then
+mapped to predictions.
 */
 
-class ContextMap2 {
+#define CM_USE_NONE 0
+#define CM_USE_RUNSTATS 1
+#define CM_USE_BYTEHISTORY 2
+
+class ContextMap2 : IPredictor {
+public:
+  static constexpr int MIXERINPUTS = 4;
+  static constexpr int MIXERINPUTS_RUNSTATS = 1;
+  static constexpr int MIXERINPUTS_BYTEHISTORY = 2;
+private:
+  const Shared * const shared;
+  Random rnd;
   const U32 C; // max number of contexts
   class Bucket { // hash bucket, 64 bytes
     U16 Checksums[7]; // byte context checksums
@@ -2838,190 +2881,505 @@ class ContextMap2 {
     U8 BitState[7][7]; // byte context, 3-bit context -> bit history state
                        // BitState[][0] = 1st bit, BitState[][1,2] = 2nd bit, BitState[][3..6] = 3rd bit
                        // BitState[][0] is also a replacement priority, 0 = empty
-    inline U8* Find(U16 Checksum) { // Find or create hash element matching checksum. 
+    inline U8* Find(U16 Checksum) { // Find or create hash element matching checksum.
                                     // If not found, insert or replace lowest priority (skipping 2 most recent).
       if (Checksums[MRU&15]==Checksum)
         return &BitState[MRU&15][0];
-      int worst=0xFFFF, index=0;
+      int worst=0xFFFF, idx=0;
       for (int i=0; i<7; ++i) {
-        if (Checksums[i]==Checksum)
-          return MRU=MRU<<4|i, (U8*)&BitState[i][0];
+        if (Checksums[i]==Checksum) {
+          MRU=MRU<<4|i;
+          return (U8*)&BitState[i][0];
+        }
         if (BitState[i][0]<worst && (MRU&15)!=i && MRU>>4!=i) {
           worst = BitState[i][0];
-          index=i;
+          idx=i;
         }
       }
-      MRU = 0xF0|index;
-      Checksums[index] = Checksum;
-      return (U8*)memset(&BitState[index][0], 0, 7);
+      MRU = 0xF0|idx;
+      Checksums[idx] = Checksum;
+      return (U8*)memset(&BitState[idx][0], 0, 7);
     }
   };
   Array<Bucket, 64> Table; // bit histories for bits 0-1, 2-4, 5-7
                            // For 0-1, also contains run stats in BitState[][3] and byte history in BitState[][4..6]
-  Array<U8*> BitState; // C pointers to current bit history states
-  Array<U8*> BitState0; // First element of 7 element array containing BitState[i]
-  Array<U8*> ByteHistory; // C pointers to run stats plus byte history, 4 bytes, [RunStats,1..3]
-  Array<U32> Contexts; // C whole byte contexts (hashes)
-  Array<bool> HasHistory; // True if context has a full valid byte history (i.e., seen at least 3 times)
-  StateMap **Maps6b, **Maps8b, **Maps12b;
+  Array<U8*> BitState;     // C pointers to current bit history states
+  Array<U8*> BitState0;    // First element of 7 element array containing BitState[i]
+  Array<U8*> ByteHistory;  // C pointers to run stats plus byte history, 4 bytes, [RunStats,1..3]
+  Array<U32> Contexts;     // C whole byte context hashes
+  Array<U16> Chk;          // C whole byte context checksums
+  StateMap runmap, statemap, bhmap8b, bhmap12b;
   U32 index; // Next context to set by set()
-  U32 bits;
-  U8 lastByte, lastBit, bitPos;
-  inline void Update() {
-    U64 mask = Table.size()-1;
-    for (U32 i=0; i<index; i++) {
-      if (BitState[i])
-        *BitState[i] = nex(*BitState[i], lastBit);
-
-      if (bitPos>1 && ByteHistory[i][0]==0)
-        BitState[i] = nullptr;
-      else {
-        U16 chksum = Contexts[i]>>16;
-        switch (bitPos) {
-          case 0: {
-            BitState[i] = BitState0[i] = Table[(Contexts[i]+bits)&mask].Find(chksum);
-            // Update pending bit histories for bits 2-7
-            if (BitState0[i][3]==2) {
-              const int c = BitState0[i][4]+256;
-              U8 *p = Table[(Contexts[i]+(c>>6))&mask].Find(chksum);
-              p[0] = 1+((c>>5)&1);
-              p[1+((c>>5)&1)] = 1+((c>>4)&1);
-              p[3+((c>>4)&3)] = 1+((c>>3)&1);
-              p = Table[(Contexts[i]+(c>>3))&mask].Find(chksum);
-              p[0] = 1+((c>>2)&1);
-              p[1+((c>>2)&1)] = 1+((c>>1)&1);
-              p[3+((c>>1)&3)] = 1+(c&1);
-              BitState0[i][6] = 0;
-            }
-            // Update byte history of previous context
-            ByteHistory[i][3] = ByteHistory[i][2];
-            ByteHistory[i][2] = ByteHistory[i][1];
-            if (ByteHistory[i][0]==0)  // new context
-              ByteHistory[i][0]=2, ByteHistory[i][1]=lastByte;
-            else if (ByteHistory[i][1]!=lastByte)  // different byte in context
-              ByteHistory[i][0]=1, ByteHistory[i][1]=lastByte;
-            else if (ByteHistory[i][0]<254)  // same byte in context
-              ByteHistory[i][0]+=2;
-            else if (ByteHistory[i][0]==255) // more than one byte seen, but long run of current byte, reset to single byte seen
-              ByteHistory[i][0] = 128;
-
-            ByteHistory[i] = BitState0[i]+3;
-            HasHistory[i] = *BitState0[i]>15;
-            break;
-          }
-          case 2: case 5: {
-            BitState[i] = BitState0[i] = Table[(Contexts[i]+bits)&mask].Find(chksum);
-            break;
-          }
-          case 1: case 3: case 6: BitState[i] = BitState0[i]+1+lastBit; break;
-          case 4: case 7: BitState[i] = BitState0[i]+3+(bits&3); break;
-        }
-      }
-    }
-  }
+  const U32 mask;
+  const int hashbits;
+  U64 validflags;
+  int scale;
+  U32 usewhat;
 public:
+  int order=0; // is set after mix()
   // Construct using Size bytes of memory for Count contexts
-  ContextMap2(const U64 Size, const U32 Count) : C(Count), Table(Size>>6), BitState(Count), BitState0(Count), ByteHistory(Count), Contexts(Count), HasHistory(Count){
-    assert(Size>=64 && (Size&(Size-1))==0);  // power of 2?
+  ContextMap2(const Shared * const sh, const U64 Size, const U32 Count, const int Scale, const U32 uw) : shared(sh), 
+    C(Count), Table(Size>>6), BitState(Count), BitState0(Count), ByteHistory(Count), 
+    Contexts(Count), Chk(Count),
+    runmap   (sh,Count,(1<<12),127,StateMap::RUN),        /* StateMap : s, n, lim, init */  // 63-255
+    statemap (sh,Count,(1<<8),511,StateMap::BITHISTORY),  /* StateMap : s, n, lim, init */  // 511-1023
+    bhmap8b  (sh,Count,(1<<8),511,StateMap::GENERIC),     /* StateMap : s, n, lim, init */  // 511-1023
+    bhmap12b (sh,Count,(1<<12),511,StateMap::GENERIC),    /* StateMap : s, n, lim, init */  // 255-1023
+    index(0), mask(U32(Table.size()-1)), hashbits(ilog2(mask+1)), validflags(0), scale(Scale), usewhat(uw) {
+    assert(Size>=64 && ispowerof2(Size));
     assert(sizeof(Bucket)==64);
-    Maps6b = new StateMap*[C];
-    Maps8b = new StateMap*[C];
-    Maps12b = new StateMap*[C];
+    assert(C<=(int)sizeof(validflags)*8); // validflags is 64 bits - it can't support more than 64 contexts
     for (U32 i=0; i<C; i++) {
-      Maps6b[i] = new StateMap((1<<6)+8);
-      Maps8b[i] = new StateMap(1<<8);
-      Maps12b[i] = new StateMap((1<<12)+(1<<9));
       BitState[i] = BitState0[i] = &Table[i].BitState[0][0];
       ByteHistory[i] = BitState[i]+3;
     }
-    index = 0;
-    lastByte = lastBit = 0;
-    bits = 1;  bitPos = 0;
   }
-  ~ContextMap2() {
-    for (U32 i=0; i<C; i++) {
-      delete Maps6b[i];
-      delete Maps8b[i];
-      delete Maps12b[i];
+  //~ContextMap2() {
+  //  runmap.print();
+  //}
+  inline void set(const U64 ctx) { // set next whole byte context to ctx
+    assert(index>=0 && index<C);
+    const U32 ctx0 = Contexts[index] = finalize64(ctx,hashbits);
+    const U16 chk0 = Chk[index] = (U16)checksum64(ctx,hashbits,16);
+    U8* base = BitState[index] = BitState0[index] = Table[ctx0&mask].Find(chk0);
+    ByteHistory[index] = &base[3];
+    const U8 runcount = base[3];
+    if (runcount==255) { // pendig
+      // Update pending bit histories for bits 2-7
+      // in case of a collision updating (mixing) is slightly better (but slightly slower) then resetting, so we update
+      const int c = base[4]+256;
+      U8 *p1a = Table[(ctx0+(c>>6))&mask].Find(chk0);
+      StateTable::update(p1a,((c>>5)&1),rnd);
+      StateTable::update(p1a+1+((c>>5)&1),((c>>4)&1),rnd);
+      StateTable::update(p1a+3+((c>>4)&3),((c>>3)&1),rnd);
+      U8 *p1b = Table[(ctx0+(c>>3))&mask].Find(chk0);
+      StateTable::update(p1b,(c>>2)&1,rnd);
+      StateTable::update(p1b+1+((c>>2)&1),(c>>1)&1,rnd);
+      StateTable::update(p1b+3+((c>>1)&3),c&1,rnd);
+      base[3]=1; // runcount: flag for having completed storing all the 8 bits of the first byte
+    } else {
+      const U8 byte_state = base[0];
+      if(byte_state==0) // empty slot, new context
+        base[3]=255; // runcount: flag for skipping updating bits 2..7
     }
-    delete[] Maps6b;
-    delete[] Maps8b;
-    delete[] Maps12b;
-  }
-  inline void set(U32 ctx) { // set next whole byte context to ctx
-    ctx = ctx*987654323+index; // permute (don't hash) ctx to spread the distribution
-    ctx = ctx<<16|ctx>>16;
-    Contexts[index] = ctx*123456791+index;
     index++;
-    assert(index>0 && index<=C);
+    validflags=(validflags<<1)+1;
   }
-  void Train(const U8 B){
-    for (bitPos=0; bitPos<8; bitPos++){
-      Update();
-      lastBit = (B>>(7-bitPos))&1;
-      bits += bits+lastBit;
-    }
-    index = 0;
-    bits = 1; bitPos = 0;
-    lastByte = B;
-  }
-  int mix(Mixer& m) {
-    int result = 0;
-    lastBit = y;
-    bitPos = bpos;
-    bits+=bits+lastBit;
-    lastByte = bits&0xFF;
-    if (bitPos==0)
-      bits = 1;
-    Update();
 
+  inline void skip() {
+    assert(index>=0 && index<C);
+    index++;
+    validflags<<=1;
+  }
+
+  void update() override {
+    INJECT_SHARED_bpos INJECT_SHARED_c0 INJECT_SHARED_c1 INJECT_SHARED_y
     for (U32 i=0; i<index; i++) {
-      // predict from bit context
-      int state = (BitState[i])?*BitState[i]:0;
-      result+=(state>0);
-      int p1 = Maps8b[i]->p(state);
-      int n0=nex(state, 2), n1=nex(state, 3), k=-~n1;
-      k = (k*64)/(k-~n0);
-      n0=-!n0, n1=-!n1;
-      // predict from last byte in context
-      if ((U32)((ByteHistory[i][1]+256)>>(8-bitPos))==bits){
-        int RunStats = ByteHistory[i][0]; // count*2, +1 if 2 different bytes seen
-        int sign=(ByteHistory[i][1]>>(7-bitPos)&1)*2-1;  // predicted bit + for 1, - for 0
-        int value = ilog(RunStats+1)<<(3-(RunStats&1));
-        m.add(sign*value);
-      }
-      else if (bitPos>0 && (ByteHistory[i][0]&1)>0) {
-        if ((U32)((ByteHistory[i][2]+256)>>(8-bitPos))==bits)
-          m.add((((ByteHistory[i][2]>>(7-bitPos))&1)*2-1)*128);
-        else if (HasHistory[i] && (U32)((ByteHistory[i][3]+256)>>(8-bitPos))==bits)
-          m.add((((ByteHistory[i][3]>>(7-bitPos))&1)*2-1)*128);
-        else
-          m.add(0);
-      }
-      else
-        m.add(0);
+      if(((validflags>>(index-1-i))&1)!=0) {
+        if (BitState[i])
+          StateTable::update(BitState[i],y,rnd);
 
-      if (HasHistory[i]) {
-        state  = (ByteHistory[i][1]>>(7-bitPos))&1;
-        state |= ((ByteHistory[i][2]>>(7-bitPos))&1)*2;
-        state |= ((ByteHistory[i][3]>>(7-bitPos))&1)*4;
-      }
-      else
-        state = 8;
+        U8* const bytehistory_ptr=ByteHistory[i];
+        const U8 runcount = bytehistory_ptr[0];
 
-      int st = stretch(p1)>>2;
-      m.add(st);
-      m.add((p1-2047)>>3);
-      p1>>=4;
-      int p0 = 255-p1;
-      m.add((st*(n1-n0)));
-      m.add((p1&n0)-(p0&n1));
-      m.add((p1&n1)-(p0&n0));
-      m.add(stretch(Maps12b[i]->p((state<<9)|(bitPos<<6)|k))>>2);
-      m.add(stretch(Maps6b[i]->p((state<<3)|bitPos))>>2);
+        if (runcount==255 && bpos>=2)
+          BitState[i] = nullptr; // shadow non-reserverd slots for bits 2..7 and skip update temporarily
+        else {
+          switch (bpos) {
+            case 0: {
+              // Update byte history
+              const U8 byte_state = bytehistory_ptr[-3];
+              if (byte_state<3) { // 1st byte has just become known
+                bytehistory_ptr[1]=bytehistory_ptr[2]=bytehistory_ptr[3]=c1; // set all byte candidates to c1
+              }
+              else { // 2nd byte is known
+                const bool is_match=bytehistory_ptr[1]==c1;
+                if (is_match) {
+                  if (runcount<253)
+                    bytehistory_ptr[0]=runcount+1;
+                } else {
+                  bytehistory_ptr[0]=1; //runcount
+                  // scroll byte candidates
+                  bytehistory_ptr[3]=bytehistory_ptr[2]; 
+                  bytehistory_ptr[2]=bytehistory_ptr[1];
+                  bytehistory_ptr[1]=c1;
+                }
+              }
+              break;
+            }
+            case 2: case 5: {
+              const U16 chk = Chk[i];
+              const U32 ctx = Contexts[i];
+              BitState[i] = BitState0[i] = Table[(ctx+c0)&mask].Find(chk);
+              break;
+            }
+            case 1: case 3: case 6: BitState[i] = BitState0[i]+1+y; break;
+            case 4: case 7: BitState[i] = BitState0[i]+3+(c0&3); break;
+          }
+        }
+      }
     }
-    if (bitPos==7) index = 0;
-    return result;
+    if (bpos==0) {index = 0; validflags = 0;} // start over
+  }
+
+  void setscale(const int Scale){scale=Scale;}
+  void mix(Mixer& m) {
+    updater.subscribe(this);
+    statemap.subscribe();
+    if(usewhat&CM_USE_RUNSTATS){runmap.subscribe();}
+    if(usewhat&CM_USE_BYTEHISTORY){bhmap8b.subscribe();bhmap12b.subscribe();}
+    INJECT_SHARED_bpos INJECT_SHARED_c0
+    order = 0;
+    for (U32 i=0; i<index; i++) {
+      if(((validflags>>(index-1-i))&1)!=0) {
+        const int state = BitState[i]!=nullptr ? *BitState[i] : 0;
+        const int n0=StateTable::next(state,2);
+        const int n1=StateTable::next(state,3);
+        const int bit_is_uncertain=int(n0!=0 && n1!=0);
+
+        // predict from last byte(s) in context
+        U8* const bytehistory_ptr = ByteHistory[i];
+        U8 byte_state = bytehistory_ptr[-3];
+        const U8 byte1 = bytehistory_ptr[1];
+        const U8 byte2 = bytehistory_ptr[2];
+        const U8 byte3 = bytehistory_ptr[3];
+        const bool complete1 = (byte_state>=3 ) || (byte_state>=1 && bpos==0);
+        const bool complete2 = (byte_state>=7 ) || (byte_state>=3 && bpos==0);
+        const bool complete3 = (byte_state>=15) || (byte_state>=7 && bpos==0);
+        if(usewhat&CM_USE_RUNSTATS) {
+          const int bp=(0xFEA4>>(bpos<<1))&3; // {0}->0  {1}->1  {2,3,4}->2  {5,6,7}->3
+          bool skiprunmap=true;
+          if(complete1) {
+            if (((byte1+256)>>(8-bpos))==c0) { // 1st candidate (last byte seen) matches
+              const int predicted_bit=(byte1>>(7-bpos))&1;
+              const int byte1_is_uncertain=(byte2!=byte1);
+              const int runcount = bytehistory_ptr[0]; // 1..254
+              m.add(stretch(runmap.p2(i,runcount<<4|bp<<2|byte1_is_uncertain<<1|predicted_bit))>>(1+byte1_is_uncertain));
+              skiprunmap=false;
+            }
+            else if (complete2 && ((byte2+256)>>(8-bpos))==c0) { // 2nd candidate matches
+              const int predicted_bit=(byte2>>(7-bpos))&1;
+              const int byte2_is_uncertain=(byte3!=byte2);
+              m.add(stretch(runmap.p2(i,                    bit_is_uncertain<<1|predicted_bit))>>(2+byte2_is_uncertain));
+              skiprunmap=false;
+            }
+            // remark: considering the 3rd byte is not beneficial in most cases, except for some 8bpp images
+          }
+          if(skiprunmap) {
+            runmap.skip(i);
+            m.add(0);
+          }
+        }
+        // predict from bit context
+        if (state==0) {
+          statemap.skip(i);
+          m.add(0);
+          m.add(0);
+          m.add(0);
+          m.add(0);
+        } else {
+          const int p1=statemap.p2(i,state);
+          const int st=(stretch(p1)*scale)>>8;
+          const int context_is_young=int(state<=2);
+          m.add(st>>context_is_young);
+          m.add(((p1-2048)*scale)>>9);
+          m.add((bit_is_uncertain-1)&st); // when both counts are nonzero add(0) otherwise add(st)
+          const int p0=4095-p1;
+          m.add((((p1&(-!n0))-(p0&(-!n1)))*scale)>>10);
+          order++;
+        }
+        
+        if(usewhat&CM_USE_BYTEHISTORY) {
+          const int bh_bits =
+              (((byte1>>(7-bpos))&1)   )
+            | (((byte2>>(7-bpos))&1)<<1)
+            | (((byte3>>(7-bpos))&1)<<2);
+
+          int bh_state=0; // 4 bit
+          if     (complete3) bh_state=8|(bh_bits  ); //we have seen 3 bytes (at least) 
+          else if(complete2) bh_state=4|(bh_bits&3); //we have seen 2 bytes
+          else if(complete1) bh_state=2|(bh_bits&1); //we have seen 1 byte only
+                                                     //else new context (bh_state=0)
+ 
+          const U8 state_group=StateTable::group(state); //0..31
+          m.add(stretch(  bhmap8b.p2(i,bit_is_uncertain<<7|(bh_state<<3)|bpos) )>>2); // using bit_is_uncertain is generally beneficial except for some 8bpp image (noticable loss)
+          m.add(stretch( bhmap12b.p2(i,     state_group<<7|(bh_state<<3)|bpos) )>>2);
+        }
+      } else { //skipped context
+        if(usewhat&CM_USE_RUNSTATS) {
+          runmap.skip(i); m.add(0);
+        }
+        if(usewhat&CM_USE_BYTEHISTORY) {
+           bhmap8b.skip(i); m.add(0);
+          bhmap12b.skip(i); m.add(0);
+        }
+        statemap.skip(i); m.add(0);
+        m.add(0);m.add(0);m.add(0);
+      }
+    }
+  }
+};
+
+///////////////// Ordinary Least Squares predictor /////////////////
+
+template <typename F, typename T, const bool hasZeroMean = true>
+class OLS {
+  static constexpr F ftol = 1E-8;
+  static constexpr F sub = F(int64_t(!hasZeroMean)<<(8*sizeof(T)-1));
+private:
+  int n, kmax, km, index;
+  F lambda, nu;
+  F *x, *w, *b;
+  F **mCovariance, **mCholesky;
+  int Factor() {
+    // copy the matrix
+    for (int i=0; i<n; i++)
+      for (int j=0; j<n; j++)
+        mCholesky[i][j] = mCovariance[i][j];
+
+    for (int i=0; i<n; i++)
+      mCholesky[i][i] += nu;
+    for (int i=0; i<n; i++) {
+      for (int j=0; j<i; j++) {
+        F sum = mCholesky[i][j];
+        for (int k=0; k<j; k++)
+          sum -= (mCholesky[i][k] * mCholesky[j][k]);
+        mCholesky[i][j] = sum / mCholesky[j][j];
+      }
+      F sum = mCholesky[i][i];
+      for (int k=0; k<i; k++)
+        sum -= (mCholesky[i][k] * mCholesky[i][k]);
+      if (sum>ftol)
+        mCholesky[i][i] = sqrt(sum);
+      else
+        return 1;
+    }
+    return 0;
+  }
+  void Solve() {
+    for (int i=0; i<n; i++) {
+      F sum = b[i];
+      for (int j=0; j<i; j++)
+        sum -= (mCholesky[i][j] * w[j]);
+      w[i] = sum / mCholesky[i][i];
+    }
+    for (int i=n-1; i>=0; i--) {
+      F sum = w[i];
+      for (int j=i+1; j<n; j++)
+        sum -= (mCholesky[j][i] * w[j]);
+      w[i] = sum / mCholesky[i][i];
+    }
+  }
+public:
+  OLS(int n, int kmax=1, F lambda=0.998, F nu=0.001) : n(n), kmax(kmax), lambda(lambda), nu(nu) {
+    km = index = 0;
+    x = new F[n], w = new F[n], b = new F[n];
+    mCovariance = new F*[n], mCholesky = new F*[n];
+    for (int i=0; i<n; i++) {
+      x[i] = w[i] = b[i] = 0.;
+      mCovariance[i] = new F[n], mCholesky[i] = new F[n];
+      for (int j=0; j<n; j++)
+        mCovariance[i][j] = mCholesky[i][j] = 0.;
+    }
+  }
+  ~OLS() {
+    delete x, delete w, delete b;
+    for (int i=0; i<n; i++) {
+      delete mCovariance[i];
+      delete mCholesky[i];
+    }
+    delete[] mCovariance, delete[] mCholesky;
+  }
+  void Add(const T val) {
+    assert(index<n);
+    x[index++] = F(val)-sub;
+  }
+  void AddFloat(const F val) {
+    assert(index<n);
+    x[index++] = val-sub;
+  }
+  F Predict(const T **p) {
+    F sum = 0.;
+    for (int i=0; i<n; i++)
+      sum += w[i] * (x[i] = F(*p[i])-sub);
+    return sum+sub;
+  }
+  F Predict() {
+    assert(index==n);
+    index = 0;
+    F sum = 0.;
+    for (int i=0; i<n; i++)
+      sum += w[i] * x[i];
+    return sum+sub;
+  }
+  inline void Update(const T val) {
+#ifdef __GNUC__
+    if (chosen_simd==SIMD_AVX2)
+      UpdateAVX2(val);
+    else
+#endif
+      UpdateUnrolled(val);
+  }
+#ifdef __GNUC__
+  __attribute__ ((target ("avx2")))
+#endif
+  void UpdateAVX2(const T val) {
+    F mul = 1.0-lambda;
+    for (int j=0; j<n; j++)
+      for (int i=0; i<n; i++)
+        mCovariance[j][i] = lambda * mCovariance[j][i] + mul * (x[j] * x[i]);
+    mul*=(F(val)-sub);
+    for (int i=0; i<n; i++)
+      b[i] = lambda * b[i] + mul * x[i];
+    km++;
+    if (km>=kmax) {
+      if (!Factor()) Solve();
+      km = 0;
+    }
+  }
+  void UpdateUnrolled(const T val) {
+    F mul = 1.0-lambda;
+    int l = n-(n&3), i=0;
+    for (int j=0; j<n; j++) {
+    for (i=0; i<l; i+=4) {
+      mCovariance[j][i]   = lambda * mCovariance[j][i  ] + mul * (x[j] * x[i  ]);
+      mCovariance[j][i+1] = lambda * mCovariance[j][i+1] + mul * (x[j] * x[i+1]);
+      mCovariance[j][i+2] = lambda * mCovariance[j][i+2] + mul * (x[j] * x[i+2]);
+      mCovariance[j][i+3] = lambda * mCovariance[j][i+3] + mul * (x[j] * x[i+3]);
+    }
+    for (; i<n; i++)
+      mCovariance[j][i] = lambda * mCovariance[j][i] + mul * (x[j] * x[i]);
+    }
+    mul*=(F(val)-sub);
+    for (i=0; i<l; i+=4) {
+      b[i  ] = lambda * b[i  ] + mul * x[i  ];
+      b[i+1] = lambda * b[i+1] + mul * x[i+1];
+      b[i+2] = lambda * b[i+2] + mul * x[i+2];
+      b[i+3] = lambda * b[i+3] + mul * x[i+3];
+    }
+    for (; i<n; i++)
+      b[i] = lambda * b[i] + mul * x[i];
+    km++;
+    if (km>=kmax) {
+      if (!Factor()) Solve();
+      km = 0;
+    }
+  }
+};
+
+///////////////// Least Mean Squares predictor /////////////////
+
+template <typename F, typename T>
+class LMS {
+private:
+  F *weights, *eg, *buffer;
+  F rates[2];
+  F rho, complement, eps, prediction;
+  int S, D;
+public:
+  LMS(const int S, const int D, const F lRate, const F rRate, const F rho = (F)0.95, const F eps = (F)1e-3) : rates{ lRate, rRate }, rho(rho), complement(1.0f - rho), eps(eps), prediction(0.0f), S(S), D(D) {
+    assert(S>0 && D>0);
+    weights = new F[S+D], eg = new F[S+D], buffer = new F[S+D];
+    Reset();
+  }
+  ~LMS() {
+    delete weights, delete eg, delete buffer;
+  }
+  F Predict(const T sample) {
+    memmove(&buffer[S+1], &buffer[S], (D-1) * sizeof(F));
+    buffer[S] = sample;
+    prediction = 0.;
+    for (int i=0; i<S+D; i++)
+      prediction+= weights[i] * buffer[i];
+    return prediction;
+  }
+  void Update(const T sample) {
+    const F error = sample - prediction;
+    int i=0;
+    for (; i<S; i++) {
+      const F gradient = error * buffer[i];
+      eg[i] = rho * eg[i] + complement * (gradient * gradient);
+      weights[i]+= (rates[0] * gradient * rsqrt(eg[i] + eps));
+    }
+    for (; i<S+D; i++) {
+      const F gradient = error * buffer[i];
+      eg[i] = rho * eg[i] + complement * (gradient * gradient);
+      weights[i]+= (rates[1] * gradient * rsqrt(eg[i] + eps));
+    }
+    memmove(&buffer[1], &buffer[0], (S-1) * sizeof(F));
+    buffer[0] = sample;
+  }
+  void Reset() {
+    for (int i=0; i<S+D; i++)
+      weights[i] = eg[i] = buffer[i] = 0.;
+  }
+};
+
+////////////////////////////// Indirect Context //////////////////////////////
+
+template <typename T>
+class IndirectContext {
+private:
+  Array<T> data;
+  T* ctx;
+  const U32 ctxMask, inputMask, inputBits;
+public:
+  IndirectContext(const int BitsPerContext, const int InputBits) :
+    data(UINT64_C(1)<<BitsPerContext),
+    ctx(&data[0]),
+    ctxMask((UINT32_C(1)<<BitsPerContext)-1),
+    inputMask((UINT32_C(1)<<InputBits)-1),
+    inputBits(InputBits)
+  {
+    assert(BitsPerContext>0 && BitsPerContext<=20);
+    assert(InputBits>0 && InputBits<=8);
+  }
+  void operator+=(const U32 i) {
+    assert(i<=inputMask);
+    (*ctx)<<=inputBits;
+    (*ctx)|=i;
+  }
+  void operator=(const U32 i) {
+    ctx = &data[i&ctxMask];
+  }
+  T& operator()(void) {
+    return *ctx;
+  }
+};
+
+////////////////////////////// Move-to-Front list //////////////////////////////
+
+class MTFList{
+private:
+  int Root, Index;
+  Array<int, 16> Previous;
+  Array<int, 16> Next;
+public:
+  MTFList(const U16 n): Root(0), Index(0), Previous(n), Next(n) {
+    assert(n>0);
+    for (int i=0; i<n; i++) {
+      Previous[i] = i-1;
+      Next[i] = i+1;
+    }
+    Next[n-1] = -1;
+  }
+  inline int GetFirst() {
+    return Index=Root;
+  }
+  inline int GetNext() {
+    if (Index>=0) Index = Next[Index];
+    return Index;
+  }
+  inline void MoveToFront(const int i) {
+    assert(U32(i)<Previous.size());
+    if ((Index=i)==Root) return;
+    const int p=Previous[Index], n=Next[Index];
+    if (p>=0) Next[p] = Next[Index];
+    if (n>=0) Previous[n] = Previous[Index];
+    Previous[Root] = Index;
+    Next[Index] = Root;
+    Root = Index;
+    Previous[Root]=-1;
   }
 };
 
@@ -3031,6 +3389,8 @@ public:
 #define NEW_LINE 0x0A
 #define CARRIAGE_RETURN 0x0D
 #define SPACE 0x20
+#define QUOTE 0x22
+#define APOSTROPHE 0x27
 
 #ifdef USE_TEXTMODEL
 
@@ -3043,14 +3403,27 @@ inline bool CharInArray(const char c, const char a[], const int len) {
 }
 
 #define MAX_WORD_SIZE 64
+#define WORD_EMBEDDING_SIZE 3
 
 class Word {
+private:
+  U64 CalculateHash() {
+    U64 h=0;
+    for (int i=Start; i<=End; i++)
+      h=combine64(h,Letters[i]);
+    return h;
+  }
 public:
   U8 Letters[MAX_WORD_SIZE];
   U8 Start, End;
-  U32 Hash[4], Type, Language;
-  Word() : Start(0), End(0), Hash{0,0,0,0}, Type(0) {
+  U64 Hash[2];
+  U32 Type, Language, Embedding;
+  Word() {reset();}
+  void reset() {
     memset(&Letters[0], 0, sizeof(U8)*MAX_WORD_SIZE);
+    Start=End=0;
+    Hash[0]=Hash[1]=0;
+    Type=Language=Embedding=0;
   }
   bool operator==(const char *s) const {
     size_t len=strlen(s);
@@ -3065,6 +3438,18 @@ public:
       Letters[End]=tolower(c);
     }
   }
+  U32 operator-(const Word W) const {
+    U32 res = 0;
+    for (int i=0, j=0; i<WORD_EMBEDDING_SIZE; i++, j+=8)
+      res = (res<<8)|U8(U8(Embedding>>j)-U8(W.Embedding>>j));
+    return res;
+  }
+  U32 operator+(const Word W) const {
+    U32 res = 0;
+    for (int i=0, j=0; i<WORD_EMBEDDING_SIZE; i++, j+=8)
+      res = (res<<8)|U8(U8(Embedding>>j)+U8(W.Embedding>>j));
+    return res;
+  }
   U8 operator[](U8 i) const {
     return (End-Start>=i)?Letters[Start+i]:0;
   }
@@ -3076,20 +3461,17 @@ public:
       return End-Start+1;
     return 0;
   }
-  void GetHashes() {
-    Hash[0] = 0xc01dflu, Hash[1] = ~Hash[0];
-    for (int i=Start; i<=End; i++) {
-      U8 l = Letters[i];
-      Hash[0]^=hash(Hash[0], l, i);
-      Hash[1]^=hash(Hash[1], 
-        ((l&0x80)==0)?l&0x5F:
-        ((l&0xC0)==0x80)?l&0x3F:
-        ((l&0xE0)==0xC0)?l&0x1F:
-        ((l&0xF0)==0xE0)?l&0xF:l&0x7
-      );
-    }
-    Hash[2] = (~Hash[0])^Hash[1];
-    Hash[3] = (~Hash[1])^Hash[0];
+  U32 DistanceTo(const Word W) const {
+    U32 res = 0;
+    for (int i=0, j=0; i<WORD_EMBEDDING_SIZE; i++, j+=8)
+      res+=SQR(abs(int(U8(Embedding>>j)-U8(W.Embedding>>j))));
+    return (U32)sqrt(res);
+  }
+  void CalculateWordHash() {
+    Hash[1] = Hash[0] = CalculateHash(); // Hash[1]: placeholder for stem hash, will be overwritten after stemming
+  }
+  void CalculateStemHash() { // called by a stemmer after stemming
+    Hash[1] = CalculateHash();
   }
   bool ChangeSuffix(const char *OldSuffix, const char *NewSuffix) {
     size_t len=strlen(OldSuffix);
@@ -3118,6 +3500,11 @@ public:
   bool StartsWith(const char *Prefix) const {
     size_t len=strlen(Prefix);
     return (Length()>len && memcmp(&Letters[Start], Prefix, len)==0);
+  }
+  void print() const {
+    for(int r=Start;r<=End;r++)
+      printf("%c",(char)Letters[r]);
+    printf("\n");
   }
 };
 
@@ -3159,14 +3546,16 @@ public:
     Unknown,
     English,
     French,
+    German,
     Count
   };
+  virtual ~Language() {};
   virtual bool IsAbbreviation(Word *W) = 0;
 };
 
 class English: public Language {
 private:
-  static const int NUM_ABBREV = 6;
+  static constexpr int NUM_ABBREV = 6;
   const char *Abbreviations[NUM_ABBREV]={ "mr","mrs","ms","dr","st","jr" };
 public:
   enum Flags {
@@ -3199,7 +3588,7 @@ public:
 
 class French: public Language {
 private:
-  static const int NUM_ABBREV = 2;
+  static constexpr int NUM_ABBREV = 2;
   const char *Abbreviations[NUM_ABBREV]={ "m","mm" };
 public:
   enum Flags {
@@ -3209,48 +3598,68 @@ public:
   bool IsAbbreviation(Word *W) { return W->MatchesAny(Abbreviations, NUM_ABBREV); };
 };
 
+class German : public Language {
+private:
+  static constexpr int NUM_ABBREV = 3;
+  const char *Abbreviations[NUM_ABBREV]={ "fr","hr","hrn" };
+public:
+  enum Flags {
+    Adjective              = (1<<2),
+    Plural                 = (1<<3),
+    Female                 = (1<<4)
+  };
+  bool IsAbbreviation(Word *W) { return W->MatchesAny(Abbreviations, NUM_ABBREV); };
+};
+
 //////////////////////////// Stemming routines /////////////////////////
 
 class Stemmer {
+protected:
+  U32 GetRegion(const Word *W, const U32 From) {
+    bool hasVowel = false;
+    for (int i=W->Start+From; i<=W->End; i++) {
+      if (IsVowel(W->Letters[i])) {
+        hasVowel = true;
+        continue;
+      }
+      else if (hasVowel)
+        return i-W->Start+1;
+    }
+    return W->Start+W->Length();
+  }
+  bool SuffixInRn(const Word *W, const U32 Rn, const char *Suffix) {
+    return (W->Start!=W->End && Rn<=W->Length()-strlen(Suffix));
+  }
 public:
+  virtual ~Stemmer() {};
   virtual bool IsVowel(const char c) = 0;
-  virtual void Hash(Word *W) = 0;
   virtual bool Stem(Word *W) = 0;
 };
 
-/*
-  English affix stemmer, based on the Porter2 stemmer.
-
-  Changelog:
-  (29/12/2017) v127: Initial release by Márcio Pais
-  (02/01/2018) v128: Small changes to allow for compilation with MSVC
-  Fix buffer overflow (thank you Jan Ondrus)
-  (28/01/2018) v133: Refactoring, added processing of "non/non-" prefixes
-  (04/02/2018) v135: Refactoring, added processing of gender-specific words and common words
-*/
+//  English affix stemmer, based on the Porter2 stemmer.
 
 class EnglishStemmer: public Stemmer {
 private:
-  static const int NUM_VOWELS = 6;
-  const char Vowels[NUM_VOWELS]={'a','e','i','o','u','y'};
-  static const int NUM_DOUBLES = 9;
-  const char Doubles[NUM_DOUBLES]={'b','d','f','g','m','n','p','r','t'};
-  static const int NUM_LI_ENDINGS = 10;
-  const char LiEndings[NUM_LI_ENDINGS]={'c','d','e','g','h','k','m','n','r','t'};
-  static const int NUM_NON_SHORT_CONSONANTS = 3;
-  const char NonShortConsonants[NUM_NON_SHORT_CONSONANTS]={'w','x','Y'};
-  static const int NUM_MALE_WORDS = 9;
+  static constexpr int NUM_VOWELS = 6;
+  static constexpr char Vowels[NUM_VOWELS]={'a','e','i','o','u','y'};
+  static constexpr int NUM_DOUBLES = 9;
+  static constexpr char Doubles[NUM_DOUBLES]={'b','d','f','g','m','n','p','r','t'};
+  static constexpr int NUM_LI_ENDINGS = 10;
+  static constexpr char LiEndings[NUM_LI_ENDINGS]={'c','d','e','g','h','k','m','n','r','t'};
+  static constexpr int NUM_NON_SHORT_CONSONANTS = 3;
+  static constexpr char NonShortConsonants[NUM_NON_SHORT_CONSONANTS]={'w','x','Y'};
+  static constexpr int NUM_MALE_WORDS = 9;
   const char *MaleWords[NUM_MALE_WORDS]={"he","him","his","himself","man","men","boy","husband","actor"};
-  static const int NUM_FEMALE_WORDS = 8;
+  static constexpr int NUM_FEMALE_WORDS = 8;
   const char *FemaleWords[NUM_FEMALE_WORDS]={"she","her","herself","woman","women","girl","wife","actress"};
-  static const int NUM_COMMON_WORDS = 12;
+  static constexpr int NUM_COMMON_WORDS = 12;
   const char *CommonWords[NUM_COMMON_WORDS]={"the","be","to","of","and","in","that","you","have","with","from","but"};
-  static const int NUM_SUFFIXES_STEP0 = 3;
+  static constexpr int NUM_SUFFIXES_STEP0 = 3;
   const char *SuffixesStep0[NUM_SUFFIXES_STEP0]={"'s'","'s","'"};
-  static const int NUM_SUFFIXES_STEP1b = 6;
+  static constexpr int NUM_SUFFIXES_STEP1b = 6;
   const char *SuffixesStep1b[NUM_SUFFIXES_STEP1b]={"eedly","eed","ed","edly","ing","ingly"};
-  const U32 TypesStep1b[NUM_SUFFIXES_STEP1b]={English::AdverbOfManner,0,English::PastTense,English::AdverbOfManner|English::PastTense,English::PresentParticiple,English::AdverbOfManner|English::PresentParticiple};
-  static const int NUM_SUFFIXES_STEP2 = 22;
+  static constexpr U32 TypesStep1b[NUM_SUFFIXES_STEP1b]={English::AdverbOfManner,0,English::PastTense,English::AdverbOfManner|English::PastTense,English::PresentParticiple,English::AdverbOfManner|English::PresentParticiple};
+  static constexpr int NUM_SUFFIXES_STEP2 = 22;
   const char *(SuffixesStep2[NUM_SUFFIXES_STEP2])[2]={
     {"ization", "ize"},
     {"ational", "ate"},
@@ -3299,7 +3708,7 @@ private:
     English::AdverbOfManner,
     English::AdverbOfManner
   };
-  static const int NUM_SUFFIXES_STEP3 = 8;
+  static constexpr int NUM_SUFFIXES_STEP3 = 8;
   const char *(SuffixesStep3[NUM_SUFFIXES_STEP3])[2]={
     {"ational", "ate"},
     {"tional", "tion"},
@@ -3310,10 +3719,10 @@ private:
     {"ful", ""},
     {"ness", ""}
   };
-  const U32 TypesStep3[NUM_SUFFIXES_STEP3]={English::SuffixION|English::SuffixAL,English::SuffixION|English::SuffixAL,0,0,English::SuffixITY,English::SuffixAL,English::AdjectiveFull,English::SuffixNESS};
-  static const int NUM_SUFFIXES_STEP4 = 20;
+  static constexpr U32 TypesStep3[NUM_SUFFIXES_STEP3]={English::SuffixION|English::SuffixAL,English::SuffixION|English::SuffixAL,0,0,English::SuffixITY,English::SuffixAL,English::AdjectiveFull,English::SuffixNESS};
+  static constexpr int NUM_SUFFIXES_STEP4 = 20;
   const char *SuffixesStep4[NUM_SUFFIXES_STEP4]={"al","ance","ence","er","ic","able","ible","ant","ement","ment","ent","ou","ism","ate","iti","ous","ive","ize","sion","tion"};
-  const U32 TypesStep4[NUM_SUFFIXES_STEP4]={
+  static constexpr U32 TypesStep4[NUM_SUFFIXES_STEP4]={
     English::SuffixAL,
     English::SuffixNCE,
     English::SuffixNCE,
@@ -3335,17 +3744,17 @@ private:
     English::SuffixION,
     English::SuffixION
   };
-  static const int NUM_EXCEPTION_REGION1 = 3;
+  static constexpr int NUM_EXCEPTION_REGION1 = 3;
   const char *ExceptionsRegion1[NUM_EXCEPTION_REGION1]={"gener","arsen","commun"};
-  static const int NUM_EXCEPTIONS1 = 18;
+  static constexpr int NUM_EXCEPTIONS1 = 19;
   const char *(Exceptions1[NUM_EXCEPTIONS1])[2]={
     {"skis", "ski"},
     {"skies", "sky"},
     {"dying", "die"},
     {"lying", "lie"},
     {"tying", "tie"},
-    {"idly", "idle"},
-    {"gently", "gentle"},
+    {"idly", "idl"},
+    {"gently", "gentl"},
     {"ugly", "ugli"},
     {"early", "earli"},
     {"only", "onli"},
@@ -3356,11 +3765,12 @@ private:
     {"atlas", "atlas"},
     {"cosmos", "cosmos"},
     {"bias", "bias"},
-    {"andes", "andes"}
+    {"andes", "andes"},
+    {"texas", "texas"}
   };
-  const U32 TypesExceptions1[NUM_EXCEPTIONS1]={
+  static constexpr U32 TypesExceptions1[NUM_EXCEPTIONS1]={
     English::Noun|English::Plural,
-    English::Plural,
+    English::Noun|English::Plural|English::Verb,
     English::PresentParticiple,
     English::PresentParticiple,
     English::PresentParticiple,
@@ -3376,11 +3786,12 @@ private:
     English::Noun,
     English::Noun,
     English::Noun,
-    0
+    English::Noun|English::Plural,
+    English::Noun
   };
-  static const int NUM_EXCEPTIONS2 = 8;
+  static constexpr int NUM_EXCEPTIONS2 = 8;
   const char *Exceptions2[NUM_EXCEPTIONS2]={"inning","outing","canning","herring","earring","proceed","exceed","succeed"};
-  const U32 TypesExceptions2[NUM_EXCEPTIONS2]={English::Noun,English::Noun,English::Noun,English::Noun,English::Noun,English::Verb,English::Verb,English::Verb}; 
+  static constexpr U32 TypesExceptions2[NUM_EXCEPTIONS2]={English::Noun,English::Noun,English::Noun,English::Noun,English::Noun,English::Verb,English::Verb,English::Verb};
   inline bool IsConsonant(const char c) {
     return !IsVowel(c);
   }
@@ -3393,27 +3804,12 @@ private:
   inline bool IsLiEnding(const char c) {
     return CharInArray(c, LiEndings, NUM_LI_ENDINGS);
   }
-  U32 GetRegion(const Word *W, const U32 From) {
-    bool hasVowel = false;
-    for (int i=W->Start+From; i<=W->End; i++) {
-      if (IsVowel(W->Letters[i])) {
-        hasVowel = true;
-        continue;
-      }
-      else if (hasVowel)
-        return i-W->Start+1;
-    }
-    return W->Start+W->Length();
-  }
   U32 GetRegion1(const Word *W) {
     for (int i=0; i<NUM_EXCEPTION_REGION1; i++) {
       if (W->StartsWith(ExceptionsRegion1[i]))
         return U32(strlen(ExceptionsRegion1[i]));
     }
     return GetRegion(W, 0);
-  }
-  bool SuffixInRn(const Word *W, const U32 Rn, const char *Suffix) {
-    return (W->Start!=W->End && Rn<=W->Length()-strlen(Suffix));
   }
   bool EndsInShortSyllable(const Word *W) {
     if (W->End==W->Start)
@@ -3433,10 +3829,22 @@ private:
     }
     return false;
   }
-  bool TrimStartingApostrophe(Word *W) {
-    bool r=(W->Start!=W->End && (*W)[0]=='\'');
-    W->Start+=(U8)r;
-    return r;
+  bool TrimApostrophes(Word *W) {
+    bool result=false;
+    //trim all apostrophes from the beginning
+    int cnt=0;
+    while(W->Start!=W->End && (*W)[0]==APOSTROPHE) {
+      result=true;
+      W->Start++;
+      cnt++;
+    }
+    //trim the same number of apostrophes from the end (if there are)
+    while(W->Start!=W->End && (*W)(0)==APOSTROPHE) {
+      if(cnt==0)break;
+      W->End--;
+      cnt--;
+    }
+    return result;
   }
   void MarkYsAsConsonants(Word *W) {
     if ((*W)[0]=='y')
@@ -3524,6 +3932,8 @@ private:
     }
     return (W->Type&English::AdjectiveSuperlative)>0;
   }
+  //Search for the longest among the suffixes, 's' or 's or ' and remove if found.
+  //Examples: Children's toys / Vice presidents' duties
   bool Step0(Word *W) {
     for (int i=0; i<NUM_SUFFIXES_STEP0; i++) {
       if (W->EndsWith(SuffixesStep0[i])) {
@@ -3534,19 +3944,29 @@ private:
     }
     return false;
   }
+
+  //Search for the longest among the following suffixes, and perform the action indicated.
   bool Step1a(Word *W) {
+
+    //sses -> replace by ss
     if (W->EndsWith("sses")) {
       W->End-=2;
       W->Type|=English::Plural;
       return true;
     }
+
+    //ied+ ies* -> replace by i if preceded by more than one letter, otherwise by ie (so ties -> tie, cries -> cri) 
     if (W->EndsWith("ied") || W->EndsWith("ies")) {
-      W->Type|=((*W)(0)=='d')?English::PastTense:English::Plural;
-      W->End-=1+(W->Length()>4);
+      W->Type |= ((*W)(0)=='d') ? English::PastTense : English::Plural;
+      W->End-= W->Length()>4 ? 2 : 1;
       return true;
     }
+
+    //us+ ss -> do nothing
     if (W->EndsWith("us") || W->EndsWith("ss"))
       return false;
+
+    //s -> delete if the preceding word part contains a vowel not immediately before the s (so gas and this retain the s, gaps and kiwis lose it) 
     if ((*W)(0)=='s' && W->Length()>2) {
       for (int i=W->Start;i<=W->End-2;i++) {
         if (IsVowel(W->Letters[i])) {
@@ -3556,34 +3976,37 @@ private:
         }
       }
     }
+
     if (W->EndsWith("n't") && W->Length()>4) {
       switch ((*W)(3)) {
         case 'a': {
           if ((*W)(4)=='c')
-            W->End-=2;
+            W->End-=2; // can't -> can
           else
-            W->ChangeSuffix("n't","ll");
+            W->ChangeSuffix("n't","ll"); // shan't -> shall
           break;
         }
-        case 'i': { W->ChangeSuffix("in't","m"); break; }
+        case 'i': { W->ChangeSuffix("in't","m"); break; } // ain't -> am
         case 'o': {
           if ((*W)(4)=='w')
-            W->ChangeSuffix("on't","ill");
+            W->ChangeSuffix("on't","ill"); // won't -> will
           else
-            W->End-=3;
+            W->End-=3; //don't -> do
           break;
         }
-        default: W->End-=3;
+        default: W->End-=3; // couldn't -> could, shouldn't -> should, needn't -> need, hasn't -> has
       }
-      W->Type|=English::Negation;
+      W->Type|=English::Negation;	
       return true;
     }
+
     if (W->EndsWith("hood") && W->Length()>7) {
-      W->End-=4;
+      W->End-=4;  //brotherhood -> brother
       return true;
     }
     return false;
   }
+  //Search for the longest among the following suffixes, and perform the action indicated. 
   bool Step1b(Word *W, const U32 R1) {
     for (int i=0; i<NUM_SUFFIXES_STEP1b; i++) {
       if (W->EndsWith(SuffixesStep1b[i])) {
@@ -3606,13 +4029,13 @@ private:
                   switch((*W)(0)) {
                     case 'c': case 's': case 'v': { W->End+=!(W->EndsWith("ss") || W->EndsWith("ias")); break; }
                     case 'd': {
-                      static const char nAllowed[4] = {'a','e','i','o'};
+                      static constexpr char nAllowed[4] = {'a','e','i','o'};
                       W->End+=IsVowel((*W)(1)) && (!CharInArray((*W)(2), nAllowed, 4)); break;
                     }
                     case 'k': { W->End+=W->EndsWith("uak"); break; }
                     case 'l': {
-                      static const char Allowed1[10] = {'b','c','d','f','g','k','p','t','y','z'};
-                      static const char Allowed2[4] = {'a','i','o','u'};
+                      static constexpr char Allowed1[10] = {'b','c','d','f','g','k','p','t','y','z'};
+                      static constexpr char Allowed2[4] = {'a','i','o','u'};
                       W->End+= CharInArray((*W)(1), Allowed1, 10) ||
                                 (CharInArray((*W)(1), Allowed2, 4) && IsConsonant((*W)(2)));
                       break;
@@ -3627,7 +4050,7 @@ private:
                       break;
                     }
                     case 'g': {
-                      static const char Allowed[7] = {'a','d','e','i','l','r','u'};
+                      static constexpr char Allowed[7] = {'a','d','e','i','l','r','u'};
                       if (
                         CharInArray((*W)(1), Allowed, 7) || (
                          (*W)(1)=='n' && (
@@ -3636,7 +4059,7 @@ private:
                           ((*W)(2)=='a' && ((*W)(3)=='r' || ((*W)(3)=='h' && (*W)(4)=='c'))) ||
                           (W->EndsWith("ring") && ((*W)(4)=='c' || (*W)(4)=='f'))
                          )
-                        ) 
+                        )
                       )
                         (*W)+='e';
                       break;
@@ -3734,7 +4157,7 @@ private:
             case 'b': {
               W->Letters[W->End]='e';
               W->Type|=English::AdverbOfManner;
-              return true;              
+              return true;
             }
             case 'i': {
               if (W->Length()>4) {
@@ -3791,16 +4214,18 @@ private:
     }
     return res;
   }
+
+  //Search for the longest among the following suffixes, and, if found and in R2, perform the action indicated.
   bool Step4(Word *W, const U32 R2) {
     bool res=false;
     for (int i=0; i<NUM_SUFFIXES_STEP4; i++) {
       if (W->EndsWith(SuffixesStep4[i]) && SuffixInRn(W, R2, SuffixesStep4[i])) {
-        W->End-=U8(strlen(SuffixesStep4[i])-(i>17));
-        if (i!=10 || (*W)(0)!='m')
-          W->Type|=TypesStep4[i];
-        if (i==0 && W->EndsWith("nti")) {
-          W->End--;
-          res=true;
+        W->End-=U8(strlen(SuffixesStep4[i])-(i>17) /*sion, tion*/); // remove: al   ance   ence   er   ic   able   ible   ant   ement   ment   ent   ism   ate   iti   ous   ive   ize ; ion -> delete if preceded by s or t
+        if (!(i==10 /* ent */ && (*W)(0)=='m')) //exception: no TypesStep4 should be assigned for 'agreement'
+          W->Type|=TypesStep4[i]; 
+        if (i==0 && W->EndsWith("nti")) { 
+          W->End--; // ntial -> nt
+          res=true; // process ant+ial, ent+ial
           continue;
         }
         return true;
@@ -3808,20 +4233,22 @@ private:
     }
     return res;
   }
+
+  //Search for the the following suffixes, and, if found, perform the action indicated. 
   bool Step5(Word *W, const U32 R1, const U32 R2) {
     if ((*W)(0)=='e' && (*W)!="here") {
       if (SuffixInRn(W, R2, "e"))
-        W->End--;
+        W->End--; //e -> delete if in R2, or in R1 and not preceded by a short syllable 
       else if (SuffixInRn(W, R1, "e")) {
-        W->End--;
-        W->End+=!EndsInShortSyllable(W);
+        W->End--; //e -> delete if in R1 and not preceded by a short syllable 
+        W->End+=EndsInShortSyllable(W);
       }
       else
         return false;
       return true;
     }
     else if (W->Length()>1 && (*W)(0)=='l' && SuffixInRn(W, R2, "l") && (*W)(1)=='l') {
-      W->End--;
+      W->End--; //l -> delete if in R2 and preceded by l 
       return true;
     }
     return false;
@@ -3830,25 +4257,13 @@ public:
   inline bool IsVowel(const char c) final {
     return CharInArray(c, Vowels, NUM_VOWELS);
   }
-  inline void Hash(Word *W) final {
-    W->Hash[2] = W->Hash[3] = 0xb0a710ad;
-    for (int i=W->Start; i<=W->End; i++) {
-      U8 l = W->Letters[i];
-      W->Hash[2]=W->Hash[2]*263*32 + l;
-      if (IsVowel(l))
-        W->Hash[3]=W->Hash[3]*997*8 + (l/4-22);
-      else if (l>='b' && l<='z')
-        W->Hash[3]=W->Hash[3]*271*32 + (l-97);
-      else
-        W->Hash[3]=W->Hash[3]*11*32 + l;
-    }
-  }
   bool Stem(Word *W) {
     if (W->Length()<2) {
-      Hash(W);
+      W->CalculateStemHash();
+      //W->print(); //for debugging
       return false;
     }
-    bool res = TrimStartingApostrophe(W);
+    bool res = TrimApostrophes(W);
     res|=ProcessPrefixes(W);
     res|=ProcessSuperlatives(W);
     for (int i=0; i<NUM_EXCEPTIONS1; i++) {
@@ -3858,9 +4273,10 @@ public:
           memcpy(&W->Letters[W->Start], Exceptions1[i][1], len);
           W->End=W->Start+U8(len-1);
         }
-        Hash(W);
+        W->CalculateStemHash();
         W->Type|=TypesExceptions1[i];
         W->Language = Language::English;
+        //W->print(); //for debugging
         return (i<11);
       }
     }
@@ -3872,9 +4288,10 @@ public:
     res|=Step1a(W);
     for (int i=0; i<NUM_EXCEPTIONS2; i++) {
       if ((*W)==Exceptions2[i]) {
-        Hash(W);
+        W->CalculateStemHash();
         W->Type|=TypesExceptions2[i];
         W->Language = Language::English;
+        //W->print(); //for debugging
         return res;
       }
     }
@@ -3897,40 +4314,34 @@ public:
     }
     if (!res)
       res=W->MatchesAny(CommonWords, NUM_COMMON_WORDS);
-    Hash(W);
+    W->CalculateStemHash();
     if (res)
       W->Language = Language::English;
+    //W->print(); //for debugging
     return res;
   }
 };
 
-/*
-  French suffix stemmer, based on the Porter stemmer.
-
-  Changelog:
-  (28/01/2018) v133: Initial release by Márcio Pais
-  (04/02/2018) v135: Added processing of common words
-  (25/02/2018) v139: Added UTF8 conversion
-*/
+// French suffix stemmer, based on the Porter stemmer.
 
 class FrenchStemmer: public Stemmer {
 private:
-  static const int NUM_VOWELS = 17;
-  const char Vowels[NUM_VOWELS]={'a','e','i','o','u','y','\xE2','\xE0','\xEB','\xE9','\xEA','\xE8','\xEF','\xEE','\xF4','\xFB','\xF9'};
-  static const int NUM_COMMON_WORDS = 10;
+  static constexpr int NUM_VOWELS = 17;
+  static constexpr char Vowels[NUM_VOWELS]={'a','e','i','o','u','y','\xE2','\xE0','\xEB','\xE9','\xEA','\xE8','\xEF','\xEE','\xF4','\xFB','\xF9'};
+  static constexpr int NUM_COMMON_WORDS = 10;
   const char *CommonWords[NUM_COMMON_WORDS]={"de","la","le","et","en","un","une","du","que","pas"};
-  static const int NUM_EXCEPTIONS = 3;
+  static constexpr int NUM_EXCEPTIONS = 3;
   const char *(Exceptions[NUM_EXCEPTIONS])[2]={
     {"monument", "monument"},
     {"yeux", "oeil"},
     {"travaux", "travail"},
   };
-  const U32 TypesExceptions[NUM_EXCEPTIONS]={
+  static constexpr U32 TypesExceptions[NUM_EXCEPTIONS]={
     French::Noun,
     French::Noun|French::Plural,
     French::Noun|French::Plural
   };
-  static const int NUM_SUFFIXES_STEP1 = 39;
+  static constexpr int NUM_SUFFIXES_STEP1 = 39;
   const char *SuffixesStep1[NUM_SUFFIXES_STEP1]={
     "ance","iqUe","isme","able","iste","eux","ances","iqUes","ismes","ables","istes", //11
     "atrice","ateur","ation","atrices","ateurs","ations", //6
@@ -3944,7 +4355,7 @@ private:
     "euse","euses", //2
     "ment","ments" //2
   };
-  static const int NUM_SUFFIXES_STEP2a = 35;
+  static constexpr int NUM_SUFFIXES_STEP2a = 35;
   const char *SuffixesStep2a[NUM_SUFFIXES_STEP2a]={
     "issaIent", "issantes", "iraIent", "issante",
     "issants", "issions", "irions", "issais",
@@ -3955,7 +4366,7 @@ private:
     "ies", "ira", "\xEEt", "ie", "ir", "is",
     "it", "i"
   };
-  static const int NUM_SUFFIXES_STEP2b = 38;
+  static constexpr int NUM_SUFFIXES_STEP2b = 38;
   const char *SuffixesStep2b[NUM_SUFFIXES_STEP2b]={
     "eraIent", "assions", "erions", "assent",
     "assiez", "\xE8rent", "erais", "erait",
@@ -3966,11 +4377,11 @@ private:
     "ait", "ant", "\xE9""e", "\xE9s", "er",
     "ez", "\xE2t", "ai", "as", "\xE9", "a"
   };
-  static const int NUM_SET_STEP4 = 6;
-  const char SetStep4[NUM_SET_STEP4]={'a','i','o','u','\xE8','s'};
-  static const int NUM_SUFFIXES_STEP4 = 7;
+  static constexpr int NUM_SET_STEP4 = 6;
+  static constexpr char SetStep4[NUM_SET_STEP4]={'a','i','o','u','\xE8','s'};
+  static constexpr int NUM_SUFFIXES_STEP4 = 7;
   const char *SuffixesStep4[NUM_SUFFIXES_STEP4]={"i\xE8re","I\xE8re","ion","ier","Ier","e","\xEB"};
-  static const int NUM_SUFFIXES_STEP5 = 5;
+  static constexpr int NUM_SUFFIXES_STEP5 = 5;
   const char *SuffixesStep5[NUM_SUFFIXES_STEP5]={"enn","onn","ett","ell","eill"};
   inline bool IsConsonant(const char c) {
     return !IsVowel(c);
@@ -3981,7 +4392,7 @@ private:
       if (W->Letters[i]==0xC3 && (IsVowel(c) || (W->Letters[i+1]&0xDF)==0x87)) {
         W->Letters[i] = c;
         if (i+1<W->End)
-          memcpy(&W->Letters[i+1], &W->Letters[i+2], W->End-i-1);
+          memmove(&W->Letters[i+1], &W->Letters[i+2], W->End-i-1);
         W->End--;
       }
     }
@@ -4013,21 +4424,6 @@ private:
     }
     return res;
   }
-  U32 GetRegion(const Word *W, const U32 From) {
-    bool hasVowel = false;
-    for (int i=W->Start+From; i<=W->End; i++) {
-      if (IsVowel(W->Letters[i])) {
-        hasVowel = true;
-        continue;
-      }
-      else if (hasVowel)
-        return i-W->Start+1;
-    }
-    return W->Start+W->Length();
-  }
-  bool SuffixInRn(const Word *W, const U32 Rn, const char *Suffix) {
-    return (W->Start!=W->End && Rn<=W->Length()-strlen(Suffix));
-  }
   bool Step1(Word *W, const U32 RV, const U32 R1, const U32 R2, bool *ForceStep2a) {
     int i = 0;
     for (; i<11; i++) {
@@ -4057,7 +4453,7 @@ private:
       }
     }
     for (; i<27; i++) {
-      if (W->EndsWith(SuffixesStep1[i]) && SuffixInRn(W, R1, SuffixesStep1[i]) && IsConsonant(W->Letters[W->End-strlen(SuffixesStep1[i])])) {
+      if (W->EndsWith(SuffixesStep1[i]) && SuffixInRn(W, R1, SuffixesStep1[i]) && IsConsonant((*W)((U8)strlen(SuffixesStep1[i])))) {
         W->End-=U8(strlen(SuffixesStep1[i]));
         return true;
       }
@@ -4133,7 +4529,7 @@ private:
       }
     }
     for (; i<NUM_SUFFIXES_STEP1; i++) {
-      if (W->EndsWith(SuffixesStep1[i]) && SuffixInRn(W, RV+1, SuffixesStep1[i]) && IsVowel(W->Letters[W->End-strlen(SuffixesStep1[i])])) {
+      if (W->EndsWith(SuffixesStep1[i]) && SuffixInRn(W, RV+1, SuffixesStep1[i]) && IsVowel((*W)((U8)strlen(SuffixesStep1[i])))) {
         W->End-=U8(strlen(SuffixesStep1[i]));
         (*ForceStep2a) = true;
         return true;
@@ -4163,7 +4559,7 @@ private:
   }
   bool Step2a(Word *W, const U32 RV) {
     for (int i=0; i<NUM_SUFFIXES_STEP2a; i++) {
-      if (W->EndsWith(SuffixesStep2a[i]) && SuffixInRn(W, RV+1, SuffixesStep2a[i]) && IsConsonant(W->Letters[W->End-strlen(SuffixesStep2a[i])])) {
+      if (W->EndsWith(SuffixesStep2a[i]) && SuffixInRn(W, RV+1, SuffixesStep2a[i]) && IsConsonant((*W)((U8)strlen(SuffixesStep2a[i])))) {
         W->End-=U8(strlen(SuffixesStep2a[i]));
         if (i==31 /*ir*/)
           W->Type|=French::Verb;
@@ -4188,7 +4584,7 @@ private:
               return true;
             }
           }
-        }        
+        }
       }
     }
     return false;
@@ -4202,7 +4598,7 @@ private:
   }
   bool Step4(Word *W, const U32 RV, const U32 R2) {
     bool res = false;
-    if (W->Length()>=2 && W->Letters[W->End]=='s' && !CharInArray(W->Letters[W->End-1], SetStep4, NUM_SET_STEP4)) {
+    if (W->Length()>=2 && W->Letters[W->End]=='s' && !CharInArray((*W)(1), SetStep4, NUM_SET_STEP4)) {
       W->End--;
       res = true;
     }
@@ -4210,7 +4606,7 @@ private:
       if (W->EndsWith(SuffixesStep4[i]) && SuffixInRn(W, RV, SuffixesStep4[i])) {
         switch (i) {
           case 2: { //ion
-            char prec = W->Letters[W->End-3];
+            char prec = (*W)(3);
             if (SuffixInRn(W, R2, SuffixesStep4[i]) && SuffixInRn(W, RV+1, SuffixesStep4[i]) && (prec=='s' || prec=='t')) {
               W->End-=3;
               return true;
@@ -4262,36 +4658,21 @@ public:
   inline bool IsVowel(const char c) final {
     return CharInArray(c, Vowels, NUM_VOWELS);
   }
-  inline void Hash(Word *W) final {
-    W->Hash[2] = W->Hash[3] = ~0xeff1cace;
-    for (int i=W->Start; i<=W->End; i++) {
-      U8 l = W->Letters[i];
-      W->Hash[2]=W->Hash[2]*251*32 + l;
-      if (IsVowel(l))
-        W->Hash[3]=W->Hash[3]*997*16 + l;
-      else if (l>='b' && l<='z')
-        W->Hash[3]=W->Hash[3]*271*32 + (l-97);
-      else
-        W->Hash[3]=W->Hash[3]*11*32 + l;
-    }
-  }
   bool Stem(Word *W) {
     ConvertUTF8(W);
     if (W->Length()<2) {
-      Hash(W);
+      W->CalculateStemHash();
       return false;
     }
-    else {
-      for (int i=0; i<NUM_EXCEPTIONS; i++) {
-        if ((*W)==Exceptions[i][0]) {
-          size_t len=strlen(Exceptions[i][1]);
-          memcpy(&W->Letters[W->Start], Exceptions[i][1], len);
-          W->End=W->Start+U8(len-1);
-          Hash(W);
-          W->Type|=TypesExceptions[i];
-          W->Language = Language::French;
-          return true;
-        }
+    for (int i=0; i<NUM_EXCEPTIONS; i++) {
+      if ((*W)==Exceptions[i][0]) {
+        size_t len=strlen(Exceptions[i][1]);
+        memcpy(&W->Letters[W->Start], Exceptions[i][1], len);
+        W->End=W->Start+U8(len-1);
+        W->CalculateStemHash();
+        W->Type|=TypesExceptions[i];
+        W->Language = Language::French;
+        return true;
       }
     }
     MarkVowelsAsConsonants(W);
@@ -4314,9 +4695,287 @@ public:
       W->Letters[i] = tolower(W->Letters[i]);
     if (!res)
       res=W->MatchesAny(CommonWords, NUM_COMMON_WORDS);
+    W->CalculateStemHash();
     if (res)
       W->Language = Language::French;
     return res;
+  }
+};
+
+// German suffix stemmer, based on the Porter stemmer.
+
+class GermanStemmer : public Stemmer {
+private:
+  static constexpr int NUM_VOWELS = 9;
+  static constexpr char Vowels[NUM_VOWELS]={'a','e','i','o','u','y','\xE4','\xF6','\xFC'};
+  static constexpr int NUM_COMMON_WORDS = 10;
+  const char *CommonWords[NUM_COMMON_WORDS]={"der","die","das","und","sie","ich","mit","sich","auf","nicht"};
+  static constexpr int NUM_ENDINGS = 10;
+  static constexpr char Endings[NUM_ENDINGS]={'b','d','f','g','h','k','l','m','n','t'}; //plus 'r' for words ending in 's'
+  static constexpr int NUM_SUFFIXES_STEP1 = 6;
+  const char *SuffixesStep1[NUM_SUFFIXES_STEP1]={"em","ern","er","e","en","es"};
+  static constexpr int NUM_SUFFIXES_STEP2 = 3;
+  const char *SuffixesStep2[NUM_SUFFIXES_STEP2]={"en","er","est"};
+  static constexpr int NUM_SUFFIXES_STEP3 = 7;
+  const char *SuffixesStep3[NUM_SUFFIXES_STEP3]={"end","ung","ik","ig","isch","lich","heit"};
+  void ConvertUTF8(Word *W) {
+    for (int i=W->Start; i<W->End; i++) {
+      U8 c = W->Letters[i+1]+((W->Letters[i+1]<0x9F)?0x60:0x40);
+      if (W->Letters[i]==0xC3 && (IsVowel(c) || c==0xDF)) {
+        W->Letters[i] = c;
+        if (i+1<W->End)
+          memmove(&W->Letters[i+1], &W->Letters[i+2], W->End-i-1);
+        W->End--;
+      }
+    }
+  }
+  void ReplaceSharpS(Word *W) {
+    for (int i=W->Start; i<=W->End; i++) {
+      if (W->Letters[i]==0xDF) {
+        W->Letters[i]='s';
+        if (i<MAX_WORD_SIZE-1) {
+          memmove(&W->Letters[i+2], &W->Letters[i+1], MAX_WORD_SIZE-i-2);
+          W->Letters[i+1]='s';
+          W->End+=(W->End<MAX_WORD_SIZE-1);
+        }
+      }
+    }
+  }
+  void MarkVowelsAsConsonants(Word *W) {
+    for (int i=W->Start+1; i<W->End; i++) {
+      U8 c = W->Letters[i];
+      if ((c=='u' || c=='y') && IsVowel(W->Letters[i-1]) && IsVowel(W->Letters[i+1]))
+        W->Letters[i] = toupper(c);
+    }
+  }
+  inline bool IsValidEnding(const char c, const bool IncludeR = false) {
+    return CharInArray(c, Endings, NUM_ENDINGS) || (IncludeR && c=='r');
+  }
+  bool Step1(Word *W, const U32 R1) {
+    int i = 0;
+    for (; i<3; i++) {
+      if (W->EndsWith(SuffixesStep1[i]) && SuffixInRn(W, R1, SuffixesStep1[i])) {
+        W->End-=U8(strlen(SuffixesStep1[i]));
+        return true;
+      }
+    }
+    for (; i<NUM_SUFFIXES_STEP1; i++) {
+      if (W->EndsWith(SuffixesStep1[i]) && SuffixInRn(W, R1, SuffixesStep1[i])) {
+        W->End-=U8(strlen(SuffixesStep1[i]));
+        W->End-=U8(W->EndsWith("niss"));
+        return true;
+      }
+    }
+    if (W->EndsWith("s") && SuffixInRn(W, R1, "s") && IsValidEnding((*W)(1), true)) {
+      W->End--;
+      return true;
+    }
+    return false;
+  }
+  bool Step2(Word *W, const U32 R1) {
+    for (int i=0; i<NUM_SUFFIXES_STEP2; i++) {
+      if (W->EndsWith(SuffixesStep2[i]) && SuffixInRn(W, R1, SuffixesStep2[i])) {
+        W->End-=U8(strlen(SuffixesStep2[i]));
+        return true;
+      }
+    }
+    if (W->EndsWith("st") && SuffixInRn(W, R1, "st") && W->Length()>5 && IsValidEnding((*W)(2))) {
+      W->End-=2;
+      return true;
+    }
+    return false;
+  }
+  bool Step3(Word *W, const U32 R1, const U32 R2) {
+    int i = 0;
+    for (; i<2; i++) {
+      if (W->EndsWith(SuffixesStep3[i]) && SuffixInRn(W, R2, SuffixesStep3[i])) {
+        W->End-=U8(strlen(SuffixesStep3[i]));
+        if (W->EndsWith("ig") && (*W)(2)!='e' && SuffixInRn(W, R2, "ig"))
+          W->End-=2;
+        if (i)
+          W->Type|=German::Noun;
+        return true;
+      }
+    }
+    for (; i<5; i++) {
+      if (W->EndsWith(SuffixesStep3[i]) && SuffixInRn(W, R2, SuffixesStep3[i]) && (*W)((U8)strlen(SuffixesStep3[i]))!='e') {
+        W->End-=U8(strlen(SuffixesStep3[i]));
+        if (i>2)
+          W->Type|=German::Adjective;
+        return true;
+      }
+    }
+    for (; i<NUM_SUFFIXES_STEP3; i++) {
+      if (W->EndsWith(SuffixesStep3[i]) && SuffixInRn(W, R2, SuffixesStep3[i])) {
+        W->End-=U8(strlen(SuffixesStep3[i]));
+        if ((W->EndsWith("er") || W->EndsWith("en")) && SuffixInRn(W, R1, "e?"))
+          W->End-=2;
+        if (i>5)
+          W->Type|=German::Noun|German::Female;
+        return true;
+      }
+    }
+    if (W->EndsWith("keit") && SuffixInRn(W, R2, "keit")) {
+      W->End-=4;
+      if (W->EndsWith("lich") && SuffixInRn(W, R2, "lich"))
+        W->End-=4;
+      else if (W->EndsWith("ig") && SuffixInRn(W, R2, "ig"))
+        W->End-=2;
+      W->Type|=German::Noun|German::Female;
+      return true;
+    }
+    return false;
+  }
+public:
+  inline bool IsVowel(const char c) final {
+    return CharInArray(c, Vowels, NUM_VOWELS);
+  }
+  bool Stem(Word *W) {
+    ConvertUTF8(W);
+    if (W->Length()<2) {
+      W->CalculateStemHash();
+      return false;
+    }
+    ReplaceSharpS(W);
+    MarkVowelsAsConsonants(W);
+    U32 R1=GetRegion(W, 0), R2=GetRegion(W, R1);
+    R1 = min(3, R1);
+    bool res = Step1(W, R1);
+    res|=Step2(W, R1);
+    res|=Step3(W, R1, R2);
+    for (int i=W->Start; i<=W->End; i++) {
+      switch (W->Letters[i]) {
+        case 0xE4: { W->Letters[i] = 'a'; break; }
+        case 0xF6: case 0xFC: { W->Letters[i]-=0x87; break; }
+        default: W->Letters[i] = tolower(W->Letters[i]);
+      }
+    }
+    if (!res)
+      res=W->MatchesAny(CommonWords, NUM_COMMON_WORDS);
+    W->CalculateStemHash();
+    if (res)
+      W->Language = Language::German;
+    return res;
+  }
+};
+
+#pragma pack(push,1)
+struct Entry {
+  short prefix;
+  U8 suffix;
+  bool termination;
+  U32 embedding;
+};
+#pragma pack(pop)
+
+class WordEmbeddingDictionary{
+private:
+  static constexpr int HashSize = 81929;
+  Array<Entry> entries;
+  Array<short> table;
+  int index;
+#ifndef NVERBOSE
+  U32 requests, hits;
+#endif
+  int findEntry(const short prefix, const U8 suffix){
+    int i = hash(prefix, suffix)%HashSize;
+    int offset = (i>0)?HashSize-i:1;
+    while (true){
+      if (table[i]<0) //free slot?
+        return -i-1;
+      else if (entries[table[i]].prefix==prefix && entries[table[i]].suffix==suffix) //is it the entry we want?
+        return table[i];
+      i-=offset;
+      if (i<0)
+        i+=HashSize;
+    }
+  }
+  void addEntry(const short prefix, const U8 suffix, const int offset = -1){
+    if (prefix==-1 || prefix>=index || index>0x7FFF || offset>=0)
+      return;
+    entries[index].prefix = prefix;
+    entries[index].suffix = suffix;
+    table[-offset-1] = index;
+    index+=(index<0x8000);
+  }
+public:
+  WordEmbeddingDictionary(): entries(0x8000), table(HashSize), index(0) { reset(); }
+  ~WordEmbeddingDictionary() {
+  #ifndef NVERBOSE
+    if (requests>0)
+      printf("\nHits: %d, Requests: %d, %.2f%%\n", hits, requests, (hits*100.0)/requests);
+  #endif
+  }
+  void reset(){
+    for (index=0; index<HashSize; table[index]=-1, index++);
+    for (index=0; index<256; index++){
+      table[-findEntry(-1, index)-1] = index;
+      entries[index].prefix = -1;
+      entries[index].suffix = index;
+    }
+  #ifndef NVERBOSE
+    requests = hits = 0;
+  #endif
+  }
+  bool addWord(const Word *W, const U32 embedding){
+    bool res = false;
+    int parent=-1, code=0, len=W->Length();
+    if (len==0) return res;
+    for (int i=0; i<len; i++){
+      int idx = findEntry(parent, code=(*W)[i]);
+      if (idx<0){
+        addEntry(parent, code, idx);
+        parent = index-1;
+        res = true;
+      }
+      else
+        parent = idx;
+    }
+    assert(parent>=0);
+    if (!res)
+      res=!entries[parent].termination;
+    entries[parent].termination = true;
+    entries[parent].embedding = embedding;
+    return res;
+  }
+  void getWordEmbedding(Word *W) {
+    int parent = -1;
+  #ifndef NVERBOSE
+    requests++;
+  #endif
+    W->Embedding = -1;
+    for (U32 i=0; i<W->Length(); i++){
+      if ((parent = findEntry(parent, (*W)[i]))<0)
+        return;
+    }
+    if (!entries[parent].termination)
+      return;
+    W->Embedding = entries[parent].embedding;
+  #ifndef NVERBOSE
+    hits++;
+  #endif
+  }
+  void loadFromFile(const char* filename) {
+    FileDisk f;
+#ifndef NVERBOSE
+    if (to_screen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+    printf("Loading word embeddings...");
+#endif
+    OpenFromMyFolder::anotherfile(&f, filename);
+    Word W;
+    int byte=0, embedding=0, total=0;
+    do {
+      if (f.blockread((U8*)(&embedding), WORD_EMBEDDING_SIZE)!=WORD_EMBEDDING_SIZE)
+        break;
+      W.reset();
+      while ((byte=f.getchar())>=0 && byte!=0x0A)
+        W+=byte;
+      if (addWord(&W, embedding)) total++;
+    } while (byte>=0);
+  #ifndef NVERBOSE
+    printf(" done [%s, %d words]\n", filename, total);
+  #endif
+    f.close();
   }
 };
 
@@ -4333,11 +4992,12 @@ public:
 #ifdef USE_TEXTMODEL
 
 template <class T, const U32 Size> class Cache {
-  static_assert(Size>1 && (Size&(Size-1))==0, "Cache size must be a power of 2 bigger than 1");
+  static_assert(Size>1 && ispowerof2(Size), "Cache size must be a power of 2 bigger than 1");
 private:
   Array<T> Data;
   U32 Index;
 public:
+  static const U32 size = Size;
   explicit Cache() : Data(Size) { Index=0; }
   T& operator()(U32 i) {
     return Data[(Index-i)&(Size-1)];
@@ -4353,28 +5013,71 @@ public:
   }
 };
 
-/*
-  Text model
-
-  Changelog:
-  (04/02/2018) v135: Initial release by Márcio Pais
-  (11/02/2018) v136: Uses 16 contexts, sets 3 mixer contexts
-  (15/02/2018) v138: Uses 21 contexts, sets 4 mixer contexts
-  (25/02/2018) v139: Uses 26 contexts
-*/
+static constexpr U8 AsciiGroupC0[2][254] ={
+  {
+    0, 10,
+    0, 1, 10, 10,
+    0, 4, 2, 3, 10, 10, 10, 10,
+    0, 0, 5, 4, 2, 2, 3, 3, 10, 10, 10, 10, 10, 10, 10, 10,
+    0, 0, 0, 0, 5, 5, 9, 4, 2, 2, 2, 2, 3, 3, 3, 3, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
+    0, 0, 0, 0, 0, 0, 0, 0, 5, 8, 8, 5, 9, 9, 6, 5, 2, 2, 2, 2, 2, 2, 2, 8, 3, 3, 3, 3, 3, 3, 3, 8, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 8, 8, 8, 8, 8, 5, 5, 9, 9, 9, 9, 9, 7, 8, 5, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 8, 8, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 8, 8, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10
+  },
+  {
+    0, 6,
+    0, 1, 6, 6,
+    4, 5, 1, 1, 6, 6, 6, 6,
+    4, 0, 3, 2, 1, 1, 1, 1, 6, 6, 6, 6, 6, 6, 6, 6,
+    0, 4, 0, 0, 3, 3, 2, 5, 1, 1, 1, 1, 1, 1, 1, 1, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
+    0, 0, 4, 4, 0, 0, 0, 0, 3, 3, 3, 3, 2, 2, 5, 5, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 1, 1, 1, 1, 1, 3, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
+    0, 0, 0, 0, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6
+  }
+};
+static constexpr U8 AsciiGroup[128] = {
+  0,  5,  5,  5,  5,  5,  5,  5,
+  5,  5,  4,  5,  5,  4,  5,  5,
+  5,  5,  5,  5,  5,  5,  5,  5,
+  5,  5,  5,  5,  5,  5,  5,  5,
+  6,  7,  8, 17, 17,  9, 17, 10,
+  11, 12, 17, 17, 13, 14, 15, 16,
+  1,  1,  1,  1,  1,  1,  1,  1,
+  1,  1, 18, 19, 20, 23, 21, 22,
+  23,  2,  2,  2,  2,  2,  2,  2,
+  2,  2,  2,  2,  2,  2,  2,  2,
+  2,  2,  2,  2,  2,  2,  2,  2,
+  2,  2,  2, 24, 27, 25, 27, 26,
+  27,  3,  3,  3,  3,  3,  3,  3,
+  3,  3,  3,  3,  3,  3,  3,  3,
+  3,  3,  3,  3,  3,  3,  3,  3,
+  3,  3,  3, 28, 30, 29, 30, 30
+};
 
 class TextModel {
 private:
-  const U32 MIN_RECOGNIZED_WORDS = 4;
-  ContextMap2 Map;
+  static constexpr int nCM2 = 28;
+public:
+  static constexpr int MIXERINPUTS = nCM2*(ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUNSTATS + ContextMap2::MIXERINPUTS_BYTEHISTORY) ; // 196
+  static constexpr int MIXERCONTEXTS = 2048+2048+4096+4096+2048+2048+4096+8192+2048; //30720
+  static constexpr int MIXERCONTEXTSETS = 9;
+private:
+  const Shared * const shared;
+  ModelStats *stats;
+  static constexpr U32 MIN_RECOGNIZED_WORDS = 4;
+  ContextMap2 cm;
   Array<Stemmer*> Stemmers;
   Array<Language*> Languages;
+  Array<WordEmbeddingDictionary*> Dictionaries;
   Cache<Word, 8> Words[Language::Count];
   Cache<Segment, 4> Segments;
   Cache<Sentence, 4> Sentences;
   Cache<Paragraph, 2> Paragraphs;
   Array<U32> WordPos;
   U32 BytePos[256];
+  struct WordDistance {
+    U32 distance[4];
+    U32 closest;
+  };
+  Cache<WordDistance, 4> WordDistances;
   Word *cWord, *pWord; // current word, previous word
   Segment *cSegment; // current segment
   Sentence *cSentence; // current sentence
@@ -4392,12 +5095,12 @@ private:
   struct {
     U32 Count[Language::Count-1]; // number of recognized words of each language in the last 64 words seen
     U64 Mask[Language::Count-1];  // binary mask with the recognition status of the last 64 words for each language
-    int Id;  // current language detected
+    int Id;  // current detected language
     int pId; // detected language of the previous word
   } Lang;
   struct {
     U64 numbers[2];   // last 2 numbers seen
-    U32 numHashes[2]; // hashes of the last 2 numbers seen
+    U64 numHashes[2]; // hashes of the last 2 numbers seen
     U8  numLength[2]; // digit length of last 2 numbers seen
     U32 numMask;      // binary mask of the results of the arithmetic comparisons between the numbers seen
     U32 numDiff;      // log2 of the consecutive differences between the last 16 numbers seen, clipped to 2 bits per difference
@@ -4416,7 +5119,7 @@ private:
     U32 maskPunct;    // mask of relative position of last comma related to other punctuation
     U32 nestHash;     // hash representing current nesting state
     U32 lastNest;     // distance to last nesting character
-    U32 masks[4],
+    U32 masks[5],
         wordLength[2];
     int UTF8Remaining;// remaining bytes for current UTF8-encoded Unicode code point (-1 if invalid byte found)
     U8 firstLetter;   // first letter of current word
@@ -4425,76 +5128,115 @@ private:
     U8 prevPunct;     // most recent punctuation character seen
     Word TopicDescriptor; // last word before ':'
   } Info;
-  U32 ParseCtx;
-  void Update(Buf& buffer, ModelStats *Stats = nullptr);
-  void SetContexts(Buf& buffer, ModelStats *Stats = nullptr);
+  U64 ParseCtx;       // state of parser + relevant features used as a context (hash) 
+  void SetContexts();
 public:
-  TextModel(const U32 Size) : Map(Size, 26), Stemmers(Language::Count-1), Languages(Language::Count-1), WordPos(0x10000), State(Parse::Unknown), pState(State), Lang{ 0, 0, Language::Unknown, Language::Unknown }, Info{ 0 }, ParseCtx(0) {
+  TextModel(const Shared * const sh, ModelStats *st, const U64 Size) : 
+    shared(sh), 
+    stats(st),
+    cm(sh,Size,nCM2,64,CM_USE_RUNSTATS|CM_USE_BYTEHISTORY),
+    Stemmers(Language::Count-1),
+    Languages(Language::Count-1),
+    Dictionaries(Language::Count-1),
+    WordPos(0x10000),
+    State(Parse::Unknown),
+    pState(State),
+    Lang{ {0}, {0}, Language::Unknown, Language::Unknown },
+    Info{},
+    ParseCtx(0)
+  {
     Stemmers[Language::English-1] = new EnglishStemmer();
     Stemmers[Language::French-1] = new FrenchStemmer();
+    Stemmers[Language::German-1] = new GermanStemmer();
     Languages[Language::English-1] = new English();
     Languages[Language::French-1] = new French();
+    Languages[Language::German-1] = new German();
     cWord = &Words[Lang.Id](0);
     pWord = &Words[Lang.Id](1);
     cSegment = &Segments(0);
     cSentence = &Sentences(0);
     cParagraph = &Paragraphs(0);
-    memset(&BytePos[0], 0, 256*sizeof(U32));
+    memset(&BytePos[0], 0, sizeof(BytePos));
   }
-  void Predict(Mixer& mixer, Buf& buffer, ModelStats *Stats = nullptr) {
-    if (bpos==0) {
-      Update(buffer, Stats);
-      SetContexts(buffer, Stats);
+  ~TextModel() {
+    for (int i=0; i<Language::Count-1; i++) {
+      delete Stemmers[i];
+      delete Languages[i];
+      delete Dictionaries[i];
     }
-    Map.mix(mixer);
-    mixer.set(hash((Lang.Id!=Language::Unknown)?1+Stemmers[Lang.Id-1]->IsVowel(buffer(1)):0, Info.masks[1]&0xFF, c0)&0x3FF, 1024);
-    mixer.set(hash(ilog2(Info.wordLength[0]+1), c0,
+  }
+  void Update();
+  void mix(Mixer& m) {
+    INJECT_SHARED_bpos 
+    if (bpos==0) {
+      Update();
+      SetContexts();
+    }
+    cm.mix(m);
+
+    const U8 chargrp = stats->Text.chargrp;
+    INJECT_SHARED_c1 INJECT_SHARED_c0
+    m.set(finalize64(hash((Lang.Id!=Language::Unknown)?1+Stemmers[Lang.Id-1]->IsVowel(c1):0, Info.masks[1]&0xFF, c0),11), 2048);
+    m.set(finalize64(hash(ilog2(Info.wordLength[0]+1), c0,
       (Info.lastDigit<Info.wordLength[0]+Info.wordGap)|
       ((Info.lastUpper<Info.lastLetter+Info.wordLength[1])<<1)|
       ((Info.lastPunct<Info.wordLength[0]+Info.wordGap)<<2)|
       ((Info.lastUpper<Info.wordLength[0])<<3)
-    )&0x3FF, 1024);
-    mixer.set(hash(Info.masks[1]&0x3FF, Info.lastUpper<Info.wordLength[0], Info.lastUpper<Info.lastLetter+Info.wordLength[1])&0x7FF, 2048);
-    mixer.set(hash(Info.spaces&0x1FF,
+    ),11), 2048);
+    m.set(finalize64(hash(Info.masks[1]&0x3FF, chargrp, Info.lastUpper<Info.wordLength[0], Info.lastUpper<Info.lastLetter+Info.wordLength[1]),12), 4096);
+    m.set(finalize64(hash(Info.spaces&0x1FF, chargrp,
       (Info.lastUpper<Info.wordLength[0])|
       ((Info.lastUpper<Info.lastLetter+Info.wordLength[1])<<1)|
       ((Info.lastPunct<Info.lastLetter)<<2)|
       ((Info.lastPunct<Info.wordLength[0]+Info.wordGap)<<3)|
       ((Info.lastPunct<Info.lastLetter+Info.wordLength[1]+Info.wordGap)<<4)
-    )&0x7FF, 2048);
+    ),12), 4096);
+    m.set(finalize64(hash(Info.firstLetter*(Info.wordLength[0]<4), min(6, Info.wordLength[0]), c0),11), 2048);
+    m.set(finalize64(hash((*pWord)[0], (*pWord)(0), min(4, Info.wordLength[0]), Info.lastPunct<Info.lastLetter),11), 2048);
+    m.set(finalize64(hash(min(4, Info.wordLength[0]), chargrp,
+      Info.lastUpper<Info.wordLength[0],
+      (Info.nestHash>0)?Info.nestHash&0xFF:0x100|(Info.firstLetter*(Info.wordLength[0]>0 && Info.wordLength[0]<4))
+    ),12), 4096);
+    m.set(finalize64(hash(chargrp, Info.masks[4]&0x1F, (Info.masks[4]>>5)&0x1F), 13), 8192);
+    m.set(finalize64(hash(chargrp, U8(pWord->Embedding), Lang.Id, State), 11), 2048);
   }
 };
 
-void TextModel::Update(Buf& buffer, ModelStats *Stats) {
+void TextModel::Update() {
   Info.lastUpper  = min(0xFF, Info.lastUpper+1), Info.maskUpper<<=1;
   Info.lastLetter = min(0x1F, Info.lastLetter+1);
   Info.lastDigit  = min(0xFF, Info.lastDigit+1);
   Info.lastPunct  = min(0x3F, Info.lastPunct+1);
-  Info.lastNewLine++, Info.prevNewLine++, Info.lastNest++;
-  Info.spaceCount-=(Info.spaces>>31), Info.spaces<<=1;
-  Info.masks[0]<<=2, Info.masks[1]<<=2, Info.masks[2]<<=4, Info.masks[3]<<=3;
-  pState = State;  
-
-  U8 c = buffer(1), pC=tolower(c);
+  Info.lastNewLine++; Info.prevNewLine++; Info.lastNest++;
+  Info.spaceCount-=(Info.spaces>>31); Info.spaces<<=1;
+  Info.masks[0]<<=2; Info.masks[1]<<=2; Info.masks[2]<<=4; Info.masks[3]<<=3;
+  pState = State;
+  
+  INJECT_SHARED_buf  
+  U8 c = buf(1), lc = tolower(c), g = (c<0x80)?AsciiGroup[c]:31;
+  if (g>4 || g!=(Info.masks[4]&0x1F))
+    Info.masks[4]<<=5, Info.masks[4]|=g;
+  INJECT_SHARED_pos
   BytePos[c] = pos;
-  if (c!=pC) {
-    c = pC;
+  if (c!=lc) {
+    c = lc;
     Info.lastUpper = 0, Info.maskUpper|=1;
   }
-  pC = buffer(2);
-  ParseCtx = hash(State=Parse::Unknown, pWord->Hash[1], c, (ilog2(Info.lastNewLine)+1)*(Info.lastNewLine*3>Info.prevNewLine), Info.masks[1]&0xFC);
+  U8 pC = buf(2);
+  State = Parse::Unknown;
+  ParseCtx = hash(State, pWord->Hash[0], c, (ilog2(Info.lastNewLine)+1)*(Info.lastNewLine*3>Info.prevNewLine), Info.masks[1]&0xFC);
 
-  if ((c>='a' && c<='z') || c=='\'' || c=='-' || c>0x7F) {    
+  if ((c>='a' && c<='z') || c==APOSTROPHE || c=='-' || c>0x7F) {
     if (Info.wordLength[0]==0) {
-      // check for hyphenation with "+"
-      if (pC==NEW_LINE && ((Info.lastLetter==3 && buffer(3)=='+') || (Info.lastLetter==4 && buffer(3)==CARRIAGE_RETURN && buffer(4)=='+'))) {
+      // check for hyphenation with "+" (book1 from Calgary)
+      if (pC==NEW_LINE && ((Info.lastLetter==3 && buf(3)=='+') || (Info.lastLetter==4 && buf(3)==CARRIAGE_RETURN && buf(4)=='+'))) {
         Info.wordLength[0] = Info.wordLength[1];
         for (int i=Language::Unknown; i<Language::Count; i++)
           Words[i]--;
         cWord = pWord, pWord = &Words[Lang.pId](1);
-        memset(cWord, 0, sizeof(Word));
+        cWord->reset();
         for (U32 i=0; i<Info.wordLength[0]; i++)
-          (*cWord)+=buffer(Info.wordLength[0]-i+Info.lastLetter);
+          (*cWord)+=buf(Info.wordLength[0]-i+Info.lastLetter);
         Info.wordLength[1] = (*pWord).Length();
         cSegment->WordCount--;
         cSentence->WordCount--;
@@ -4507,20 +5249,22 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
     Info.lastLetter = 0;
     Info.wordLength[0]++;
     Info.masks[0]+=(Lang.Id!=Language::Unknown)?1+Stemmers[Lang.Id-1]->IsVowel(c):1, Info.masks[1]++, Info.masks[3]+=Info.masks[0]&3;
-    if (c=='\'') {
+    if (c==APOSTROPHE) {
       Info.masks[2]+=12;
       if (Info.wordLength[0]==1) {
         if (Info.quoteLength==0 && pC==SPACE)
           Info.quoteLength = 1;
         else if (Info.quoteLength>0 && Info.lastPunct==1) {
           Info.quoteLength = 0;
-          ParseCtx = hash(State=Parse::AfterQuote, pC);
+          State = Parse::AfterQuote;
+          ParseCtx = hash(State, pC);
         }
       }
     }
     (*cWord)+=c;
-    cWord->GetHashes();
-    ParseCtx = hash(State=Parse::ReadingWord, cWord->Hash[1]);
+    cWord->CalculateWordHash();
+    State = Parse::ReadingWord;
+    ParseCtx = hash(State, cWord->Hash[0]);
   }
   else {
     if (cWord->Length()>0) {
@@ -4533,7 +5277,7 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
           memcpy(&Words[i](0), cWord, sizeof(Word));
         if (Stemmers[i-1]->Stem(&Words[i](0)))
           Lang.Count[i-1]++, Lang.Mask[i-1]|=1;
-      }      
+      }
       Lang.Id = Language::Unknown;
       U32 best = MIN_RECOGNIZED_WORDS;
       for (int i=Language::Count-1; i>Language::Unknown; i--) {
@@ -4544,20 +5288,48 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
         Words[i]++;
       }
       Words[Language::Unknown]++;
-      #ifndef NVERBOSE
+
       if (Lang.Id!=Lang.pId) {
-        if(to_screen)printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+        #ifndef NVERBOSE
+        if (to_screen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
         switch (Lang.Id) {
           case Language::Unknown: { printf("[Language: Unknown, blpos: %d]\n",blpos); break; };
           case Language::English: { printf("[Language: English, blpos: %d]\n",blpos); break; };
           case Language::French : { printf("[Language: French,  blpos: %d]\n",blpos); break; };
+          case Language::German : { printf("[Language: German,  blpos: %d]\n",blpos); break; };
+        }
+        #endif
+        if (options&OPTION_TRAINTXT && Lang.Id!=Language::Unknown && Dictionaries[Lang.Id-1]==nullptr) {
+          switch (Lang.Id) {
+            case Language::English: {
+              Dictionaries[Lang.Id-1] = new WordEmbeddingDictionary();
+              Dictionaries[Lang.Id-1]->loadFromFile("english.emb");
+            }
+          }
         }
       }
-      #endif
+
       Lang.pId = Lang.Id;
-      pWord = &Words[Lang.Id](1), cWord = &Words[Lang.Id](0);
-      memset(cWord, 0, sizeof(Word));
-      WordPos[pWord->Hash[1]&(WordPos.size()-1)] = pos;
+      pWord = &Words[Lang.Id](1);
+      cWord = &Words[Lang.Id](0);
+      cWord->reset();
+      if (options&OPTION_TRAINTXT) {
+        if (Lang.Id!=Language::Unknown && Dictionaries[Lang.Id-1]!=nullptr)
+          Dictionaries[Lang.Id-1]->getWordEmbedding(pWord);
+        WordDistances++;
+        for (U32 i=WordDistances.size-1; i>0; i--)
+          memcpy(&WordDistances(i), &WordDistances(i-1), sizeof(WordDistance));
+        U32 minDistance = UINT32_MAX;
+        for (U32 i=1; i<=4; i++) {
+          U32 d = pWord->DistanceTo(Words[Lang.Id](i+1));
+          WordDistances(0).distance[i-1] = d;
+          if (d<minDistance) {
+            minDistance = d;
+            WordDistances(0).closest = Words[Lang.Id](i+1).Embedding;
+          }
+        }
+      }
+      WordPos[pWord->Hash[0]&(WordPos.size()-1)] = pos;
       if (cSegment->WordCount==0)
         memcpy(&cSegment->FirstWord, pWord, sizeof(Word));
       cSegment->WordCount++;
@@ -4586,7 +5358,8 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
     switch (c) {
       case '.': {
         if (Lang.Id!=Language::Unknown && Info.lastUpper==Info.wordLength[1] && Languages[Lang.Id-1]->IsAbbreviation(pWord)) {
-          ParseCtx = hash(State=Parse::WasAbbreviation, pWord->Hash[1]);
+          State = Parse::WasAbbreviation;
+          ParseCtx = hash(State, pWord->Hash[0]);
           break;
         }
       }
@@ -4603,7 +5376,8 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
       case ',': case ';': case ':': {
         if (c==',') {
           Info.commas++;
-          ParseCtx = hash(State=Parse::AfterComma, ilog2(Info.quoteLength+1), ilog2(Info.lastNewLine), Info.lastUpper<Info.lastLetter+Info.wordLength[1]);
+          State = Parse::AfterComma;
+          ParseCtx = hash(State, ilog2(Info.quoteLength+1), ilog2(Info.lastNewLine), Info.lastUpper<Info.lastLetter+Info.wordLength[1]);
         }
         else if (c==':')
           memcpy(&Info.TopicDescriptor, pWord, sizeof(Word));
@@ -4621,14 +5395,17 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
         Info.commas = 0;
         if (Info.prevNewLine==1 || (Info.prevNewLine==2 && pC==CARRIAGE_RETURN))
           cParagraph = &Paragraphs.Next();
-        else if ((Info.lastLetter==2 && pC=='+') || (Info.lastLetter==3 && pC==CARRIAGE_RETURN && buffer(3)=='+'))
-          ParseCtx = hash(Parse::ReadingWord, pWord->Hash[1]), State=Parse::PossibleHyphenation;
+        else if ((Info.lastLetter==2 && pC=='+') || (Info.lastLetter==3 && pC==CARRIAGE_RETURN && buf(3)=='+')) {
+          ParseCtx = hash(Parse::ReadingWord, pWord->Hash[0]);
+          State = Parse::PossibleHyphenation;
+        }
       }
       case TAB: case CARRIAGE_RETURN: case SPACE: {
         Info.spaceCount++, Info.spaces|=1;
         Info.masks[1]+=3, Info.masks[3]+=5;
         if (c==SPACE && pState==Parse::WasAbbreviation) {
-          ParseCtx = hash(State=Parse::AfterAbbreviation, pWord->Hash[1]);
+          State = Parse::AfterAbbreviation;
+          ParseCtx = hash(State, pWord->Hash[0]);
         }
         break;
       }
@@ -4642,14 +5419,15 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
       case '}' : Info.masks[2]+=8; Info.nestHash-=17; Info.lastNest=0; break;
       case '>' : Info.masks[2]+=9; Info.nestHash-=23; Info.lastNest=0; break;
       case 0xBB: Info.masks[2]+=10; break;
-      case '"': {
+      case QUOTE: {
         Info.masks[2]+=11;
         // start/stop counting
         if (Info.quoteLength==0)
           Info.quoteLength = 1;
         else {
           Info.quoteLength = 0;
-          ParseCtx = hash(State=Parse::AfterQuote, 0x100|pC);
+          State = Parse::AfterQuote;
+          ParseCtx = hash(State, 0x100|pC);
         }
         break;
       }
@@ -4658,7 +5436,7 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
     }
     if (c>='0' && c<='9') {
       Info.numbers[0] = Info.numbers[0]*10 + (c&0xF), Info.numLength[0] = min(19, Info.numLength[0]+1);
-      Info.numHashes[0] = hash(Info.numHashes[0], c, Info.numLength[0]);
+      Info.numHashes[0] = combine64(Info.numHashes[0], c);
       Info.expectedDigit = -1;
       if (Info.numLength[0]<Info.numLength[1] && (pState==Parse::ExpectDigit || ((Info.numDiff&3)==0 && Info.numLength[0]<=1))) {
         U64 ExpectedNum = Info.numbers[1]+(Info.numMask&3)-2, PlaceDivisor=1;
@@ -4670,8 +5448,8 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
         }
       }
       else {
-        U8 d = buffer(Info.numLength[0]+2);
-        if (Info.numLength[0]<3 && buffer(Info.numLength[0]+1)==',' && d>='0' && d<='9')
+        U8 d = buf(Info.numLength[0]+2);
+        if (Info.numLength[0]<3 && buf(Info.numLength[0]+1)==',' && d>='0' && d<='9')
           State = Parse::ExpectDigit;
       }
       Info.lastDigit = 0;
@@ -4698,50 +5476,59 @@ void TextModel::Update(Buf& buffer, ModelStats *Stats) {
   else
     Info.UTF8Remaining = (leadingBitsSet!=1)?(c!=0xC0 && c!=0xC1 && c<0xF5)?(leadingBitsSet-(leadingBitsSet>0)):-1:0;
   Info.maskPunct = (BytePos[',']>BytePos['.'])|((BytePos[',']>BytePos['!'])<<1)|((BytePos[',']>BytePos['?'])<<2)|((BytePos[',']>BytePos[':'])<<3)|((BytePos[',']>BytePos[';'])<<4);
+
+  stats->Text.firstLetter = Info.firstLetter;
+  stats->Text.mask = Info.masks[1]&0xFF;
 }
 
-void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
-  U8 c = buffer(1), lc = tolower(c), m2 = Info.masks[2]&0xF, column = min(0xFF, Info.lastNewLine);;
-  U16 w = ((State==Parse::ReadingWord)?cWord->Hash[1]:pWord->Hash[1])&0xFFFF;
-  U32 h = ((State==Parse::ReadingWord)?cWord->Hash[1]:pWord->Hash[2])*271+c;
-  int i = State<<6;
+void TextModel::SetContexts() {
+  INJECT_SHARED_buf
+  const U8 c = buf(1), lc = tolower(c), m2 = Info.masks[2]&0xF, column = min(0xFF, Info.lastNewLine);
+  const U64 w = State==Parse::ReadingWord ? cWord->Hash[0] : pWord->Hash[0];
 
-  Map.set(ParseCtx);
-  Map.set(hash(i++, cWord->Hash[0], pWord->Hash[0],
+  const U64 cWordHash0 = cWord->Hash[0];
+  const U64 pWordHash0 = pWord->Hash[0];
+  const U64 pWordHash1 = pWord->Hash[1];
+
+  cm.set(ParseCtx);
+  U64 i = State*64;
+  cm.set(hash(++i, cWordHash0, pWordHash0,
     (Info.lastUpper<Info.wordLength[0])|
     ((Info.lastDigit<Info.wordLength[0]+Info.wordGap)<<1)
-  )); 
-  Map.set(hash(i++, cWord->Hash[1], Words[Lang.pId](2).Hash[1], min(10,ilog2((U32)Info.numbers[0])),
+  ));
+  cm.set(hash(++i, cWordHash0, Words[Lang.pId](2).Hash[0], min(10,ilog2((U32)Info.numbers[0])),
     (Info.lastUpper<Info.lastLetter+Info.wordLength[1])|
     ((Info.lastLetter>3)<<1)|
     ((Info.lastLetter>0 && Info.wordLength[1]<3)<<2)
   ));
-  Map.set(hash(i++, cWord->Hash[1]&0xFFF, Info.masks[1]&0x3FF, Words[Lang.pId](3).Hash[2],
+  cm.set(hash(++i, cWordHash0, Info.masks[1]&0x3FF, Words[Lang.pId](3).Hash[1],
     (Info.lastDigit<Info.wordLength[0]+Info.wordGap)|
     ((Info.lastUpper<Info.lastLetter+Info.wordLength[1])<<1)|
     ((Info.spaces&0x7F)<<2)
   ));
-  Map.set(hash(i++, cWord->Hash[1], pWord->Hash[3], Words[Lang.pId](2).Hash[3]));
-  Map.set(hash(i++, h&0x7FFF, Words[Lang.pId](2).Hash[1]&0xFFF, Words[Lang.pId](3).Hash[1]&0xFFF));
-  Map.set(hash(i++, cWord->Hash[1], c, (cSentence->VerbIndex<cSentence->WordCount)?cSentence->lastVerb.Hash[1]:0));
-  Map.set(hash(i++, pWord->Hash[2], Info.masks[1]&0xFC, lc, Info.wordGap));
-  Map.set(hash(i++, (Info.lastLetter==0)?cWord->Hash[1]:pWord->Hash[1], c, cSegment->FirstWord.Hash[2], min(3,ilog2(cSegment->WordCount+1))));
-  Map.set(hash(i++, cWord->Hash[1], c, Segments(1).FirstWord.Hash[3]));
-  Map.set(hash(i++, max(31,lc), Info.masks[1]&0xFFC, (Info.spaces&0xFE)|(Info.lastPunct<Info.lastLetter), (Info.maskUpper&0xFF)|(((0x100|Info.firstLetter)*(Info.wordLength[0]>1))<<8)));
-  Map.set(hash(i++, column, min(7,ilog2(Info.lastUpper+1)), ilog2(Info.lastPunct+1)));
-  Map.set(
-    (column&0xF8)|(Info.masks[1]&3)|((Info.prevNewLine-Info.lastNewLine>63)<<2)|
-    (min(3, Info.lastLetter)<<8)|
-    (Info.firstChar<<10)|
-    ((Info.commas>4)<<18)|
-    ((m2>=1 && m2<=5)<<19)|
-    ((m2>=6 && m2<=10)<<20)|
-    ((m2==11 || m2==12)<<21)|
-    ((Info.lastUpper<column)<<22)|
-    ((Info.lastDigit<column)<<23)|
-    ((column<Info.prevNewLine-Info.lastNewLine)<<24)
+  cm.set(hash(++i, cWordHash0, pWordHash1));
+  cm.set(hash(++i, cWordHash0, pWordHash1, Words[Lang.pId](2).Hash[1]));
+  cm.set(hash(++i, w, Words[Lang.pId](2).Hash[0], Words[Lang.pId](3).Hash[0]));
+  cm.set(hash(++i, cWordHash0, c, (cSentence->VerbIndex<cSentence->WordCount)?cSentence->lastVerb.Hash[0]:0));
+  cm.set(hash(++i, pWordHash1, Info.masks[1]&0xFC, lc, Info.wordGap));
+  cm.set(hash(++i, (Info.lastLetter==0)?cWordHash0:pWordHash0, c, cSegment->FirstWord.Hash[1], min(3,ilog2(cSegment->WordCount+1))));
+  cm.set(hash(++i, cWordHash0, c, Segments(1).FirstWord.Hash[1]));
+  cm.set(hash(++i, max(31,lc), Info.masks[1]&0xFFC, (Info.spaces&0xFE)|(Info.lastPunct<Info.lastLetter), (Info.maskUpper&0xFF)|(((0x100|Info.firstLetter)*(Info.wordLength[0]>1))<<8)));
+  cm.set(hash(++i, column, min(7,ilog2(Info.lastUpper+1)), ilog2(Info.lastPunct+1)));
+  cm.set(hash(++i,
+      (column&0xF8)|(Info.masks[1]&3)|((Info.prevNewLine-Info.lastNewLine>63)<<2)|
+      (min(3, Info.lastLetter)<<8)|
+      (Info.firstChar<<10)|
+      ((Info.commas>4)<<18)|
+      ((m2>=1 && m2<=5)<<19)|
+      ((m2>=6 && m2<=10)<<20)|
+      ((m2==11 || m2==12)<<21)|
+      ((Info.lastUpper<column)<<22)|
+      ((Info.lastDigit<column)<<23)|
+      ((column<Info.prevNewLine-Info.lastNewLine)<<24)
+    )
   );
-  Map.set(hash(
+  cm.set(hash(++i,
     (2*column)/3,
     min(13, Info.lastPunct)+(Info.lastPunct>16)+(Info.lastPunct>32)+Info.maskPunct*16,
     ilog2(Info.lastUpper+1),
@@ -4750,25 +5537,26 @@ void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
     ((m2<6)<<1)|
     ((m2<11)<<2)
   ));
-  Map.set(hash(i++, column>>1, Info.spaces&0xF));
-  Map.set(hash(
+  cm.set(hash(++i, column>>1, Info.spaces&0xF));
+  cm.set(hash(++i,
     Info.masks[3]&0x3F,
     min((max(Info.wordLength[0],3)-2)*(Info.wordLength[0]<8),3),
     Info.firstLetter*(Info.wordLength[0]<5),
-    w&0x3FF,
-    (c==buffer(2))|
+    w,
+    (c==buf(2))|
     ((Info.masks[2]>0)<<1)|
     ((Info.lastPunct<Info.wordLength[0]+Info.wordGap)<<2)|
     ((Info.lastUpper<Info.wordLength[0])<<3)|
     ((Info.lastDigit<Info.wordLength[0]+Info.wordGap)<<4)|
     ((Info.lastPunct<2+Info.wordLength[0]+Info.wordGap+Info.wordLength[1])<<5)
   ));
-  Map.set(hash(i++, w, c, Info.numHashes[1]));
-  Map.set(hash(i++, w, c, llog(pos-WordPos[w])>>1));
-  Map.set(hash(i++, w, c, Info.TopicDescriptor.Hash[1]&0x7FFF));
-  Map.set(hash(i++, Info.numLength[0], c, Info.TopicDescriptor.Hash[1]&0x7FFF));
-  Map.set(hash(i++, (Info.lastLetter>0)?c:0x100, Info.masks[1]&0xFFC, Info.nestHash&0x7FF));
-  Map.set(hash(i++, w*17+c, Info.masks[3]&0x1FF,
+  cm.set(hash(++i, w, c, Info.numHashes[1]));
+  INJECT_SHARED_pos
+  cm.set(hash(++i, w, c, llog(pos-WordPos[w&(WordPos.size()-1)])>>1));
+  cm.set(hash(++i, w, c, Info.TopicDescriptor.Hash[0]));
+  cm.set(hash(++i, Info.numLength[0], c, Info.TopicDescriptor.Hash[0]));
+  cm.set(hash(++i, (Info.lastLetter>0)?c:0x100, Info.masks[1]&0xFFC, Info.nestHash&0x7FF));
+  cm.set(hash(++i, w, c, Info.masks[3]&0x1FF,
     ((cSentence->VerbIndex==0 && cSentence->lastVerb.Length()>0)<<6)|
     ((Info.wordLength[1]>3)<<5)|
     ((cSegment->WordCount==0)<<4)|
@@ -4777,286 +5565,922 @@ void TextModel::SetContexts(Buf& buffer, ModelStats *Stats) {
     ((Info.lastUpper<Info.lastLetter+Info.wordLength[1])<<1)|
     (Info.lastUpper<Info.wordLength[0]+Info.wordGap+Info.wordLength[1])
   ));
-  Map.set(hash(i++, c, pWord->Hash[2], Info.firstLetter*(Info.wordLength[0]<6),
+  cm.set(hash(++i, c, pWordHash1, Info.firstLetter*(Info.wordLength[0]<6),
     ((Info.lastPunct<Info.wordLength[0]+Info.wordGap)<<1)|
     (Info.lastPunct>=Info.lastLetter+Info.wordLength[1]+Info.wordGap)
   ));
-  Map.set(hash(i++, w*23+c, Words[Lang.pId](1+(Info.wordLength[0]==0)).Letters[Words[Lang.pId](1+(Info.wordLength[0]==0)).Start], Info.firstLetter*(Info.wordLength[0]<7)));
-  Map.set(hash(i++, column, Info.spaces&7, Info.nestHash&0x7FF));
-  Map.set(hash(i++, cWord->Hash[1], (Info.lastUpper<column)|((Info.lastUpper<Info.wordLength[0])<<1), min(5, Info.wordLength[0])));
+  cm.set(hash(++i, w, c, Words[Lang.pId](1+(Info.wordLength[0]==0)).Letters[Words[Lang.pId](1+(Info.wordLength[0]==0)).Start], Info.firstLetter*(Info.wordLength[0]<7)));
+  cm.set(hash(++i, column, Info.spaces&7, Info.nestHash&0x7FF));
+  cm.set(hash(++i, cWordHash0, (Info.lastUpper<column)|((Info.lastUpper<Info.wordLength[0])<<1), min(5, Info.wordLength[0])));
+  cm.set(hash(++i, Lang.Id, w,
+    U8(Words[Lang.Id](1+(State!=Parse::ReadingWord)).Embedding),
+    (Info.lastUpper<Info.wordLength[0])|
+    ((cSegment->WordCount==0)<<1)
+  ));
+  assert(i-State*64+1==nCM2);
 }
 
 #endif //USE_TEXTMODEL
 
-//////////////////////////// matchModel ///////////////////////////
+//////////////////////////// MatchModel ///////////////////////////
 
-// matchModel() finds the most recent matching context and returns its max length
+//
+// Predict the next bit based on a preceding long matching byte sequence
+//
+// This model monitors byte sequences and keeps their most recent 
+// positions in a hashtable.
+// When the current byte sequence matches an older sequence (having 
+// the same hash) the model predicts the forthcoming bits.
 
-int matchModel(Mixer& m) {
-  const int MAXLEN=65534;  // longest allowed match + 1
-  static Array<int> t(MEM);  // hash table of pointers to contexts
-  static int h=0;  // hash of last 7 bytes
-  static int ptr=0;  // points to next byte of match if any
-  static int len=0;  // length of match, or 0 if no match
-  static int result=0;
-
-  static SmallStationaryContextMap scm1(0x10000);
-
-  if (bpos==0) {
-    h=(h*997*8+buf(1)+1)&(t.size()-1);  // update context hash
-    if (len) ++len, ++ptr;
-    else {  // find match
-      ptr=t[h];
-      if (ptr && pos-ptr<(int)buf.size())
-        while (buf(len+1)==buf[ptr-len-1] && len<MAXLEN) ++len;
-    }
-    t[h]=pos;  // update hash table
-    result=len;
-//    if (result>0 && !(result&0xffff)) printf("pos=%d len=%d ptr=%d\n", pos, len, ptr);
-    scm1.set(pos);
-  }
-
-  // predict
-  if (len)
+class MatchModel {
+private:
+  static constexpr int NumHashes = 3;
+  static constexpr int nCM = 2;
+  static constexpr int nST = 3;
+  static constexpr int nSSM = 2;
+  static constexpr int nSM = 2;
+public:
+  static constexpr int MIXERINPUTS = 2 + nCM*(ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUNSTATS) + nST + nSSM*SmallStationaryContextMap::MIXERINPUTS + nSM*StationaryMap::MIXERINPUTS; // 23
+  static constexpr int MIXERCONTEXTS = 8;
+  static constexpr int MIXERCONTEXTSETS = 1;
+private:
+  const Shared * const shared;
+  ModelStats *stats;
+  enum Parameters : U32 {
+    MaxExtend = 0,   // longest allowed match expansion // warning: larger value -> slowdown
+    MinLen = 5,      // minimum required match length
+    StepSize = 2,    // additional minimum length increase per higher order hash
+  };
+  Array<U32> Table;
+  StateMap StateMaps[nST];
+  ContextMap2 cm;
+  SmallStationaryContextMap SCM;
+  StationaryMap Maps[nSM];
+  IndirectContext<U8> iCtx;
+  U32 hashes[NumHashes]{ 0 };
+  U32 ctx[nST]{ 0 };
+  U32 length=0;      // rebased length of match (length=1 represents the smallest accepted match length), or 0 if no match
+  U32 index=0;       // points to next byte of match in buf, 0 when there is no match
+  U32 length_bak=0;  // allows match recovery after a 1-byte mismatch 
+  U32 index_bak=0;   // 
+  U8 expectedByte=0; // prediction is based on this byte (buf[index]), valid only when length>0
+  bool delta=false;  // indicates that a match has just failed (delta mode)
+  const U32 mask;
+  const int hashbits;
+public:
+  MatchModel(const Shared * const sh, ModelStats *st, const U64 Size) : 
+    shared(sh), stats(st), Table(Size/sizeof(U32)), 
+    StateMaps{ //StateMap:  s, n, lim, 
+      {sh,1,56*256,1023,StateMap::GENERIC}, {sh,1,8*256*256+1,1023,StateMap::GENERIC}, {sh,1,256*256,1023,StateMap::GENERIC}
+    },
+    cm(sh,MEM/32,nCM,74,CM_USE_RUNSTATS),
+    SCM{sh,6,1,6,64}, /* SmallStationaryContextMap: BitsOfContext, InputBits, Rate, Scale */
+    Maps{ /* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
+      {sh,23,1,64,1023}, {sh,15,1,64,1023}
+    },
+    iCtx{15,1}, // IndirectContext<U8>: BitsPerContext, InputBits
+    mask(U32(Size/sizeof(U32)-1)), hashbits(ilog2(mask+1))
   {
-   if (buf(1)==buf[ptr-1] && c0==(buf[ptr]+256)>>(8-bpos))
-   {
-    if (len>MAXLEN) len=MAXLEN;
-    if (buf[ptr]>>(7-bpos)&1)
-    {
-     m.add(ilog(len)<<2);
-     m.add(min(len, 32)<<6);
-    }
-    else
-    {
-     m.add(-(ilog(len)<<2));
-     m.add(-(min(len, 32)<<6));
-    }
-   }
-   else
-   {
-    len=0;
-    m.add(0);
-    m.add(0);
-   }
+    assert(ispowerof2(Size));
   }
-  else
-  {
-   m.add(0);
-   m.add(0);
-  }
-
-  scm1.mix(m);
-  return result;
-}
-
-
-//////////////////////////// wordModel /////////////////////////
-
-// Model English text (words and columns/end of line)
-
-#ifdef USE_WORDMODEL
-
-static U32 frstchar=0, spafdo=0, spaces=0, spacecount=0, words=0, wordcount=0,wordlen=0,wordlen1=0;
-void wordModel(Mixer& m, Blocktype blocktype) {
-  static U32 word0=0, word1=0, word2=0, word3=0, word4=0, word5=0;  // hashes
-  static U32 xword0=0,xword1=0,xword2=0,cword0=0,ccword=0;
-  static U32 number0=0, number1=0;  // hashes
-  static U32 text0=0;  // hash stream of letters
-  static U32 wrdhsh=0, lastLetter=0, firstLetter=0, lastUpper=0, lastDigit=0, wordGap=0;
-  static ContextMap cm(MEM*16, 47+1);
-  static int nl1=-3, nl=-2, w=0;  // previous, current newline position
-  static U32 mask=0, mask2=0;
-  static Array<int> wpos(0x10000);  // last position of word
-  static Array<Word> StemWords(4);
-  static Word *cWord=&StemWords[0], *pWord=&StemWords[3];
-  static EnglishStemmer StemmerEN;
-  static int StemIndex=0;
-
-  // Update word hashes
-  if (bpos==0) {
-    int c=c4&255,pC=(U8)(c4>>8),f=0;
-    if (spaces&0x80000000) --spacecount;
-    if (words&0x80000000) --wordcount;
-    spaces=spaces*2;
-    words=words*2;
-    lastUpper=min(lastUpper+1,63);
-    lastLetter=min(lastLetter+1,63);
-    mask2<<=2;
-    if (c>='A' && c<='Z') c+='a'-'A', lastUpper=0;
-    if ((c>='a' && c<='z') || c=='\'' || c=='-' || c>127)
-      (*cWord)+=c;
-    else if ((*cWord).Length()>0){
-      StemmerEN.Stem(cWord);
-      cWord->GetHashes();
-      StemIndex=(StemIndex+1)&3;
-      pWord=cWord;
-      cWord=&StemWords[StemIndex];
-      memset(cWord, 0, sizeof(Word));
+  void Update() {
+    INJECT_SHARED_bpos INJECT_SHARED_buf 
+    if (length!=0) {
+      const int expectedBit = (expectedByte>>((8-bpos)&7))&1;
+      INJECT_SHARED_y
+        if (y!=expectedBit) {
+          if(length_bak!=0 && length-length_bak<MinLen) { // mismatch too soon in recovery mode -> give up
+            length_bak=0;
+            index_bak=0;
+          } 
+          else { //backup match information: maybe we can recover it just after this mismatch
+            length_bak=length;
+            index_bak=index;
+          }
+          delta = true;
+          length = 0;
+        }
     }
-    if ((c>='a' && c<='z') || c==1 || c==2 ||(c>=128 &&(b2!=3))) {
-      if (!wordlen){
-        // model hyphenation with "+"
-        if ((lastLetter==3 && (c4&0xFFFF00)==0x2B0A00) || (lastLetter==4 && (c4&0xFFFFFF00)==0x2B0D0A00)){
-          word0 = word1;
-          wordlen = wordlen1;
-          if (c<128){
-            StemIndex=(StemIndex-1)&3;
-            cWord=pWord;
-            pWord=&StemWords[(StemIndex-1)&3];
-            memset(cWord, 0, sizeof(Word));
-            for (U32 i=0;i<=wordlen;i++)
-              (*cWord)+=buf(wordlen-i+1+(lastLetter-1)*(i!=wordlen));
+
+    //bytewise contexts
+    if(bpos==0) {
+      // update hashes
+      for (U32 i=0, minLen=MinLen+(NumHashes-1)*StepSize; i<NumHashes; i++, minLen-=StepSize) {
+        U64 hash = 0;
+        for (U32 j=minLen; j>0; j--)
+          hash = combine64(hash, buf(j));
+        hashes[i] = finalize64(hash,hashbits);
+      }
+
+      // recover match after a 1-byte mismatch
+      if(length==0 && !delta && length_bak!=0)  { //match failed (2 bytes ago), no new match found, and we have a backup
+        index_bak++;
+        if(length_bak<mask)length_bak++;
+        INJECT_SHARED_c1
+        if(buf[index_bak]==c1) { // match continues -> recover
+          length=length_bak;
+          index=index_bak;
+        }
+        else { // still mismatch
+          length_bak=index_bak=0; // purge backup
+        }
+      }
+      // extend current match
+      if(length!=0) {
+        index++;
+        if(length<mask)length++;
+      }
+      delta = false;
+
+      // find a new match, starting with the highest order hash and falling back to lower ones
+      if(length==0) {
+        U32 minLen = MinLen+(NumHashes-1)*StepSize, bestLen = 0, bestIndex = 0;
+        for (U32 i=0; i<NumHashes && length<minLen; i++, minLen-=StepSize) {
+          index = Table[hashes[i]];
+          if (index>0) {
+            length = 0;
+            while (length<(minLen+MaxExtend) && buf(length+1)==buf[index-length-1])
+              length++;
+            if (length>bestLen) {
+              bestLen = length;
+              bestIndex = index;
+            }
           }
         }
-        else{
-          wordGap = lastLetter;
-          firstLetter = c;
-          wrdhsh = 0;
+        if (bestLen>=MinLen) {
+          length = bestLen-(MinLen-1); // rebase, a length of 1 actually means a length of MinLen
+          index = bestIndex;
+          length_bak=index_bak=0; // purge any backup
         }
+        else
+          length = index = 0;
       }
-      lastLetter=0;
-      ++words, ++wordcount;
-      word0^=hash(word0, c,0);
-      text0=text0*997*16+c;
-      wordlen++;
-      wordlen=min(wordlen,45);
-      f=0;
-      w=word0&(wpos.size()-1);
-      if ((c=='a' || c=='e' || c=='i' || c=='o' || c=='u') || (c=='y' && (wordlen>0 && pC!='a' && pC!='e' && pC!='i' && pC!='o' && pC!='u'))){
-        mask2++;
-        wrdhsh = wrdhsh*997*8+(c/4-22);
-      }
-      else if (c>='b' && c<='z'){
-        mask2+=2;
-        wrdhsh = wrdhsh*271*32+(c-97);
-      }
+      // update position information in hashtable
+      INJECT_SHARED_pos
+      for (U32 i=0; i<NumHashes; i++)
+        Table[hashes[i]] = pos;
+      stats->Match.expectedByte = expectedByte = (length!=0 ? buf[index] : 0);
+    }
+  }
+
+  void mix(Mixer& m) {
+    Update();
+    
+    for (U32 i=0; i<nST; i++) // reset contexts
+      ctx[i] = 0;
+
+    INJECT_SHARED_bpos INJECT_SHARED_c1 INJECT_SHARED_c0 
+    const int expectedBit = length!=0 ? (expectedByte>>(7-bpos))&1 : 0;
+    if (length!=0) {
+      if (length<=16)
+        ctx[0] = (length-1)*2 + expectedBit; // 0..31
       else
-        wrdhsh = wrdhsh*11*32+c;
+        ctx[0] = 24 + (min(length-1, 63)>>2)*2 + expectedBit; // 32..55
+      ctx[0] = ((ctx[0]<<8) | c0);
+      ctx[1] = ((expectedByte<<11) | (bpos<<8) | c1) + 1;
+      const int sign = 2*expectedBit-1;
+      m.add(sign*(min(length, 32)<<5)); // +/- 32..1024
+      m.add(sign*(ilog(min(length,65535))<<2));   // +/-  0..1024
     }
-    else {
-      if (word0) {
-        word5=word4;
-        word4=word3;
-        word3=word2;
-        word2=word1;
-        word1=word0;
-        wordlen1=wordlen;
-        wpos[w]=blpos;
-        if (c==':'|| c=='=') cword0=word0;
-        if (c==']'&& (frstchar==':' || frstchar=='*')) xword0=word0;
-        ccword=0;
-        word0=wordlen=0;
-        if((c=='.'||c=='!'||c=='?' ||c=='}' ||c==')') && buf(2)!=10 && blocktype!=EXE) f=1;
+    else { // no match at all or delta mode
+      m.add(0);
+      m.add(0);
+    }
+
+    if (delta) // delta mode: helps predicting the remaining bits of a character when a mismatch occurs
+      ctx[2] = (expectedByte<<8) | c0;
+
+    for (U32 i=0; i<nST; i++) {
+      const U32 c = ctx[i];
+      if (c!=0)
+        m.add(stretch(StateMaps[i].p1(c))>>1);
+      else
+        m.add(0);
+    }
+
+    const U32 length_ilog2  = ilog2(length+1);
+    //no match:      length_ilog2=0
+    //length=1..2:   length_ilog2=1
+    //length=3..6:   length_ilog2=2
+    //length=7..14:  length_ilog2=3
+    //length=15..30: length_ilog2=4
+
+    const U8 length3 = min(length_ilog2,3); // 2 bits
+    const U8 rm = length_bak!=0 && length-length_bak==1; // predicting the first byte in recovery mode is still uncertain
+    const U8 length3_rm = length3<<1|rm; // 3 bits
+
+    //bytewise contexts
+    INJECT_SHARED_c4
+    if(bpos==0) {
+      if(length!=0) {
+        cm.set(hash(0,expectedByte,length3_rm));
+        cm.set(hash(1,expectedByte,length3_rm,c1));
+      } else {
+        // when there is no match it is still slightly beneficial not to skip(), but set some low-order contexts
+        cm.set(hash(2,c4&0xff));   // order 1
+        cm.set(hash(3,c4&0xffff)); // order 2
+        //cm.skip();
+        //cm.skip();
       }
-      if ((c4&0xFFFF)==0x3D3D) xword1=word1,xword2=word2; // ==
-      if ((c4&0xFFFF)==0x2727) xword1=word1,xword2=word2; // ''
-      if (c==32 || c==10) { ++spaces, ++spacecount; if (c==10 ) nl1=nl, nl=pos-1;}
-      else if (c=='.' || c=='!' || c=='?' || c==',' || c==';' || c==':') spafdo=0,ccword=c,mask2+=3;
-      else { ++spafdo; spafdo=min(63,spafdo); }
     }
-    lastDigit=min(0xFF,lastDigit+1);
-    if (c>='0' && c<='9') {
-        number0^=hash(number0, c,1);
-        lastDigit = 0;
+    cm.mix(m);
+
+    //bitwise contexts
+    {
+      Maps[0].set(hash(expectedByte, c0, c4&0xffff, length3_rm));
+      INJECT_SHARED_y
+      iCtx+=y; 
+      const U8 C = length3_rm<<1 | expectedBit; // 4 bits
+      iCtx=(bpos<<11)|(c1<<3)|C;
+      Maps[1].set_direct(iCtx());
+      SCM.set((bpos<<3)|C);
     }
-    else if (number0) {
-      number1=number0;
-      number0=0,ccword=0;
+    Maps[0].mix(m);
+    Maps[1].mix(m);
+    SCM.mix(m);
+
+    const U32 length_C = length_ilog2 !=0 ? length_ilog2 +1 : delta;
+    //no match, no delta mode:   length_C=0
+    //failed match, delta mode:  length_C=1
+    //length=1..2:   length_C=2
+    //length=3..6:   length_C=3
+    //length=7..14:  length_C=4
+    //length=15..30: length_C=5
+
+    m.set(min(length_C,7),8);
+    stats->Match.length3 = min(length_C,3);
+  }
+};
+
+//////////////////////////// SparseMatchModel ///////////////////////////
+
+class SparseMatchModel {
+private:
+  static constexpr int NumHashes = 4;
+  static constexpr int nSM = 4;
+public:
+  static constexpr int MIXERINPUTS = 3 + nSM*StationaryMap::MIXERINPUTS; // 11
+  static constexpr int MIXERCONTEXTS = NumHashes*(64+2048); // 8448
+  static constexpr int MIXERCONTEXTSETS = 2;
+private:
+  const Shared * const shared;
+  enum Parameters : U32 {
+    MaxLen    = 0xFFFF, // longest allowed match
+    MinLen    = 3,      // default minimum required match length
+  };
+  struct sparseConfig {
+    U32 offset    = 0;      // number of last input bytes to ignore when searching for a match
+    U32 stride    = 1;      // look for a match only every stride bytes after the offset
+    U32 deletions = 0;      // when a match is found, ignore these many initial post-match bytes, to model deletions
+    U32 minLen    = MinLen;
+    U32 bitMask   = 0xFF;   // match every byte according to this bit mask
+  };
+  const sparseConfig sparse[NumHashes] = { {0,1,0,5,0xDF}, {1,1,0,4,0xFF}, {0,2,0,4,0xDF}, {0,1,0,5,0x0F} };
+  Array<U32> Table;
+  StationaryMap Maps[nSM];
+  IndirectContext<U8>  iCtx8{19,1};  // BitsPerContext, InputBits
+  IndirectContext<U16> iCtx16{16,8}; // BitsPerContext, InputBits
+  MTFList list{NumHashes};
+  U32 hashes[NumHashes]{};
+  U32 hashIndex=0;   // index of hash used to find current match
+  U32 length=0;      // rebased length of match (length=1 represents the smallest accepted match length), or 0 if no match
+  U32 index=0;       // points to next byte of match in buf, 0 when there is no match
+  U8 expectedByte=0; // prediction is based on this byte (buf[index]), valid only when length>0
+  bool valid=false;
+  const U32 mask;
+  const int hashbits;
+public:
+  SparseMatchModel(const Shared * const sh, const U64 Size) : shared(sh), 
+    Table(Size/sizeof(U32)), 
+    Maps{ /* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
+      {sh,22,1,128,1023}, {sh,17,4,128,1023}, {sh,8,1,128,1023}, {sh,19,1,128,1023}
+    },
+    mask(U32(Size/sizeof(U32)-1)), hashbits(ilog2(mask+1))
+  {
+    assert(ispowerof2(Size));
+  }
+  void Update() {
+    INJECT_SHARED_buf  
+    // update sparse hashes
+    for (U32 i=0; i<NumHashes; i++) {
+      U64 hash = 0;
+      for (U32 j=0, k=sparse[i].offset+1; j<sparse[i].minLen; j++, k+=sparse[i].stride)
+        hash = combine64(hash, buf(k)&sparse[i].bitMask);
+      hashes[i] = finalize64(hash,hashbits);
+    }
+    // extend current match, if available
+    if (length) {
+      index++;
+      if (length<MaxLen)
+        length++;
+    }
+    // or find a new match
+    else {     
+      for (int i=list.GetFirst(); i>=0; i=list.GetNext()) {
+        index = Table[hashes[i]];
+        if (index>0) {
+          U32 offset = sparse[i].offset+1;
+          while (length<sparse[i].minLen && ((buf(offset)^buf[index-offset])&sparse[i].bitMask)==0) {
+            length++;
+            offset+=sparse[i].stride;
+          }
+          if (length>=sparse[i].minLen) {
+            length-=(sparse[i].minLen-1);
+            index+=sparse[i].deletions;
+            hashIndex = i;
+            list.MoveToFront(i);
+            break;
+          }
+        }
+        length = index = 0;
+      }
+    }
+    // update position information in hashtable
+    INJECT_SHARED_pos
+    for (U32 i=0; i<NumHashes; i++)
+      Table[hashes[i]] = pos;
+    
+    expectedByte = length!=0 ? buf[index] : 0;
+    INJECT_SHARED_c1
+    if (valid) {
+      INJECT_SHARED_y
+      iCtx8+=y;
+      iCtx16+=c1;
+    }
+    valid = length>1; // only predict after at least one byte following the match
+    if (valid) {
+      INJECT_SHARED_c0 INJECT_SHARED_c4
+      Maps[0].set(hash(expectedByte, c0, c1, (c4>>8)&0xff, ilog2(length+1)*NumHashes+hashIndex));
+      const U32 c1_expectedByte=(c1<<8)|expectedByte;
+      Maps[1].set_direct(c1_expectedByte);
+      iCtx8=c1_expectedByte;
+      iCtx16=c1_expectedByte;
+      Maps[2].set_direct(iCtx8());
+      Maps[3].set_direct(iCtx16());
+    }
+  }
+
+  void mix(Mixer& m) {
+    INJECT_SHARED_bpos INJECT_SHARED_c0  
+    const U8 B = c0<<(8-bpos);
+    if (bpos==0)
+      Update();
+    else if (valid) {
+      INJECT_SHARED_c1 INJECT_SHARED_c4
+      Maps[0].set(hash(expectedByte, c0, c1, (c4>>8)&0xff, ilog2(length+1)*NumHashes+hashIndex));
+      if (bpos==4)
+        Maps[1].set_direct(0x10000|((expectedByte^U8(c0<<4))<<8)|c1);
+      INJECT_SHARED_y
+      iCtx8+=y; iCtx8=(bpos<<16)|(c1<<8)|(expectedByte^B);
+      Maps[2].set_direct(iCtx8());
+      Maps[3].set_direct((bpos<<16)|(iCtx16()^U32(B|(B<<8))));
     }
 
-    U32 col=min(255, pos-nl);
-    int above=buf[nl1+col];
-    if (col<=2) frstchar=(col==2?min(c,96):0);
-    if (frstchar=='[' && c==32)    {if(buf(3)==']' || buf(4)==']' ) frstchar=96,xword0=0;}
-    cm.set(hash(513,spafdo, spaces,ccword));
-    cm.set(hash(514,frstchar, c));
-    cm.set(hash(515,col, frstchar, (lastUpper<col)*4+(mask2&3)));
-    cm.set(hash(516,spaces, (words&255)));
-    cm.set(hash(256,number0, word2));
-    cm.set(hash(257,number0, word1));
-    cm.set(hash(258,number1, c,ccword));
-    cm.set(hash(259,number0, number1));
-    cm.set(hash(260,word0, number1, lastDigit<wordGap+wordlen));
-    cm.set(hash(518,wordlen1,col));
-    cm.set(hash(519,c,spacecount/2));
-    U32 h=wordcount*64+spacecount;
-    cm.set(hash(520,c,h,ccword));
-    cm.set(hash(517,frstchar,h));
-    cm.set(hash(521,h,spafdo));
+    // check if next bit matches the prediction, accounting for the required bitmask
+    if (length>0 && (((expectedByte^B)&sparse[hashIndex].bitMask)>>(8-bpos))!=0)
+      length = 0;
 
-    U32 d=c4&0xf0ff;
-    cm.set(hash(522,d,frstchar,ccword));
-    h=word0*271;
-    h=h+buf(1);
-    cm.set(hash(262,h, 0));
-    cm.set(hash(263,word0, 0));
-    cm.set(hash(264,h, word1));
-    cm.set(hash(265,word0, word1));
-    cm.set(hash(266,h, word1,word2,lastUpper<wordlen));
-    cm.set(hash(268,text0&0xfffff, 0));
-    cm.set(hash(269,word0, xword0));
-    cm.set(hash(270,word0, xword1));
-    cm.set(hash(271,word0, xword2));
-    cm.set(hash(272,frstchar, xword2));
-    cm.set(hash(273,word0, cword0));
-    cm.set(hash(274,number0, cword0));
-    cm.set(hash(275,h, word2));
-    cm.set(hash(276,h, word3));
-    cm.set(hash(277,h, word4));
-    cm.set(hash(278,h, word5));
-    cm.set(hash(279,h, word1,word3));
-    cm.set(hash(280,h, word2,word3));
-    if (f) {
-      word5=word4;
+    if (valid) {
+      if (length>1 && ((sparse[hashIndex].bitMask>>(7-bpos))&1)>0) {
+        const int expectedBit = (expectedByte>>(7-bpos))&1;
+        const int sign = 2*expectedBit-1;
+        m.add(sign*(min(length-1, 64)<<4)); // +/- 16..1024
+        m.add(sign*(1<<min(length-2, 3))*min(length-1, 8)<<4); // +/- 16..1024
+        m.add(sign*512);
+      }
+      else {
+        m.add(0); m.add(0); m.add(0);
+      }
+      for (int i=0;i<nSM;i++) {
+        Maps[i].mix(m);
+      }
+    }
+    else
+      for (int i=0; i<MIXERINPUTS; i++) m.add(0);
+
+    m.set((hashIndex<<6)|(bpos<<3)|min(7, length), NumHashes*64);
+    m.set((hashIndex<<11)|(min(7, ilog2(length+1))<<8)|(c0^(expectedByte>>(8-bpos))), NumHashes*2048);
+  }
+};
+
+//////////////////////////// CharGroupModel /////////////////////////
+//
+// modeling ascii character sequences
+
+class CharGroupModel {
+private:
+  static constexpr int nCM=7;
+public:
+  static constexpr int MIXERINPUTS = nCM*(ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUNSTATS + ContextMap2::MIXERINPUTS_BYTEHISTORY); // 35
+  static constexpr int MIXERCONTEXTS = 0;
+  static constexpr int MIXERCONTEXTSETS = 0;
+private:
+  const Shared * const shared;
+  ContextMap2 cm;
+  U32 g_ascii3=0, g_ascii2=0, g_ascii1=0; // group identifiers of the last 12 (4+4+4) characters; the most recent is 'g_ascii1'
+public:
+  CharGroupModel (const Shared * const sh, const U64 size): shared(sh), cm(sh,size,nCM,64,CM_USE_RUNSTATS|CM_USE_BYTEHISTORY) {}
+  void mix(Mixer& m) {
+    INJECT_SHARED_bpos 
+    if(bpos==0) {
+      INJECT_SHARED_c1 
+      U32 g=c1; // group identifier
+      if('0'<=g && g<='9') g='0'; //all digits are in one group
+      else if('A'<=g && g<='Z') g='A'; //all uppercase letters are in one group
+      else if('a'<=g && g<='z') g='a'; //all lowercase letters are in one group
+      else if(g>=128) g=128;
+
+      const bool to_be_collapsed = (g=='0' || g=='A' || g=='a') && (g == (g_ascii1&0xff));
+      if(!to_be_collapsed) {
+        g_ascii3 <<= 8;
+        g_ascii3  |= g_ascii2>>(32-8);
+        g_ascii2 <<= 8;
+        g_ascii2  |= g_ascii1>>(32-8);
+        g_ascii1 <<= 8;
+        g_ascii1  |= g;
+      }
+
+      U64 i = to_be_collapsed*8;
+      cm.set(hash( (++i), g_ascii3, g_ascii2,          g_ascii1));        // last 12 groups
+      cm.set(hash( (++i),           g_ascii2,          g_ascii1));        // last 8 groups
+      cm.set(hash( (++i),           g_ascii2&0xffff,   g_ascii1));        // last 6 groups
+      cm.set(hash( (++i),                              g_ascii1));        // last 4 groups
+      cm.set(hash( (++i),                              g_ascii1&0xffff)); // last 2 groups
+      INJECT_SHARED_c4
+      cm.set(hash( (++i),           g_ascii2&0xffffff, g_ascii1, c4&0x0000ffff )); // last 7 groups + last 2 chars
+      cm.set(hash( (++i),           g_ascii2&0xff,     g_ascii1, c4&0x00ffffff )); // last 5 groups + last 3 chars
+    }
+    cm.mix(m);
+  }
+};
+
+
+//////////////////////////// WordModel /////////////////////////
+
+// Model words, expressions, numbers, paragraphs/lines, etc.
+// simple procesing of pdf text
+// simple modeling of some binary content
+
+#ifdef USE_TEXTMODEL
+
+class WordModel {
+private:
+  static constexpr int nCM1=17; // pdf / non_pdf contexts
+  static constexpr int nCM2=41; // common contexts
+  static constexpr int nCM = nCM1+nCM2; // 58
+public:
+  static constexpr int MIXERINPUTS = nCM*(ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUNSTATS + ContextMap2::MIXERINPUTS_BYTEHISTORY); // 406
+  static constexpr int MIXERCONTEXTS = 0;
+  static constexpr int MIXERCONTEXTSETS = 0;
+private:
+  const Shared * const shared;
+  ModelStats const *stats;
+  ContextMap2 cm;
+  static constexpr int wposbits=16;
+  static constexpr int maxwordlen=45;
+  static constexpr int maxlinematch=16;
+  static constexpr int maxlastUpper=63;
+  static constexpr int maxlastLetter=16;
+  class Info {
+    const Shared * const shared;
+    ModelStats const *stats;
+    ContextMap2 &cm;
+    Array<U32> wpos{1<<wposbits};  // last positions of whole words/numbers
+    Array<U16> wchk{1<<wposbits};  // checksums for whole words/numbers
+    U32 c4;                      // last 4 processed characters
+    U8 c, pC, ppC;           // last char, previous char, char before the previous char (converted to lowearcase)
+    bool is_letter, is_letter_pC, is_letter_ppC;
+    U8 opened;     // "(", "[", "{", "<", opening QUOTE, opening APOSTROPHE (or 0 when none of them)
+    U8 wordlen0, wordlen1, exprlen0;     // length of word0 and word1
+    U64 line0, frstword;       // hash of line content, hash of first word on line
+    U64 word0, word1, word2, word3, word4;  // wordtoken hashes, word0 is the partally processed ("current") word
+    U64 expr0, expr1, expr2, expr3, expr4;  // wordtoken hashes for expressions
+    U64 keyword0, gaptoken0, gaptoken1;         // hashes
+    U16 w, chk; // finalized hash and checksum of last partially processed word
+    int frstchar;  // category of first character of the current line (or -1 when in first column)
+    int linematch; // the length of match of the current line vs the previos line
+    int nl1, nl2;  // current newline position, previous newline position
+    U64 groups; // 8 last character categories
+    U64 text0;  // uninterrupted stream of letters
+    U32 lastLetter, lastUpper, wordGap;
+    U32 mask, expr0chars, mask2, f4;
+  public:
+    Info(const Shared * const sh, ModelStats const *st, ContextMap2 &contextmap): shared(sh), stats(st), 
+      cm(contextmap)
+    {
+      reset();
+    }
+    void reset() {
+      //zero contents
+      memset(&wpos[0], 0, (1<<wposbits)*sizeof(U32));
+      memset(&wchk[0], 0, (1<<wposbits)*sizeof(U16));
+      c4=0;c=pC=ppC=0;
+      is_letter=is_letter_pC=is_letter_ppC=false;
+      opened=wordlen0=wordlen1=exprlen0=0;
+      line0=frstword=0;
+      word0=word1=word2=word3=word4=0;
+      expr0=expr1=expr2=expr3=expr4=0;
+      keyword0=gaptoken0=gaptoken1=0;
+      w=chk=0;
+      frstchar=linematch=nl1=nl2=0;
+      groups=text0=0;
+      lastLetter=lastUpper=wordGap=0;
+      mask=expr0chars=mask2=f4=0;
+      //---
+      lastUpper=maxlastUpper;
+      lastLetter=wordGap=maxlastLetter;
+      frstchar=linematch=-1;
+    }
+    void shiftwords() {
       word4=word3;
       word3=word2;
       word2=word1;
-      word1='.';
+      word1=word0;
+      wordlen1=wordlen0;
     }
-    cm.set(hash(523,col,buf(1),above));
-    cm.set(hash(524,buf(1),above));
-    cm.set(hash(525,col,buf(1)));
-    cm.set(hash(526,col,c==32));
-    cm.set(hash(281, w, llog(blpos-wpos[w])>>4));
-    cm.set(hash(282,buf(1),llog(blpos-wpos[w])>>2));
-
-    int fl = 0;
-    if ((c4&0xff) != 0) {
-      if (isalpha(c4&0xff)) fl = 1;
-      else if (ispunct(c4&0xff)) fl = 2;
-      else if (isspace(c4&0xff)) fl = 3;
-      else if ((c4&0xff) == 0xff) fl = 4;
-      else if ((c4&0xff) < 16) fl = 5;
-      else if ((c4&0xff) < 64) fl = 6;
-      else fl = 7;
+    void killwords() {
+      word4=word3=word2=word1=0;
+      gaptoken1=0; //not really necessary - tiny gain
     }
-    mask = (mask<<3)|fl;
-    cm.set(hash(528,mask,0));
-    cm.set(hash(529,mask,buf(1)));
-    cm.set(hash(530,mask&0xff,col));
-    cm.set(hash(531,mask,buf(2),buf(3)));
-    cm.set(hash(532,mask&0x1ff,f4&0x00fff0));
+    void process_char(const bool is_extended_char) {
+      //note: the pdf model too uses this function, therefore only c1 may be referenced, c4, c8, etc. should not
 
-    cm.set(hash(h, llog(wordGap), mask&0x1FF,
-      ((wordlen1 > 3)<<6)|
-      ((wordlen > 0)<<5)|
-      ((spafdo == wordlen + 2)<<4)|
-      ((spafdo == wordlen + wordlen1 + 3)<<3)|
-      ((spafdo >= lastLetter + wordlen1 + wordGap)<<2)|
-      ((lastUpper < lastLetter + wordlen1)<<1)|
-      (lastUpper < wordlen + wordlen1 + wordGap)
-    ));
-    cm.set(hash(col,wordlen1,above&0x5F,c4&0x5F));
-    cm.set(hash( mask2&0x3F, wrdhsh&0xFFF, (0x100|firstLetter)*(wordlen<6),(wordGap>4)*2+(wordlen1>5)) );
-    cm.set(hash((*pWord).Hash[2], h));
+      //shift history
+      ppC=pC; pC=c;
+      is_letter_ppC=is_letter_pC; is_letter_pC=is_letter;
+
+      INJECT_SHARED_c1 
+      c4=c4<<8|c1;
+      c=c1;
+      if(c>='A' && c<='Z') {c+='a'-'A'; lastUpper=0;}
+
+                 is_letter = (c>='a' && c<='z') || is_extended_char;
+      const bool is_number = (c>='0' && c<='9') || (pC>='0' && pC<='9' && c=='.' /* decimal point (english) or thousand separator (misc) */);
+      const bool is_newline = c==NEW_LINE || c==0;
+      const bool is_newline_pC = pC==NEW_LINE || pC==0;
+
+      lastUpper=min(lastUpper+1,maxlastUpper);
+      lastLetter=min(lastLetter+1,maxlastLetter);
+
+      mask2<<=8;
+
+      if (is_letter || is_number) {
+        if (wordlen0==0) { // the beginning of a new word
+          if (pC==NEW_LINE && lastLetter==3 && ppC=='+') { 
+            // correct hyphenation with "+" (book1 from Calgary)
+            // (undo some of the recent context changes)
+            word0=word1; word1=word2; word2=word3; 
+            word3=word4=0;
+            wordlen0=wordlen1; 
+          } else {
+            wordGap=lastLetter;
+            gaptoken1=gaptoken0;
+            if (pC==QUOTE || (pC==APOSTROPHE && !is_letter_ppC)) opened=pC;
+          }
+          gaptoken0=0;
+          mask2=0;
+        }
+        lastLetter=0;
+        word0=combine64(word0, c);
+        w=U16(finalize64(word0,wposbits));
+        chk=U16(checksum64(word0,wposbits,16));
+        text0=(text0<<8|c)&0xffffffffff; // last 5 alphanumeric chars (other chars are ignored)
+        wordlen0=min(wordlen0+1,maxwordlen);
+        //last letter types
+        if(is_letter) {
+          if(c=='e')mask2|=c; // vowel/e // separating 'a' is also ok
+          else if (c=='a' || c=='i' || c=='o' || c=='u')mask2|='a'; // vowel
+          else if (c>='b' && c<='z') {
+            if(c=='y')mask2|='y'; // y
+            else if(pC=='t' && c=='h') {mask2=((mask2>>8)&0x00ffff00)|'t';} // consonant/th
+            else mask2|='b'; // consonant
+          }
+          else mask2|=128; // extended_char: c>=128
+        }
+        else { // is_number
+          if(c=='.') mask2|='.'; // decimal point or thousand separator
+          else mask2|= c=='0'?'0':'1'; // number
+        }
+      }
+      else { //it's not a letter/number 
+        gaptoken0=combine64(gaptoken0,is_newline?' ':c1);
+        if(is_newline && pC=='+' && is_letter_ppC) {} //calgary/book1 hyphenation - don't shift again
+        else if(c=='?' || pC=='!' || pC=='.') killwords(); //end of sentence (probably)
+        else if(c==pC) {} //don't shift when anything repeats
+        else if((c==SPACE || is_newline) && (pC==SPACE || is_newline_pC)) {} //ignore repeating whitespace
+        else shiftwords();
+        if (wordlen0!=0) { //beginning of a new non-word token
+          INJECT_SHARED_pos
+          wpos[w]=pos;
+          wchk[w]=chk;
+          w=0;
+          chk=0;
+
+          if (c==':'||c=='=') keyword0 = word0; // enwik, world95.txt, html/xml
+          if(frstword==0)frstword=word0;
+
+          word0=0;
+          wordlen0=0;
+          mask2=0;
+        }
+
+        if (c1=='.' || c1=='!' || c1=='?') mask2|='!';
+        else if (c1==',' || c1==';' || c1==':') mask2|=',';
+        else if (c1=='(' || c1=='{' || c1=='[' || c1=='<') {mask2|='(';opened=c1;}
+        else if (c1==')' || c1=='}' || c1==']' || c1=='>') {mask2|=')';opened=0;}
+        else if (c1==QUOTE || c1==APOSTROPHE) {mask2|=c1;opened=0;}
+        else if (c1=='-') mask2|=c1;
+        else mask2|=c1; //0, SPACE, NEW_LINE, /\+=%$ etc.
+      }
+      
+      //const U8 chargrp = stats->Text.chargrp;
+      U8 g=c1;
+      if(g>=128){
+        //utf8 code points (weak context)
+             if((g&0xf8)==0xf0)g=1;
+        else if((g&0xf0)==0xe0)g=2;
+        else if((g&0xe0)==0xc0)g=3;
+        else if((g&0xc0)==0x80)g=4;
+        //the rest of the values
+        else if (g==0xff)g=5;
+        else g=c1&0xf0;
+      }
+      else if(g>='0' && g<='9')g='0';
+      else if(g>='a' && g<='z')g='a';
+      else if(g>='A' && g<='Z')g='A';
+      else if(g<32 && !is_newline)g=6;
+      groups=groups<<8|g;
+
+      // Expressions (pure words separated by single spaces)
+      //
+      // Remarks: (1) formatted text files may contain SPACE+NEW_LINE (dickens) or NEW_LINE+SPACE (world95.txt)
+      // or just a NEW_LINE instead of a SPACE. (2) quotes and apostrophes are ignored during processing
+      if(is_letter) {
+        expr0chars = expr0chars<<8|c; // last 4 consecutive letters
+        expr0=combine64(expr0,c);
+        exprlen0=min(exprlen0+1,maxwordlen);
+      }
+      else {
+        expr0chars=0;
+        exprlen0=0;
+        if((c==SPACE || is_newline) && (is_letter_pC || pC==APOSTROPHE || pC==QUOTE)) {
+          expr4=expr3;
+          expr3=expr2;
+          expr2=expr1;
+          expr1=expr0;
+          expr0=0;
+        } else if(c==APOSTROPHE || c==QUOTE || (is_newline && pC==SPACE) || (c==SPACE && is_newline_pC)) {
+          //ignore
+        } else {
+          expr4=expr3=expr2=expr1=expr0=0;
+        }
+      }
+    }
+    void line_model_predict() {
+      U64 i = 1024;
+
+      INJECT_SHARED_c1 
+      INJECT_SHARED_pos
+      const bool is_newline = c==NEW_LINE || c==0;
+      if (is_newline) {  // a new line has just started (or: zero in asciiz or in binary data)
+        nl2=nl1; nl1=pos; 
+        frstchar=-1; frstword=0; line0=0;
+      }
+      line0=combine64(line0,c1);
+      cm.set(hash(++i,line0));
+
+      int col = pos-nl1;
+      if (col==1) frstchar = groups&0xff;
+      INJECT_SHARED_buf
+      const U8  c_above = buf[nl2+col];
+      const U8 pC_above = buf[nl2+col-1];
+
+      const bool is_new_line_start = col==0 && nl2>0;
+      const bool is_prev_char_match_above = c1==pC_above && col!=0 && nl2!=0;
+      const U32 above_ctx = c_above<<1|U32(is_prev_char_match_above);
+      if(is_new_line_start) linematch=0; //first char not yet known = nothing to match
+      else if(linematch>=0 && is_prev_char_match_above) linematch=min(linematch+1,maxlinematch); //match continues
+      else linematch=-1; //match does not continue
+
+      // context: matches with the previous line
+      if(linematch>=0) cm.set(hash(++i,c_above,linematch));
+      else {cm.skip();i++;}
+      cm.set(hash(++i,       above_ctx,c1));
+      cm.set(hash(++i,col<<9|above_ctx,c1));
+      const int line_length = nl1-nl2;
+      cm.set(hash(++i,nl1-nl2, col, above_ctx, groups&0xff)); // english_mc
+      cm.set(hash(++i,nl1-nl2, col, above_ctx, c1)); // english_mc
+
+      // modeling line content per column (and NEW_LINE is some extent)
+      cm.set(hash(++i,col,c1==SPACE)); // after space vs after other char in this column // world95.txt
+      cm.set(hash(++i,col,c1));
+      cm.set(hash(++i,col,mask&0x1ff));
+      cm.set(hash(++i,col,line_length)); // the lenght of the previous line may foretell the content of columns
+
+      cm.set(hash(++i,col, frstchar, ((int)lastUpper<col)<<8 | (groups&0xff))); // book1 book2 news
+
+      // content of lines, paragraphs
+      cm.set(hash(++i,nl1));    //chars occurring in this paragraph (order 0)
+      cm.set(hash(++i,nl1,c));  //chars occurring in this paragraph (order 1)
+      cm.set(hash(++i,frstchar));   //chars occurring in a paragraph that began with frstchar (order 0)
+      cm.set(hash(++i,frstchar,c)); //chars occurring in a paragraph that began with frstchar (order 1)
+      cm.set(hash(++i,frstword));   //chars occurring in a paragraph that began with frstword (order 0)
+      cm.set(hash(++i,frstword,c)); //chars occurring in a paragraph that began with frstword (order 1)
+      assert(i==1024+nCM1);
+    }
+    void line_model_skip(ContextMap2 &cm) {
+      for(int i=0;i<nCM1;i++)
+        cm.skip();
+    }
+    void predict(const U8 pdf_text_parser_state) {
+      INJECT_SHARED_pos
+      const U32 lastpos = wchk[w]!=chk ? 0 : wpos[w]; //last occurrence (position) of a whole word or number
+      const U32 dist = lastpos==0 ? 0 : min(llog(pos-lastpos+120)>>4,20);
+      const bool word0_may_end_now = lastpos!=0;
+      const U8 may_be_caps = U8(c4>>8)>='A' && U8(c4>>8)<='Z' && U8(c4)>='A' && U8(c4)<='Z';
+      const bool is_textblock = stats->blockType==TEXT || stats->blockType==TEXT_EOL;
+
+      U64 i = 2048*is_textblock;
+
+      cm.set(hash(++i,text0)); //strong
+
+      // expressions in normal text
+      if(is_textblock) {
+        cm.set(hash(++i,expr0,expr1,expr2,expr3,expr4));
+        cm.set(hash(++i,expr0,expr1,expr2));
+      } else {
+        cm.skip();i++;
+        cm.skip();i++;
+      }
+
+      // sections introduced by keywords (enwik world95.txt html/xml)
+      cm.set(hash(++i,gaptoken0,keyword0)); // chars occurring in a section introduced by "keyword:" or "keyword=" (order 0 and variable order for the gap)
+      cm.set(hash(++i,word0, c, keyword0)); // tokens occurring in a section introduced by "keyword:" or "keyword=" (order 1 and variable order for a word)
+
+      cm.set(hash(++i,word0, dist));
+      cm.set(hash(++i,word1, gaptoken0, dist));
+
+      cm.set(hash(++i,pos>>10, word0)); //word/number tokens and characters occurring in this 1K block
+
+      // Simple word morphology (order 1-4)
+
+      const int wme_mbc=word0_may_end_now<<1|may_be_caps;
+      const int wl=min(wordlen0,6);
+      const int wl_wme_mbc=wl<<2|wme_mbc;
+      cm.set(hash(++i, wl_wme_mbc, mask2 /*last 1-4 char types*/));
+
+      if(exprlen0>=1) {
+        const int wl_wme_mbc=min(exprlen0,1+3)<<2|wme_mbc;
+        cm.set(hash(++i, wl_wme_mbc, c));
+      }
+      else {cm.skip();i++;}
+
+      if(exprlen0>=2) {
+        const int wl_wme_mbc=min(exprlen0,2+3)<<2|wme_mbc;
+        cm.set(hash(++i, wl_wme_mbc, expr0chars&0xffff));
+      }
+      else {cm.skip();i++;}
+
+      if(exprlen0>=3) {
+        const int wl_wme_mbc=min(exprlen0,3+3)<<2|wme_mbc;
+        cm.set(hash(++i, wl_wme_mbc, expr0chars&0xffffff));
+      }
+      else {cm.skip();i++;}
+
+      if(exprlen0>=4) {
+        const int wl_wme_mbc=min(exprlen0,4+3)<<2|wme_mbc;
+        cm.set(hash(++i, wl_wme_mbc, expr0chars));
+      }
+      else {cm.skip();i++;}
+
+      cm.set(hash(++i,word0, pdf_text_parser_state));
+
+      cm.set(hash(++i,   word0, gaptoken0));                           // stronger
+      cm.set(hash(++i,c, word0,                    gaptoken1));        // stronger
+      cm.set(hash(++i,c,        gaptoken0,  word1));                   // stronger //french texts need that "c"
+      cm.set(hash(++i,   word0,             word1));                   // stronger
+      cm.set(hash(++i,   word0,             word1,            word2)); // weaker
+      cm.set(hash(++i,          gaptoken0,  word1, gaptoken1, word2)); // stronger
+      cm.set(hash(++i,   word0,             word1, gaptoken1, word2)); // weaker
+      cm.set(hash(++i,   word0,             word1, gaptoken1));        // weaker
+
+      const U8 c1=c4&0xff;
+      if(is_textblock) {
+        cm.set(hash(++i,word0, c1, word2));
+        cm.set(hash(++i,word0, c1, word3));
+        cm.set(hash(++i,word0, c1, word4));
+        cm.set(hash(++i,word0, c1, word1, word4));
+        cm.set(hash(++i,word0, c1, word1, word3));
+        cm.set(hash(++i,word0, c1, word2, word3));
+      } else {
+        cm.skip();i++;
+        cm.skip();i++;
+        cm.skip();i++;
+        cm.skip();i++;
+        cm.skip();i++;
+        cm.skip();i++;
+      }
+
+      const U8 g=groups&0xff;
+      cm.set(hash(++i,opened,wl_wme_mbc,g,pdf_text_parser_state));
+      cm.set(hash(++i,opened,c,dist!=0,pdf_text_parser_state));
+      cm.set(hash(++i,opened,word0)); // book1, book2, dickens, enwik
+
+
+      cm.set(hash(++i,groups));
+      cm.set(hash(++i,groups,c));
+      cm.set(hash(++i,groups,c4&0x0000ffff));
+
+      f4=(f4<<4) | (c1==' ' ? 0 : c1>>4);
+      cm.set(hash(++i,f4&0xfff));
+      cm.set(hash(++i,f4));
+
+      int fl = 0;
+      if (c1 != 0) {
+        if (isalpha(c1)) fl = 1;
+        else if (ispunct(c1)) fl = 2;
+        else if (isspace(c1)) fl = 3;
+        else if ((c1) == 0xff) fl = 4;
+        else if ((c1) < 16) fl = 5;
+        else if ((c1) < 64) fl = 6;
+        else fl = 7;
+      }
+      mask = (mask<<3)|fl;
+
+      cm.set(hash(++i,mask));
+      cm.set(hash(++i,mask,c1));
+      cm.set(hash(++i,mask,c4&0x00ffff00));
+      cm.set(hash(++i,mask&0x1ff,f4&0x00fff0)); // for some binary files
+
+      if(is_textblock) {
+        cm.set(hash(++i, word0, c1, llog(wordGap), mask&0x1FF,
+          ((wordlen1 > 3)<<2)|
+          ((lastUpper < lastLetter + wordlen1)<<1)|
+          (lastUpper < wordlen0 + wordlen1 + wordGap)
+        )); //weak
+      }
+      else {
+        cm.skip();i++;
+      }
+      assert(int(i)==2048*is_textblock+nCM2);
+    }
+  };
+  Info info_normal; //used for general content
+  Info info_pdf;    //used only in case of pdf text - in place of info_normal
+  U8 pdf_text_parser_state;  // 0..7
+public:
+  WordModel(const Shared * const sh, ModelStats const *st, const U64 size) : 
+    shared(sh), stats(st), cm(sh,size,nCM,74,CM_USE_RUNSTATS|CM_USE_BYTEHISTORY), 
+    info_normal(sh,st,cm), info_pdf(sh,st,cm), pdf_text_parser_state(0) {}
+  void reset() {
+    info_normal.reset();
+    info_pdf.reset();
   }
-  cm.mix(m);
-}
+  void mix(Mixer &m) {
+    INJECT_SHARED_bpos 
+    if (bpos==0) {
+      //extract text from pdf
+      INJECT_SHARED_c4
+      const U8 c1=c4;
+      if(c4==0x0a42540a /* "\nBT\n" */) pdf_text_parser_state=1; // Begin Text
+      else if (c4==0x0a45540a /* "\nET\n" */) {pdf_text_parser_state=0;} // End Text
+      bool do_pdf_process=true;
+      if(pdf_text_parser_state!=0) {
+        const U8 pC=c4>>8;
+        if(pC!='\\') {
+             if(c1=='[') {pdf_text_parser_state|=2;} //array begins
+        else if(c1==']') {pdf_text_parser_state&=(255-2);}
+        else if(c1=='(') {pdf_text_parser_state|=4; do_pdf_process=false;} //signal: start text extraction from the next char
+        else if(c1==')') {pdf_text_parser_state&=(255-4);} //signal: start pdf gap processing
+        }
+      }
 
-#endif //USE_WORDMODEL
+      const bool is_pdftext = (pdf_text_parser_state&4)!=0;
+      if(is_pdftext) {
+        const bool is_extended_char = 0;
+        //predict the chars after "(", but the "(" must not be processed
+        if(do_pdf_process) { 
+          //printf("%c",c1); //debug: print the extracted pdf text
+          info_pdf.process_char(is_extended_char);
+        }
+        info_pdf.predict(pdf_text_parser_state);
+        info_pdf.line_model_skip(cm);
+      } else {
+        const bool is_textblock = stats->blockType==TEXT || stats->blockType==TEXT_EOL;
+        const bool is_extended_char = is_textblock && c1>=128;
+        info_normal.process_char(is_extended_char);
+        info_normal.predict(pdf_text_parser_state);
+        info_normal.line_model_predict();
+      }
+    }
+    cm.mix(m);
+  }
+};
 
-//////////////////////////// recordModel ///////////////////////
+#endif //USE_TEXTMODEL
+
+
+//////////////////////////// RecordModel ///////////////////////
 
 // Model 2-D data with fixed record length.  Also order 1-2 models
 // that include the distance to the last match.
@@ -5073,285 +6497,399 @@ inline U8 Clamp4(const int Px, const U8 n1, const U8 n2, const U8 n3, const U8 n
   if(Px>maximum)return maximum;
   return Px;
 }
-inline U8 LogMeanDiffQt(const U8 a, const U8 b){
-  if(a==b)return 0;
+inline U8 LogMeanDiffQt(const U8 a, const U8 b, const U8 limit = 7){
+  if (a==b) return 0;
   U8 sign=a>b?8:0;
-  return sign | ilog2((a+b)/max(2,abs(a-b)*2)+1);
+  return sign | min(limit, ilog2((a+b)/max(2,abs(a-b)*2)+1));
+}
+inline U32 LogQt(const U8 Px, const U8 bits){
+  return (U32(0x100|Px))>>max(0,(int)(ilog2(Px)-bits));
 }
 
 struct dBASE {
   U8 Version;
   U32 nRecords;
   U16 RecordLength, HeaderLength;
-  int Start, End;
+  U32 Start, End;
 };
 
-void recordModel(Mixer& m, Blocktype blocktype, ModelStats *Stats = nullptr) {
-  static Array<int> cpos1(256) , cpos2(256), cpos3(256), cpos4(256);
-  static Array<int> wpos1(0x10000); // buf(1..2) -> last position
-  static int rlen[3] = {2,3,4}; // run length and 2 candidates
-  static int rcount[2] = {0,0}; // candidate counts
-  static U8 padding = 0; // detected padding byte
-  static int prevTransition = 0, nTransition = 0; // position of the last padding transition
-  static int col = 0, mxCtx = 0;
-  static ContextMap cm(32768, 3), cn(32768/2, 3), co(32768*2, 3), cp(MEM, 7);
-  static StationaryMap Map0(10), Map1(10);
-  static bool MayBeImg24b = false;
-  static dBASE dbase;
-
-  // Find record length
-  if (bpos==0) {
-    int w=c4&0xffff, c=w&255, d=w>>8;
-    if (Stats && (*Stats).Record && ((*Stats).Record>>16)>2 &&
-          ((*Stats).Record>>16) != (U32)rlen[0]) {
-      rlen[0] = (*Stats).Record>>16;
-      rcount[0]=rcount[1]=0;
+class RecordModel {
+private:
+  static constexpr int nCM = 3+3+3+16; //cm,cn,co,cp
+  static constexpr int nSM = 6;
+  static constexpr int nSSM = 4;
+  static constexpr int nIM = 3;
+  static constexpr int nIndCtxs = 5;
+public:
+  static constexpr int MIXERINPUTS = nCM*ContextMap::MIXERINPUTS + nSM*StationaryMap::MIXERINPUTS + nSSM*SmallStationaryContextMap::MIXERINPUTS + nIM*IndirectMap::MIXERINPUTS; // 149
+  static constexpr int MIXERCONTEXTS = 1024+512+11*32; //1888
+  static constexpr int MIXERCONTEXTSETS = 3;
+private:
+  const Shared * const shared;
+  ModelStats *stats;
+  ContextMap cm, cn, co; 
+  ContextMap cp; 
+  StationaryMap Maps[nSM];
+  SmallStationaryContextMap sMap[nSSM];
+  IndirectMap iMap[nIM];
+  IndirectContext<U16> iCtx[nIndCtxs];
+  Array<U32> cpos1{256}, cpos2{256}, cpos3{256}, cpos4{256};
+  Array<U32> wpos1{256*256}; // buf(1..2) -> last position
+  U32 rlen[3] = {2,0,0}; // run length and 2 candidates
+  U32 rcount[2] = {0,0}; // candidate counts
+  U8 padding = 0; // detected padding byte
+  U8 N=0, NN=0, NNN=0, NNNN=0, WxNW=0;
+  U32 prevTransition = 0, nTransition = 0; // position of the last padding transition
+  U32 col = 0, mxCtx = 0, x = 0;
+  bool MayBeImg24b = false;
+  dBASE dbase {};
+public:
+  RecordModel (const Shared * const sh, ModelStats *st, const U64 size): shared(sh), stats(st), 
+    cm(sh,32768,3), cn(sh,32768/2,3), co(sh,32768*2,3), // cm,cn,co: memory pressure is advantageous
+    cp(sh,size,16),
+    Maps{ /* BitsOfContext, InputBits, Scale, Limit  */
+      {sh,10,8,86,1023},{sh,10,8,86,1023},{sh,8,8,86,1023},{sh,8,8,86,1023},{sh,8,8,86,1023},{sh,11,1,86,1023}
+    },
+    sMap{ /* BitsOfContext, InputBits, Rate, Scale */
+      {sh,11,1,6,86}, {sh,3,1,6,86}, {sh,19,1,5,128},
+      {sh,8,8,5,64} // pos&255
+    },
+    iMap{ /* BitsOfContext, InputBits, Scale, Limit */
+      {sh,8,8,86,255}, {sh,8,8,86,255}, {sh,8,8,86,255}
+    },
+    iCtx{ // BitsPerContext, InputBits
+      {16,8}, {16,8}, {16,8}, {20,8}, {11,1}
     }
-    else{
-      // detect dBASE tables
-      if (blpos==0 || (dbase.Version>0 && blpos>=dbase.End))
-        dbase.Version = 0;
-      else if (dbase.Version==0 && blocktype==DEFAULT && blpos>=31){
-        U8 b = buf(32);
-        if ( ((b&7)==3 || (b&7)==4 || (b>>4)==3 || b==0xF5) &&
-             ((b=buf(30))>0 && b<13) &&
-             ((b=buf(29))>0 && b<32) &&
-             ((dbase.nRecords = buf(28)|(buf(27)<<8)|(buf(26)<<16)|(buf(25)<<24)) > 0 && dbase.nRecords<0xFFFFF) &&
-             ((dbase.HeaderLength = buf(24)|(buf(23)<<8)) > 32 && ( ((dbase.HeaderLength-32-1)%32)==0 || (dbase.HeaderLength>255+8 && (((dbase.HeaderLength-=255+8)-32-1)%32)==0) )) &&
-             ((dbase.RecordLength = buf(22)|(buf(21)<<8)) > 8) &&
-             (buf(20)==0 && buf(19)==0 && buf(17)<=1 && buf(16)<=1)
-        ){
-          dbase.Version = (((b=buf(32))>>4)==3)?3:b&7;
-          dbase.Start = blpos - 32 + dbase.HeaderLength;
-          dbase.End = dbase.Start + dbase.nRecords * dbase.RecordLength;
-          if (dbase.Version==3){
-            rlen[0] = 32;
-            rcount[0]=rcount[1]=0;
-          }
-        }
-      }
-      else if (dbase.Version>0 && blpos==dbase.Start){
-        rlen[0] = dbase.RecordLength;
+  {} 
+  void mix(Mixer& m) {
+    INJECT_SHARED_bpos
+    // Find record length
+    if (bpos==0) {
+      INJECT_SHARED_c4 INJECT_STATS_blpos INJECT_SHARED_buf INJECT_SHARED_pos
+      int w=c4&0xffff, c=w&255, d=w>>8;
+      if ((stats->Wav)>2 && (stats->Wav) != rlen[0]) {
+        rlen[0] = stats->Wav;
         rcount[0]=rcount[1]=0;
       }
-      
-      int r=pos-cpos1[c];
-      if (r>1 && r==cpos1[c]-cpos2[c]
-          && r==cpos2[c]-cpos3[c] && (r>32 || r==cpos3[c]-cpos4[c])
-          && (r>10 || ((c==buf(r*5+1)) && c==buf(r*6+1)))) {
-        if (r==rlen[1]) ++rcount[0];
-        else if (r==rlen[2]) ++rcount[1];
-        else if (rcount[0]>rcount[1]) rlen[2]=r, rcount[1]=1;
-        else rlen[1]=r, rcount[0]=1;
-      }
-
-      // check candidate lengths
-      for (int i=0; i < 2; i++) {
-        if (rcount[i] > max(0,12-(int)ilog2(rlen[i+1]))){
-          if (rlen[0] != rlen[i+1]){
-            if (MayBeImg24b && rlen[i+1]==3){
-              rcount[0]>>=1;
-              rcount[1]>>=1;
-              continue;
+      else{
+        // detect dBASE tables
+        if (blpos==0 || (dbase.Version>0 && blpos>=dbase.End))
+          dbase.Version = 0;
+        else if (dbase.Version==0 && stats->blockType==DEFAULT && blpos>=31){
+          U8 b = buf(32);
+          if ( ((b&7)==3 || (b&7)==4 || (b>>4)==3 || b==0xF5) &&
+               ((b=buf(30))>0 && b<13) &&
+               ((b=buf(29))>0 && b<32) &&
+               ((dbase.nRecords = buf(28)|(buf(27)<<8)|(buf(26)<<16)|(buf(25)<<24)) > 0 && dbase.nRecords<0xFFFFF) &&
+               ((dbase.HeaderLength = buf(24)|(buf(23)<<8)) > 32 && ( ((dbase.HeaderLength-32-1)%32)==0 || (dbase.HeaderLength>255+8 && (((dbase.HeaderLength-=255+8)-32-1)%32)==0) )) &&
+               ((dbase.RecordLength = buf(22)|(buf(21)<<8)) > 8) &&
+               (buf(20)==0 && buf(19)==0 && buf(17)<=1 && buf(16)<=1)
+          ){
+            dbase.Version = (((b=buf(32))>>4)==3)?3:b&7;
+            dbase.Start = blpos - 32 + dbase.HeaderLength;
+            dbase.End = dbase.Start + dbase.nRecords * dbase.RecordLength;
+            if (dbase.Version==3){
+              rlen[0] = 32;
+              rcount[0]=rcount[1]=0;
             }
-            else if ( (rlen[i+1] > rlen[0]) && (rlen[i+1] % rlen[0] == 0) ){
-              // maybe we found a multiple of the real record size..?
-              // in that case, it is probably an immediate multiple (2x).
-              // that is probably more likely the bigger the length, so
-              // check for small lengths too
-              if ((rlen[0] > 32) && (rlen[i+1] == rlen[0]*2)){
+          }
+        }
+        else if (dbase.Version>0 && blpos==dbase.Start){
+          rlen[0] = dbase.RecordLength;
+          rcount[0]=rcount[1]=0;
+        }
+
+        U32 r=pos-cpos1[c];
+        if (r>1 && r==cpos1[c]-cpos2[c]
+            && r==cpos2[c]-cpos3[c] && (r>32 || r==cpos3[c]-cpos4[c])
+            && (r>10 || ((c==buf(r*5+1)) && c==buf(r*6+1)))) {
+          if (r==rlen[1]) ++rcount[0];
+          else if (r==rlen[2]) ++rcount[1];
+          else if (rcount[0]>rcount[1]) rlen[2]=r, rcount[1]=1;
+          else rlen[1]=r, rcount[0]=1;
+        }
+
+        // check candidate lengths
+        for (int i=0; i < 2; i++) {
+          if ((int)rcount[i] > max(0,12-(int)ilog2(rlen[i+1]))){
+            if (rlen[0] != rlen[i+1]){
+              if (MayBeImg24b && rlen[i+1]==3){
                 rcount[0]>>=1;
                 rcount[1]>>=1;
                 continue;
               }
+              else if ( (rlen[i+1] > rlen[0]) && (rlen[i+1] % rlen[0] == 0) ){
+                // maybe we found a multiple of the real record size..?
+                // in that case, it is probably an immediate multiple (2x).
+                // that is probably more likely the bigger the length, so
+                // check for small lengths too
+                if ((rlen[0] > 32) && (rlen[i+1] == rlen[0]*2)){
+                  rcount[0]>>=1;
+                  rcount[1]>>=1;
+                  continue;
+                }
+              }
+              rlen[0] = rlen[i+1];
+              //printf("\nrecordModel: detected rlen: %d\n",rlen[0]); // for debugging
+              rcount[i] = 0;
+              MayBeImg24b = (rlen[0]>30 && (rlen[0]%3)==0);
+              nTransition = 0;
             }
-            rlen[0] = rlen[i+1];
-            rcount[i] = 0;
-            MayBeImg24b = (rlen[0]>30 && (rlen[0]%3)==0);
-            nTransition = 0;
-          }
-          else
-            // we found the same length again, that's positive reinforcement that
-            // this really is the correct record size, so give it a little boost
-            rcount[i]>>=2;
+            else
+              // we found the same length again, that's positive reinforcement that
+              // this really is the correct record size, so give it a little boost
+              rcount[i]>>=2;
 
-          // if the other candidate record length is orders of
-          // magnitude larger, it will probably never have enough time
-          // to increase its counter before it's reset again. and if
-          // this length is not a multiple of the other, than it might
-          // really be worthwhile to investigate it, so we won't set its
-          // counter to 0
-          if (rlen[i+1]<<4 > rlen[1+(i^1)])
-            rcount[i^1] = 0;
+            // if the other candidate record length is orders of
+            // magnitude larger, it will probably never have enough time
+            // to increase its counter before it's reset again. and if
+            // this length is not a multiple of the other, than it might
+            // really be worthwhile to investigate it, so we won't set its
+            // counter to 0
+            if (rlen[i+1]<<4 > rlen[1+(i^1)])
+              rcount[i^1] = 0;
+          }
         }
       }
+
+      assert(rlen[0]>=2);
+      col=pos%rlen[0];
+      x = min(0x1F,col/max(1,rlen[0]/32));
+      N = buf(rlen[0]), NN = buf(rlen[0]*2), NNN = buf(rlen[0]*3), NNNN = buf(rlen[0]*4);
+      for (int i=0; i<nIndCtxs-1; iCtx[i]+=c, i++);
+      iCtx[0]=(c<<8)|N;
+      iCtx[1]=(buf(rlen[0]-1)<<8)|N;
+      iCtx[2]=(c<<8)|buf(rlen[0]-1);
+      iCtx[3]=finalize64(hash(c, N, buf(rlen[0]+1)), 20);
+
+      /*
+      Consider record structures that include fixed-length strings.
+      These usually contain the text followed by either spaces or 0's,
+      depending on whether they're to be trimmed or they're null-terminated.
+      That means we can guess the length of the string field by looking
+      for small repetitions of one of these padding bytes followed by a
+      different byte. By storing the last position where this transition
+      ocurred, and what was the padding byte, we are able to model these
+      runs of padding bytes.
+      Special care is taken to skip record structures of less than 9 bytes,
+      since those may be little-endian 64 bit integers. If they contain
+      relatively low values (<2^40), we may consistently get runs of 3 or
+      even more 0's at the end of each record, and so we could assume that
+      to be the general case. But with integers, we can't be reasonably sure
+      that a number won't have 3 or more 0's just before a final non-zero MSB.
+      And with such simple structures, there's probably no need to be fancy
+      anyway
+      */
+
+      if (!col)
+        nTransition = 0;
+      if ((((c4>>8) == SPACE*0x010101) && (c != SPACE)) || (!(c4>>8) && c && ((padding != SPACE) || (pos-prevTransition > rlen[0])))){
+        prevTransition = pos;
+        nTransition+=(nTransition<31);
+        padding = (U8)d;
+      }
+
+      U64 i=0;
+
+      // Set 2-3 dimensional contexts
+      // assuming rlen[0]<1024; col<4096
+      cm.set(hash(++i, c<<8 | (min(255, pos-cpos1[c])>>2)));
+      cm.set(hash(++i, w<<9 | llog(pos-wpos1[w])>>2));
+      cm.set(hash(++i, rlen[0] | N<<10 | NN<<18));
+
+      cn.set(hash(++i, w | rlen[0]<<16));
+      cn.set(hash(++i, d | rlen[0]<<8));
+      cn.set(hash(++i, c | rlen[0]<<8));
+
+      co.set(hash(++i, c<<8|min(255, pos-cpos1[c])));
+      co.set(hash(++i, c<<17 | d<<9|llog(pos-wpos1[w])>>2));
+      co.set(hash(++i, c<<8 | N));
+
+      cp.set(hash(++i, rlen[0] | N<<10 | col<<18));
+      cp.set(hash(++i, rlen[0] | c<<10 | col<<18));
+      cp.set(hash(++i, col | rlen[0]<<12));
+
+      if (rlen[0]>8){
+        cp.set(hash(++i, min(min(0xFF,rlen[0]),pos-prevTransition), min(0x3FF,col), (w&0xF0F0)|(w==((padding<<8)|padding)), nTransition ) );
+        cp.set(hash(++i, w, (buf(rlen[0]+1)==padding && N==padding), col/max(1,rlen[0]/32) ) );
+      }
+      else
+        cp.set(0), cp.set(0);
+
+      cp.set(hash(++i, N|((NN&0xF0)<<4)|((NNN&0xE0)<<7)|((NNNN&0xE0)<<10)|((col/max(1,rlen[0]/16))<<18)));
+      cp.set(hash(++i, (N&0xF8)|((NN&0xF8)<<8)|(col<<16)));
+      cp.set(hash(++i, N, NN));
+
+      cp.set(hash(++i, col, iCtx[0]()));
+      cp.set(hash(++i, col, iCtx[1]()));
+      cp.set(hash(++i, col, iCtx[0]()&0xFF, iCtx[1]()&0xFF));
+
+      cp.set(hash(++i, iCtx[2]()));
+      cp.set(hash(++i, iCtx[3]()));
+      cp.set(hash(++i, iCtx[1]()&0xFF, iCtx[3]()&0xFF));
+
+      cp.set(hash(++i, N, (WxNW=c^buf(rlen[0]+1))));
+      cp.set(hash(++i, (stats->Match.length3!=0)<<8 | stats->Match.expectedByte, U8(iCtx[1]()), N, WxNW));
+
+      int k=0x300;
+      if (MayBeImg24b) {
+        k = (col%3)<<8;
+        Maps[0].set_direct(Clip(((U8)(c4>>16))+c-(c4>>24))|k);
+      }
+      else
+        Maps[0].set_direct(Clip(c*2-d)|k);
+      Maps[1].set_direct(Clip(c+N-buf(rlen[0]+1))|k);
+      Maps[2].set_direct(Clip(N+NN-NNN));
+      Maps[3].set_direct(Clip(N*2-NN));
+      Maps[4].set_direct(Clip(N*3-NN*3+NNN));
+      iMap[0].set_direct(N+NN-NNN);
+      iMap[1].set_direct(N*2-NN);
+      iMap[2].set_direct(N*3-NN*3+NNN);
+
+      sMap[3].set(pos&255); // mozilla
+
+      // update last context positions
+      cpos4[c]=cpos3[c];
+      cpos3[c]=cpos2[c];
+      cpos2[c]=cpos1[c];
+      cpos1[c]=pos;
+      wpos1[w]=pos;
+
+      mxCtx = (rlen[0]>128)?(min(0x7F,col/max(1,rlen[0]/128))):col;
     }
-    // Set 2 dimensional contexts
-    assert(rlen[0]>0);
-    cm.set(c<<8| (min(255, pos-cpos1[c])/4));
-    cm.set(w<<9| llog(pos-wpos1[w])>>2);
-    cm.set(rlen[0]|buf(rlen[0])<<10|buf(rlen[0]*2)<<18);
+    INJECT_SHARED_c0 
+    U8 B = c0<<(8-bpos);
+    U32 ctx = (N^B)|(bpos<<8);
+    INJECT_SHARED_y
+    iCtx[nIndCtxs-1]+=y;
+    iCtx[nIndCtxs-1]=ctx;
+    Maps[5].set_direct(ctx);
 
-    cn.set(w|rlen[0]<<8);
-    cn.set(d|rlen[0]<<16);
-    cn.set(c|rlen[0]<<8);
+    sMap[0].set(ctx);
+    sMap[1].set(iCtx[nIndCtxs-1]());
+    sMap[2].set((ctx<<8)|WxNW);
 
-    co.set(buf(1)<<8|min(255, pos-cpos1[buf(1)]));
-    co.set(buf(1)<<17|buf(2)<<9|llog(pos-wpos1[w])>>2);
-    co.set(buf(1)<<8|buf(rlen[0]));
+    cm.mix(m);
+    cn.mix(m);
+    co.mix(m);
+    cp.mix(m);
+    for (int i=0;i<nSM;i++)
+      Maps[i].mix(m);
+    for (int i=0; i<nIM; i++)
+      iMap[i].mix(m);
+    for (int i=0; i<nSSM; i++)
+      sMap[i].mix(m);
 
-    col=pos%rlen[0];
-    if (!col)
-      nTransition = 0;
-    cp.set(rlen[0]|buf(rlen[0])<<10|col<<18);
-    cp.set(rlen[0]|buf(1)<<10|col<<18);
-    cp.set(col|rlen[0]<<12);
+    m.set( (rlen[0]>2)*( (bpos<<7)|mxCtx ), 1024 );
+    m.set( ((N^B)>>4)|(x<<4), 512 );
+    m.set( ((stats->Text.chargrp)<<5)|x, 11*32);
 
-    /*
-    Consider record structures that include fixed-length strings.
-    These usually contain the text followed by either spaces or 0's,
-    depending on whether they're to be trimmed or they're null-terminated.
-    That means we can guess the length of the string field by looking
-    for small repetitions of one of these padding bytes followed by a
-    different byte. By storing the last position where this transition
-    ocurred, and what was the padding byte, we are able to model these
-    runs of padding bytes.
-    Special care is taken to skip record structures of less than 9 bytes,
-    since those may be little-endian 64 bit integers. If they contain
-    relatively low values (<2^40), we may consistently get runs of 3 or
-    even more 0's at the end of each record, and so we could assume that
-    to be the general case. But with integers, we can't be reasonably sure
-    that a number won't have 3 or more 0's just before a final non-zero MSB.
-    And with such simple structures, there's probably no need to be fancy
-    anyway
-    */
-
-    if ((((c4>>8) == SPACE*0x010101) && (c != SPACE)) || (!(c4>>8) && c && ((padding != SPACE) || (pos-prevTransition > rlen[0])))){
-      prevTransition = pos;
-      nTransition+=(nTransition<31);
-      padding = (U8)d;
-    }
-    if (rlen[0]>8){
-      cp.set( hash( min(min(0xFF,rlen[0]),pos-prevTransition), min(0x3FF,col), (w&0xF0F0)|(w==((padding<<8)|padding)), nTransition ) );
-      cp.set( hash( w, (buf(rlen[0]+1)==padding && buf(rlen[0])==padding), col/max(1,rlen[0]/32) ) );
-    }
-    else
-      cp.set(0), cp.set(0);
-
-    int last4 = (buf(rlen[0]*4)<<24)|(buf(rlen[0]*3)<<16)|(buf(rlen[0]*2)<<8)|buf(rlen[0]);
-    cp.set( (last4&0xFF)|((last4&0xF000)>>4)|((last4&0xE00000)>>9)|((last4&0xE0000000)>>14)|((col/max(1,rlen[0]/16))<<18) );
-    cp.set( (last4&0xF8F8)|(col<<16) );
-
-    int i=0x300;
-    if (MayBeImg24b)
-      i = (col%3)<<8, Map0.set(Clip(((U8)(c4>>16))+c-(c4>>24))|i);
-    else
-      Map0.set(Clip(c*2-d)|i);
-    Map1.set(Clip(c+buf(rlen[0])-buf(rlen[0]+1))|i);
-      
-    // update last context positions
-    cpos4[c]=cpos3[c];
-    cpos3[c]=cpos2[c];
-    cpos2[c]=cpos1[c];
-    cpos1[c]=pos;
-    wpos1[w]=pos;
-
-    mxCtx = (rlen[0]>128)?(min(0x7F,col/max(1,rlen[0]/128))):col;
-  }
-  cm.mix(m);
-  cn.mix(m);
-  co.mix(m);
-  cp.mix(m);
-  Map0.mix(m);
-  Map1.mix(m);
-
-  m.set( (rlen[0]>2)*( (bpos<<7)|mxCtx ), 1024 );
-  m.set( ((buf(rlen[0])^((U8)(c0<<(8-bpos))))>>4)|(min(0x1F,col/max(1,rlen[0]/32))<<4), 512 );
-  if (Stats)
-    (*Stats).Record = (min(0xFFFF,rlen[0])<<16)|min(0xFFFF,col);
-}
-
-
-//////////////////////////// sparseModel ///////////////////////
-
-// Model order 1-2 contexts with gaps.
-
-void sparseModel(Mixer& m, int seenbefore, int howmany) {
-  static ContextMap cm(MEM*2, 42);
-  if (bpos==0) {
-    cm.set(seenbefore);
-    cm.set(howmany);
-    cm.set(buf(1)|buf(5)<<8);
-    cm.set(buf(1)|buf(6)<<8);
-    cm.set(buf(3)|buf(6)<<8);
-    cm.set(buf(4)|buf(8)<<8);
-    cm.set(buf(1)|buf(3)<<8|buf(5)<<16);
-    cm.set(buf(2)|buf(4)<<8|buf(6)<<16);
-    cm.set(c4&0x00f0f0ff);
-    cm.set(c4&0x00ff00ff);
-    cm.set(c4&0xff0000ff);
-    cm.set(c4&0x00f8f8f8);
-    cm.set(c4&0xf8f8f8f8);
-    cm.set(f4&0x00000fff);
-    cm.set(f4);
-    cm.set(c4&0x00e0e0e0);
-    cm.set(c4&0xe0e0e0e0);
-    cm.set(c4&0x810000c1);
-    cm.set(c4&0xC3CCC38C);
-    cm.set(c4&0x0081CC81);
-    cm.set(c4&0x00c10081);
-    for (int i=1; i<8; ++i) {
-      cm.set(seenbefore|buf(i)<<8);
-      cm.set((buf(i+2)<<8)|buf(i+1));
-      cm.set((buf(i+3)<<8)|buf(i+1));
-    }
-  }
-  cm.mix(m);
-}
-
-//////////////////////////// distanceModel ///////////////////////
-
-// Model for modelling distances between symbols
-
-void distanceModel(Mixer& m) {
-  static ContextMap cr(MEM, 3);
-  if (bpos == 0) {
-    static int pos00=0,pos20=0,posnl=0;
-    int c=c4&0xff;
-    if (c==0x00) pos00=pos;
-    if (c==0x20) pos20=pos;
-    if (c==0xff||c=='\r'||c=='\n') posnl=pos;
-    cr.set(min(pos-pos00,255)|(c<<8));
-    cr.set(min(pos-pos20,255)|(c<<8));
-    cr.set(min(pos-posnl,255)|((c<<8)+234567));
-  }
-  cr.mix(m);
-}
-
-
-//////////////////////////// im24bitModel /////////////////////////////////
-
-// Square buf(i)
-inline int sqrbuf(int i) {
-  assert(i>0);
-  return buf(i)*buf(i);
-}
-
-class RingBuffer {
-  Array<U8> b;
-  U32 offset;
-public:
-  RingBuffer(int i=0): b(i), offset(0) {}
-  void Add(U8 B){
-    b[offset&(b.size()-1)] = B;
-    offset++;
-  }
-  int operator()(int i) const {
-    return b[(offset-i)&(b.size()-1)];
+    stats->Wav = min(0xFFFF,rlen[0]);
   }
 };
 
-inline U8 Paeth(U8 W, U8 N, U8 NW){
+
+//////////////////////// LinearPredictionModel ///////////////////
+
+class LinearPredictionModel {
+private:
+  static constexpr int nOLS=3;
+  static constexpr int nSSM=nOLS+2;
+public:
+  static constexpr int MIXERINPUTS = nSSM*SmallStationaryContextMap::MIXERINPUTS; // 10
+  static constexpr int MIXERCONTEXTS = 0;
+  static constexpr int MIXERCONTEXTSETS = 0;
+private:
+  const Shared * const shared;
+  SmallStationaryContextMap sMap[nSSM];
+  OLS<double, U8> ols[nOLS]{ {32, 4, 0.995}, {32, 4, 0.995}, {32, 4, 0.995} };
+  U8 prd[nSSM]{ 0 };
+public:
+  LinearPredictionModel(const Shared * const sh) : shared(sh),
+    sMap{  /* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
+      {sh,11,1,6,128},{sh,11,1,6,128},{sh,11,1,6,128},{sh,11,1,6,128},{sh,11,1,6,128}
+    }
+  {}
+  void mix (Mixer& m) {
+    INJECT_SHARED_bpos
+    if (bpos==0) {
+      INJECT_SHARED_buf
+      const U8 W=buf(1), WW=buf(2), WWW=buf(3);
+      int i=0;
+      for (; i<nOLS; i++)
+        ols[i].Update(W);
+      for (i=1; i<=32; i++) {
+        ols[0].Add(buf(i));
+        ols[1].Add(buf(i*2-1));
+        ols[2].Add(buf(i*2));
+      }
+      for (i=0; i<nOLS; i++)
+        prd[i]=Clip((int)floor(ols[i].Predict()));
+      prd[i++]=Clip(W*2-WW);
+      prd[i  ]=Clip(W*3-WW*3+WWW);
+    }
+    INJECT_SHARED_c0
+    const U8 B=c0<<(8-bpos);
+    for (int i=0; i<nSSM; i++) {
+      sMap[i].set((prd[i]-B)*8+bpos);
+      sMap[i].mix(m);
+    }
+  }
+};
+
+//////////////////////////// SparseModel ///////////////////////
+
+// Model order 1-2-3 contexts with gaps.
+
+class SparseModel {
+private:
+  static constexpr int nCM=38; //17+3*7
+public:
+  static constexpr int MIXERINPUTS = nCM*(ContextMap::MIXERINPUTS); // 190
+  static constexpr int MIXERCONTEXTS = 0;
+  static constexpr int MIXERCONTEXTSETS = 0;
+private:
+  const Shared * const shared;
+  ContextMap cm;
+public:
+  SparseModel(const Shared * const sh, const U64 size) : shared(sh), cm(sh,size,nCM){}
+  void mix(Mixer& m) {
+    INJECT_SHARED_bpos
+    if(bpos==0) {
+      INJECT_SHARED_buf INJECT_SHARED_c4
+      U64 i=0;
+      cm.set(hash(++i,buf(1)|buf(5)<<8));
+      cm.set(hash(++i,buf(1)|buf(6)<<8));
+      cm.set(hash(++i,buf(3)|buf(6)<<8));
+      cm.set(hash(++i,buf(4)|buf(8)<<8));
+      cm.set(hash(++i,buf(1)|buf(3)<<8|buf(5)<<16));
+      cm.set(hash(++i,buf(2)|buf(4)<<8|buf(6)<<16));
+      cm.set(hash(++i,c4&0x00f0f0ff));
+      cm.set(hash(++i,c4&0x00ff00ff));
+      cm.set(hash(++i,c4&0xff0000ff));
+      cm.set(hash(++i,c4&0x00f8f8f8));
+      cm.set(hash(++i,c4&0xf8f8f8f8));
+      cm.set(hash(++i,c4&0x00e0e0e0));
+      cm.set(hash(++i,c4&0xe0e0e0e0));
+      cm.set(hash(++i,c4&0x810000c1));
+      cm.set(hash(++i,c4&0xC3CCC38C));
+      cm.set(hash(++i,c4&0x0081CC81));
+      cm.set(hash(++i,c4&0x00c10081));
+      for (int j=2; j<=8; ++j) {
+        cm.set(hash(++i,buf(j)));
+        cm.set(hash(++i,(buf(j+1)<<8)|buf(j)));
+        cm.set(hash(++i,(buf(j+2)<<8)|buf(j)));
+      }
+      assert((int)i==nCM);
+    }
+    cm.mix(m);
+  }
+};
+
+
+//////////////////////////// Image24bitModel /////////////////////////////////
+
+inline U8 Paeth(U8 const W, U8 const N, U8 const NW){
   int p = W+N-NW;
   int pW=abs(p-(int)W), pN=abs(p-(int)N), pNW=abs(p-(int)NW);
   if (pW<=pN && pW<=pNW) return W;
@@ -5361,698 +6899,1124 @@ inline U8 Paeth(U8 W, U8 N, U8 NW){
 
 // Model for filtered (PNG) or unfiltered 24/32-bit image data
 
-void im24bitModel(Mixer& m, int info, int alpha=0, int isPNG=0) {
-  static const int SC=0x10000;
-  static const int nMaps = 38;
-  static SmallStationaryContextMap scm1(SC), scm2(SC), scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC), scm8(SC), scm9(SC*2), scm_fixed(256);
-  static ContextMap cm(MEM*4, 45);
-  static StationaryMap Map[nMaps] = {12, 12, 12, 12, 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0};
-  static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
-  static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
-  static U8 WWp1, Wp1, p1, NWp1, Np1, NEp1, NNp1;
-  static U8 p2;
-  static U8 px = 0; // current PNG filter prediction
-  static int color = -1;
-  static int stride = 3;
-  static int ctx[2], padding, lastPos=0, lastWasPNG=0, filter=0, x=0, w=0, line=0, R1=0, R2=0;
-  static bool filterOn = false;
-  static int columns[2] = {1,1}, column[2];
+class Image24bitModel {
+private:
+  static constexpr int nSM0 = 18;
+  static constexpr int nSM1 = 76;
+  static constexpr int nOLS = 6;
+  static constexpr int nSM = nSM0+nSM1+nOLS;
+  static constexpr int nSSM = 59;
+  static constexpr int nCM = 45;
+public:
+  static constexpr int MIXERINPUTS = nSSM*SmallStationaryContextMap::MIXERINPUTS + nSM*StationaryMap::MIXERINPUTS + nCM*(ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUNSTATS);
+  static constexpr int MIXERCONTEXTS = 6+256+512+2048+8*32+6*64+256*2+1024+8192+8192+8192+8192+256; //38022
+  static constexpr int MIXERCONTEXTSETS = 13;
 
-  if (bpos==0) {
-    if ((color < 0) || (pos-lastPos != 1)){
-      stride = 3+alpha;
-      w = info&0xFFFFFF;
-      padding = w%stride;
-      x = color = line = px = 0;
-      filterOn = false;
-      columns[0] = max(1,w/max(1,ilog2(w)*3));
-      columns[1] = max(1,columns[0]/max(1,ilog2(columns[0])));
-      if (lastPos && lastWasPNG!=isPNG){
-        for (int i=0;i<nMaps;i++)
-          Map[i].Reset();
-      }
-      lastWasPNG = isPNG;
+  const Shared * const shared;
+  ModelStats *stats;
+  ContextMap2 cm;
+  SmallStationaryContextMap SCMap[nSSM];
+  StationaryMap Map[nSM];
+  Buf buffer{0x100000}; // internal rotating buffer for (PNG unfiltered) pixel data
+  //pixel neighborhood
+  U8 WWWWWW=0, WWWWW=0, WWWW=0, WWW=0, WW=0, W=0;
+  U8 NWWWW=0, NWWW=0, NWW=0, NW=0, N=0, NE=0, NEE=0, NEEE=0, NEEEE=0;
+  U8 NNWWW=0, NNWW=0, NNW=0, NN=0, NNE=0, NNEE=0, NNEEE=0;
+  U8 NNNWW=0, NNNW=0, NNN=0, NNNE=0, NNNEE=0;
+  U8 NNNNW=0, NNNN=0, NNNNE=0;
+  U8 NNNNN=0;
+  U8 NNNNNN=0;
+  U8 WWp1=0, Wp1=0, p1=0, NWp1=0, Np1=0, NEp1=0, NNp1=0;
+  U8 WWp2=0, Wp2=0, p2=0, NWp2=0, Np2=0, NEp2=0, NNp2=0;
+  U8 px = 0; // current PNG filter prediction
+  int info=0;
+  U32 alpha=0, isPNG=0;
+  int color = -1;
+  int stride = 3;
+  int col=0;
+  int ctx[2]{}, padding=0, filter=0, x=0, w=0, line=0, R1=0, R2=0;
+  U32 lastPos=0, lastWasPNG=0;
+  bool filterOn = false;
+  int columns[2] = {1,1}, column[2]{};
+  U8 MapCtxs[nSM1] = { 0 }, SCMapCtxs[nSSM] = { 0 }, pOLS[nOLS] = { 0 };
+  static constexpr double lambda[nOLS] ={ 0.98, 0.87, 0.9, 0.8, 0.9, 0.7 };
+  static constexpr int num[nOLS] ={ 32, 12, 15, 10, 14, 8 };
+  OLS<double, U8> ols[nOLS][4] = {
+    {{num[0], 1, lambda[0]}, {num[0], 1, lambda[0]}, {num[0], 1, lambda[0]}, {num[0], 1, lambda[0]}},
+    {{num[1], 1, lambda[1]}, {num[1], 1, lambda[1]}, {num[1], 1, lambda[1]}, {num[1], 1, lambda[1]}},
+    {{num[2], 1, lambda[2]}, {num[2], 1, lambda[2]}, {num[2], 1, lambda[2]}, {num[2], 1, lambda[2]}},
+    {{num[3], 1, lambda[3]}, {num[3], 1, lambda[3]}, {num[3], 1, lambda[3]}, {num[3], 1, lambda[3]}},
+    {{num[4], 1, lambda[4]}, {num[4], 1, lambda[4]}, {num[4], 1, lambda[4]}, {num[4], 1, lambda[4]}},
+    {{num[5], 1, lambda[5]}, {num[5], 1, lambda[5]}, {num[5], 1, lambda[5]}, {num[5], 1, lambda[5]}}
+  };
+  const U8 *ols_ctx1[32] = { &WWWWWW, &WWWWW, &WWWW, &WWW, &WW, &W, &NWWWW, &NWWW, &NWW, &NW, &N, &NE, &NEE, &NEEE, &NEEEE, &NNWWW, &NNWW, &NNW, &NN, &NNE, &NNEE, &NNEEE, &NNNWW, &NNNW, &NNN, &NNNE, &NNNEE, &NNNNW, &NNNN, &NNNNE, &NNNNN, &NNNNNN };
+  const U8 *ols_ctx2[12] = { &WWW, &WW, &W, &NWW, &NW, &N, &NE, &NEE, &NNW, &NN, &NNE, &NNN }; 
+  const U8 *ols_ctx3[15] = { &N, &NE, &NEE, &NEEE, &NEEEE, &NN, &NNE, &NNEE, &NNEEE, &NNN, &NNNE, &NNNEE, &NNNN, &NNNNE, &NNNNN };
+  const U8 *ols_ctx4[10] = { &N, &NE, &NEE, &NEEE, &NN, &NNE, &NNEE, &NNN, &NNNE, &NNNN };
+  const U8 *ols_ctx5[14] = { &WWWW, &WWW, &WW, &W, &NWWW, &NWW, &NW, &N, &NNWW, &NNW, &NN, &NNNW, &NNN, &NNNN };
+  const U8 *ols_ctx6[ 8] = { &WWW, &WW, &W, &NNN, &NN, &N, &p1, &p2 };
+  const U8 **ols_ctxs[nOLS] = { &ols_ctx1[0], &ols_ctx2[0], &ols_ctx3[0], &ols_ctx4[0], &ols_ctx5[0], &ols_ctx6[0] };
+public:
+  Image24bitModel(const Shared * const sh, ModelStats *st,const U64 size): shared(sh), stats(st), cm(sh,size,nCM,64,CM_USE_RUNSTATS),
+    SCMap { /* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
+      {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
+      {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
+      {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
+      {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
+      {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
+      {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
+      {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
+      {sh,11,1,9,86}, {sh,11,1,9,86}, {sh, 0,8,9,86}
+    },
+    Map { /* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
+    /*nSM0: 0- 8*/  {sh,8,8,86,1023},  {sh,8,8,86,1023},  {sh,8,8,86,1023},  {sh,2,8,86,1023},  {sh,0,8,86,1023}, {sh,15,1,86,1023}, {sh,15,1,86,1023}, {sh,15,1,86,1023}, {sh,15,1,86,1023}, 
+    /*nSM0: 9-17*/ {sh,15,1,86,1023}, {sh,17,1,86,1023}, {sh,17,1,86,1023}, {sh,17,1,86,1023}, {sh,17,1,86,1023}, {sh,13,1,86,1023}, {sh,13,1,86,1023}, {sh,13,1,86,1023}, {sh,13,1,86,1023}, 
+    /*nSM1: 0- 8*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
+    /*nSM1: 9-17*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
+    /*nSM1:18-26*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
+    /*nSM1:27-35*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
+    /*nSM1:36-44*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, 
+    /*nSM1:45-53*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
+    /*nSM1:54-62*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
+    /*nSM1:63-71*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
+    /*nSM1:72-75*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
+    /*nOLS:   0- 5*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023} 
     }
-    else{
-      x++;
-      if(x>=w+isPNG){x=0;line++;}
-    }
-    lastPos = pos;
-
-    if (x==1 && isPNG)
-      filter = c4 & 0xFF;
-    else{
-      if (x+padding<w)
-        color*=(++color)<stride;
-      else
-        color=(padding>0)*(stride+1);
-
-      if (isPNG){
-        U8 B = c4 & 0xFF;
-        switch (filter){
-        case 1: {
-          buffer.Add((U8)( B + buffer(stride)*(x>stride+1 || !x) ) );
-          filterOn = x>stride;
-          px = buffer(stride);
-          break;
-        }
-        case 2: {
-          buffer.Add((U8)( B + buffer(w)*(filterOn=(line>0)) ) );
-          px = buffer(w);
-          break;
-        }
-        case 3: {
-          buffer.Add((U8)( B + (buffer(w)*(line>0) + buffer(stride)*(x>stride+1 || !x))/2 ) );
-          filterOn = (x>stride || line>0);
-          px = (buffer(stride)*(x>stride)+buffer(w)*(line>0))/2;
-          break;
-        }
-        case 4: {
-          buffer.Add((U8)( B + Paeth(buffer(stride)*(x>stride+1 || !x), buffer(w)*(line>0), buffer(w+stride)*(line>0 && (x>stride+1 || !x))) ) );
-          filterOn = (x>stride || line>0);
-          px = Paeth(buffer(stride)*(x>stride),buffer(w)*(line>0),buffer(w+stride)*(x>stride && line>0));
-          break;
-        }
-        default: buffer.Add(B);
-          filterOn = false;
-          px = 0;
-        }
-        if (!filterOn)px=0;
-      }
-      else
-        buffer.Add(c4 & 0xFF);
-    }
-
-    if (x || !isPNG){
-      int i=color<<5;
-      column[0]=(x-isPNG)/columns[0];
-      column[1]=(x-isPNG)/columns[1];
-
-      if (!isPNG){
-        WWW=buf(3*stride), WW=buf(2*stride), W=buf(stride), NW=buf(w+stride), N=buf(w), NE=buf(w-stride), NEE=buf(w-2*stride), NNWW=buf((w+stride)*2), NNW=buf(w*2+stride), NN=buf(w*2), NNE=buf(w*2-stride), NNEE=buf((w-stride)*2), NNN=buf(w*3);
-        WWp1=buf(stride*2+1), Wp1=buf(stride+1), p1=buf(1), NWp1=buf(w+stride+1), Np1=buf(w+1), NEp1=buf(w-stride+1), NNp1=buf(w*2+1);
-        p2=buf(2);
-        int mean=W+NW+N+NE;
-        const int var=(W*W+NW*NW+N*N+NE*NE-mean*mean/4)>>2;
-        mean>>=2;
-        const int logvar=ilog(var);
-
-        cm.set(hash((N+1)>>1, LogMeanDiffQt(N,Clip(NN*2-NNN))));
-        cm.set(hash((W+1)>>1, LogMeanDiffQt(W,Clip(WW*2-WWW))));
-        cm.set(hash(Clamp4(W+N-NW,W,NW,N,NE), LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
-        cm.set(hash((NNN+N+4)/8, Clip(N*3-NN*3+NNN)>>1 ));
-        cm.set(hash((WWW+W+4)/8, Clip(W*3-WW*3+WWW)>>1 ));
-        cm.set(hash(++i, (W+Clip(NE*3-NNE*3+buf(w*3-stride)))/4, LogMeanDiffQt(N,(NW+NE)/2)));
-        cm.set(hash(++i, Clip((-buf(4*stride)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buf(w*3-stride)*4-buf(w*4-stride),N,NE,buf(w-2*stride),buf(w-3*stride)))/5)/4));
-        cm.set(hash(Clip(NEE+N-NNEE), LogMeanDiffQt(W,Clip(NW+NE-NNE))));
-        cm.set(hash(Clip(NN+W-NNW), LogMeanDiffQt(W,Clip(NNW+WW-NNWW))));
-        cm.set(hash(++i, p1));
-        cm.set(hash(++i, p2));
-        cm.set(hash(++i, Clip(W+N-NW)/2, Clip(W+p1-Wp1)/2));
-        cm.set(hash(Clip(N*2-NN)/2, LogMeanDiffQt(N,Clip(NN*2-NNN))));
-        cm.set(hash(Clip(W*2-WW)/2, LogMeanDiffQt(W,Clip(WW*2-WWW))));
-        cm.set(Clamp4(N*3-NN*3+NNN,W,NW,N,NE)/2);
-        cm.set(Clamp4(W*3-WW*3+WWW,W,N,NE,NEE)/2);
-        cm.set(hash(++i, LogMeanDiffQt(W,Wp1), Clamp4((p1*W)/(Wp1<1?1:Wp1),W,N,NE,NEE))); //using max(1,Wp1) results in division by zero in VC2015
-        cm.set(hash(++i, Clamp4(N+p2-buf(w+2),W,NW,N,NE)));
-        cm.set(hash(++i, Clip(W+N-NW), column[0]));
-        cm.set(hash(++i, Clip(N*2-NN), LogMeanDiffQt(W,Clip(NW*2-NNW))));
-        cm.set(hash(++i, Clip(W*2-WW), LogMeanDiffQt(N,Clip(NW*2-NWW))));
-        cm.set(hash( (W+NEE)/2, LogMeanDiffQt(W,(WW+NE)/2) ));
-        cm.set(Clamp4(Clip(W*2-WW) + Clip(N*2-NN) - Clip(NW*2-NNWW), W, NW, N, NE));
-        cm.set(hash(++i, W, p2 ));
-        cm.set(hash( N, NN&0x1F, NNN&0x1F ));
-        cm.set(hash( W, WW&0x1F, WWW&0x1F ));
-        cm.set(hash(++i, N, column[0] ));
-        cm.set(hash(++i, Clip(W+NEE-NE), LogMeanDiffQt(W,Clip(WW+NE-N))));
-        cm.set(hash( NN, buf(w*4)&0x1F, buf(w*6)&0x1F, column[1] ));
-        cm.set(hash( WW, buf(stride*4)&0x1F, buf(stride*6)&0x1F, column[1] ));
-        cm.set(hash( NNN, buf(w*6)&0x1F, buf(w*9)&0x1F, column[1] ));
-        cm.set(hash(++i, column[1]));
-        
-        cm.set(hash(++i, W, LogMeanDiffQt(W,WW)));
-        cm.set(hash(++i, W, p1));
-        cm.set(hash(++i, W/4, LogMeanDiffQt(W,p1), LogMeanDiffQt(W,p2) ));
-        cm.set(hash(++i, N, LogMeanDiffQt(N,NN)));
-        cm.set(hash(++i, N, p1));
-        cm.set(hash(++i, N/4, LogMeanDiffQt(N,p1), LogMeanDiffQt(N,p2) ));
-        cm.set(hash(++i, (W+N)>>3, p1>>4, p2>>4));
-        cm.set(hash(++i, p1/2, p2/2));
-        cm.set(hash(++i, W, p1-Wp1));
-        cm.set(hash(++i, W+p1-Wp1));
-        cm.set(hash(++i, N, p1-Np1));
-        cm.set(hash(++i, N+p1-Np1));
-        cm.set(hash(++i, mean, logvar>>4));
-        scm1.set(W+N-NW);
-        scm2.set(W+NE-N);
-        scm3.set(W*2-WW);
-        scm4.set(N*2-NN);
-        scm5.set(NW*2-NNWW);
-        scm6.set(NE*2-NNEE);
-        scm7.set(NE+p1-NEp1);
-        scm8.set(N+NE-NNE);
-        scm9.set(mean>>1|(logvar<<1&0x180));
-        //scm_fixed.set(0); //unnecessary: context is set to 0 (by default)
-
-        ctx[0] = (min(color,stride-1)<<9)|((abs(W-N)>3)<<8)|((W>N)<<7)|((W>NW)<<6)|((abs(N-NW)>3)<<5)|((N>NW)<<4)|((abs(N-NE)>3)<<3)|((N>NE)<<2)|((W>WW)<<1)|(N>NN);
-        ctx[1] = ((LogMeanDiffQt(p1,Clip(Np1+NEp1-buf(w*2-stride+1)))>>1)<<5)|((LogMeanDiffQt(Clip(N+NE-NNE),Clip(N+NW-NNW))>>1)<<2)|min(color,stride-1);
-      }
-      else{
-        i|=(filterOn)?((0x100|filter)<<8):0;
-        WWW=buffer(3*stride), WW=buffer(2*stride), W=buffer(stride), NWW=buffer(w+2*stride), NW=buffer(w+stride), N=buffer(w), NE=buffer(w-stride), NEE=buffer(w-2*stride), NNWW=buffer((w+stride)*2), NNW=buffer(w*2+stride), NN=buffer(w*2), NNE=buffer(w*2-stride), NNEE=buffer((w-stride)*2), NNN=buffer(w*3);
-        WWp1=buffer(stride*2+1), Wp1=buffer(stride+1), p1=buffer(1), NWp1=buffer(w+stride+1), Np1=buffer(w+1), NEp1=buffer(w-stride+1), NNp1=buffer(w*2+1);
-        p2=buffer(2);
-        int residuals[5] = { ((int8_t)buf(stride+(x<=stride)))+128,
-                             ((int8_t)buf(1+(x<2)))+128,
-                             ((int8_t)buf(stride+1+(x<=stride)))+128,
-                             ((int8_t)buf(2+(x<3)))+128,
-                             ((int8_t)buf(stride+2+(x<=stride)))+128
-                           };
-        R1 = (residuals[1]*residuals[0])/max(1,residuals[2]);
-        R2 = (residuals[3]*residuals[0])/max(1,residuals[4]);
-
-        cm.set(hash(++i, Clip(W+N-NW)-px, Clip(W+p1-Wp1)-px, R1));
-        cm.set(hash(++i, Clip(W+N-NW)-px, LogMeanDiffQt(p1,Clip(Wp1+Np1-NWp1))));
-        cm.set(hash(++i, Clip(W+N-NW)-px, LogMeanDiffQt(p2,Clip(buffer(stride+2)+buffer(w+2)-buffer(w+stride+2))), R2/4));
-        cm.set(hash(++i, Clip(W+N-NW)-px, Clip(N+NE-NNE)-Clip(N+NW-NNW)));
-        cm.set(hash(++i, Clip(W+N-NW+p1-(Wp1+Np1-NWp1)), px, R1 ));
-        cm.set(hash(++i, Clamp4(W+N-NW,W,NW,N,NE)-px, column[0]));
-        cm.set(hash(i>>8, Clamp4(W+N-NW,W,NW,N,NE)/8, px));
-        cm.set(hash(++i, N-px, Clip(N+p1-Np1)-px));
-        cm.set(hash(++i, Clip(W+p1-Wp1)-px, R1));
-        cm.set(hash(++i, Clip(N+p1-Np1)-px));
-        cm.set(hash(++i, Clip(N+p1-Np1)-px, Clip(N+p2-buffer(w+2))-px));
-        cm.set(hash(++i, Clip(W+p1-Wp1)-px, Clip(W+p2-buffer(stride+2))-px));
-        cm.set(hash(++i, Clip(NW+p1-NWp1)-px));
-        cm.set(hash(++i, Clip(NW+p1-NWp1)-px, column[0]));
-        cm.set(hash(++i, Clip(NE+p1-NEp1)-px, column[0]));
-        cm.set(hash(++i, Clip(NE+N-NNE)-px, Clip(NE+p1-NEp1)-px));
-        cm.set(hash(i>>8, Clip(N+NE-NNE)-px, column[0]));
-        cm.set(hash(++i, Clip(NW+N-NNW)-px, Clip(NW+p1-NWp1)-px));
-        cm.set(hash(i>>8, Clip(N+NW-NNW)-px, column[0]));
-        cm.set(hash(i>>8, Clip(NN+W-NNW)-px, LogMeanDiffQt(N,Clip(NNN+NW-buffer(w*3+stride)))));
-        cm.set(hash(i>>8, Clip(W+NEE-NE)-px, LogMeanDiffQt(W,Clip(WW+NE-N))));
-        cm.set(hash(++i, Clip(N+NN-NNN+buffer(1+(!color))-Clip(buffer(w+1+(!color))+buffer(w*2+1+(!color))-buffer(w*3+1+(!color))))-px));
-        cm.set(hash(i>>8, Clip(N+NN-NNN)-px, Clip( 5*N-10*NN+10*NNN-5*buffer(w*4)+buffer(w*5) )-px ));
-        cm.set(hash(++i, Clip(N*2-NN)-px, LogMeanDiffQt(N,Clip(NN*2-NNN))));
-        cm.set(hash(++i, Clip(W*2-WW)-px, LogMeanDiffQt(W,Clip(WW*2-WWW))));
-        cm.set(hash(i>>8, Clip(N*3-NN*3+NNN)-px));
-        cm.set(hash(++i, Clip(N*3-NN*3+NNN)-px, LogMeanDiffQt(W,Clip(NW*2-NNW))));
-        cm.set(hash(i>>8, Clip(W*3-WW*3+WWW)-px));
-        cm.set(hash(++i, Clip(W*3-WW*3+WWW)-px, LogMeanDiffQt(N,Clip(NW*2-NWW))));
-        cm.set(hash(i>>8, Clip( (35*N-35*NNN+21*buffer(w*5)-5*buffer(w*7))/16 )-px ));
-        cm.set(hash(++i, (W+Clip(NE*3-NNE*3+buffer(w*3-stride)))/2-px, R2));
-        cm.set(hash(++i, (W+Clamp4(NE*3-NNE*3+buffer(w*3-stride),W,N,NE,NEE))/2-px, LogMeanDiffQt(N,(NW+NE)/2)));
-        cm.set(hash(++i, (W+NEE)/2-px, R1/2));
-        cm.set(hash(++i, Clamp4(Clip(W*2-WW)+Clip(N*2-NN)-Clip(NW*2-NNWW),W,NW,N,NE)-px));
-        cm.set(hash(++i, buf(stride+(x<=stride)), buf(1+(x<2)), buf(2+(x<3))));
-        cm.set(hash(++i, buf(1+(x<2)), px));
-        cm.set(hash(i>>8, buf(w+1), buf((w+1)*2), buf((w+1)*3), px));                                                             
-        cm.set(~0x5ca1ab1e);
-
-        ctx[0] = (min(color,stride-1)<<9)|((abs(W-N)>3)<<8)|((W>N)<<7)|((W>NW)<<6)|((abs(N-NW)>3)<<5)|((N>NW)<<4)|((N>NE)<<3)|min(5, filterOn?filter+1:0);
-        ctx[1] = ((LogMeanDiffQt(p1,Clip(Np1+NEp1-buffer(w*2-stride+1)))>>1)<<5)|((LogMeanDiffQt(Clip(N+NE-NNE),Clip(N+NW-NNW))>>1)<<2)|min(color,stride-1);
-      }
-
-      Map[0].set(((U8)(Clip(W+N-NW)-px))|(LogMeanDiffQt(Clip(N+NE-NNE),Clip(N+NW-NNW))<<8));
-      Map[1].set(((U8)(Clip(N*2-NN)-px))|(LogMeanDiffQt(W,Clip(NW*2-NNW))<<8));
-      Map[2].set(((U8)(Clip(W*2-WW)-px))|(LogMeanDiffQt(N,Clip(NW*2-NWW))<<8));
-      Map[3].set(((U8)(Clip(W+N-NW)-px))|(LogMeanDiffQt(p1,Clip(Wp1+Np1-NWp1))<<8));
-      Map[4].set((min(color,stride-1)<<8)|((U8)( Clip(N+p1-Np1)-px )));
-      Map[5].set(Clip((-buffer(4*stride)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buffer(w*3-stride)*4-buffer(w*4-stride),N,NE,buffer(w-2*stride),buffer(w-3*stride)))/5)-px);
-      Map[6].set((W+Clamp4(NE*3-NNE*3+buffer(w*3-stride),W,N,NE,NEE))/2-px);
-      Map[7].set(Clip((buffer(w*5)-6*buffer(w*4)+15*NNN-20*NN+15*N+Clamp4(W*4-NWW*6+buffer(w*2+3*stride)*4-buffer(w*3+4*stride),W,NW,N,NN))/6)-px);
-      Map[8].set(Clip((-3*WW+8*W+Clamp4(NEE*3-NNEE*3+buffer(w*3-stride*2),NE,NEE,buffer(w-3*stride),buffer(w-4*stride)))/6)-px);
-      Map[9].set(Clip((buffer(w*3-3*stride)-4*NNEE+6*NE+Clip(W*4-NW*6+NNW*4-buffer(w*3+stride)))/4)-px);
-      Map[10].set(Clip(W+N-NW+p1-Clip(Wp1+Np1-NWp1))-px);
-      Map[11].set(Clip(W+N-NW+p2-Clip(buffer(stride+2)+buffer(w+2)-buffer(w+stride+2)))-px);
-      Map[12].set(Clip(N*2-NN+p1-Clip(Np1*2-NNp1))-px);
-      Map[13].set(Clip(W*2-WW+p1-Clip(Wp1*2-WWp1))-px);
-      if (isPNG) {
-        Map[14].set(Clip(N+NN-NNN+p1-Clip(Np1+NNp1-buffer(w*3+1)) )-px);
-        Map[15].set(Clip(W+WW-WWW+p1-Clip(Wp1+WWp1-buffer(stride*3+1)))-px);
-        Map[16].set(Clip(W+NEE-NE+p1-Clip(Wp1+buffer(w-stride*2+1)-NEp1))-px);
-        Map[17].set(Clip(NN+W-NNW+p1-Clip(NNp1+Wp1-buffer(w*2+stride+1)))-px);
-        Map[18].set(Clip(NN+NW-buffer(w*3+stride)+p1-Clip(NNp1+NWp1-buffer(w*3+stride+1)))-px);
-        Map[19].set(Clip(NN+NE-buffer(w*3-stride)+p1-Clip(NNp1+NEp1-buffer(w*3-stride+1)))-px);
-        Map[20].set(Clip(NN+buffer(w*4)-buffer(w*6)+p1-Clip(NNp1+buffer(w*4+1)-buffer(w*6+1)))-px);
-        Map[21].set(Clip(WW+buffer(stride*4)-buffer(stride*6)+p1-Clip(WWp1+buffer(stride*4+1)-buffer(stride*6+1)))-px);
-      }
+  {}
+  void update() { 
+    INJECT_SHARED_bpos
+    if (bpos==0) {
+      INJECT_SHARED_c1 INJECT_SHARED_buf
+      if (x==1 && isPNG)
+        filter = c1;
       else {
-        Map[14].set(Clip(N+NN-NNN));
-        Map[15].set(Clip(W+WW-WWW));
-        Map[16].set(Clip(W+NEE-NE));
-        Map[17].set(Clip(NN+W-NNW));
-        Map[18].set(Clip(NN+NW-buf(w*3+stride)));
-        Map[19].set(Clip(NN+NE-buf(w*3-stride)));
-        Map[20].set(Clip(NN+buf(w*4)-buf(w*6)));
-        Map[21].set(Clip(WW+buf(stride*4)-buf(stride*6)));
-      }
-      Map[22].set(Clip(WW+NEE-N+p1-Clip(WWp1+buffer(w-stride*2+1)-Np1))-px);
-      Map[23].set(Clip(((N+3*NW)/4)*3-((NNW+NNWW)/2)*3+(buffer(w*3+2*stride)*3+buffer(w*3+3*stride))/4)-px);
-      Map[24].set(buffer(w*6)-px);
-      Map[25].set((buffer(w-4*stride)+buffer(w-6*stride))/2-px);
-      Map[26].set((buffer(stride*6)+buffer(stride*4))/2-px);
-      Map[27].set(Clip(W+N-NW)-px);
-      Map[28].set(buf(1+(isPNG && x<2)));
-      Map[29].set((W+NEE)/2-px);
-      Map[30].set(Clip(N*3-NN*3+NNN)-px);
-      Map[31].set(Clip(N+NW-NNW)-px);
-      Map[32].set(Clip(N+NE-NNE)-px);
-      Map[33].set((Clip(W*2-NW)+Clip(W*2-NWW)+N+NE)/4-px);
-      Map[34].set(Clip((-4*WW+15*W+10*Clip(NE*3-NNE*3+buffer(w*3-stride))-Clip(buffer(w-3*stride)*3-buffer(w*2-3*stride)*3+buffer(w*3-3*stride)))/20)-px);
-      Map[35].set(((W+N)*3-NW*2)/4-px);
-      Map[36].set(Clip((WWW-4*WW+6*W+Clip(NE*4-NNE*6+buffer(w*3-stride)*4-buffer(w*4-stride)))/4)-px);
-    }
-  }
-
-  // Predict next bit
-  if (x || !isPNG){
-    cm.mix(m);
-    for (int i=0;i<nMaps;i++)
-      Map[i].mix(m);
-    if (!isPNG){
-      scm1.mix(m,8);
-      scm2.mix(m,8);
-      scm3.mix(m,8);
-      scm4.mix(m,8);
-      scm5.mix(m);
-      scm6.mix(m);
-      scm7.mix(m);
-      scm8.mix(m);
-      scm9.mix(m,8);
-      scm_fixed.mix(m,8);
-    }
-    static int col=0;
-    if (++col>=stride*8) col=0;
-    m.set(5, 6);
-    m.set(min(63,column[0])+((ctx[0]>>3)&0xC0), 256);
-    m.set(min(127,column[1])+((ctx[0]>>2)&0x180), 512);
-    m.set((ctx[0]&0x7FC)|(bpos>>1), 2048);
-    m.set(col+(isPNG?(ctx[0]&7)+1:(c0==((0x100|((N+W)/2))>>(8-bpos))))*32, 8*32);
-    m.set(((isPNG?p1:0)>>4)*stride+(x%stride) + min(5,filterOn?filter+1:0)*64, 6*64);
-    m.set(c0+256*(isPNG && abs(R1-128)>8), 256*2);
-    if (level>=4)
-      m.set( (ctx[1]<<2)|(bpos>>1), 1024);
-  }
-  else{
-    m.add( -2048+((filter>>(7-bpos))&1)*4096 );
-    m.set(min(4,filter), 6);
-  }
-}
-
-//////////////////////////// im8bitModel /////////////////////////////////
-
-// Model for 8-bit image data
-void im8bitModel(Mixer& m, int w, int gray = 0, int isPNG=0) {
-  static const int nMaps = 57;
-  static ContextMap cm(MEM*4, 49);
-  static StationaryMap Map[nMaps] = { 12, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0 };
-  static RingBuffer buffer(0x100000); // internal rotating buffer for PNG unfiltered pixel data
-  static Array<short> jumps(0x8000);
-  static U8 WWW, WW, W, NWW, NW, N, NE, NEE, NNWW, NNW, NN, NNE, NNEE, NNN; //pixel neighborhood
-  static U8 px = 0, res = 0; // current PNG filter prediction, expected residual
-  static int ctx, lastPos=0, lastWasPNG=0, col=0, line=0, x=0, filter=0, jump=0;
-  static bool filterOn = false;
-  static int columns[2] = {1,1}, column[2];
-  // Select nearby pixels as context
-  if (bpos==0) {
-    if (pos!=lastPos+1){
-      x = line = px = jump = 0;
-      filterOn = false;
-      columns[0] = max(1,w/max(1,ilog2(w)*2));
-      columns[1] = max(1,columns[0]/max(1,ilog2(columns[0])));
-      if (gray){
-        if (lastPos && lastWasPNG!=isPNG){
-          for (int i=0;i<nMaps;i++)
-            Map[i].Reset();
+        if (x+padding<w) {
+          color++;
+          if (color>=stride) color=0;
         }
-        lastWasPNG = isPNG;
-      }
-    }
-    else{
-      x++;
-      if (x>=w+isPNG){x=0;line++;}
-    }
-    lastPos = pos;
-
-    if (isPNG){
-      if (x==1)
-        filter = (U8)c4;
-      else{
-        U8 B = (U8)c4;
-
-        switch (filter){
-          case 1: {
-            buffer.Add((U8)( B + buffer(1)*(x>2 || !x) ) );
-            filterOn = x>1;
-            px = buffer(1);
-            break;
-          }
-          case 2: {
-            buffer.Add((U8)( B + buffer(w)*(filterOn=(line>0)) ) );
-            px = buffer(w);
-            break;
-          }
-          case 3: {
-            buffer.Add((U8)( B + (buffer(w)*(line>0) + buffer(1)*(x>2 || !x))/2 ) );
-            filterOn = (x>1 || line>0);
-            px = (buffer(1)*(x>1)+buffer(w)*(line>0))/2;
-            break;
-          }
-          case 4: {
-            buffer.Add((U8)( B + Paeth(buffer(1)*(x>2 || !x), buffer(w)*(line>0), buffer(w+1)*(line>0 && (x>2 || !x))) ) );
-            filterOn = (x>1 || line>0);
-            px = Paeth(buffer(1)*(x>1),buffer(w)*(line>0),buffer(w+1)*(x>1 && line>0));
-            break;
-          }
-          default: buffer.Add(B);
-            filterOn = false;
-            px = 0;
+        else {
+          if (padding>0) color=stride;
+          else color=0;
         }
-        if(!filterOn)px=0;
+        if (isPNG) {
+          switch (filter) {
+            case 1: {
+              buffer.add((U8)(c1+buffer(stride)*(x>stride+1 || !x)));
+              filterOn = x>stride;
+              px = buffer(stride);
+              break;
+            }
+            case 2: {
+              buffer.add((U8)(c1+buffer(w)*(filterOn=(line>0))));
+              px = buffer(w);
+              break;
+            }
+            case 3: {
+              buffer.add((U8)(c1+(buffer(w)*(line>0)+buffer(stride)*(x>stride+1 || !x))/2));
+              filterOn = (x>stride || line>0);
+              px = (buffer(stride)*(x>stride)+buffer(w)*(line>0))/2;
+              break;
+            }
+            case 4: {
+              buffer.add((U8)(c1+Paeth(buffer(stride)*(x>stride+1 || !x), buffer(w)*(line>0), buffer(w+stride)*(line>0 && (x>stride+1 || !x)))));
+              filterOn = (x>stride || line>0);
+              px = Paeth(buffer(stride)*(x>stride), buffer(w)*(line>0), buffer(w+stride)*(x>stride && line>0));
+              break;
+            }
+            default: buffer.add(c1);
+              filterOn = false;
+              px = 0;
+          }
+          if (!filterOn) px=0;
+        }
+        else
+          buffer.add(c1);
       }
+
+      if (x>0 || !isPNG) {
+        column[0]=(x-isPNG)/columns[0];
+        column[1]=(x-isPNG)/columns[1];
+        WWWWWW=buffer(6*stride), WWWWW=buffer(5*stride), WWWW=buffer(4*stride), WWW=buffer(3*stride), WW=buffer(2*stride), W=buffer(stride);
+        NWWWW=buffer(w+4*stride), NWWW=buffer(w+3*stride), NWW=buffer(w+2*stride), NW=buffer(w+stride), N=buffer(w), NE=buffer(w-stride), NEE=buffer(w-2*stride), NEEE=buffer(w-3*stride), NEEEE=buffer(w-4*stride);
+        NNWWW=buffer(w*2+stride*3), NNWW=buffer((w+stride)*2), NNW=buffer(w*2+stride), NN=buffer(w*2), NNE=buffer(w*2-stride), NNEE=buffer((w-stride)*2), NNEEE=buffer(w*2-stride*3);
+        NNNWW=buffer(w*3+stride*2), NNNW=buffer(w*3+stride), NNN=buffer(w*3), NNNE=buffer(w*3-stride), NNNEE=buffer(w*3-stride*2);
+        NNNNW=buffer(w*4+stride), NNNN=buffer(w*4), NNNNE=buffer(w*4-stride);
+        NNNNN=buffer(w*5);
+        NNNNNN=buffer(w*6);
+        WWp1=buffer(stride*2+1), Wp1=buffer(stride+1), p1=buffer(1), NWp1=buffer(w+stride+1), Np1=buffer(w+1), NEp1=buffer(w-stride+1), NNp1=buffer(w*2+1);
+        WWp2=buffer(stride*2+2), Wp2=buffer(stride+2), p2=buffer(2), NWp2=buffer(w+stride+2), Np2=buffer(w+2), NEp2=buffer(w-stride+2), NNp2=buffer(w*2+2);
+
+        int j = -1;
+        MapCtxs[++j] = Clamp4(N+p1-Np1, W, NW, N, NE);
+        MapCtxs[++j] = Clamp4(N+p2-Np2, W, NW, N, NE);
+        MapCtxs[++j] = (W+Clamp4(NE*3-NNE*3+NNNE, W, N, NE, NEE))/2;
+        MapCtxs[++j] = Clamp4((W+Clip(NE*2-NNE))/2, W, NW, N, NE);
+        MapCtxs[++j] = (W+NEE)/2;
+        MapCtxs[++j] = Clip((WWW-4*WW+6*W+Clip(NE*4-NNE*6+NNNE*4-NNNNE))/4);
+        MapCtxs[++j] = Clip((-WWWW+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+NNNE*4-NNNNE, N, NE, NEE, NEEE))/5);
+        MapCtxs[++j] = Clip((-4*WW+15*W+10*Clip(NE*3-NNE*3+NNNE)-Clip(NEEE*3-NNEEE*3+buffer(w*3-3*stride)))/20);
+        MapCtxs[++j] = Clip((-3*WW+8*W+Clamp4(NEE*3-NNEE*3+NNNEE, NE, NEE, NEEE, NEEEE))/6);
+        MapCtxs[++j] = Clip((W+Clip(NE*2-NNE))/2+p1-(Wp1+Clip(NEp1*2-buffer(w*2-stride+1)))/2);
+        MapCtxs[++j] = Clip((W+Clip(NE*2-NNE))/2+p2-(Wp2+Clip(NEp2*2-buffer(w*2-stride+2)))/2);
+        MapCtxs[++j] = Clip((-3*WW+8*W+Clip(NEE*2-NNEE))/6+p1-(-3*WWp1+8*Wp1+Clip(buffer(w-stride*2+1)*2-buffer(w*2-stride*2+1)))/6);
+        MapCtxs[++j] = Clip((-3*WW+8*W+Clip(NEE*2-NNEE))/6+p2-(-3*WWp2+8*Wp2+Clip(buffer(w-stride*2+2)*2-buffer(w*2-stride*2+2)))/6);
+        MapCtxs[++j] = Clip((W+NEE)/2+p1-(Wp1+buffer(w-stride*2+1))/2);
+        MapCtxs[++j] = Clip((W+NEE)/2+p2-(Wp2+buffer(w-stride*2+2))/2);
+        MapCtxs[++j] = Clip((WW+Clip(NEE*2-NNEE))/2+p1-(WWp1+Clip(buffer(w-stride*2+1)*2-buffer(w*2-stride*2+1)))/2);
+        MapCtxs[++j] = Clip((WW+Clip(NEE*2-NNEE))/2+p2-(WWp2+Clip(buffer(w-stride*2+2)*2-buffer(w*2-stride*2+2)))/2);
+        MapCtxs[++j] = Clip(WW+NEE-N+p1-Clip(WWp1+buffer(w-stride*2+1)-Np1));
+        MapCtxs[++j] = Clip(WW+NEE-N+p2-Clip(WWp2+buffer(w-stride*2+2)-Np2));
+        MapCtxs[++j] = Clip(W+N-NW);
+        MapCtxs[++j] = Clip(W+N-NW+p1-Clip(Wp1+Np1-NWp1));
+        MapCtxs[++j] = Clip(W+N-NW+p2-Clip(Wp2+Np2-NWp2));
+        MapCtxs[++j] = Clip(W+NE-N);
+        MapCtxs[++j] = Clip(N+NW-NNW);
+        MapCtxs[++j] = Clip(N+NW-NNW+p1-Clip(Np1+NWp1-buffer(w*2+stride+1)));
+        MapCtxs[++j] = Clip(N+NW-NNW+p2-Clip(Np2+NWp2-buffer(w*2+stride+2)));
+        MapCtxs[++j] = Clip(N+NE-NNE);
+        MapCtxs[++j] = Clip(N+NE-NNE+p1-Clip(Np1+NEp1-buffer(w*2-stride+1)));
+        MapCtxs[++j] = Clip(N+NE-NNE+p2-Clip(Np2+NEp2-buffer(w*2-stride+2)));
+        MapCtxs[++j] = Clip(N+NN-NNN);
+        MapCtxs[++j] = Clip(N+NN-NNN+p1-Clip(Np1+NNp1-buffer(w*3+1)));
+        MapCtxs[++j] = Clip(N+NN-NNN+p2-Clip(Np2+NNp2-buffer(w*3+2)));
+        MapCtxs[++j] = Clip(W+WW-WWW);
+        MapCtxs[++j] = Clip(W+WW-WWW+p1-Clip(Wp1+WWp1-buffer(stride*3+1)));
+        MapCtxs[++j] = Clip(W+WW-WWW+p2-Clip(Wp2+WWp2-buffer(stride*3+2)));
+        MapCtxs[++j] = Clip(W+NEE-NE);
+        MapCtxs[++j] = Clip(W+NEE-NE+p1-Clip(Wp1+buffer(w-stride*2+1)-NEp1));
+        MapCtxs[++j] = Clip(W+NEE-NE+p2-Clip(Wp2+buffer(w-stride*2+2)-NEp2));
+        MapCtxs[++j] = Clip(NN+p1-NNp1);
+        MapCtxs[++j] = Clip(NN+p2-NNp2);
+        MapCtxs[++j] = Clip(NN+W-NNW);
+        MapCtxs[++j] = Clip(NN+W-NNW+p1-Clip(NNp1+Wp1-buffer(w*2+stride+1)));
+        MapCtxs[++j] = Clip(NN+W-NNW+p2-Clip(NNp2+Wp2-buffer(w*2+stride+2)));
+        MapCtxs[++j] = Clip(NN+NW-NNNW);
+        MapCtxs[++j] = Clip(NN+NW-NNNW+p1-Clip(NNp1+NWp1-buffer(w*3+stride+1)));
+        MapCtxs[++j] = Clip(NN+NW-NNNW+p2-Clip(NNp2+NWp2-buffer(w*3+stride+2)));
+        MapCtxs[++j] = Clip(NN+NE-NNNE);
+        MapCtxs[++j] = Clip(NN+NE-NNNE+p1-Clip(NNp1+NEp1-buffer(w*3-stride+1)));
+        MapCtxs[++j] = Clip(NN+NE-NNNE+p2-Clip(NNp2+NEp2-buffer(w*3-stride+2)));
+        MapCtxs[++j] = Clip(NN+NNNN-NNNNNN);
+        MapCtxs[++j] = Clip(NN+NNNN-NNNNNN+p1-Clip(NNp1+buffer(w*4+1)-buffer(w*6+1)));
+        MapCtxs[++j] = Clip(NN+NNNN-NNNNNN+p2-Clip(NNp2+buffer(w*4+2)-buffer(w*6+2)));
+        MapCtxs[++j] = Clip(WW+p1-WWp1);
+        MapCtxs[++j] = Clip(WW+p2-WWp2);
+        MapCtxs[++j] = Clip(WW+WWWW-WWWWWW);
+        MapCtxs[++j] = Clip(WW+WWWW-WWWWWW+p1-Clip(WWp1+buffer(stride*4+1)-buffer(stride*6+1)));
+        MapCtxs[++j] = Clip(WW+WWWW-WWWWWW+p2-Clip(WWp2+buffer(stride*4+2)-buffer(stride*6+2)));
+        MapCtxs[++j] = Clip(N*2-NN+p1-Clip(Np1*2-NNp1));
+        MapCtxs[++j] = Clip(N*2-NN+p2-Clip(Np2*2-NNp2));
+        MapCtxs[++j] = Clip(W*2-WW+p1-Clip(Wp1*2-WWp1));
+        MapCtxs[++j] = Clip(W*2-WW+p2-Clip(Wp2*2-WWp2));
+        MapCtxs[++j] = Clip(N*3-NN*3+NNN);
+        MapCtxs[++j] = Clamp4(N*3-NN*3+NNN, W, NW, N, NE);
+        MapCtxs[++j] = Clamp4(W*3-WW*3+WWW, W, NW, N, NE);
+        MapCtxs[++j] = Clamp4(N*2-NN, W, NW, N, NE);
+        MapCtxs[++j] = Clip((NNNNN-6*NNNN+15*NNN-20*NN+15*N+Clamp4(W*4-NWW*6+NNWWW*4-buffer(w*3+4*stride), W, NW, N, NN))/6);
+        MapCtxs[++j] = Clip((buffer(w*3-3*stride)-4*NNEE+6*NE+Clip(W*4-NW*6+NNW*4-NNNW))/4);
+        MapCtxs[++j] = Clip(((N+3*NW)/4)*3-((NNW+NNWW)/2)*3+(NNNWW*3+buffer(w*3+3*stride))/4);
+        MapCtxs[++j] = Clip((W*2+NW)-(WW+2*NWW)+NWWW);
+        MapCtxs[++j] = (Clip(W*2-NW)+Clip(W*2-NWW)+N+NE)/4;
+        MapCtxs[++j] = NNNNNN;
+        MapCtxs[++j] = (NEEEE+buffer(w-6*stride))/2;
+        MapCtxs[++j] = (WWWWWW+WWWW)/2;
+        MapCtxs[++j] = ((W+N)*3-NW*2)/4;
+        MapCtxs[++j] = N;
+        MapCtxs[++j] = NN;
+        assert(++j==nSM1);
+        j = -1;
+        SCMapCtxs[++j] = N+p1-Np1;
+        SCMapCtxs[++j] = N+p2-Np2;
+        SCMapCtxs[++j] = W+p1-Wp1;
+        SCMapCtxs[++j] = W+p2-Wp2;
+        SCMapCtxs[++j] = NW+p1-NWp1;
+        SCMapCtxs[++j] = NW+p2-NWp2;
+        SCMapCtxs[++j] = NE+p1-NEp1;
+        SCMapCtxs[++j] = NE+p2-NEp2;
+        SCMapCtxs[++j] = NN+p1-NNp1;
+        SCMapCtxs[++j] = NN+p2-NNp2;
+        SCMapCtxs[++j] = WW+p1-WWp1;
+        SCMapCtxs[++j] = WW+p2-WWp2;
+        SCMapCtxs[++j] = W+N-NW;
+        SCMapCtxs[++j] = W+N-NW+p1-Wp1-Np1+NWp1;
+        SCMapCtxs[++j] = W+N-NW+p2-Wp2-Np2+NWp2;
+        SCMapCtxs[++j] = W+NE-N;
+        SCMapCtxs[++j] = W+NE-N+p1-Wp1-NEp1+Np1;
+        SCMapCtxs[++j] = W+NE-N+p2-Wp2-NEp2+Np2;
+        SCMapCtxs[++j] = W+NEE-NE;
+        SCMapCtxs[++j] = W+NEE-NE+p1-Wp1-buffer(w-stride*2+1)+NEp1;
+        SCMapCtxs[++j] = W+NEE-NE+p2-Wp2-buffer(w-stride*2+2)+NEp2;
+        SCMapCtxs[++j] = N+NN-NNN;
+        SCMapCtxs[++j] = N+NN-NNN+p1-Np1-NNp1+buffer(w*3+1);
+        SCMapCtxs[++j] = N+NN-NNN+p2-Np2-NNp2+buffer(w*3+2);
+        SCMapCtxs[++j] = N+NE-NNE;
+        SCMapCtxs[++j] = N+NE-NNE+p1-Np1-NEp1+buffer(w*2-stride+1);
+        SCMapCtxs[++j] = N+NE-NNE+p2-Np2-NEp2+buffer(w*2-stride+2);
+        SCMapCtxs[++j] = N+NW-NNW;
+        SCMapCtxs[++j] = N+NW-NNW+p1-Np1-NWp1+buffer(w*2+stride+1);
+        SCMapCtxs[++j] = N+NW-NNW+p2-Np2-NWp2+buffer(w*2+stride+2);
+        SCMapCtxs[++j] = NE+NW-NN;
+        SCMapCtxs[++j] = NE+NW-NN+p1-NEp1-NWp1+NNp1;
+        SCMapCtxs[++j] = NE+NW-NN+p2-NEp2-NWp2+NNp2;
+        SCMapCtxs[++j] = NW+W-NWW;
+        SCMapCtxs[++j] = NW+W-NWW+p1-NWp1-Wp1+buffer(w+stride*2+1);
+        SCMapCtxs[++j] = NW+W-NWW+p2-NWp2-Wp2+buffer(w+stride*2+2);
+        SCMapCtxs[++j] = W*2-WW;
+        SCMapCtxs[++j] = W*2-WW+p1-Wp1*2+WWp1;
+        SCMapCtxs[++j] = W*2-WW+p2-Wp2*2+WWp2;
+        SCMapCtxs[++j] = N*2-NN;
+        SCMapCtxs[++j] = N*2-NN+p1-Np1*2+NNp1;
+        SCMapCtxs[++j] = N*2-NN+p2-Np2*2+NNp2;
+        SCMapCtxs[++j] = NW*2-NNWW;
+        SCMapCtxs[++j] = NW*2-NNWW+p1-NWp1*2+buffer(w*2+stride*2+1);
+        SCMapCtxs[++j] = NW*2-NNWW+p2-NWp2*2+buffer(w*2+stride*2+2);
+        SCMapCtxs[++j] = NE*2-NNEE;
+        SCMapCtxs[++j] = NE*2-NNEE+p1-NEp1*2+buffer(w*2-stride*2+1);
+        SCMapCtxs[++j] = NE*2-NNEE+p2-NEp2*2+buffer(w*2-stride*2+2);
+        SCMapCtxs[++j] = N*3-NN*3+NNN+p1-Np1*3+NNp1*3-buffer(w*3+1);
+        SCMapCtxs[++j] = N*3-NN*3+NNN+p2-Np2*3+NNp2*3-buffer(w*3+2);
+        SCMapCtxs[++j] = N*3-NN*3+NNN;
+        SCMapCtxs[++j] = (W+NE*2-NNE)/2;
+        SCMapCtxs[++j] = (W+NE*3-NNE*3+NNNE)/2;
+        SCMapCtxs[++j] = (W+NE*2-NNE)/2+p1-(Wp1+NEp1*2-buffer(w*2-stride+1))/2;
+        SCMapCtxs[++j] = (W+NE*2-NNE)/2+p2-(Wp2+NEp2*2-buffer(w*2-stride+2))/2;
+        SCMapCtxs[++j] = NNE+NE-NNNE;
+        SCMapCtxs[++j] = NNE+W-NN;
+        SCMapCtxs[++j] = NNW+W-NNWW;
+        SCMapCtxs[++j] = 0;
+        assert(++j==nSSM);
+        j = 0;
+        for (int k=(color>0)?color-1:stride-1; j<nOLS; j++) {
+          pOLS[j] = Clip(int(floor(ols[j][color].Predict(ols_ctxs[j]))));
+          ols[j][k].Update(p1);
+        }
+
+        if (!isPNG) {
+          int mean=W+NW+N+NE;
+          const int var=(W*W+NW*NW+N*N+NE*NE-mean*mean/4)>>2;
+          mean>>=2;
+          const int logvar=ilog(var);
+
+          U64 i=0;
+          cm.set(hash(++i,        (N+1)>>1, LogMeanDiffQt(N, Clip(NN*2-NNN))));
+          cm.set(hash(++i,        (W+1)>>1, LogMeanDiffQt(W, Clip(WW*2-WWW))));
+          cm.set(hash(++i,        Clamp4(W+N-NW, W, NW, N, NE), LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
+          cm.set(hash(++i,        (NNN+N+4)/8, Clip(N*3-NN*3+NNN)>>1));
+          cm.set(hash(++i,        (WWW+W+4)/8, Clip(W*3-WW*3+WWW)>>1));
+          cm.set(hash(++i, color, (W+Clip(NE*3-NNE*3+NNNE))/4, LogMeanDiffQt(N, (NW+NE)/2)));
+          cm.set(hash(++i, color, Clip((-WWWW+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+NNNE*4-NNNNE, N, NE, NEE, NEEE))/5)/4));
+          cm.set(hash(++i,        Clip(NEE+N-NNEE), LogMeanDiffQt(W, Clip(NW+NE-NNE))));
+          cm.set(hash(++i,        Clip(NN+W-NNW), LogMeanDiffQt(W, Clip(NNW+WW-NNWW))));
+          cm.set(hash(++i, color, p1));
+          cm.set(hash(++i, color, p2));
+          cm.set(hash(++i, color, Clip(W+N-NW)/2, Clip(W+p1-Wp1)/2));
+          cm.set(hash(++i,        Clip(N*2-NN)/2, LogMeanDiffQt(N, Clip(NN*2-NNN))));
+          cm.set(hash(++i,        Clip(W*2-WW)/2, LogMeanDiffQt(W, Clip(WW*2-WWW))));
+          cm.set(hash(++i,        Clamp4(N*3-NN*3+NNN, W, NW, N, NE)/2));
+          cm.set(hash(++i,        Clamp4(W*3-WW*3+WWW, W, N, NE, NEE)/2));
+          cm.set(hash(++i, color, LogMeanDiffQt(W, Wp1), Clamp4((p1*W)/(Wp1<1?1:Wp1), W, N, NE, NEE))); //using max(1,Wp1) results in division by zero in VC2015
+          cm.set(hash(++i, color, Clamp4(N+p2-Np2, W, NW, N, NE)));
+          cm.set(hash(++i, color, Clip(W+N-NW), column[0]));
+          cm.set(hash(++i, color, Clip(N*2-NN), LogMeanDiffQt(W, Clip(NW*2-NNW))));
+          cm.set(hash(++i, color, Clip(W*2-WW), LogMeanDiffQt(N, Clip(NW*2-NWW))));
+          cm.set(hash(++i,        (W+NEE)/2, LogMeanDiffQt(W, (WW+NE)/2)));
+          cm.set(hash(++i,        (Clamp4(Clip(W*2-WW)+Clip(N*2-NN)-Clip(NW*2-NNWW), W, NW, N, NE))));
+          cm.set(hash(++i, color, W, p2));
+          cm.set(hash(++i,        N, NN&0x1F, NNN&0x1F));
+          cm.set(hash(++i,        W, WW&0x1F, WWW&0x1F));
+          cm.set(hash(++i, color, N, column[0]));
+          cm.set(hash(++i, color, Clip(W+NEE-NE), LogMeanDiffQt(W, Clip(WW+NE-N))));
+          cm.set(hash(++i,        NN, NNNN&0x1F, NNNNNN&0x1F, column[1]));
+          cm.set(hash(++i,        WW, WWWW&0x1F, WWWWWW&0x1F, column[1]));
+          cm.set(hash(++i,        NNN, NNNNNN&0x1F, buffer(w*9)&0x1F, column[1]));
+          cm.set(hash(++i, color, column[1]));
+
+          cm.set(hash(++i, color, W, LogMeanDiffQt(W, WW)));
+          cm.set(hash(++i, color, W, p1));
+          cm.set(hash(++i, color, W/4, LogMeanDiffQt(W, p1), LogMeanDiffQt(W, p2)));
+          cm.set(hash(++i, color, N, LogMeanDiffQt(N, NN)));
+          cm.set(hash(++i, color, N, p1));
+          cm.set(hash(++i, color, N/4, LogMeanDiffQt(N, p1), LogMeanDiffQt(N, p2)));
+          cm.set(hash(++i, color, (W+N)>>3, p1>>4, p2>>4));
+          cm.set(hash(++i, color, p1/2, p2/2));
+          cm.set(hash(++i, color, W, p1-Wp1));
+          cm.set(hash(++i, color, W+p1-Wp1));
+          cm.set(hash(++i, color, N, p1-Np1));
+          cm.set(hash(++i, color, N+p1-Np1));
+          cm.set(hash(++i, color, mean, logvar>>4));
+
+          ctx[0] = (min(color, stride-1)<<9)|((abs(W-N)>3)<<8)|((W>N)<<7)|((W>NW)<<6)|((abs(N-NW)>3)<<5)|((N>NW)<<4)|((abs(N-NE)>3)<<3)|((N>NE)<<2)|((W>WW)<<1)|(N>NN);
+          ctx[1] = ((LogMeanDiffQt(p1, Clip(Np1+NEp1-buffer(w*2-stride+1)))>>1)<<5)|((LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))>>1)<<2)|min(color, stride-1);
+        }
+        else {
+          int residuals[5] ={ ((int8_t)buf(stride+(x<=stride)))+128,
+                              ((int8_t)buf(1+(x<2)))+128,
+                              ((int8_t)buf(stride+1+(x<=stride)))+128,
+                              ((int8_t)buf(2+(x<3)))+128,
+                              ((int8_t)buf(stride+2+(x<=stride)))+128
+          };
+          R1 = (residuals[1]*residuals[0])/max(1, residuals[2]);
+          R2 = (residuals[3]*residuals[0])/max(1, residuals[4]);
+
+          U64 i=(filterOn ? filter+1 : 0)*1024;
+          cm.set(0);
+          cm.set(hash(++i, color, Clip(W+N-NW)-px, Clip(W+p1-Wp1)-px, R1));
+          cm.set(hash(++i, color, Clip(W+N-NW)-px, LogMeanDiffQt(p1, Clip(Wp1+Np1-NWp1))));
+          cm.set(hash(++i, color, Clip(W+N-NW)-px, LogMeanDiffQt(p2, Clip(Wp2+Np2-NWp2)), R2/4));
+          cm.set(hash(++i, color, Clip(W+N-NW)-px, Clip(N+NE-NNE)-Clip(N+NW-NNW)));
+          cm.set(hash(++i, color, Clip(W+N-NW+p1-(Wp1+Np1-NWp1)), px, R1));
+          cm.set(hash(++i, color, Clamp4(W+N-NW, W, NW, N, NE)-px, column[0]));
+          cm.set(hash(++i,        Clamp4(W+N-NW, W, NW, N, NE)/8, px));
+          cm.set(hash(++i, color, N-px, Clip(N+p1-Np1)-px));
+          cm.set(hash(++i, color, Clip(W+p1-Wp1)-px, R1));
+          cm.set(hash(++i, color, Clip(N+p1-Np1)-px));
+          cm.set(hash(++i, color, Clip(N+p1-Np1)-px, Clip(N+p2-Np2)-px));
+          cm.set(hash(++i, color, Clip(W+p1-Wp1)-px, Clip(W+p2-Wp2)-px));
+          cm.set(hash(++i, color, Clip(NW+p1-NWp1)-px));
+          cm.set(hash(++i, color, Clip(NW+p1-NWp1)-px, column[0]));
+          cm.set(hash(++i, color, Clip(NE+p1-NEp1)-px, column[0]));
+          cm.set(hash(++i, color, Clip(NE+N-NNE)-px, Clip(NE+p1-NEp1)-px));
+          cm.set(hash(++i,        Clip(N+NE-NNE)-px, column[0]));
+          cm.set(hash(++i, color, Clip(NW+N-NNW)-px, Clip(NW+p1-NWp1)-px));
+          cm.set(hash(++i,        Clip(N+NW-NNW)-px, column[0]));
+          cm.set(hash(++i,        Clip(NN+W-NNW)-px, LogMeanDiffQt(N, Clip(NNN+NW-NNNW))));
+          cm.set(hash(++i,        Clip(W+NEE-NE)-px, LogMeanDiffQt(W, Clip(WW+NE-N))));
+          cm.set(hash(++i, color, Clip(N+NN-NNN+buffer(1+(!color))-Clip(buffer(w+1+(!color))+buffer(w*2+1+(!color))-buffer(w*3+1+(!color))))-px));
+          cm.set(hash(++i,        Clip(N+NN-NNN)-px, Clip(5*N-10*NN+10*NNN-5*NNNN+NNNNN)-px));
+          cm.set(hash(++i, color, Clip(N*2-NN)-px, LogMeanDiffQt(N, Clip(NN*2-NNN))));
+          cm.set(hash(++i, color, Clip(W*2-WW)-px, LogMeanDiffQt(W, Clip(WW*2-WWW))));
+          cm.set(hash(++i,        Clip(N*3-NN*3+NNN)-px));
+          cm.set(hash(++i, color, Clip(N*3-NN*3+NNN)-px, LogMeanDiffQt(W, Clip(NW*2-NNW))));
+          cm.set(hash(++i,        Clip(W*3-WW*3+WWW)-px));
+          cm.set(hash(++i, color, Clip(W*3-WW*3+WWW)-px, LogMeanDiffQt(N, Clip(NW*2-NWW))));
+          cm.set(hash(++i,        Clip((35*N-35*NNN+21*NNNNN-5*buffer(w*7))/16)-px));
+          cm.set(hash(++i, color, (W+Clip(NE*3-NNE*3+NNNE))/2-px, R2));
+          cm.set(hash(++i, color, (W+Clamp4(NE*3-NNE*3+NNNE, W, N, NE, NEE))/2-px, LogMeanDiffQt(N, (NW+NE)/2)));
+          cm.set(hash(++i, color, (W+NEE)/2-px, R1/2));
+          cm.set(hash(++i, color, Clamp4(Clip(W*2-WW)+Clip(N*2-NN)-Clip(NW*2-NNWW), W, NW, N, NE)-px));
+          cm.set(hash(++i, color, buf(stride+(x<=stride)), buf(1+(x<2)), buf(2+(x<3))));
+          cm.set(hash(++i, color, buf(1+(x<2)), px));
+          cm.set(hash(++i,        buf(w+1), buf((w+1)*2), buf((w+1)*3), px));
+          ctx[0] = (min(color, stride-1)<<9)|((abs(W-N)>3)<<8)|((W>N)<<7)|((W>NW)<<6)|((abs(N-NW)>3)<<5)|((N>NW)<<4)|((N>NE)<<3)|min(5, filterOn?filter+1:0);
+          ctx[1] = ((LogMeanDiffQt(p1, Clip(Np1+NEp1-buffer(w*2-stride+1)))>>1)<<5)|((LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))>>1)<<2)|min(color, stride-1);
+        }
+
+        int i=-1;
+        Map[++i].set_direct((W&0xC0)|((N&0xC0)>>2)|((WW&0xC0)>>4)|(NN>>6));
+        Map[++i].set_direct((N&0xC0)|((NN&0xC0)>>2)|((NE&0xC0)>>4)|(NEE>>6));
+        Map[++i].set_direct(buf(1+(isPNG && x<2)));
+        Map[++i].set_direct(min(color, stride-1));
+        Map[++i].set_direct(0);
+        stats->Image.plane = min(color, stride-1);
+        stats->Image.pixels.W = W;
+        stats->Image.pixels.N = N;
+        stats->Image.pixels.NN = NN;
+        stats->Image.pixels.WW = WW;
+        stats->Image.pixels.Wp1 = Wp1;
+        stats->Image.pixels.Np1 = Np1;
+        stats->Image.ctx = ctx[0]>>3;
+      }
+    }
+    if (x>0 || !isPNG) {
+      INJECT_SHARED_c0
+      U8 B=(c0<<(8-bpos));
+      int i=4;
+
+      Map[++i].set_direct((((U8)(Clip(W+N-NW)-px-B))*8+bpos)|(LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))<<11));
+      Map[++i].set_direct((((U8)(Clip(N*2-NN)-px-B))*8+bpos)|(LogMeanDiffQt(W, Clip(NW*2-NNW))<<11));
+      Map[++i].set_direct((((U8)(Clip(W*2-WW)-px-B))*8+bpos)|(LogMeanDiffQt(N, Clip(NW*2-NWW))<<11));
+      Map[++i].set_direct((((U8)(Clip(W+N-NW)-px-B))*8+bpos)|(LogMeanDiffQt(p1, Clip(Wp1+Np1-NWp1))<<11));
+      Map[++i].set_direct((((U8)(Clip(W+N-NW)-px-B))*8+bpos)|(LogMeanDiffQt(p2, Clip(Wp2+Np2-NWp2))<<11));
+      Map[++i].set(hash(W-px-B, N-px-B)*8+bpos);
+      Map[++i].set(hash(W-px-B, WW-px-B)*8+bpos);
+      Map[++i].set(hash(N-px-B, NN-px-B)*8+bpos);
+      Map[++i].set(hash(Clip(N+NE-NNE)-px-B, Clip(N+NW-NNW)-px-B)*8+bpos);
+      Map[++i].set_direct((min(color, stride-1)<<11)|(((U8)(Clip(N+p1-Np1)-px-B))*8+bpos));
+      Map[++i].set_direct((min(color, stride-1)<<11)|(((U8)(Clip(N+p2-Np2)-px-B))*8+bpos));
+      Map[++i].set_direct((min(color, stride-1)<<11)|(((U8)(Clip(W+p1-Wp1)-px-B))*8+bpos));
+      Map[++i].set_direct((min(color, stride-1)<<11)|(((U8)(Clip(W+p2-Wp2)-px-B))*8+bpos));
+      ++i;
+      assert(i==nSM0);
+
+      for (int j=0; j<nSM1; i++, j++)
+        Map[i].set_direct((MapCtxs[j]-px-B)*8+bpos);
+
+      for (int j=0; i<nSM; i++, j++)
+        Map[i].set_direct((pOLS[j]-px-B)*8+bpos);
+
+      for (int i=0; i<nSSM; i++)
+        SCMap[i].set((SCMapCtxs[i]-px-B)*8+bpos);
+    }   
+  }
+  void init() { //new image
+    stride = 3+alpha;
+    w = info&0xFFFFFF;
+    padding = w%stride;
+    x = color = line = px = 0;
+    filterOn = false;
+    columns[0] = max(1, w/max(1, ilog2(w)*3));
+    columns[1] = max(1, columns[0]/max(1, ilog2(columns[0])));
+    if (lastPos>0 && lastWasPNG!=isPNG) {
+      for (int i=0; i<nSM; i++)
+        Map[i].Reset(0);
+    }
+    lastWasPNG = isPNG;
+    buffer.fill(0x7F);
+  }
+  void setparam(int info0, U32 alpha0, U32 isPNG0) {
+    info=info0;
+    alpha=alpha0;
+    isPNG=isPNG0;
+  }
+  void mix(Mixer& m) {
+    INJECT_SHARED_bpos INJECT_SHARED_pos
+    if (bpos==0) {
+      if ((color<0) || (pos-lastPos!=1))
+        init();
+      else {
+        x++;
+        if (x>=w+(int)isPNG) { x=0; line++; }
+      }
+      lastPos = pos;
+    }
+    
+    update();
+    
+    // Predict next bit
+    if (x>0 || !isPNG){
+      cm.mix(m);
+      
+      for (int i=0;i<nSM;i++)
+        Map[i].mix(m);
+        
+      for (int i=0;i<nSSM;i++)
+        SCMap[i].mix(m);
+        
+      if (++col>=stride*8) col=0;
+      m.set(5, 6);
+      m.set(min(63,column[0])+((ctx[0]>>3)&0xC0), 256);
+      m.set(min(127,column[1])+((ctx[0]>>2)&0x180), 512);
+      INJECT_SHARED_c0 
+      m.set((ctx[0]&0x7FC)|(bpos>>1), 2048);
+      m.set(col+(isPNG?(ctx[0]&7)+1:(c0==((0x100|((N+W)/2))>>(8-bpos))))*32, 8*32);
+      m.set(((isPNG?p1:0)>>4)*stride+(x%stride) + min(5,filterOn?filter+1:0)*64, 6*64);
+      m.set(c0+256*(isPNG && abs(R1-128)>8), 256*2);
+      m.set((ctx[1]<<2)|(bpos>>1), 1024);
+      m.set(finalize64(hash(LogMeanDiffQt(W,WW,5), LogMeanDiffQt(N,NN,5), LogMeanDiffQt(W,N,5), ilog2(W), color),13), 8192);
+      m.set(finalize64(hash(ctx[0], column[0]/8),13), 8192);
+      m.set(finalize64(hash(LogQt(N,5), LogMeanDiffQt(N,NN,3), c0),13), 8192);
+      m.set(finalize64(hash(LogQt(W,5), LogMeanDiffQt(W,WW,3), c0),13), 8192);
+      m.set(min(255,(x+line)/32), 256);
     }
     else {
-      buffer.Add((U8)c4);
-      if (x==0) {
-        memset(&jumps[0], 0, sizeof(short)*jumps.size());
-        if (line>0 && w>8) {
-          U8 bMask = 0xFF-((1<<gray)-1);
-          U32 pMask = bMask*0x01010101u;
-          U32 left=0, right=0;
-          int l=min(w, (int)jumps.size()), end=l-4;
-          do {
-            left = ((buffer(l-x)<<24)|(buffer(l-x-1)<<16)|(buffer(l-x-2)<<8)|buffer(l-x-3))&pMask;
-            int i = end;
-            while (i>=x+4) {
-              right = ((buffer(l-i-3)<<24)|(buffer(l-i-2)<<16)|(buffer(l-i-1)<<8)|buffer(l-i))&pMask;
-              if (left==right) {
-                int j=(i+3-x-1)/2, k=0;
-                for (; k<=j; k++) {
-                  if (k<4 || (buffer(l-x-k)&bMask)==(buffer(l-i-3+k)&bMask)) {
-                    jumps[x+k] = -(x+(l-i-3)+2*k);
-                    jumps[i+3-k] = i+3-x-2*k;
-                  }
-                  else
-                    break;
-                }
-                x+=k;
-                end-=k;
-                break;
-              }
-              i--;
-            }
-            x++;
-            if (x>end)
-              break;
-          } while (x+4<l);
-          x = 0;
-        }
-      }
+      m.add(-2048+((filter>>(7-bpos))&1)*4096);
+      m.set(min(4,filter), MIXERCONTEXTSETS);
     }
+  }
+};
 
-    if (x || !isPNG){
-      int i= filterOn ? (filter+1)<<6 : 0;
-      column[0]=(x-isPNG)/columns[0];
-      column[1]=(x-isPNG)/columns[1];
-      WWW=buffer(3), WW=buffer(2), W=buffer(1), NWW=buffer(w+2), NW=buffer(w+1), N=buffer(w), NE=buffer(w-1), NEE=buffer(w-2), NNWW=buffer(w*2+2), NNW=buffer(w*2+1), NN=buffer(w*2), NNE=buffer(w*2-1), NNEE=buffer(w*2-2), NNN=buffer(w*3);
+//////////////////////////// Image8bitModel /////////////////////////////////
 
-      jump = jumps[min(x,(int)jumps.size()-1)];
-      cm.set(hash(++i, (jump!=0)?(0x100|buffer(abs(jump)))*(1-2*(jump<0)):N, line&3));
-      if (!gray){
-        cm.set(hash(++i, W, px));
-        cm.set(hash(++i, W, px, column[0]));
-        cm.set(hash(++i, N, px));
-        cm.set(hash(++i, N, px, column[0]));
-        cm.set(hash(++i, NW, px));
-        cm.set(hash(++i, NW, px, column[0]));
-        cm.set(hash(++i, NE, px));
-        cm.set(hash(++i, NE, px, column[0]));
-        cm.set(hash(++i, NWW, px));
-        cm.set(hash(++i, NEE, px));
-        cm.set(hash(++i, WW, px));
-        cm.set(hash(++i, NN, px));
-        cm.set(hash(++i, W, N, px));
-        cm.set(hash(++i, W, NW, px));
-        cm.set(hash(++i, W, NE, px));
-        cm.set(hash(++i, W, NEE, px));
-        cm.set(hash(++i, W, NWW, px));
-        cm.set(hash(++i, N, NW, px));
-        cm.set(hash(++i, N, NE, px));
-        cm.set(hash(++i, NW, NE, px));
-        cm.set(hash(++i, W, WW, px));
-        cm.set(hash(++i, N, NN, px));
-        cm.set(hash(++i, NW, NNWW, px));
-        cm.set(hash(++i, NE, NNEE, px));
-        cm.set(hash(++i, NW, NWW, px));
-        cm.set(hash(++i, NW, NNW, px));
-        cm.set(hash(++i, NE, NEE, px));
-        cm.set(hash(++i, NE, NNE, px));
-        cm.set(hash(++i, N, NNW, px));
-        cm.set(hash(++i, N, NNE, px));
-        cm.set(hash(++i, N, NNN, px));
-        cm.set(hash(++i, W, WWW, px));
-        cm.set(hash(++i, WW, NEE, px));
-        cm.set(hash(++i, WW, NN, px));
-        cm.set(hash(++i, W, buffer(w-3), px));
-        cm.set(hash(++i, W, buffer(w-4), px));
-        cm.set(hash(++i, W, hash(N,NW)&0x7FF, px));
-        cm.set(hash(++i, N, hash(NN,NNN)&0x7FF, px));
-        cm.set(hash(++i, W, hash(NE,NEE)&0x7FF, px));
-        cm.set(hash(++i, W, hash(NW,N,NE)&0x7FF, px));
-        cm.set(hash(++i, N, hash(NE,NN,NNE)&0x7FF, px));
-        cm.set(hash(++i, N, hash(NW,NNW,NN)&0x7FF, px));
-        cm.set(hash(++i, W, hash(WW,NWW,NW)&0x7FF, px));
-        cm.set(hash(++i, W, hash(NW,N)&0xFF, hash(WW,NWW)&0xFF, px));
-        cm.set(hash(++i, px, column[0]));
-        cm.set(hash(++i, px));
-        cm.set(hash(++i, N, px, column[1] ));
-        cm.set(hash(++i, W, px, column[1] ));
+// Model for 8-bit image data
+class Image8bitModel {
+private:
+  static constexpr int nSM0 = 2;
+  static constexpr int nSM1 = 55;
+  static constexpr int nOLS = 5;
+  static constexpr int nSM = nSM0 + nSM1 + nOLS;
+  static constexpr int nPltMaps = 4;
+  static constexpr int nCM = nPltMaps+49;
+public:
+  static constexpr int MIXERINPUTS = nSM*StationaryMap::MIXERINPUTS + nCM*(ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUNSTATS);
+  static constexpr int MIXERCONTEXTS =(2048+5)+6*16+6*32+256+1024+64+128+256; // 4069
+  static constexpr int MIXERCONTEXTSETS = 8;
 
-        ctx = min(0x1F,(x-1)/min(0x20,columns[0]));
-        res = W;
+  const Shared * const shared;
+  ModelStats *stats;
+  ContextMap2 cm;
+  StationaryMap Map[nSM];
+  SmallStationaryContextMap pltMap[nPltMaps];
+  IndirectMap sceneMap[5];
+  IndirectContext<U8> iCtx[nPltMaps];
+  Buf buffer{0x100000}; // internal rotating buffer for (PNG unfiltered) pixel data
+  Array<short> jumps{0x8000};
+  //pixel neighborhood
+  U8 WWWWWW=0, WWWWW=0, WWWW=0, WWW=0, WW=0, W=0;
+  U8 NWWWW=0, NWWW=0, NWW=0, NW=0, N=0, NE=0, NEE=0, NEEE=0, NEEEE=0;
+  U8 NNWWW=0, NNWW=0, NNW=0, NN=0, NNE=0, NNEE=0, NNEEE=0;
+  U8 NNNWW=0, NNNW=0, NNN=0, NNNE=0, NNNEE=0;
+  U8 NNNNW=0, NNNN=0, NNNNE=0;
+  U8 NNNNN=0;
+  U8 NNNNNN=0;
+  U8 px = 0, res = 0, prvFrmPx = 0, prvFrmPred = 0; // current PNG filter prediction, expected residual, corresponding pixel in previous frame
+  U32 lastPos=0, lastWasPNG=0;
+  U32 gray=0, isPNG=0;
+  int w=0, ctx=0, col=0, line=0, x=0, filter=0, jump=0;
+  int framePos=0, prevFramePos=0, frameWidth=0, prevFrameWidth=0;
+  bool filterOn = false;
+  int columns[2] = {1,1}, column[2]{};
+  U8 MapCtxs[nSM1] = { 0 }, pOLS[nOLS] = { 0 };
+  static constexpr double lambda[nOLS] ={ 0.996, 0.87, 0.93, 0.8, 0.9 };
+  static constexpr int num[nOLS] ={ 32, 12, 15, 10, 14 };
+  OLS<double, U8> ols[nOLS] = { 
+    {num[0], 1, lambda[0]},
+    {num[1], 1, lambda[1]},
+    {num[2], 1, lambda[2]},
+    {num[3], 1, lambda[3]},
+    {num[4], 1, lambda[4]}
+  };
+  OLS<double, U8> sceneOls{13, 1, 0.994};
+  const U8 *ols_ctx1[32] = { &WWWWWW, &WWWWW, &WWWW, &WWW, &WW, &W, &NWWWW, &NWWW, &NWW, &NW, &N, &NE, &NEE, &NEEE, &NEEEE, &NNWWW, &NNWW, &NNW, &NN, &NNE, &NNEE, &NNEEE, &NNNWW, &NNNW, &NNN, &NNNE, &NNNEE, &NNNNW, &NNNN, &NNNNE, &NNNNN, &NNNNNN };
+  const U8 *ols_ctx2[12] = { &WWW, &WW, &W, &NWW, &NW, &N, &NE, &NEE, &NNW, &NN, &NNE, &NNN }; 
+  const U8 *ols_ctx3[15] = { &N, &NE, &NEE, &NEEE, &NEEEE, &NN, &NNE, &NNEE, &NNEEE, &NNN, &NNNE, &NNNEE, &NNNN, &NNNNE, &NNNNN };
+  const U8 *ols_ctx4[10] = { &N, &NE, &NEE, &NEEE, &NN, &NNE, &NNEE, &NNN, &NNNE, &NNNN };
+  const U8 *ols_ctx5[14] = { &WWWW, &WWW, &WW, &W, &NWWW, &NWW, &NW, &N, &NNWW, &NNW, &NN, &NNNW, &NNN, &NNNN };
+  const U8 **ols_ctxs[nOLS] = { &ols_ctx1[0], &ols_ctx2[0], &ols_ctx3[0], &ols_ctx4[0], &ols_ctx5[0] };
+public:
+  Image8bitModel(const Shared * const sh, ModelStats *st, const U64 size): 
+    shared(sh), stats(st), cm(sh,size,nCM,64,CM_USE_RUNSTATS),
+    Map{ /* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
+    /*nSM0: 0- 1*/ {sh, 0,8,64,1023}, {sh,15,1,64,1023},
+    /*nSM1: 0- 4*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, 
+    /*nSM1: 5- 9*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, 
+    /*nSM1:10-14*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, 
+    /*nSM1:15-19*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:20-24*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:25-29*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, 
+    /*nSM1:30-34*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:35-39*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:40-44*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:45-49*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:50-54*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nOLS:   0- 4*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023} 
+  },
+  pltMap{   /* SmallStationaryContextMap: BitsOfContext, InputBits, Rate, Scale */
+    {sh,11,1,7,64}, {sh,11,1,7,64}, {sh,11,1,7,64}, {sh,11,1,7,64}
+  },
+  sceneMap{ /* IndirectMap: BitsOfContext, InputBits, Scale, Limit */
+    {sh,8,8,64,255}, {sh,8,8,64,255}, {sh,22,1,64,255}, {sh,11,1,64,255}, {sh,11,1,64,255} 
+  },
+  iCtx{     /* IndirectContext<U8>: BitsPerContext, InputBits */
+    {16,8}, {16,8}, {16,8}, {16,8}
+  }
+  {}
+  void setparam(int info0, U32 gray0, U32 isPNG0) {
+    w=info0;
+    gray=gray0;
+    isPNG=isPNG0;
+  }
+  void mix(Mixer& m) {
+    // Select nearby pixels as context
+    INJECT_SHARED_bpos 
+    if (bpos==0) {
+      INJECT_SHARED_c1 INJECT_SHARED_buf INJECT_SHARED_pos
+      if (pos!=lastPos+1){
+        x = line = px = jump = 0;
+        filterOn = false;
+        columns[0] = max(1,w/max(1,ilog2(w)*2));
+        columns[1] = max(1,columns[0]/max(1,ilog2(columns[0])));
+        if (gray){
+          if (lastPos && lastWasPNG!=isPNG){
+            for (int i=0;i<nSM;i++)
+              Map[i].Reset(0);
+          }
+          lastWasPNG = isPNG;
+        }
+        buffer.fill(0x7F);
+        prevFramePos = framePos;
+        framePos = pos;
+        prevFrameWidth = frameWidth;
+        frameWidth = w;
       }
       else{
-        cm.set(hash(++i, N, px));
-        cm.set(hash(++i, N-px));
-        cm.set(hash(++i, W, px));
-        cm.set(hash(++i, NW, px));
-        cm.set(hash(++i, NE, px));
-        cm.set(hash(++i, N, NN, px));
-        cm.set(hash(++i, W, WW, px));
-        cm.set(hash(++i, NE, NNEE, px ));
-        cm.set(hash(++i, NW, NNWW, px ));
-        cm.set(hash(++i, W, NEE, px));
-        cm.set(hash(++i, (Clamp4(W+N-NW,W,NW,N,NE)-px)/2, LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
-        cm.set(hash(++i, (W-px)/4, (NE-px)/4, column[0]));
-        cm.set(hash(++i, (Clip(W*2-WW)-px)/4, (Clip(N*2-NN)-px)/4));
-        cm.set(hash(++i, (Clamp4(N+NE-NNE,W,N,NE,NEE)-px)/4, column[0]));
-        cm.set(hash(++i, (Clamp4(N+NW-NNW,W,NW,N,NE)-px)/4, column[0]));
-        cm.set(hash(++i, (W+NEE)/4, px, column[0]));
-        cm.set(hash(++i, Clip(W+N-NW)-px, column[0]));
-        cm.set(hash(++i, Clamp4(N*3-NN*3+NNN,W,N,NN,NE), px, LogMeanDiffQt(W,Clip(NW*2-NNW))));
-        cm.set(hash(++i, Clamp4(W*3-WW*3+WWW,W,N,NE,NEE), px, LogMeanDiffQt(N,Clip(NW*2-NWW))));
-        cm.set(hash(++i, (W+Clamp4(NE*3-NNE*3+(isPNG?buffer(w*3-1):buf(w*3-1)),W,N,NE,NEE))/2, px, LogMeanDiffQt(N,(NW+NE)/2)));
-        cm.set(hash(++i, (N+NNN)/8, Clip(N*3-NN*3+NNN)/4, px));
-        cm.set(hash(++i, (W+WWW)/8, Clip(W*3-WW*3+WWW)/4, px));
-        cm.set(hash(++i, Clip((-buffer(4)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buffer(w*3-1)*4-buffer(w*4-1),N,NE,buffer(w-2),buffer(w-3)))/5)-px));
-        cm.set(hash(++i, Clip(N*2-NN)-px, LogMeanDiffQt(N,Clip(NN*2-NNN))));
-        cm.set(hash(++i, Clip(W*2-WW)-px, LogMeanDiffQt(NE,Clip(N*2-NW))));
-        cm.set(~0xde7ec7ed);
+        x++;
+        if (x>=w+(int)isPNG){x=0; line++;}
+      }
+      lastPos = pos;
 
-        Map[0].set(((U8)(Clip(W+N-NW)-px))|(LogMeanDiffQt(Clip(N+NE-NNE),Clip(N+NW-NNW))<<8));
-        Map[1].set(Clamp4(W+N-NW,W,NW,N,NE)-px);
-        Map[2].set(Clip(W+N-NW)-px);
-        Map[3].set(Clamp4(W+NE-N,W,NW,N,NE)-px);
-        Map[4].set(Clip(W+NE-N)-px);
-        Map[5].set(Clamp4(N+NW-NNW,W,NW,N,NE)-px);
-        Map[6].set(Clip(N+NW-NNW)-px);
-        Map[7].set(Clamp4(N+NE-NNE,W,N,NE,NEE)-px);
-        Map[8].set(Clip(N+NE-NNE)-px);
-        Map[9].set((W+NEE)/2-px);
-        Map[10].set(Clip(N*3-NN*3+NNN)-px);
-        Map[11].set(Clip(W*3-WW*3+WWW)-px);
-        Map[12].set((W+Clip(NE*3-NNE*3+buffer(w*3-1)))/2-px);
-        Map[13].set((W+Clip(NEE*3-buffer(w*2-3)*3+buffer(w*3-4)))/2-px);
-        Map[14].set(Clip(NN+buffer(w*4)-buffer(w*6))-px);
-        Map[15].set(Clip(WW+buffer(4)-buffer(6))-px);
-        Map[16].set(Clip((buffer(w*5)-6*buffer(w*4)+15*NNN-20*NN+15*N+Clamp4(W*2-NWW,W,NW,N,NN))/6)-px);
-        Map[17].set(Clip((-3*WW+8*W+Clamp4(NEE*3-NNEE*3+buffer(w*3-2),NE,NEE,buffer(w-3),buffer(w-4)))/6)-px);
-        Map[18].set(Clip(NN+NW-buffer(w*3+1))-px);
-        Map[19].set(Clip(NN+NE-buffer(w*3-1))-px);
-        Map[20].set(Clip((W*2+NW)-(WW+2*NWW)+buffer(w+3))-px);
-        Map[21].set(Clip(((NW+NWW)/2)*3-buffer(w*2+3)*3+(buffer(w*3+4)+buffer(w*3+5))/2)-px);
-        Map[22].set(Clip(NEE+NE-buffer(w*2-3))-px);
-        Map[23].set(Clip(NWW+WW-buffer(w+4))-px);
-        Map[24].set(Clip(((W+NW)*3-NWW*6+buffer(w+3)+buffer(w*2+3))/2)-px);
-        Map[25].set(Clip((NE*2+NNE)-(NNEE+buffer(w*3-2)*2)+buffer(w*4-3))-px);
-        Map[26].set(buffer(w*6)-px);
-        Map[27].set((buffer(w-4)+buffer(w-6))/2-px);
-        Map[28].set((buffer(4)+buffer(6))/2-px);
-        Map[29].set((W+N+buffer(w-5)+buffer(w-7))/4-px);
-        Map[30].set(Clip(buffer(w-3)+W-NEE)-px);
-        Map[31].set(Clip(4*NNN-3*buffer(w*4))-px);
-        Map[32].set(Clip(N+NN-NNN)-px);
-        Map[33].set(Clip(W+WW-WWW)-px);
-        Map[34].set(Clip(W+NEE-NE)-px);
-        Map[35].set(Clip(WW+NEE-N)-px);
-        Map[36].set((Clip(W*2-NW)+Clip(W*2-NWW)+N+NE)/4-px);
-        Map[37].set(Clamp4(N*2-NN,W,N,NE,NEE)-px);
-        Map[38].set((N+NNN)/2-px);
-        Map[39].set(Clip(NN+W-NNW)-px);
-        Map[40].set(Clip(NWW+N-NNWW)-px);
-        Map[41].set(Clip((4*WWW-15*WW+20*W+Clip(NEE*2-NNEE))/10)-px);
-        Map[42].set(Clip((buffer(w*3-3)-4*NNEE+6*NE+Clip(W*3-NW*3+NNW))/4)-px);
-        Map[43].set(Clip((N*2+NE)-(NN+2*NNE)+buffer(w*3-1))-px);
-        Map[44].set(Clip((NW*2+NNW)-(NNWW+buffer(w*3+2)*2)+buffer(w*4+3))-px);
-        Map[45].set(Clip(NNWW+W-buffer(w*2+3))-px);
-        Map[46].set(Clip((-buffer(w*4)+5*NNN-10*NN+10*N+Clip(W*4-NWW*6+buffer(w*2+3)*4-buffer(w*3+4)))/5)-px);
-        Map[47].set(Clip(NEE+Clip(buffer(w-3)*2-buffer(w*2-4))-buffer(w-4))-px);
-        Map[48].set(Clip(NW+W-NWW)-px);
-        Map[49].set(Clip((N*2+NW)-(NN+2*NNW)+buffer(w*3+1))-px);
-        Map[50].set(Clip(NN+Clip(NEE*2-buffer(w*2-3))-NNE)-px);
-        Map[51].set(Clip((-buffer(4)+5*WWW-10*WW+10*W+Clip(NE*2-NNE))/5)-px);
-        Map[52].set(Clip((-buffer(5)+4*buffer(4)-5*WWW+5*W+Clip(NE*2-NNE))/4)-px);
-        Map[53].set(Clip((WWW-4*WW+6*W+Clip(NE*3-NNE*3+buffer(w*3-1)))/4)-px);
-        Map[54].set(Clip((-NNEE+3*NE+Clip(W*4-NW*6+NNW*4-buffer(w*3+1)))/3)-px);
-        Map[55].set(((W+N)*3-NW*2)/4-px);
+      if (isPNG){
+        if (x==1)
+          filter = (U8)c1;
+        else{
+          switch (filter){
+            case 1: {
+              buffer.add((U8)( c1 + buffer(1)*(x>2 || !x) ) );
+              filterOn = x>1;
+              px = buffer(1);
+              break;
+            }
+            case 2: {
+              buffer.add((U8)( c1 + buffer(w)*(filterOn=(line>0)) ) );
+              px = buffer(w);
+              break;
+            }
+            case 3: {
+              buffer.add((U8)( c1 + (buffer(w)*(line>0) + buffer(1)*(x>2 || !x))/2 ) );
+              filterOn = (x>1 || line>0);
+              px = (buffer(1)*(x>1)+buffer(w)*(line>0))/2;
+              break;
+            }
+            case 4: {
+              buffer.add((U8)( c1 + Paeth(buffer(1)*(x>2 || !x), buffer(w)*(line>0), buffer(w+1)*(line>0 && (x>2 || !x))) ) );
+              filterOn = (x>1 || line>0);
+              px = Paeth(buffer(1)*(x>1),buffer(w)*(line>0),buffer(w+1)*(x>1 && line>0));
+              break;
+            }
+            default: buffer.add(c1);
+              filterOn = false;
+              px = 0;
+          }
+          if (!filterOn) px=0;
+        }
+      }
+      else { // non-png
+        buffer.add(c1);
+        if (x==0) {
+          memset(&jumps[0], 0, sizeof(short)*jumps.size());
+          if (line>0 && w>8) {
+            U8 bMask = 0xFF-((1<<gray)-1);
+            U32 pMask = bMask*0x01010101u;
+            U32 left=0, right=0;
+            int l=min(w, (int)jumps.size()), end=l-4;
+            do {
+              left = ((buffer(l-x)<<24)|(buffer(l-x-1)<<16)|(buffer(l-x-2)<<8)|buffer(l-x-3))&pMask;
+              int i = end;
+              while (i>=x+4) {
+                right = ((buffer(l-i-3)<<24)|(buffer(l-i-2)<<16)|(buffer(l-i-1)<<8)|buffer(l-i))&pMask;
+                if (left==right) {
+                  int j=(i+3-x-1)/2, k=0;
+                  for (; k<=j; k++) {
+                    if (k<4 || (buffer(l-x-k)&bMask)==(buffer(l-i-3+k)&bMask)) {
+                      jumps[x+k] = -(x+(l-i-3)+2*k);
+                      jumps[i+3-k] = i+3-x-2*k;
+                    }
+                    else
+                      break;
+                  }
+                  x+=k;
+                  end-=k;
+                  break;
+                }
+                i--;
+              }
+              x++;
+              if (x>end)
+                break;
+            } while (x+4<l);
+            x = 0;
+          }
+        }
+      }
 
-        if (isPNG)
-          ctx = ((abs(W-N)>8)<<10)|((W>N)<<9)|((abs(N-NW)>8)<<8)|((N>NW)<<7)|((abs(N-NE)>8)<<6)|((N>NE)<<5)|((W>WW)<<4)|((N>NN)<<3)|min(5,filterOn?filter+1:0);
-        else
-          ctx = min(0x1F,x/max(1,w/min(32,columns[0])))|( ( ((abs(W-N)*16>W+N)<<1)|(abs(N-NW)>8) )<<5 )|((W+N)&0x180);
+      if (x || !isPNG){
+        column[0]=(x-isPNG)/columns[0];
+        column[1]=(x-isPNG)/columns[1];
+        WWWWW=buffer(5), WWWW=buffer(4), WWW=buffer(3), WW=buffer(2), W=buffer(1);
+        NWWWW=buffer(w+4), NWWW=buffer(w+3), NWW=buffer(w+2), NW=buffer(w+1), N=buffer(w), NE=buffer(w-1), NEE=buffer(w-2), NEEE=buffer(w-3), NEEEE=buffer(w-4);
+        NNWWW=buffer(w*2+3), NNWW=buffer(w*2+2), NNW=buffer(w*2+1), NN=buffer(w*2), NNE=buffer(w*2-1), NNEE=buffer(w*2-2), NNEEE=buffer(w*2-3);
+        NNNWW=buffer(w*3+2), NNNW=buffer(w*3+1), NNN=buffer(w*3), NNNE=buffer(w*3-1), NNNEE=buffer(w*3-2);
+        NNNNW=buffer(w*4+1), NNNN=buffer(w*4), NNNNE=buffer(w*4-1);
+        NNNNN=buffer(w*5);
+        NNNNNN=buffer(w*6);
+        if (prevFramePos>0 && prevFrameWidth==w){
+          int offset = prevFramePos+line*w+x;
+          prvFrmPx = buf[offset];
+          if (gray) {
+            sceneOls.Update(W);
+            sceneOls.Add(W); sceneOls.Add(NW); sceneOls.Add(N); sceneOls.Add(NE);
+            for (int i=-1; i<2; i++) {
+              for (int j=-1; j<2; j++)
+                sceneOls.Add(buf[offset+i*w+j]);
+            }
+            prvFrmPred = Clip(int(floor(sceneOls.Predict())));
+          }
+          else
+            prvFrmPred = W;
+        }
+        else {
+          prvFrmPx = prvFrmPred = W;
+        }
+        sceneMap[0].set_direct(prvFrmPx);
+        sceneMap[1].set_direct(prvFrmPred);
 
-        res = Clamp4(W+N-NW,W,NW,N,NE)-px;
+        int j = 0;
+        jump = jumps[min(x,(int)jumps.size()-1)];
+        U64 i= (filterOn ? (filter+1)*64 : 0) + (gray*1024);
+        cm.set(hash(++i, (jump!=0)?(0x100|buffer(abs(jump)))*(1-2*(jump<0)):N, line&3));
+        if (!gray) {
+          for (j=0; j<nPltMaps; j++)
+            iCtx[j]+=W;
+          iCtx[0]=W|(NE<<8);
+          iCtx[1]=W|(N<<8);
+          iCtx[2]=W|(WW<<8);
+          iCtx[3]=N|(NN<<8);
+
+          cm.set(hash(++i, W, px));
+          cm.set(hash(++i, W, px, column[0]));
+          cm.set(hash(++i, N, px));
+          cm.set(hash(++i, N, px, column[0]));
+          cm.set(hash(++i, NW, px));
+          cm.set(hash(++i, NW, px, column[0]));
+          cm.set(hash(++i, NE, px));
+          cm.set(hash(++i, NE, px, column[0]));
+          cm.set(hash(++i, NWW, px));
+          cm.set(hash(++i, NEE, px));
+          cm.set(hash(++i, WW, px));
+          cm.set(hash(++i, NN, px));
+          cm.set(hash(++i, W, N, px));
+          cm.set(hash(++i, W, NW, px));
+          cm.set(hash(++i, W, NE, px));
+          cm.set(hash(++i, W, NEE, px));
+          cm.set(hash(++i, W, NWW, px));
+          cm.set(hash(++i, N, NW, px));
+          cm.set(hash(++i, N, NE, px));
+          cm.set(hash(++i, NW, NE, px));
+          cm.set(hash(++i, W, WW, px));
+          cm.set(hash(++i, N, NN, px));
+          cm.set(hash(++i, NW, NNWW, px));
+          cm.set(hash(++i, NE, NNEE, px));
+          cm.set(hash(++i, NW, NWW, px));
+          cm.set(hash(++i, NW, NNW, px));
+          cm.set(hash(++i, NE, NEE, px));
+          cm.set(hash(++i, NE, NNE, px));
+          cm.set(hash(++i, N, NNW, px));
+          cm.set(hash(++i, N, NNE, px));
+          cm.set(hash(++i, N, NNN, px));
+          cm.set(hash(++i, W, WWW, px));
+          cm.set(hash(++i, WW, NEE, px));
+          cm.set(hash(++i, WW, NN, px));
+          cm.set(hash(++i, W, buffer(w-3), px));
+          cm.set(hash(++i, W, buffer(w-4), px));
+          cm.set(hash(++i, W, N,NW, px));
+          cm.set(hash(++i, N, NN,NNN, px));
+          cm.set(hash(++i, W, NE,NEE, px));
+          cm.set(hash(++i, W, NW,N,NE, px));
+          cm.set(hash(++i, N, NE,NN,NNE, px));
+          cm.set(hash(++i, N, NW,NNW,NN, px));
+          cm.set(hash(++i, W, WW,NWW,NW, px));
+          cm.set(hash(++i, W, NW<<8 | N, WW<<8 | NWW, px));
+          cm.set(hash(++i, px, column[0]));
+          cm.set(hash(++i, px));
+          cm.set(hash(++i, N, px, column[1] ));
+          cm.set(hash(++i, W, px, column[1] ));
+          for (int j=0; j<nPltMaps; j++)
+            cm.set(hash(++i, iCtx[j](), px));
+
+          ctx = min(0x1F,(x-isPNG)/min(0x20,columns[0]));
+          res = W;
+        }
+        else{ // gray
+          MapCtxs[j++] = Clamp4(W+N-NW, W, NW, N, NE);
+          MapCtxs[j++] = Clip(W+N-NW);
+          MapCtxs[j++] = Clamp4(W+NE-N, W, NW, N, NE);
+          MapCtxs[j++] = Clip(W+NE-N);
+          MapCtxs[j++] = Clamp4(N+NW-NNW, W, NW, N, NE);
+          MapCtxs[j++] = Clip(N+NW-NNW);
+          MapCtxs[j++] = Clamp4(N+NE-NNE, W, N, NE, NEE);
+          MapCtxs[j++] = Clip(N+NE-NNE);
+          MapCtxs[j++] = (W+NEE)/2;
+          MapCtxs[j++] = Clip(N*3-NN*3+NNN);
+          MapCtxs[j++] = Clip(W*3-WW*3+WWW);
+          MapCtxs[j++] = (W+Clip(NE*3-NNE*3+buffer(w*3-1)))/2;
+          MapCtxs[j++] = (W+Clip(NEE*3-buffer(w*2-3)*3+buffer(w*3-4)))/2;
+          MapCtxs[j++] = Clip(NN+buffer(w*4)-buffer(w*6));
+          MapCtxs[j++] = Clip(WW+buffer(4)-buffer(6));
+          MapCtxs[j++] = Clip((buffer(w*5)-6*buffer(w*4)+15*NNN-20*NN+15*N+Clamp4(W*2-NWW, W, NW, N, NN))/6);
+          MapCtxs[j++] = Clip((-3*WW+8*W+Clamp4(NEE*3-NNEE*3+buffer(w*3-2), NE, NEE, buffer(w-3), buffer(w-4)))/6);
+          MapCtxs[j++] = Clip(NN+NW-buffer(w*3+1));
+          MapCtxs[j++] = Clip(NN+NE-buffer(w*3-1));
+          MapCtxs[j++] = Clip((W*2+NW)-(WW+2*NWW)+buffer(w+3));
+          MapCtxs[j++] = Clip(((NW+NWW)/2)*3-buffer(w*2+3)*3+(buffer(w*3+4)+buffer(w*3+5))/2);
+          MapCtxs[j++] = Clip(NEE+NE-buffer(w*2-3));
+          MapCtxs[j++] = Clip(NWW+WW-buffer(w+4));
+          MapCtxs[j++] = Clip(((W+NW)*3-NWW*6+buffer(w+3)+buffer(w*2+3))/2);
+          MapCtxs[j++] = Clip((NE*2+NNE)-(NNEE+buffer(w*3-2)*2)+buffer(w*4-3));
+          MapCtxs[j++] = buffer(w*6);
+          MapCtxs[j++] = (buffer(w-4)+buffer(w-6))/2;
+          MapCtxs[j++] = (buffer(4)+buffer(6))/2;
+          MapCtxs[j++] = (W+N+buffer(w-5)+buffer(w-7))/4;
+          MapCtxs[j++] = Clip(buffer(w-3)+W-NEE);
+          MapCtxs[j++] = Clip(4*NNN-3*buffer(w*4));
+          MapCtxs[j++] = Clip(N+NN-NNN);
+          MapCtxs[j++] = Clip(W+WW-WWW);
+          MapCtxs[j++] = Clip(W+NEE-NE);
+          MapCtxs[j++] = Clip(WW+NEE-N);
+          MapCtxs[j++] = (Clip(W*2-NW)+Clip(W*2-NWW)+N+NE)/4;
+          MapCtxs[j++] = Clamp4(N*2-NN, W, N, NE, NEE);
+          MapCtxs[j++] = (N+NNN)/2;
+          MapCtxs[j++] = Clip(NN+W-NNW);
+          MapCtxs[j++] = Clip(NWW+N-NNWW);
+          MapCtxs[j++] = Clip((4*WWW-15*WW+20*W+Clip(NEE*2-NNEE))/10);
+          MapCtxs[j++] = Clip((buffer(w*3-3)-4*NNEE+6*NE+Clip(W*3-NW*3+NNW))/4);
+          MapCtxs[j++] = Clip((N*2+NE)-(NN+2*NNE)+buffer(w*3-1));
+          MapCtxs[j++] = Clip((NW*2+NNW)-(NNWW+buffer(w*3+2)*2)+buffer(w*4+3));
+          MapCtxs[j++] = Clip(NNWW+W-buffer(w*2+3));
+          MapCtxs[j++] = Clip((-buffer(w*4)+5*NNN-10*NN+10*N+Clip(W*4-NWW*6+buffer(w*2+3)*4-buffer(w*3+4)))/5);
+          MapCtxs[j++] = Clip(NEE+Clip(buffer(w-3)*2-buffer(w*2-4))-buffer(w-4));
+          MapCtxs[j++] = Clip(NW+W-NWW);
+          MapCtxs[j++] = Clip((N*2+NW)-(NN+2*NNW)+buffer(w*3+1));
+          MapCtxs[j++] = Clip(NN+Clip(NEE*2-buffer(w*2-3))-NNE);
+          MapCtxs[j++] = Clip((-buffer(4)+5*WWW-10*WW+10*W+Clip(NE*2-NNE))/5);
+          MapCtxs[j++] = Clip((-buffer(5)+4*buffer(4)-5*WWW+5*W+Clip(NE*2-NNE))/4);
+          MapCtxs[j++] = Clip((WWW-4*WW+6*W+Clip(NE*3-NNE*3+buffer(w*3-1)))/4);
+          MapCtxs[j++] = Clip((-NNEE+3*NE+Clip(W*4-NW*6+NNW*4-buffer(w*3+1)))/3);
+          MapCtxs[j++] = ((W+N)*3-NW*2)/4;
+          for (j=0; j<nOLS; j++) {
+            ols[j].Update(W);
+            pOLS[j] = Clip(int(floor(ols[j].Predict(ols_ctxs[j]))));
+          }
+
+          cm.set(0);
+          cm.set(hash(++i, N, px));
+          cm.set(hash(++i, N-px));
+          cm.set(hash(++i, W, px));
+          cm.set(hash(++i, NW, px));
+          cm.set(hash(++i, NE, px));
+          cm.set(hash(++i, N, NN, px));
+          cm.set(hash(++i, W, WW, px));
+          cm.set(hash(++i, NE, NNEE, px ));
+          cm.set(hash(++i, NW, NNWW, px ));
+          cm.set(hash(++i, W, NEE, px));
+          cm.set(hash(++i, (Clamp4(W+N-NW,W,NW,N,NE)-px)/2, LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))));
+          cm.set(hash(++i, (W-px)/4, (NE-px)/4, column[0]));
+          cm.set(hash(++i, (Clip(W*2-WW)-px)/4, (Clip(N*2-NN)-px)/4));
+          cm.set(hash(++i, (Clamp4(N+NE-NNE,W,N,NE,NEE)-px)/4, column[0]));
+          cm.set(hash(++i, (Clamp4(N+NW-NNW,W,NW,N,NE)-px)/4, column[0]));
+          cm.set(hash(++i, (W+NEE)/4, px, column[0]));
+          cm.set(hash(++i, Clip(W+N-NW)-px, column[0]));
+          cm.set(hash(++i, Clamp4(N*3-NN*3+NNN,W,N,NN,NE), px, LogMeanDiffQt(W,Clip(NW*2-NNW))));
+          cm.set(hash(++i, Clamp4(W*3-WW*3+WWW,W,N,NE,NEE), px, LogMeanDiffQt(N,Clip(NW*2-NWW))));
+          cm.set(hash(++i, (W+Clamp4(NE*3-NNE*3+NNNE,W,N,NE,NEE))/2, px, LogMeanDiffQt(N,(NW+NE)/2)));
+          cm.set(hash(++i, (N+NNN)/8, Clip(N*3-NN*3+NNN)/4, px));
+          cm.set(hash(++i, (W+WWW)/8, Clip(W*3-WW*3+WWW)/4, px));
+          cm.set(hash(++i, Clip((-buffer(4)+5*WWW-10*WW+10*W+Clamp4(NE*4-NNE*6+buffer(w*3-1)*4-buffer(w*4-1),N,NE,buffer(w-2),buffer(w-3)))/5)-px));
+          cm.set(hash(++i, Clip(N*2-NN)-px, LogMeanDiffQt(N,Clip(NN*2-NNN))));
+          cm.set(hash(++i, Clip(W*2-WW)-px, LogMeanDiffQt(NE,Clip(N*2-NW))));
+
+          if (isPNG)
+            ctx = ((abs(W-N)>8)<<10)|((W>N)<<9)|((abs(N-NW)>8)<<8)|((N>NW)<<7)|((abs(N-NE)>8)<<6)|((N>NE)<<5)|((W>WW)<<4)|((N>NN)<<3)|min(5,filterOn?filter+1:0);
+          else
+            ctx = min(0x1F,x/max(1,w/min(32,columns[0])))|( ( ((abs(W-N)*16>W+N)<<1)|(abs(N-NW)>8) )<<5 )|((W+N)&0x180);
+
+          res = Clamp4(W+N-NW,W,NW,N,NE)-px;
+        }
+
+        stats->Image.pixels.W = W;
+        stats->Image.pixels.N = N;
+        stats->Image.pixels.NN = NN;
+        stats->Image.pixels.WW = WW;
+        stats->Image.ctx = ctx>>gray;
       }
     }
-  }
+    INJECT_SHARED_c0
+    U8 B=(c0<<(8-bpos));
+    if (x || !isPNG){
+      if (gray) {
+        int i=0;
+        Map[i++].set_direct(0);
+        Map[i++].set_direct((((U8)(Clip(W+N-NW)-px-B))*8+bpos)|(LogMeanDiffQt(Clip(N+NE-NNE), Clip(N+NW-NNW))<<11));
 
-  // Predict next bit
-  if (x || !isPNG){
-    cm.mix(m);
-    if (gray){
-      for (int i=0;i<nMaps;i++)
-        Map[i].mix(m);
+        for (int j=0; j<nSM1; i++, j++)
+          Map[i].set_direct((MapCtxs[j]-px-B)*8+bpos);
+
+        for (int j=0; i<nSM; i++, j++)
+          Map[i].set_direct((pOLS[j]-px-B)*8+bpos);
+      }
+      sceneMap[2].set_direct(finalize64(hash(x, line), 19)*8+bpos);
+      sceneMap[3].set_direct((prvFrmPx-B)*8+bpos);
+      sceneMap[4].set_direct((prvFrmPred-B)*8+bpos);
     }
-    col=(col+1)&7;
-    m.set(5+ctx, 2048+5);
-    m.set(col*2+(isPNG && c0==((0x100|res)>>(8-bpos))) + min(5, filterOn?filter+1:0)*16, 6*16);
-    m.set(((isPNG?px:N+W)>>4) + min(5, filterOn?filter+1:0)*32, 6*32);
-    m.set(c0, 256);
-    m.set( ((abs((int)(W-N))>4)<<9)|((abs((int)(N-NE))>4)<<8)|((abs((int)(W-NW))>4)<<7)|((W>N)<<6)|((N>NE)<<5)|((W>NW)<<4)|((W>WW)<<3)|((N>NN)<<2)|((NW>NNWW)<<1)|(NE>NNEE), 1024 );
-    m.set(min(63,column[0]), 64);
-    m.set(min(127,column[1]), 128);
-  }
-  else{
-    m.add( -2048+((filter>>(7-bpos))&1)*4096 );
-    m.set(min(4,filter),5);
-  }
-}
 
-//////////////////////////// im4bitModel /////////////////////////////////
-/*
-  Model for 4-bit image data
+    // Predict next bit
+    if (x || !isPNG){
+      cm.mix(m);
+      if (gray){
+        for (int i=0;i<nSM;i++) {
+          Map[i].mix(m);
+        }
+      }
+      else {
+        for (int i=0; i<nPltMaps; i++) {
+          pltMap[i].set((bpos<<8)|iCtx[i]());
+          pltMap[i].mix(m);
+        }
+      }
+      for (int i=0; i<5; i++) {
+        const int scale=(prevFramePos>0 && prevFrameWidth==w) ? 64:0;
+        sceneMap[i].setscale(scale);
+        sceneMap[i].mix(m);
+      }
 
-  Changelog:
-  (31/08/2017) v103: Initial release by Márcio Pais
-*/
-void im4bitModel(Mixer& m, int w) {
-  static HashTable<16> t(MEM/2);
-  const int S=11; // number of contexts
-  static U8* cp[S]; // context pointers
-  static StateMap sm[S];
-  static U8 WW=0, W=0, NWW=0, NW=0, N=0, NE=0, NEE=0, NNWW = 0, NNW=0, NN=0, NNE=0, NNEE=0;
-  static int col=0, line=0, run=0, prevColor=0, px=0;
-  int i;
-  if (!cp[0]){
-    for (i=0;i<S;i++)
-      cp[i]=t[263*i]; //set the initial context to an arbitrary slot in the hashtable
+      col=(col+1)&7;
+      m.set(5+ctx, 2048+5);
+      m.set(col*2+(isPNG && c0==((0x100|res)>>(8-bpos))) + min(5, filterOn?filter+1:0)*16, 6*16);
+      m.set(((isPNG?px:N+W)>>4) + min(5, filterOn?filter+1:0)*32, 6*32);
+      m.set(c0, 256);
+      m.set( ((abs((int)(W-N))>4)<<9)|((abs((int)(N-NE))>4)<<8)|((abs((int)(W-NW))>4)<<7)|((W>N)<<6)|((N>NE)<<5)|((W>NW)<<4)|((W>WW)<<3)|((N>NN)<<2)|((NW>NNWW)<<1)|(NE>NNEE), 1024 );
+      m.set(min(63,column[0]), 64);
+      m.set(min(127,column[1]), 128);
+      m.set( min(255,(x+line)/32), 256);
+    }
+    else{
+      m.add( -2048+((filter>>(7-bpos))&1)*4096 );
+      m.set(min(4,filter),MIXERINPUTS);
+    }
   }
-  for (i=0;i<S;i++)
-    *cp[i]=nex(*cp[i],y); //update hashtable item priorities using predicted counts
+};
 
-  if (bpos==0 || bpos==4){
+//////////////////////////// Image4bitModel /////////////////////////////////
+
+//  Model for 4-bit image data
+
+
+class Image4bitModel {
+private:
+  static constexpr int S = 14; //number of contexts
+public:
+  static constexpr int MIXERINPUTS = (S*3+1);
+  static constexpr int MIXERCONTEXTS = 256+512+512+1024+16+1; //2321
+  static constexpr int MIXERCONTEXTSETS = 6;
+private:
+  const Shared * const shared;
+  Random rnd;
+  HashTable<16> t;
+  StateMap sm;
+  StateMap map;
+  U8* cp[S]{}; // context pointers
+  U8 WW=0, W=0, NWW=0, NW=0, N=0, NE=0, NEE=0, NNWW = 0, NNW=0, NN=0, NNE=0, NNEE=0;
+  int w=0, col=0, line=0, run=0, prevColor=0, px=0;
+public:
+  Image4bitModel(const Shared * const sh, const U64 size) : shared(sh), t(size),
+    sm{sh,S,256,1023,StateMap::BITHISTORY}, //StateMap: s, n, lim, init
+    map{sh,1,16,1023,StateMap::GENERIC} //StateMap: s, n, lim, init
+  {}
+  void setparam(int info0) {
+    w=info0;
+  }
+  void mix(Mixer& m) {
+    if (!cp[0]){
+      for (int i=0;i<S;i++)
+        cp[i]=t[263*i]; //set the initial context to an arbitrary slot in the hashtable
+    }
+    INJECT_SHARED_y
+    for (int i=0;i<S;i++)
+      StateTable::update(cp[i],y,rnd); //update hashtable item priorities using predicted counts
+
+    INJECT_SHARED_bpos 
+    if (bpos==0 || bpos==4){
       WW=W; NWW=NW; NW=N; N=NE; NE=NEE; NNWW=NWW; NNW=NN; NN=NNE; NNE=NNEE;
+      INJECT_SHARED_buf 
       if (bpos==0)
-        {W=c4&0xF; NEE=buf(w-1)>>4; NNEE=buf(w*2-1)>>4;}
+        {INJECT_SHARED_c4 W=c4&0xF; NEE=buf(w-1)>>4; NNEE=buf(w*2-1)>>4;}
       else
-        {W=c0&0xF; NEE=buf(w-1)&0xF; NNEE=buf(w*2-1)&0xF;}
+        {INJECT_SHARED_c0 W=c0&0xF; NEE=buf(w-1)&0xF; NNEE=buf(w*2-1)&0xF;}
       run=(W!=WW || col==0)?(prevColor=WW,0):min(0xFFF,run+1);
       px=1; //partial pixel (4 bits) with a leading "1"
-      i=0;
-
-      cp[i++]=t[hash(W,NW,N)];
-      cp[i++]=t[hash(N, min(0xFFF, col/8))];
-      cp[i++]=t[hash(W,NW,N,NN,NE)];
-      cp[i++]=t[hash(W, N, NE+NNE*16, NEE+NNEE*16)];
-      cp[i++]=t[hash(W, N, NW+NNW*16, NWW+NNWW*16)];
-      cp[i++]=t[hash(W, ilog2(run+1), prevColor, col/max(1,w/2) )];
-      cp[i++]=t[hash(NE, min(0x3FF, (col+line)/max(1,w*8)))];
-      cp[i++]=t[hash(NW, (col-line)/max(1,w*8))];
-      cp[i++]=t[hash(WW*16+W,NN*16+N,NNWW*16+NW)];
-      cp[i++]=t[N+NN*16];
-      cp[i++]=t[-1];
-      assert(i==S);
-
+      U64 i=0; cp[i]=t[hash(i,W,NW,N)];
+          i++; cp[i]=t[hash(i,N, min(0xFFF, col/8))];
+          i++; cp[i]=t[hash(i,W,NW,N,NN,NE)];
+          i++; cp[i]=t[hash(i,W, N, NE+NNE*16, NEE+NNEE*16)];
+          i++; cp[i]=t[hash(i,W, N, NW+NNW*16, NWW+NNWW*16)];
+          i++; cp[i]=t[hash(i,W, ilog2(run+1), prevColor, col/max(1,w/2) )];
+          i++; cp[i]=t[hash(i,NE, min(0x3FF, (col+line)/max(1,w*8)))];
+          i++; cp[i]=t[hash(i,NW, (col-line)/max(1,w*8))];
+          i++; cp[i]=t[hash(i,WW*16+W,NN*16+N,NNWW*16+NW)];
+          i++; cp[i]=t[hash(i,N,NN)];
+          i++; cp[i]=t[hash(i,W,WW)];
+          i++; cp[i]=t[hash(i,W,NE)];
+          i++; cp[i]=t[hash(i,WW,NN,NEE)];
+          i++; cp[i]=t[-1];
+      assert(++i==S);
       col++;
       if(col==w*2){col=0;line++;}
+    }
+    else{
+      INJECT_SHARED_y
+      px+=px+y;
+      int j=(y+1)<<(bpos&3);
+      for (int i=0;i<S;i++)
+        cp[i]+=j;
+    }
+
+    // predict
+    sm.subscribe();
+    for (int i=0; i<S; i++) {
+      const U8 s = *cp[i];
+      const int n0=-!StateTable::next(s, 2);
+      const int n1=-!StateTable::next(s, 3);
+      const int p1 = sm.p2(i,s);
+      const int st = stretch(p1)>>1;
+      m.add(st);
+      m.add((p1-2048)>>2);
+      m.add(st*abs(n1-n0));
+    }
+    m.add(stretch(map.p1(px))>>1);
+
+    m.set((W<<4) | px, 256);
+    m.set(min(31,col/max(1,w/16)) | (N<<5), 512);
+    m.set((bpos&3) | (W<<2) | (min(7,ilog2(run+1))<<6), 512);
+    m.set(W | (NE<<4) | ((bpos&3)<<8), 1024);
+    m.set(px, 16);
+    m.set(0,1);
   }
-  else{
-    px+=px+y;
-    int j=(y+1)<<(bpos&3);
-    for (i=0;i<S;i++)
-      cp[i]+=j;
-  }
+};
 
-  // predict
-  for (i=0; i<S; i++)
-    m.add(stretch(sm[i].p(*cp[i])));
-
-  m.set((W<<4) | px, 256);
-  m.set(min(31,col/max(1,w/16)) | (N<<5), 512);
-  m.set((bpos&3) | (W<<2) | (min(7,ilog2(run+1))<<6), 512);
-  m.set(W | (NE<<4) | ((bpos&3)<<8), 1024);
-  m.set(px, 16);
-  m.set(0,1);
-}
-
-//////////////////////////// im1bitModel /////////////////////////////////
+//////////////////////////// Image1bitModel /////////////////////////////////
 
 // Model for 1-bit image data
 
-void im1bitModel(Mixer& m, int w) {
-  static U32 r0, r1, r2, r3;  // last 4 rows, bit 8 is over current pixel
-  static Array<U8> t(0x23000);  // model: cxt -> state
-  const int N=11;  // number of contexts
-  static int cxt[N];  // contexts
-  static StateMap sm[N];
+class Image1bitModel {
+private:
+  static constexpr int S = 11;
+public:
+  static constexpr int MIXERINPUTS = S;
+private:
+  const Shared * const shared;
+  Random rnd;
+  int w=0;
+  U32 r0=0, r1=0, r2=0, r3=0;  // last 4 rows, bit 8 is over current pixel
+  Array<U8> t{0x23000};  // model: cxt -> state
+  int cxt[S]{};  // contexts
+  StateMap sm;
+public:
+  Image1bitModel(const Shared * const sh) : shared(sh),
+    sm{sh,S,256,1023,StateMap::BITHISTORY} // StateMap: s, n, limit, init
+  {}
+  void setparam(int info0) {
+    w=info0;
+  }
+  void mix(Mixer& m) {
+    // update the model
+    INJECT_SHARED_y
+    for (int i=0; i<S; ++i)
+      StateTable::update(&t[cxt[i]],y,rnd);
 
-  // update the model
-  int i;
-  for (i=0; i<N; ++i)
-    t[cxt[i]]=nex(t[cxt[i]],y);
+    INJECT_SHARED_bpos INJECT_SHARED_buf
+    // update the contexts (pixels surrounding the predicted one)
+    r0+=r0+y;
+    r1+=r1+((buf(w-1)>>(7-bpos))&1);
+    r2+=r2+((buf(w+w-1)>>(7-bpos))&1);
+    r3+=r3+((buf(w+w+w-1)>>(7-bpos))&1);
+    cxt[0]=(r0&0x7)|(r1>>4&0x38)|(r2>>3&0xc0);
+    cxt[1]=0x100+((r0&1)|(r1>>4&0x3e)|(r2>>2&0x40)|(r3>>1&0x80));
+    cxt[2]=0x200+((r0&1)|(r1>>4&0x1d)|(r2>>1&0x60)|(r3&0xC0));
+    cxt[3]=0x300+(y|((r0<<1)&4)|((r1>>1)&0xF0)|((r2>>3)&0xA));
+    cxt[4]=0x400+((r0>>4&0x2AC)|(r1&0xA4)|(r2&0x349)|(!(r3&0x14D)));
+    cxt[5]=0x800+(y|((r1>>4)&0xE)|((r2>>1)&0x70)|((r3<<2)&0x380));
+    cxt[6]=0xC00+(((r1&0x30)^(r3&0x0c0c))|(r0&3));
+    cxt[7]=0x1000+((!(r0&0x444))|(r1&0xC0C)|(r2&0xAE3)|(r3&0x51C));
+    cxt[8]=0x2000+((r0&7)|((r1>>1)&0x3F8)|((r2<<5)&0xC00));
+    cxt[9]=0x3000+((r0&0x3f)^(r1&0x3ffe)^(r2<<2&0x7f00)^(r3<<5&0xf800));
+    cxt[10]=0x13000+((r0&0x3e)^(r1&0x0c0c)^(r2&0xc800));
 
-  // update the contexts (pixels surrounding the predicted one)
-  r0+=r0+y;
-  r1+=r1+((buf(w-1)>>(7-bpos))&1);
-  r2+=r2+((buf(w+w-1)>>(7-bpos))&1);
-  r3+=r3+((buf(w+w+w-1)>>(7-bpos))&1);
-  cxt[0]=(r0&0x7)|(r1>>4&0x38)|(r2>>3&0xc0);
-  cxt[1]=0x100+((r0&1)|(r1>>4&0x3e)|(r2>>2&0x40)|(r3>>1&0x80));
-  cxt[2]=0x200+((r0&1)|(r1>>4&0x1d)|(r2>>1&0x60)|(r3&0xC0));
-  cxt[3]=0x300+(y|((r0<<1)&4)|((r1>>1)&0xF0)|((r2>>3)&0xA));
-  cxt[4]=0x400+((r0>>4&0x2AC)|(r1&0xA4)|(r2&0x349)|(!(r3&0x14D)));
-  cxt[5]=0x800+(y|((r1>>4)&0xE)|((r2>>1)&0x70)|((r3<<2)&0x380));
-  cxt[6]=0xC00+(((r1&0x30)^(r3&0x0c0c))|(r0&3));
-  cxt[7]=0x1000+((!(r0&0x444))|(r1&0xC0C)|(r2&0xAE3)|(r3&0x51C));
-  cxt[8]=0x2000+((r0&7)|((r1>>1)&0x3F8)|((r2<<5)&0xC00));
-  cxt[9]=0x3000+((r0&0x3f)^(r1&0x3ffe)^(r2<<2&0x7f00)^(r3<<5&0xf800));
-  cxt[10]=0x13000+((r0&0x3e)^(r1&0x0c0c)^(r2&0xc800));
-
-  // predict
-  for (i=0; i<N; ++i) m.add(stretch(sm[i].p(t[cxt[i]])));
-}
+    // predict
+    sm.subscribe();
+    for (int i=0; i<S; ++i) {
+      const U8 s=t[cxt[i]];
+      m.add(stretch(sm.p2(i,s)));
+    }
+  }
+};
 
 //////////////////////////// jpegModel /////////////////////////
 
@@ -6073,15 +8037,15 @@ void dump(const char* msg, int p) {
 */
 
 #define finish(success){ \
-  int length = pos - images[idx].offset; \
+  U32 length = pos - images[idx].offset; \
   /*if (success && idx && pos-lastPos==1)*/ \
     /*printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bEmbedded JPEG at offset %d, size: %d bytes, level %d\nCompressing... ", images[idx].offset-pos+blpos, length, idx), fflush(stdout);*/ \
   memset(&images[idx], 0, sizeof(JPEGImage)); \
   mcusize=0,dqt_state=-1; \
   idx-=(idx>0); \
-  images[idx].app-=length; \
-  if (images[idx].app < 0) \
+  if (images[idx].app <= length) \
     images[idx].app = 0; \
+  else images[idx].app-=length; \
 }
 
 // Detect invalid JPEG data.  The proper response is to silently
@@ -6099,7 +8063,7 @@ struct HUF {U32 min, max; int val;}; // Huffman decode tables
   // coefficient type Tc (0=DC, 1=AC), table Th (0-3), length m+1 (m=0-15)
 
 struct JPEGImage{
-  int offset, // offset of SOI marker
+  U32 offset, // offset of SOI marker
   jpeg, // 1 if JPEG is header detected, 2 if image data
   next_jpeg, // updated with jpeg on next byte boundary
   app, // Bytes remaining to skip in this marker
@@ -6112,13 +8076,21 @@ struct JPEGImage{
 
 class JpegModel {
 private:
+  static constexpr int N = 32; // number of contexts
+public:
+  static constexpr int MIXERINPUTS = 2*N+6; 
+  static constexpr int MIXERCONTEXTS = (1+8)+(1+1024)+1024;
+  static constexpr int MIXERCONTEXTSETS = 6;
+private:
+    const Shared * const shared;
+    Random rnd;
     // State of parser
     enum {SOF0=0xc0, SOF1, SOF2, SOF3, DHT, RST0=0xd0, SOI=0xd8, EOI, SOS, DQT,
       DNL, DRI, APP0=0xe0, COM=0xfe, FF};  // Second byte of 2 byte codes
     static const int MaxEmbeddedLevel = 3;
     JPEGImage images[MaxEmbeddedLevel]{};
     int idx=-1;
-    int lastPos=0;
+    U32 lastPos=0;
 
     // Huffman decode state
     U32 huffcode=0;  // Current Huffman code including extra bits
@@ -6128,6 +8100,7 @@ private:
       // 2 packed 4-bit numbers, r=run of zeros, s=number of extra bits for
       // first nonzero code.  huffcode is complete when rs >= 0.
       // rs is -1 prior to decoding incomplete huffcode.
+    int hbcount=2;
 
     int mcupos=0;  // position in MCU (0-639).  The low 6 bits mark
       // the coefficient in zigzag scan order (0=DC, 1-63=AC).  The high
@@ -6154,12 +8127,12 @@ private:
       //   xx is the first 2 extra bits, and the last 2 bits are 1 (since
       //   this never occurs in a valid RS code).
     int cpos=0;  // position in cbuf
-    int rs1;  // last RS code
+    int rs1=0;  // last RS code
     int rstpos=0,rstlen=0; // reset position
     int ssum=0, ssum1=0, ssum2=0, ssum3=0;
       // sum of S in RS codes in block and sum of S in first component
 
-    IntBuf cbuf2{0x20000};
+    RingBuffer<int> cbuf2{0x20000};
     Array<int> adv_pred{4}, sumu{8}, sumv{8}, run_pred{6};
     int prev_coef=0, prev_coef2=0, prev_coef_rs=0;
     Array<int> ls{10};  // block -> distance to previous block
@@ -6167,57 +8140,62 @@ private:
     Array<int> lcp{7}, zpos{64};
 
     //for parsing Quantization tables
-    int dqt_state = -1, dqt_end = 0, qnum = 0;
+    int dqt_state = -1;
+    U32 dqt_end = 0, qnum = 0;
 
     // Context model
-    static const int N=32; // size of t, number of contexts
     BH<9> t; // context hash -> bit history
       // As a cache optimization, the context does not include the last 1-2
       // bits of huffcode if the length (huffbits) is not a multiple of 3.
       // The 7 mapped values are for context+{"", 0, 00, 01, 1, 10, 11}.
-    Array<U32> cxt{N};  // context hashes
+    Array<U64> cxt{N};  // context hashes
     Array<U8*> cp{N};  // context pointers
-    StateMap sm[N]{};
+    IndirectMap MJPEGMap; 
+    StateMap sm;
     Mixer *m1;
-    APM a1{0x8000}, a2{0x20000};
+    APM apm1, apm2;
 
 public:
-  JpegModel(): t(MEM) {
-    m1=MixerFactory::CreateMixer(N+1, 2050, 3);
+  JpegModel(const Shared * const sh, const U64 size): shared(sh), t(size), 
+    MJPEGMap(sh,21,3,128,127), /* BitsOfContext, InputBits, Scale, Limit */
+    sm(sh,N,256,1023,StateMap::BITHISTORY), apm1 (sh,0x8000,24), apm2(sh,0x20000,24)
+  {
+    m1=MixerFactory::CreateMixer(sh, N+1, 2050, 3);
+    m1->set_scalefactor(1024, 128);
   }
   ~JpegModel() {
     delete m1;
   }
 
-  int jpegModel(Mixer& m) {
+  int mix(Mixer& m) {
 
-    const static U8 zzu[64]={  // zigzag coef -> u,v
+    static constexpr U8 zzu[64]={  // zigzag coef -> u,v
       0,1,0,0,1,2,3,2,1,0,0,1,2,3,4,5,4,3,2,1,0,0,1,2,3,4,5,6,7,6,5,4,
       3,2,1,0,1,2,3,4,5,6,7,7,6,5,4,3,2,3,4,5,6,7,7,6,5,4,5,6,7,7,6,7};
-    const static U8 zzv[64]={
+    static constexpr U8 zzv[64]={
       0,0,1,2,1,0,0,1,2,3,4,3,2,1,0,0,1,2,3,4,5,6,5,4,3,2,1,0,0,1,2,3,
       4,5,6,7,7,6,5,4,3,2,1,2,3,4,5,6,7,7,6,5,4,3,4,5,6,7,7,6,5,6,7,7};
 
     // Standard Huffman tables (cf. JPEG standard section K.3)
     // IMPORTANT: these are only valid for 8-bit data precision
-    const static U8 bits_dc_luminance[16] = {
+    static constexpr U8 bits_dc_luminance[16] = {
       0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0
     };
-    const static U8 values_dc_luminance[12] = {
+    static constexpr U8 values_dc_luminance[12] = {
       0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
     };
 
-    const static U8 bits_dc_chrominance[16] = {
+    static constexpr U8 bits_dc_chrominance[16] = {
       0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0
     };
-    const static U8 values_dc_chrominance[12] = {
+    static constexpr U8 values_dc_chrominance[12] = {
       0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
     };
 
-    const static U8 bits_ac_luminance[16] = {
+    static constexpr U8 bits_ac_luminance[16] = {
       0, 2, 1, 3, 3, 2, 4, 3, 5, 5, 4, 4, 0, 0, 1, 0x7d
     };
-    const static U8 values_ac_luminance[162] = {
+    static constexpr U8 values_ac_luminance[162] = {
       0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12,
       0x21, 0x31, 0x41, 0x06, 0x13, 0x51, 0x61, 0x07,
       0x22, 0x71, 0x14, 0x32, 0x81, 0x91, 0xa1, 0x08,
@@ -6241,10 +8219,10 @@ public:
       0xf9, 0xfa
     };
 
-    const static U8 bits_ac_chrominance[16] = {
+    static constexpr U8 bits_ac_chrominance[16] = {
       0, 2, 1, 2, 4, 4, 3, 4, 7, 5, 4, 4, 0, 1, 2, 0x77
     };
-    const static U8 values_ac_chrominance[162] = {
+    static constexpr U8 values_ac_chrominance[162] = {
       0x00, 0x01, 0x02, 0x03, 0x11, 0x04, 0x05, 0x21,
       0x31, 0x06, 0x12, 0x41, 0x51, 0x07, 0x61, 0x71,
       0x13, 0x22, 0x32, 0x81, 0x08, 0x14, 0x42, 0x91,
@@ -6267,12 +8245,15 @@ public:
       0xea, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8,
       0xf9, 0xfa
     };
-
+    
+    INJECT_SHARED_pos
     if (idx < 0){
       memset(&images[0], 0, sizeof(images));
       idx = 0;
       lastPos = pos;
     }
+
+    INJECT_SHARED_bpos INJECT_SHARED_buf
 
     // Be sure to quit on a byte boundary
     if (bpos==0) images[idx].next_jpeg=images[idx].jpeg>1;
@@ -6387,10 +8368,10 @@ public:
       // Build Huffman tables
       // huf[Tc][Th][m] = min, max+1 codes of length m, pointer to byte values
       if (pos==images[idx].data && bpos==1) {
-        for (int i=0; i<images[idx].htsize; ++i) {
-          int p=images[idx].ht[i]+4;  // pointer to current table after length field
-          int end=p+buf[p-2]*256+buf[p-1]-2;  // end of Huffman table
-          int count=0;  // sanity check
+        for (U32 i=0; i<images[idx].htsize; ++i) {
+          U32 p=images[idx].ht[i]+4;  // pointer to current table after length field
+          U32 end=p+buf[p-2]*256+buf[p-1]-2;  // end of Huffman table
+          U32 count=0;  // sanity check
           while (p<end && end<pos && end<p+2100 && ++count<10) {
             int tc=buf[p]>>4, th=buf[p]&15;
             if (tc>=2 || th>=4) break;
@@ -6524,6 +8505,7 @@ public:
     {
       if (mcusize && buf(1+(bpos==0))!=FF) {  // skip stuffed byte
         jassert(huffbits<=32);
+        INJECT_SHARED_y
         huffcode+=huffcode+y;
         ++huffbits;
         if (rs<0) {
@@ -6554,8 +8536,9 @@ public:
                 mcupos=(mcupos+63)&-64;
                 jassert(mcupos>=0 && mcupos<=mcusize && mcupos<=640);
                 while (cpos&63) {
-                  cbuf2[cpos]=0;
-                  cbuf[cpos]=(!rs)?0:(63-(cpos&63))<<4; cpos++; rs++;
+                  cbuf2.set(cpos,0);
+                  cbuf.set(cpos,(!rs)?0:(63-(cpos&63))<<4);
+                  cpos++; rs++;
                 }
               }
               else {  // rs = r zeros + s extra bits for the next nonzero value
@@ -6568,12 +8551,13 @@ public:
                 ex=huffcode&((1<<s)-1);
                 if (s!=0 && (ex>>(s-1))==0) ex-=(1<<s)-1;
                 for (int i=r; i>=1; --i) {
-                  cbuf2[cpos]=0;
-                  cbuf[cpos++]=(i<<4)|s;
+                  cbuf2.set(cpos,0);
+                  cbuf.set(cpos,(i<<4)|s);
+                  cpos++;
                 }
-                cbuf2[cpos]=ex;
-                cbuf[cpos++]=(s<<4)|(huffcode<<2>>s&3)|12;
-                ssum+=s;
+                cbuf2.set(cpos,ex);
+                cbuf.set(cpos,(s<<4)|(huffcode<<2>>s&3)|12);
+                cpos++; ssum+=s;
               }
             }
             else {  // DC: rs = 0S, s<12
@@ -6586,8 +8570,9 @@ public:
               jassert(comp>=0 && comp<4);
               dc=pred[comp]+=ex;
               jassert((cpos&63)==0);
-              cbuf2[cpos]=dc;
-              cbuf[cpos++]=(dc+1023)>>3;
+              cbuf2.set(cpos,dc);
+              cbuf.set(cpos,(dc+1023)>>3);
+              cpos++;
               if ((mcupos>>6)==0) {
                 ssum1=0;
                 ssum2=ssum3;
@@ -6705,875 +8690,1046 @@ public:
     if (!images[idx].jpeg || !images[idx].data) return images[idx].next_jpeg;
     if (buf(1+(bpos==0))==FF) {
       m.add(128); //network bias
-      m.set(0, 9);
-      m.set(0, 1025);
+      m.set(0, 1+8);
+      m.set(0, 1+1024);
       m.set(buf(1), 1024);
       return true;
     }
     if (rstlen>0 && rstlen==column+row*width-rstpos && mcupos==0 && (int)huffcode==(1<<huffbits)-1) {
       m.add(2047); //network bias
-      m.set(0, 9);
-      m.set(0, 1025);
+      m.set(0, 1+8);
+      m.set(0, 1+1024);
       m.set(buf(1), 1024);
       return true;
     }
 
     // Update model
     if (cp[N-1]) {
+      INJECT_SHARED_y
       for (int i=0; i<N; ++i)
-        *cp[i]=nex(*cp[i],y);
+        StateTable::update(cp[i],y,rnd);
     }
-    m1->update();
 
     // Update context
     const int comp=color[mcupos>>6];
     const int coef=(mcupos&63)|comp<<6;
     const int hc=(huffcode*4+((mcupos&63)==0)*2+(comp==0))|1<<(huffbits+2);
     const bool firstcol=column==0 && blockW[mcupos>>6]>mcupos;
-    static int hbcount=2;
     if (++hbcount>2 || huffbits==0) hbcount=0;
     jassert(coef>=0 && coef<256);
     const int zu=zzu[mcupos&63], zv=zzv[mcupos&63];
     if (hbcount==0) {
-      int n=hc*32;
-      cxt[0]=hash(++n, coef, adv_pred[2]/12+(run_pred[2]<<8), ssum2>>6, prev_coef/72);
-      cxt[1]=hash(++n, coef, adv_pred[0]/12+(run_pred[0]<<8), ssum2>>6, prev_coef/72);
-      cxt[2]=hash(++n, coef, adv_pred[1]/11+(run_pred[1]<<8), ssum2>>6);
-      cxt[3]=hash(++n, rs1, adv_pred[2]/7, run_pred[5]/2, prev_coef/10);
-      cxt[4]=hash(++n, rs1, adv_pred[0]/7, run_pred[3]/2, prev_coef/10);
-      cxt[5]=hash(++n, rs1, adv_pred[1]/11, run_pred[4]);
-      cxt[6]=hash(++n, adv_pred[2]/14, run_pred[2], adv_pred[0]/14, run_pred[0]);
-      cxt[7]=hash(++n, cbuf[cpos-blockN[mcupos>>6]]>>4, adv_pred[3]/17, run_pred[1], run_pred[5]);
-      cxt[8]=hash(++n, cbuf[cpos-blockW[mcupos>>6]]>>4, adv_pred[3]/17, run_pred[1], run_pred[3]);
-      cxt[9]=hash(++n, lcp[0]/22, lcp[1]/22, adv_pred[1]/7, run_pred[1]);
-      cxt[10]=hash(++n, lcp[0]/22, lcp[1]/22, mcupos&63, lcp[4]/30);
-      cxt[11]=hash(++n, zu/2, lcp[0]/13, lcp[2]/30, prev_coef/40+((prev_coef2/28)<<20));
-      cxt[12]=hash(++n, zv/2, lcp[1]/13, lcp[3]/30, prev_coef/40+((prev_coef2/28)<<20));
-      cxt[13]=hash(++n, rs1, prev_coef/42, prev_coef2/34, hash(lcp[0]/60,lcp[2]/14,lcp[1]/60,lcp[3]/14));
-      cxt[14]=hash(++n, mcupos&63, column>>1);
-      cxt[15]=hash(++n, column>>3, min(5+2*(!comp),zu+zv), hash(lcp[0]/10,lcp[2]/40,lcp[1]/10,lcp[3]/40));
-      cxt[16]=hash(++n, ssum>>3, mcupos&63);
-      cxt[17]=hash(++n, rs1, mcupos&63, run_pred[1]);
-      cxt[18]=hash(++n, coef, ssum2>>5, adv_pred[3]/30, (comp)?hash(prev_coef/22,prev_coef2/50):ssum/((mcupos&0x3F)+1));
-      cxt[19]=hash(++n, lcp[0]/40, lcp[1]/40, adv_pred[1]/28, hash( (comp)?prev_coef/40+((prev_coef2/40)<<20):lcp[4]/22, min(7,zu+zv), ssum/(2*(zu+zv)+1) ) );
-      cxt[20]=hash(++n, zv, cbuf[cpos-blockN[mcupos>>6]], adv_pred[2]/28, run_pred[2]);
-      cxt[21]=hash(++n, zu, cbuf[cpos-blockW[mcupos>>6]], adv_pred[0]/28, run_pred[0]);
-      cxt[22]=hash(++n, adv_pred[2]/7, run_pred[2]);
-      cxt[23]=hash(n, adv_pred[0]/7, run_pred[0]);
-      cxt[24]=hash(n, adv_pred[1]/7, run_pred[1]);
-      cxt[25]=hash(++n, zv, lcp[1]/14, adv_pred[2]/16, run_pred[5]);
-      cxt[26]=hash(++n, zu, lcp[0]/14, adv_pred[0]/16, run_pred[3]);
-      cxt[27]=hash(++n, lcp[0]/14, lcp[1]/14, adv_pred[3]/16);
-      cxt[28]=hash(++n, coef, prev_coef/10, prev_coef2/20);
-      cxt[29]=hash(++n, coef, ssum>>2, prev_coef_rs);
-      cxt[30]=hash(++n, coef, adv_pred[1]/17, hash(lcp[(zu<zv)]/24,lcp[2]/20,lcp[3]/24));
-      cxt[31]=hash(++n, coef, adv_pred[3]/11, hash(lcp[(zu<zv)]/50,lcp[2+3*(zu*zv>1)]/50,lcp[3+3*(zu*zv>1)]/50));
+      U64 n=hc*32;
+      int i=0;
+      cxt[i++]=hash(++n, coef, adv_pred[2]/12+(run_pred[2]<<8), ssum2>>6, prev_coef/72);
+      cxt[i++]=hash(++n, coef, adv_pred[0]/12+(run_pred[0]<<8), ssum2>>6, prev_coef/72);
+      cxt[i++]=hash(++n, coef, adv_pred[1]/11+(run_pred[1]<<8), ssum2>>6);
+      cxt[i++]=hash(++n, rs1, adv_pred[2]/7, run_pred[5]/2, prev_coef/10);
+      cxt[i++]=hash(++n, rs1, adv_pred[0]/7, run_pred[3]/2, prev_coef/10);
+      cxt[i++]=hash(++n, rs1, adv_pred[1]/11, run_pred[4]);
+      cxt[i++]=hash(++n, adv_pred[2]/14, run_pred[2], adv_pred[0]/14, run_pred[0]);
+      cxt[i++]=hash(++n, cbuf[cpos-blockN[mcupos>>6]]>>4, adv_pred[3]/17, run_pred[1], run_pred[5]);
+      cxt[i++]=hash(++n, cbuf[cpos-blockW[mcupos>>6]]>>4, adv_pred[3]/17, run_pred[1], run_pred[3]);
+      cxt[i++]=hash(++n, lcp[0]/22, lcp[1]/22, adv_pred[1]/7, run_pred[1]);
+      cxt[i++]=hash(++n, lcp[0]/22, lcp[1]/22, mcupos&63, lcp[4]/30);
+      cxt[i++]=hash(++n, zu/2, lcp[0]/13, lcp[2]/30, prev_coef/40+((prev_coef2/28)<<20));
+      cxt[i++]=hash(++n, zv/2, lcp[1]/13, lcp[3]/30, prev_coef/40+((prev_coef2/28)<<20));
+      cxt[i++]=hash(++n, rs1, prev_coef/42, prev_coef2/34, lcp[0]/60,lcp[2]/14,lcp[1]/60,lcp[3]/14);
+      cxt[i++]=hash(++n, mcupos&63, column>>1);
+      cxt[i++]=hash(++n, column>>3, min(5+2*(!comp),zu+zv), lcp[0]/10,lcp[2]/40,lcp[1]/10,lcp[3]/40);
+      cxt[i++]=hash(++n, ssum>>3, mcupos&63);
+      cxt[i++]=hash(++n, rs1, mcupos&63, run_pred[1]);
+      cxt[i++]=hash(++n, coef, ssum2>>5, adv_pred[3]/30, (comp)?hash(prev_coef/22,prev_coef2/50):ssum/((mcupos&0x3F)+1));
+      cxt[i++]=hash(++n, lcp[0]/40, lcp[1]/40, adv_pred[1]/28, (comp)?prev_coef/40+((prev_coef2/40)<<20):lcp[4]/22, min(7,zu+zv), ssum/(2*(zu+zv)+1) );
+      cxt[i++]=hash(++n, zv, cbuf[cpos-blockN[mcupos>>6]], adv_pred[2]/28, run_pred[2]);
+      cxt[i++]=hash(++n, zu, cbuf[cpos-blockW[mcupos>>6]], adv_pred[0]/28, run_pred[0]);
+      cxt[i++]=hash(++n, adv_pred[2]/7, run_pred[2]);
+      cxt[i++]=hash(  n, adv_pred[0]/7, run_pred[0]);
+      cxt[i++]=hash(  n, adv_pred[1]/7, run_pred[1]);
+      cxt[i++]=hash(++n, zv, lcp[1]/14, adv_pred[2]/16, run_pred[5]);
+      cxt[i++]=hash(++n, zu, lcp[0]/14, adv_pred[0]/16, run_pred[3]);
+      cxt[i++]=hash(++n, lcp[0]/14, lcp[1]/14, adv_pred[3]/16);
+      cxt[i++]=hash(++n, coef, prev_coef/10, prev_coef2/20);
+      cxt[i++]=hash(++n, coef, ssum>>2, prev_coef_rs);
+      cxt[i++]=hash(++n, coef, adv_pred[1]/17, lcp[(zu<zv)]/24,lcp[2]/20,lcp[3]/24);
+      cxt[i++]=hash(++n, coef, adv_pred[3]/11, lcp[(zu<zv)]/50,lcp[2+3*(zu*zv>1)]/50,lcp[3+3*(zu*zv>1)]/50);
+      assert(i==N);
     }
 
     // Predict next bit
     m1->add(128); //network bias
+    sm.subscribe();
     assert(hbcount<=2);
-    int p;
-   switch(hbcount)
-    {
-     case 0: for (int i=0; i<N; ++i){ cp[i]=t[cxt[i]]+1, m1->add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>1);} break;
-     case 1: { int hc=1+(huffcode&1)*3; for (int i=0; i<N; ++i){ cp[i]+=hc, m1->add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>1); }} break;
-     default: { int hc=1+(huffcode&1); for (int i=0; i<N; ++i){ cp[i]+=hc, m1->add(p=stretch(sm[i].p(*cp[i]))); m.add(p>>1); }} break;
+    switch(hbcount) {
+      case 0: { for (int i=0; i<N; ++i) {
+                  cp[i]=t[cxt[i]]+1;
+                  const U8 s=*cp[i];
+                  const U32 p=sm.p2(i,s);
+                  m.add(((int)p-2048)>>3);
+                  const int st=stretch(p);
+                  m1->add(st);
+                  m.add(st>>1);
+                }
+                break;
+              }
+      case 1: { int hc=1+(huffcode&1)*3;
+                for (int i=0; i<N; ++i) {
+                  cp[i]+=hc;
+                  const U8 s=*cp[i];
+                  const U32 p=sm.p2(i,s);
+                  m.add(((int)p-2048)>>3);
+                  const int st=stretch(p);
+                  m1->add(st);
+                  m.add(st>>1);
+                }
+                break;
+              } 
+      default: {int hc=1+(huffcode&1); 
+                for (int i=0; i<N; ++i) {
+                  cp[i]+=hc;
+                  const U8 s=*cp[i];
+                  const U32 p=sm.p2(i,s);
+                  m.add(((int)p-2048)>>3);
+                  const int st=stretch(p);
+                  m1->add(st);
+                  m.add(st>>1);
+                }
+                break;
+              } 
     }
-
-    m1->set(firstcol, 2); 
+    if (!hbcount) MJPEGMap.set(hash(mcupos, column, row, hc>>2));
+    MJPEGMap.mix(*m1);
+    m1->set(firstcol, 2);
     m1->set(coef | (min(3,huffbits)<<8), 1024);
     m1->set(((hc&0x1FE)<<1) | min(3,ilog2(zu+zv)), 1024);
     int pr=m1->p();
     m.add(stretch(pr)>>1);
     m.add((pr>>2)-511);
-    pr=a1.p(pr, (hc&511) | (((adv_pred[1]/16)&63)<<9), 1023);
+    pr=apm1.p(pr, (hc&511) | (((adv_pred[1]/16)&63)<<9), 1023);
     m.add(stretch(pr)>>1);
     m.add((pr>>2)-511);
-    pr=a2.p(pr, (hc&511) | (coef<<9), 1023);
+    pr=apm2.p(pr, (hc&511) | (coef<<9), 1023);
     m.add(stretch(pr)>>1);
     m.add((pr>>2)-511);
+    
     m.set(1 + ((zu+zv<5) | ((huffbits>8)<<1) | (firstcol<<2)), 1+8);
     m.set(1 + ((hc&0xFF) | (min(3,(zu+zv)/3))<<8), 1+1024);
     m.set(coef | (min(3,huffbits/2)<<8), 1024);
+    
     return true;
   }
 };
 
-//////////////////////////// wavModel /////////////////////////////////
+//////////////////////////// AudioModel /////////////////////////////////
 
 // Model a 16/8-bit stereo/mono uncompressed .wav file.
 // Based on 'An asymptotically Optimal Predictor for Stereo Lossless Audio Compression'
 // by Florin Ghido.
 
-#ifdef USE_WAVMODEL
+#ifdef USE_AUDIOMODEL
 
-static int S,D;
-static int wmode;
+// A base class for the common functions
+class AudioModel {
+protected:
+  const Shared * const shared;
+  ModelStats *stats;
+  int S=0;
+  int wmode=0;
+  AudioModel(const Shared * const sh, ModelStats *st) : shared(sh), stats(st) {}
 
-inline int s2(int i) { return int(short(buf(i)+256*buf(i-1))); }
-inline int t2(int i) { return int(short(buf(i-1)+256*buf(i))); }
+  inline int s2(int i) { INJECT_SHARED_buf return int(short(buf(i)+256*buf(i-1))); }
+  inline int t2(int i) { INJECT_SHARED_buf return int(short(buf(i-1)+256*buf(i))); }
 
-inline int X1(int i) {
-  switch (wmode) {
-    case 0: return buf(i)-128;
-    case 1: return buf(i<<1)-128;
-    case 2: return s2(i<<1);
-    case 3: return s2(i<<2);
-    case 4: return (buf(i)^128)-128;
-    case 5: return (buf(i<<1)^128)-128;
-    case 6: return t2(i<<1);
-    case 7: return t2(i<<2);
-    default: return 0;
-  }
-}
-
-inline int X2(int i) {
-  switch (wmode) {
-    case 0: return buf(i+S)-128;
-    case 1: return buf((i<<1)-1)-128;
-    case 2: return s2((i+S)<<1);
-    case 3: return s2((i<<2)-2);
-    case 4: return (buf(i+S)^128)-128;
-    case 5: return (buf((i<<1)-1)^128)-128;
-    case 6: return t2((i+S)<<1);
-    case 7: return t2((i<<2)-2);
-    default: return 0;
-  }
-}
-
-#define pr_(i,chn)(pr[2*(i)+chn])
-#define F_(k,l,chn)(F[2*(49*(k)+l)+chn])
-#define L_(i,k)(L[49*(i)+k])
-
-void wavModel(Mixer& m, int info, ModelStats *Stats = nullptr) {
-  static int col=0;
-  static Array<int> pr{3*2}; // [3][2]
-  static Array<int> counter{2};
-  static Array<double> F{49*49*2}; //[49][49][2]
-  static Array<double> L{49*49}; //[49][49]
-  static const double a=0.996,a2=1.0/a;
-  static const int SC=0x10000;
-  static SmallStationaryContextMap scm1(SC), scm2(SC), scm3(SC), scm4(SC), scm5(SC), scm6(SC), scm7(SC);
-  static ContextMap cm(MEM*4, 11);
-  static int bits, channels, w, ch;
-  static int z1, z2, z3, z4, z5, z6, z7;
-
-  int j, k, l, i = 0;
-  long double sum;
-
-  if (bpos==0 && blpos==0) {
-    bits=((info%4)/2)*8+8;
-    channels=info%2+1;
-    w=channels*(bits>>3);
-    wmode=info;
-    z1=z2=z3=z4=z5=z6=z7=0;
-    if (channels==1) {S=48;D=0;} else {S=36;D=12;}
-    for (k=0; k<=S+D; k++) 
-      for (l=0; l<=S+D; l++) {
-        L_(k,l)=0.0;
-        for (int chn=0; chn<channels; chn++)
-          F_(k,l,chn)=0.0;
-      }
-    for (int chn=0; chn<channels; chn++) {
-      F_(1,0,chn)=1.0;
-      counter[chn]=pr_(2,chn)=pr_(1,chn)=pr_(0,chn)=0;
+  inline int X1(int i) {
+    INJECT_SHARED_buf
+    switch (wmode) {
+      case 0: return buf(i)-128;
+      case 1: return buf(i<<1)-128;
+      case 2: return s2(i<<1);
+      case 3: return s2(i<<2);
+      case 4: return (buf(i)^128)-128;
+      case 5: return (buf(i<<1)^128)-128;
+      case 6: return t2(i<<1);
+      case 7: return t2(i<<2);
+      default: return 0;
     }
   }
-  // Select previous samples and predicted sample as context
-  if (bpos==0 && blpos>=w) {
-    ch=blpos%w;
-    const int msb=ch%(bits>>3);
-    const int chn=ch/(bits>>3);
-    if (msb==0) {
-      z1=X1(1);z2=X1(2);z3=X1(3);z4=X1(4);z5=X1(5);
-      k=X1(1);
-      const int mS=min(S,counter[chn]-1);
-      const int mD=min(D,counter[chn]);
-      for (l=0; l<=mS; l++) { F_(0,l,chn)*=a; F_(0,l,chn)+=X1(l+1)*k; }
-      for (l=1; l<=mD; l++) { F_(0,l+S,chn)*=a; F_(0,l+S,chn)+=X2(l+1)*k; }
-      if (channels==2) {
-        k=X2(2);
-        for (l=1; l<=mD; l++) { F_(S+1,l+S,chn)*=a; F_(S+1,l+S,chn)+=X2(l+1)*k; }
-        for (l=1; l<=mS; l++) { F_(l,S+1,chn)*=a; F_(l,S+1,chn)+=X1(l+1)*k; }
-        z6=X2(1)+X1(1)-X2(2);
-        z7=X2(1);
-      } else {
-        z6=2*X1(1)-X1(2); 
-        z7=X1(1);
-      }
 
-      if (channels==1) for (k=1; k<=S+D; k++) for (l=k; l<=S+D; l++) F_(k,l,chn)=(F_(k-1,l-1,chn)-X1(k)*X1(l))*a2;
-      else for (k=1; k<=S+D; k++) if (k!=S+1) for (l=k; l<=S+D; l++) if (l!=S+1) F_(k,l,chn)=(F_(k-1,l-1,chn)-(k-1<=S?X1(k):X2(k-S))*(l-1<=S?X1(l):X2(l-S)))*a2;
-      for (i=1; i<=S+D; i++) {
-          sum=F_(i,i,chn);
-          for (k=1; k<i; k++) sum-=L_(i,k)*L_(i,k);
-          sum=floor(sum+0.5);
-          sum=1.0/sum;
-          if (sum>0.0) {
-            L_(i,i)=sqrt(sum);
-            for (j=(i+1); j<=S+D; j++) {
-              sum=F_(i,j,chn);
-              for (k=1; k<i; k++) sum-=L_(j,k)*L_(i,k);
-              sum=floor(sum+0.5);
-              L_(j,i)=sum*L_(i,i);
-            }
-          } else break;
-      }
-      if (i>S+D && counter[chn]>S+1) {
-        for (k=1; k<=S+D; k++) {
-          F_(k,0,chn)=F_(0,k,chn);
-          for (j=1; j<k; j++) F_(k,0,chn)-=L_(k,j)*F_(j,0,chn);
-          F_(k,0,chn)*=L_(k,k);
-        }
-        for (k=S+D; k>0; k--) {
-          for (j=k+1; j<=S+D; j++) F_(k,0,chn)-=L_(j,k)*F_(j,0,chn);
-          F_(k,0,chn)*=L_(k,k);
-        }
-      }
-      sum=0.0;
-      for (l=1; l<=S+D; l++) sum+=F_(l,0,chn)*(l<=S?X1(l):X2(l-S));
-      pr_(2,chn)=pr_(1,chn);
-      pr_(1,chn)=pr_(0,chn);
-      pr_(0,chn)=int(floor(sum));
-      counter[chn]++;
+  inline int X2(int i) {
+    INJECT_SHARED_buf
+    switch (wmode) {
+      case 0: return buf(i+S)-128;
+      case 1: return buf((i<<1)-1)-128;
+      case 2: return s2((i+S)<<1);
+      case 3: return s2((i<<2)-2);
+      case 4: return (buf(i+S)^128)-128;
+      case 5: return (buf((i<<1)-1)^128)-128;
+      case 6: return t2((i+S)<<1);
+      case 7: return t2((i<<2)-2);
+      default: return 0;
     }
-    const int y1=pr_(0,chn), y2=pr_(1,chn), y3=pr_(2,chn);
-    int x1=buf(1), x2=buf(2), x3=buf(3);
-    if (wmode==4 || wmode==5) {x1^=128; x2^=128;}
-    if (bits==8) {x1-=128; x2-=128;}
-    const int t=((bits==8) || ((!msb)^(wmode<6)));
-    i=ch<<4;
-    if ((msb)^(wmode<6)) {
-      cm.set(hash(++i, y1&0xff));
-      cm.set(hash(++i, y1&0xff, ((z1-y2+z2-y3)>>1)&0xff));
-      cm.set(hash(++i, x1, y1&0xff));
-      cm.set(hash(++i, x1, x2>>3, x3));
-      if (bits==8)
-        cm.set(hash(++i, y1&0xFE, ilog2(abs((int)(z1-y2)))*2+(z1>y2) ));
+  }
+
+  inline int signedClip8(const int i) {
+    return max(-128, min(127, i));
+  }
+
+  inline int signedClip16(const int i) {
+    return max(-32768, min(32767, i));
+  }
+};
+
+class Audio8bitModel : AudioModel {
+private:
+  static constexpr int nOLS = 8;
+  static constexpr int nLMS = 3;
+  static constexpr int nSSM = nOLS+nLMS+3;
+  static constexpr int nCtx = 3;
+public:
+  static constexpr int MIXERINPUTS = nCtx*nSSM*SmallStationaryContextMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = 4096+2048+2048+256+10; //8458
+  static constexpr int MIXERCONTEXTSETS = 5;
+private:
+  SmallStationaryContextMap sMap1b[nSSM][nCtx];
+  OLS<double, int8_t> ols[nOLS][2]{
+    {{128, 24, 0.9975}, {128, 24, 0.9975}},
+    {{90, 30, 0.9965}, {90, 30, 0.9965}},
+    {{90, 31, 0.996}, {90, 31, 0.996}},
+    {{90, 32, 0.995}, {90, 32, 0.995}},
+    {{90, 33, 0.995}, {90, 33, 0.995}},
+    {{90, 34, 0.9985}, {90, 34, 0.9985}},
+    {{28, 4, 0.98}, {28, 4, 0.98}},
+    {{28, 3, 0.992}, {28, 3, 0.992}}
+  };
+  LMS<float, int8_t> lms[nLMS][2]{
+    {{1280, 640, 3e-5f, 2e-5f}, {1280, 640, 3e-5f, 2e-5f}},
+    {{640, 64, 8e-5f, 1e-5f}, {640, 64, 8e-5f, 1e-5f}},
+    {{2450, 8, 1.6e-5f, 1e-6f}, {2450, 8, 1.6e-5f, 1e-6f}}
+  };
+  int prd[nSSM][2][2]{ 0 }, residuals[nSSM][2]{ 0 };
+  int stereo=0, ch=0;
+  U32 mask=0, errLog=0, mxCtx=0;
+public:
+  Audio8bitModel(const Shared * const sh, ModelStats *st) : AudioModel(sh, st),
+    sMap1b{ /* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
+    /*nOLS: 0-3*/ {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}},
+    /*nOLS: 4-7*/ {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}},
+    /*nLMS: 0-2*/ {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}, {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}, {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}, 
+    /*nSSM: 0-2*/ {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}, {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}, {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}}
+  }
+  {}
+  void setparam(int info) {
+    INJECT_STATS_blpos INJECT_SHARED_bpos
+    if (blpos==0 && bpos==0) {
+      assert((info&2)==0);
+      stereo = (info&1);
+      mask = 0;
+      stats->Wav = stereo+1;
+      wmode=info;
+      for (int i=0; i<nLMS; i++)
+        lms[i][0].Reset(), lms[i][1].Reset();
+    }
+  }
+  void mix(Mixer& m) {
+    INJECT_SHARED_bpos INJECT_SHARED_c0 INJECT_SHARED_c1
+    if (bpos==0) {
+      INJECT_STATS_blpos
+      ch=(stereo)?blpos&1:0;
+      const int8_t s = int(((wmode&4)>0)?c1^128:c1)-128;
+      const int pCh = ch^stereo;
+      int i = 0;
+      for (errLog=0; i<nOLS; i++) {
+        ols[i][pCh].Update(s);
+        residuals[i][pCh] = s-prd[i][pCh][0];
+        const U32 absResidual = (U32)abs(residuals[i][pCh]);
+        mask+=mask+(absResidual>4);
+        errLog+=SQR(absResidual);
+      }
+      for (int j=0; j<nLMS; j++)
+        lms[j][pCh].Update(s);
+      for (; i<nSSM; i++)
+        residuals[i][pCh] = s-prd[i][pCh][0];
+      errLog = min(0xF, ilog2(errLog));
+      stats->Audio = mxCtx = ilog2(min(0x1F, BitCount(mask)))*2+ch;
+
+      int k1=90, k2=k1-12*stereo;
+      for (int j=(i=1); j<=k1; j++, i+=1<<((j>8)+(j>16)+(j>64))) ols[1][ch].Add(X1(i));
+      for (int j=(i=1); j<=k2; j++, i+=1<<((j>5)+(j>10)+(j>17)+(j>26)+(j>37))) ols[2][ch].Add(X1(i));
+      for (int j=(i=1); j<=k2; j++, i+=1<<((j>3)+(j>7)+(j>14)+(j>20)+(j>33)+(j>49))) ols[3][ch].Add(X1(i));
+      for (int j=(i=1); j<=k2; j++, i+=1+(j>4)+(j>8)) ols[4][ch].Add(X1(i));
+      for (int j=(i=1); j<=k1; j++, i+=2+((j>3)+(j>9)+(j>19)+(j>36)+(j>61))) ols[5][ch].Add(X1(i));
+      if (stereo) {
+        for (i=1; i<=k1-k2; i++) {
+          const double s = (double)X2(i);
+          ols[2][ch].AddFloat(s);
+          ols[3][ch].AddFloat(s);
+          ols[4][ch].AddFloat(s);
+        }
+      }
+      k1=28, k2=k1-6*stereo;
+      for (i=1; i<=k2; i++) {
+        const double s = (double)X1(i);
+        ols[0][ch].AddFloat(s);
+        ols[6][ch].AddFloat(s);
+        ols[7][ch].AddFloat(s);
+      }
+      for (; i<=96; i++) ols[0][ch].Add(X1(i));
+      if (stereo) {
+        for (i=1; i<=k1-k2; i++) {
+          const double s = (double)X2(i);
+          ols[0][ch].AddFloat(s);
+          ols[6][ch].AddFloat(s);
+          ols[7][ch].AddFloat(s);
+        }
+        for (; i<=32; i++) ols[0][ch].Add(X2(i));
+      }
       else
-        cm.set(hash(++i, (y1+z1-y2)&0xff));
-      cm.set(hash(++i, x1));
-      cm.set(hash(++i, x1, x2));
-      cm.set(hash(++i, z1&0xff));
-      cm.set(hash(++i, (z1*2-z2)&0xff));
-      cm.set(hash(++i, z6&0xff));
-      cm.set(hash(++i, y1&0xFF, ((z1-y2+z2-y3)/(bits>>3))&0xFF ));
-    } else {
-      cm.set(hash(++i, (y1-x1+z1-y2)>>8));
-      cm.set(hash(++i, (y1-x1)>>8));
-      cm.set(hash(++i, (y1-x1+z1*2-y2*2-z2+y3)>>8));
-      cm.set(hash(++i, (y1-x1)>>8, (z1-y2+z2-y3)>>9));
-      cm.set(hash(++i, z1>>12));
-      cm.set(hash(++i, x1));
-      cm.set(hash(++i, x1>>7, x2, x3>>7));
-      cm.set(hash(++i, z1>>8));
-      cm.set(hash(++i, (z1*2-z2)>>8));
-      cm.set(hash(++i, y1>>8));
-      cm.set(hash(++i, (y1-x1)>>6 ));
+        for (; i<=128; i++) ols[0][ch].Add(X1(i));
+
+      for (i=0; i<nOLS; i++)
+        prd[i][ch][0] = signedClip8((int)floor(ols[i][ch].Predict()));
+      for (; i<nOLS+nLMS; i++)
+        prd[i][ch][0] = signedClip8((int)floor(lms[i-nOLS][ch].Predict(s)));
+      prd[i++][ch][0] = signedClip8(X1(1)*2-X1(2));
+      prd[i++][ch][0] = signedClip8(X1(1)*3-X1(2)*3+X1(3));
+      prd[i  ][ch][0] = signedClip8(X1(1)*4-X1(2)*6+X1(3)*4-X1(4));
+      for (i=0; i<nSSM; i++)
+        prd[i][ch][1] = signedClip8(prd[i][ch][0]+residuals[i][pCh]);
     }
-    scm1.set(t*ch);
-    scm2.set(t*((z1-x1+y1)>>9)&0xff);
-    scm3.set(t*((z1*2-z2-x1+y1)>>8)&0xff);
-    scm4.set(t*((z1*3-z2*3+z3-x1)>>7)&0xff);
-    scm5.set(t*((z1+z7-x1+y1*2)>>10)&0xff);
-    scm6.set(t*((z1*4-z2*6+z3*4-z4-x1)>>7)&0xff);
-    scm7.set(t*((z1*5-z2*10+z3*10-z4*5+z5-x1+y1)>>9)&0xff);
+    const int8_t B = c0<<(8-bpos);
+    for (int i=0; i<nSSM; i++) {
+      const U32 ctx = (prd[i][ch][0]-B)*8+bpos;
+      sMap1b[i][0].set(ctx);
+      sMap1b[i][1].set(ctx);
+      sMap1b[i][2].set((prd[i][ch][1]-B)*8+bpos);
+      sMap1b[i][0].mix(m);
+      sMap1b[i][1].mix(m);
+      sMap1b[i][2].mix(m);
+    }
+    m.set((errLog<<8)|c0, 4096);
+    m.set((U8(mask)<<3)|(ch<<2)|(bpos>>1), 2048);
+    m.set((mxCtx<<7)|(c1>>1), 1280);
+    m.set((errLog<<4)|(ch<<3)|bpos, 256);
+    m.set(mxCtx, 10);
   }
+};
 
-  // Predict next bit
-  scm1.mix(m);
-  scm2.mix(m);
-  scm3.mix(m);
-  scm4.mix(m);
-  scm5.mix(m);
-  scm6.mix(m);
-  scm7.mix(m);
-  cm.mix(m);
-  if (level>=4){
-    if (Stats)
-      (*Stats).Record = (w<<16)|((*Stats).Record&0xFFFF);
-    recordModel(m, AUDIO, Stats);
+class Audio16bitModel : AudioModel {
+private:
+  static constexpr int nOLS = 8;
+  static constexpr int nLMS = 3;
+  static constexpr int nSSM = nOLS+nLMS+3;
+  static constexpr int nCtx = 4;
+public:
+  static constexpr int MIXERINPUTS = nCtx*nSSM*SmallStationaryContextMap::MIXERINPUTS;
+  static constexpr int MIXERCONTEXTS = 8192+4096+2560+256+20; //15124
+  static constexpr int MIXERCONTEXTSETS = 5;
+private:
+  SmallStationaryContextMap sMap1b[nSSM][nCtx];
+  OLS<double, short> ols[nOLS][2]{
+    {{128, 24, 0.9975}, {128, 24, 0.9975}},
+    {{90, 30, 0.997}, {90, 30, 0.997}},
+    {{90, 31, 0.996}, {90, 31, 0.996}},
+    {{90, 32, 0.995}, {90, 32, 0.995}},
+    {{90, 33, 0.995}, {90, 33, 0.995}},
+    {{90, 34, 0.9985}, {90, 34, 0.9985}},
+    {{28, 4, 0.98}, {28, 4, 0.98}},
+    {{32, 3, 0.992}, {32, 3, 0.992}}
+  };
+  LMS<float, short> lms[nLMS][2]{
+    {{1280, 640, 5e-5f, 5e-5f}, {1280, 640, 5e-5f, 5e-5f}},
+    {{640, 64, 7e-5f, 1e-5f}, {640, 64, 7e-5f, 1e-5f}},
+    {{2450, 8, 2e-5f, 2e-6f}, {2450, 8, 2e-5f, 2e-6f}}
+  };
+  int prd[nSSM][2][2]{ 0 }, residuals[nSSM][2]{ 0 };
+  int stereo=0, ch=0, lsb=0;
+  U32 mask=0, errLog=0, mxCtx=0;
+  short sample = 0;
+public:
+  Audio16bitModel(const Shared * const sh, ModelStats *st) : AudioModel(sh, st),
+    sMap1b{ /* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
+    /*nOLS: 0-3*/ {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}},
+    /*nOLS: 4-7*/ {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}},
+    /*nLMS: 0-2*/ {{sh,17,1,7,86}, {sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}}, {{sh,17,1,7,86},{sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}}, {{sh,17,1,7,86},{sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}},
+    /*nSSM: 0-2*/ {{sh,17,1,7,86}, {sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}}, {{sh,17,1,7,86},{sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}}, {{sh,17,1,7,86},{sh,17,1,10,86},{sh,17,1,6,64},{sh,17,1,6,86}}
   }
-  col++;
-  if(col==w*8)col=0;
-  m.set(ch+4*ilog2(col&(bits-1)), 4*8);
-  m.set(col%bits<8, 2);
-  m.set(col%bits, bits);
-  m.set(col, w*8);
-  m.set(c0, 256);
-}
+  {}
+  void setparam(int info) {
+    INJECT_STATS_blpos INJECT_SHARED_bpos
+    if (blpos==0 && bpos==0) {
+      info|=4;  // comment this line if skipping the endianness transform
+      assert((info&2)!=0);
+      stereo = (info&1);
+      lsb = (info<4);
+      mask = 0;
+      stats->Wav = (stereo+1)*2;
+      wmode=info;
+      for (int i=0; i<nLMS; i++)
+        lms[i][0].Reset(), lms[i][1].Reset();
+    }
+  }
+  void mix(Mixer& m) {
+    INJECT_SHARED_bpos INJECT_STATS_blpos INJECT_SHARED_c0 INJECT_SHARED_c1
+    if (bpos==0 && blpos!=0) {
+      ch=(stereo)?(blpos&2)>>1:0;
+      lsb=(blpos&1)^(wmode<4);
+      if ((blpos&1)==0) {
+        sample = (wmode<4)?s2(2):t2(2);
+        const int pCh = ch^stereo;
+        int i = 0;
+        for (errLog=0; i<nOLS; i++) {
+          ols[i][pCh].Update(sample);
+          residuals[i][pCh] = sample-prd[i][pCh][0];
+          const U32 absResidual = (U32)abs(residuals[i][pCh]);
+          mask+=mask+(absResidual>128);
+          errLog+=SQR(absResidual>>6);
+        }
+        for (int j=0; j<nLMS; j++)
+          lms[j][pCh].Update(sample);
+        for (; i<nSSM; i++)
+          residuals[i][pCh] = sample-prd[i][pCh][0];
+        errLog = min(0xF, ilog2(errLog));
 
-#endif //USE_WAVMODEL
+        if (stereo) {
+          for (int i=1; i<=24; i++) ols[0][ch].Add(X2(i));
+          for (int i=1; i<=104; i++) ols[0][ch].Add(X1(i));
+        }
+        else
+          for (int i=1; i<=128; i++) ols[0][ch].Add(X1(i));
+
+        int k1=90, k2=k1-12*stereo;
+        for (int j=(i=1); j<=k1; j++, i+=1<<((j>16)+(j>32)+(j>64))) ols[1][ch].Add(X1(i));
+        for (int j=(i=1); j<=k2; j++, i+=1<<((j>5)+(j>10)+(j>17)+(j>26)+(j>37))) ols[2][ch].Add(X1(i));       
+        for (int j=(i=1); j<=k2; j++, i+=1<<((j>3)+(j>7)+(j>14)+(j>20)+(j>33)+(j>49))) ols[3][ch].Add(X1(i));
+        for (int j=(i=1); j<=k2; j++, i+=1+(j>4)+(j>8)) ols[4][ch].Add(X1(i));
+        for (int j=(i=1); j<=k1; j++, i+=2+((j>3)+(j>9)+(j>19)+(j>36)+(j>61))) ols[5][ch].Add(X1(i));
+
+        if (stereo) {
+          for (i=1; i<=k1-k2; i++) {
+            const double s = (double)X2(i);
+            ols[2][ch].AddFloat(s);
+            ols[3][ch].AddFloat(s);
+            ols[4][ch].AddFloat(s);
+          }
+        }
+
+        k1=28, k2=k1-6*stereo;
+        for (i=1; i<=k2; i++) ols[6][ch].Add(X1(i));
+        for (i=1; i<=k1-k2; i++) ols[6][ch].Add(X2(i));
+
+        k1=32, k2=k1-8*stereo;
+        for (i=1; i<=k2; i++) ols[7][ch].Add(X1(i));
+        for (i=1; i<=k1-k2; i++) ols[7][ch].Add(X2(i));
+
+        for (i=0; i<nOLS; i++)
+          prd[i][ch][0] = signedClip16((int)floor(ols[i][ch].Predict()));
+        for (; i<nOLS+nLMS; i++)
+          prd[i][ch][0] = signedClip16((int)floor(lms[i-nOLS][ch].Predict(sample)));
+        prd[i++][ch][0] = signedClip16(X1(1)*2-X1(2));
+        prd[i++][ch][0] = signedClip16(X1(1)*3-X1(2)*3+X1(3));
+        prd[i  ][ch][0] = signedClip16(X1(1)*4-X1(2)*6+X1(3)*4-X1(4));
+        for (i=0; i<nSSM; i++)
+          prd[i][ch][1] = signedClip16(prd[i][ch][0]+residuals[i][pCh]);
+      }
+      stats->Audio = 0x80|(mxCtx = ilog2(min(0x1F, BitCount(mask)))*4+ch*2+lsb);
+    }
+
+    const short B = short( (wmode<4)? (lsb)?U8(c0<<(8-bpos)):(c0<<(16-bpos))|c1 : (lsb)?(c1<<8)|U8(c0<<(8-bpos)):c0<<(16-bpos) );
+
+    for (int i=0; i<nSSM; i++) {
+      const U32 ctx0 = U16(prd[i][ch][0]-B);
+      const U32 ctx1 = U16(prd[i][ch][1]-B);
+
+      const int shift=(!lsb);
+      sMap1b[i][0].set( (lsb<<16)|(bpos<<13)|(ctx0>>(3<<shift)) );
+      sMap1b[i][1].set( (lsb<<16)|(bpos<<13)|(ctx0>>((!lsb)+(3<<shift))) );
+      sMap1b[i][2].set( (lsb<<16)|(bpos<<13)|(ctx0>>((!lsb)*2+(3<<shift))) );
+      sMap1b[i][3].set( (lsb<<16)|(bpos<<13)|(ctx1>>((!lsb)+(3<<shift))) );
+      sMap1b[i][0].mix(m);
+      sMap1b[i][1].mix(m);
+      sMap1b[i][2].mix(m);
+      sMap1b[i][3].mix(m);
+    }
+
+    m.set((errLog<<9)|(lsb<<8)|c0, 8192);
+    m.set((U8(mask)<<4)|(ch<<3)|(lsb<<2)|(bpos>>1), 4096);
+    m.set((mxCtx<<7)|(c1>>1), 2560);
+    m.set((errLog<<4)|(ch<<3)|(lsb<<2)|(bpos>>1), 256);
+    m.set(mxCtx, 20);
+  }
+};
+
+#endif //USE_AUDIOMODEL
 
 //////////////////////////// exeModel /////////////////////////
-/*
-  Model for x86/x64 code.
-  Based on the previous paq* exe models and on DisFilter (http://www.farbrausch.de/~fg/code/disfilter/) by Fabian Giesen.
+//
+//  Model for x86/x64 code.
+//  Based on the previous paq* exe models and on DisFilter (http://www.farbrausch.de/~fg/code/disfilter/) by Fabian Giesen.
+//
+//  Attemps to parse the input stream as x86/x64 instructions, and quantizes them into 32-bit representations that are then
+//  used as context to predict the next bits, and also extracts possible sparse contexts at several previous positions that
+//  are relevant to parsing (prefixes, opcode, Mod and R/M fields of the ModRM byte, Scale field of the SIB byte)
+//
 
-  Attemps to parse the input stream as x86/x64 instructions, and quantizes them into 32-bit representations that are then
-  used as context to predict the next bits, and also extracts possible sparse contexts at several previous positions that
-  are relevant to parsing (prefixes, opcode, Mod and R/M fields of the ModRM byte, Scale field of the SIB byte)
+class ExeModel {
+  // formats
+  enum InstructionFormat {
+    // encoding mode
+    fNM = 0x0,      // no ModRM
+    fAM = 0x1,      // no ModRM, "address mode" (jumps or direct addresses)
+    fMR = 0x2,      // ModRM present
+    fMEXTRA = 0x3,  // ModRM present, includes extra bits for opcode
+    fMODE = 0x3,    // bitmask for mode
 
-  Changelog:
-  (18/08/2017) v98: Initial release by Márcio Pais
-  (19/08/2017) v99: Bug fixes, tables for instruction categorization, other small improvements
-  (29/08/2017) v102: Added variable context dependent on parsing break point
-  (17/09/2017) v112: Allow pre-training of the model
-  (22/10/2017) v116: Fixed a bug in function ProcessMode (missing break, thank you Mauro Vezzosi)
-*/
+    // no ModRM: size of immediate operand
+    fNI = 0x0,      // no immediate
+    fBI = 0x4,      // byte immediate
+    fWI = 0x8,      // word immediate
+    fDI = 0xc,      // dword immediate
+    fTYPE = 0xc,    // type mask
 
-// formats
-enum InstructionFormat {
-  // encoding mode
-  fNM = 0x0,      // no ModRM
-  fAM = 0x1,      // no ModRM, "address mode" (jumps or direct addresses)
-  fMR = 0x2,      // ModRM present
-  fMEXTRA = 0x3,  // ModRM present, includes extra bits for opcode
-  fMODE = 0x3,    // bitmask for mode
+    // address mode: type of address operand
+    fAD = 0x0,      // absolute address
+    fDA = 0x4,      // dword absolute jump target
+    fBR = 0x8,      // byte relative jump target
+    fDR = 0xc,      // dword relative jump target
 
-  // no ModRM: size of immediate operand
-  fNI = 0x0,      // no immediate
-  fBI = 0x4,      // byte immediate
-  fWI = 0x8,      // word immediate
-  fDI = 0xc,      // dword immediate
-  fTYPE = 0xc,    // type mask
+    // others
+    fERR = 0xf,     // denotes invalid opcodes
+  };
 
-  // address mode: type of address operand
-  fAD = 0x0,      // absolute address
-  fDA = 0x4,      // dword absolute jump target
-  fBR = 0x8,      // byte relative jump target
-  fDR = 0xc,      // dword relative jump target
+  // 1 byte opcodes
+  static constexpr U8 Table1[256] = {
+    // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 0
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 1
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 2
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 3
 
-  // others
-  fERR = 0xf,     // denotes invalid opcodes
-};
+    fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 4
+    fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 5
+    fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fDI,fMR|fDI,fNM|fBI,fMR|fBI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 6
+    fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR, // 7
 
-// 1 byte opcodes
-static const U8 Table1[256] = {
-  // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 0
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 1
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 2
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI, // 3
+    fMR|fBI,fMR|fDI,fMR|fBI,fMR|fBI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 8
+    fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fAM|fDA,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 9
+    fAM|fAD,fAM|fAD,fAM|fAD,fAM|fAD,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // a
+    fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI, // b
 
-  fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 4
-  fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 5
-  fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fDI,fMR|fDI,fNM|fBI,fMR|fBI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 6
-  fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR, // 7
+    fMR|fBI,fMR|fBI,fNM|fWI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fBI,fMR|fDI,fNM|fBI,fNM|fNI,fNM|fWI,fNM|fNI,fNM|fNI,fNM|fBI,fERR   ,fNM|fNI, // c
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fBI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // d
+    fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fAM|fDR,fAM|fDR,fAM|fAD,fAM|fBR,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // e
+    fNM|fNI,fERR   ,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fMEXTRA,fMEXTRA,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fMEXTRA,fMEXTRA, // f
+  };
 
-  fMR|fBI,fMR|fDI,fMR|fBI,fMR|fBI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 8
-  fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fAM|fDA,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // 9
-  fAM|fAD,fAM|fAD,fAM|fAD,fAM|fAD,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fBI,fNM|fDI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // a
-  fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI,fNM|fDI, // b
+  // 2 byte opcodes
+  static constexpr U8 Table2[256] = {
+    // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fNM|fNI,fERR   ,fNM|fNI,fNM|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 0
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 1
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 2
+    fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fERR   ,fNM|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 3
 
-  fMR|fBI,fMR|fBI,fNM|fWI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fBI,fMR|fDI,fNM|fBI,fNM|fNI,fNM|fWI,fNM|fNI,fNM|fNI,fNM|fBI,fERR   ,fNM|fNI, // c
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fBI,fNM|fBI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // d
-  fAM|fBR,fAM|fBR,fAM|fBR,fAM|fBR,fNM|fBI,fNM|fBI,fNM|fBI,fNM|fBI,fAM|fDR,fAM|fDR,fAM|fAD,fAM|fBR,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // e
-  fNM|fNI,fERR   ,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fMEXTRA,fMEXTRA,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fMEXTRA,fMEXTRA, // f
-};
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 4
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 5
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 6
+    fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI, // 7
 
-// 2 byte opcodes
-static const U8 Table2[256] = {
-  // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fNM|fNI,fERR   ,fNM|fNI,fNM|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 0
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 1
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 2
-  fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fERR   ,fNM|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 3
+    fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR, // 8
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 9
+    fNM|fNI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fBI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fBI,fMR|fNI,fERR   ,fMR|fNI, // a
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // b
 
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 4
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 5
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 6
-  fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI, // 7
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // c
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // d
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // e
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   , // f
+  };
 
-  fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR,fAM|fDR, // 8
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 9
-  fNM|fNI,fNM|fNI,fNM|fNI,fMR|fNI,fMR|fBI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fBI,fMR|fNI,fERR   ,fMR|fNI, // a
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // b
+  // 3 byte opcodes 0F38XX
+  static constexpr U8 Table3_38[256] = {
+    // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   , // 0
+    fMR|fNI,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fERR   ,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fERR   , // 1
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   , // 2
+    fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 3
+    fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 4
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 5
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 6
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 7
+    fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 8
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 9
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // a
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // b
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // c
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // d
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // e
+    fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // f
+  };
 
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI,fNM|fNI, // c
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // d
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // e
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   , // f
-};
+  // 3 byte opcodes 0F3AXX
+  static constexpr U8 Table3_3A[256] = {
+    // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI, // 0
+    fERR   ,fERR   ,fERR   ,fERR   ,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 1
+    fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 2
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 3
+    fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 4
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 5
+    fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 6
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 7
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 8
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 9
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // a
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // b
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // c
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // d
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // e
+    fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // f
+  };
 
-// 3 byte opcodes 0F38XX
-static const U8 Table3_38[256] = {
-  // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   , // 0
-  fMR|fNI,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fERR   ,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fERR   , // 1
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   , // 2
-  fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // 3
-  fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 4
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 5
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 6
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 7
-  fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 8
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 9
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // a
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // b
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // c
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // d
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // e
-  fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // f
-};
+  // escape opcodes using ModRM byte to get more variants
+  static constexpr U8 TableX[32] = {
+    // 0       1       2       3       4       5       6       7
+    fMR|fBI,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // escapes for 0xf6
+    fMR|fDI,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // escapes for 0xf7
+    fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // escapes for 0xfe
+    fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fMR|fNI,fERR   ,fMR|fNI,fERR   , // escapes for 0xff
+  };
 
-// 3 byte opcodes 0F3AXX
-static const U8 Table3_3A[256] = {
-  // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI, // 0
-  fERR   ,fERR   ,fERR   ,fERR   ,fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 1
-  fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 2
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 3
-  fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 4
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 5
-  fMR|fBI,fMR|fBI,fMR|fBI,fMR|fBI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 6
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 7
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 8
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // 9
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // a
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // b
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // c
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // d
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // e
-  fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // f
-};
+  static constexpr U8 InvalidX64Ops[19] = {0x06, 0x07, 0x16, 0x17, 0x1E, 0x1F, 0x27, 0x2F, 0x37, 0x3F, 0x60, 0x61, 0x62, 0x82, 0x9A, 0xD4, 0xD5, 0xD6, 0xEA,};
+  static constexpr U8 X64Prefixes[8] = {0x26, 0x2E, 0x36, 0x3E, 0x9B, 0xF0, 0xF2, 0xF3,};
 
-// escape opcodes using ModRM byte to get more variants
-static const U8 TableX[32] = {
-  // 0       1       2       3       4       5       6       7
-  fMR|fBI,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // escapes for 0xf6
-  fMR|fDI,fERR   ,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI,fMR|fNI, // escapes for 0xf7
-  fMR|fNI,fMR|fNI,fERR   ,fERR   ,fERR   ,fERR   ,fERR   ,fERR   , // escapes for 0xfe
-  fMR|fNI,fMR|fNI,fMR|fNI,fERR   ,fMR|fNI,fERR   ,fMR|fNI,fERR   , // escapes for 0xff
-};
+  enum InstructionCategory {
+    OP_INVALID              =  0,
+    OP_PREFIX_SEGREG        =  1,
+    OP_PREFIX               =  2,
+    OP_PREFIX_X87FPU        =  3,
+    OP_GEN_DATAMOV          =  4,
+    OP_GEN_STACK            =  5,
+    OP_GEN_CONVERSION       =  6,
+    OP_GEN_ARITH_DECIMAL    =  7,
+    OP_GEN_ARITH_BINARY     =  8,
+    OP_GEN_LOGICAL          =  9,
+    OP_GEN_SHF_ROT          = 10,
+    OP_GEN_BIT              = 11,
+    OP_GEN_BRANCH           = 12,
+    OP_GEN_BRANCH_COND      = 13,
+    OP_GEN_BREAK            = 14,
+    OP_GEN_STRING           = 15,
+    OP_GEN_INOUT            = 16,
+    OP_GEN_FLAG_CONTROL     = 17,
+    OP_GEN_SEGREG           = 18,
+    OP_GEN_CONTROL          = 19,
+    OP_SYSTEM               = 20,
+    OP_X87_DATAMOV          = 21,
+    OP_X87_ARITH            = 22,
+    OP_X87_COMPARISON       = 23,
+    OP_X87_TRANSCENDENTAL   = 24,
+    OP_X87_LOAD_CONSTANT    = 25,
+    OP_X87_CONTROL          = 26,
+    OP_X87_CONVERSION       = 27,
+    OP_STATE_MANAGEMENT     = 28,
+    OP_MMX                  = 29,
+    OP_SSE                  = 30,
+    OP_SSE_DATAMOV          = 31,
+  };
 
-static const U8 InvalidX64Ops[19] = {0x06, 0x07, 0x16, 0x17, 0x1E, 0x1F, 0x27, 0x2F, 0x37, 0x3F, 0x60, 0x61, 0x62, 0x82, 0x9A, 0xD4, 0xD5, 0xD6, 0xEA,};
-static const U8 X64Prefixes[8] = {0x26, 0x2E, 0x36, 0x3E, 0x9B, 0xF0, 0xF2, 0xF3,};
+  static constexpr U8 TypeOp1[256] = {
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //03
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_STACK         , //07
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , //0B
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_STACK         , OP_PREFIX            , //0F
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //13
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_STACK         , //17
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //1B
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_STACK         , //1F
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , //23
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //27
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //2B
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //2F
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , //33
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //37
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //3B
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //3F
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //43
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //47
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //4B
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //4F
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //53
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //57
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //5B
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //5F
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_BREAK         , OP_GEN_CONVERSION    , //63
+    OP_PREFIX_SEGREG     , OP_PREFIX_SEGREG     , OP_PREFIX            , OP_PREFIX            , //67
+    OP_GEN_STACK         , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_ARITH_BINARY  , //6B
+    OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , //6F
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //73
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //77
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //7B
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //7F
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //83
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //87
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //8B
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_STACK         , //8F
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //93
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //97
+    OP_GEN_CONVERSION    , OP_GEN_CONVERSION    , OP_GEN_BRANCH        , OP_PREFIX_X87FPU     , //9B
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //9F
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //A3
+    OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , //A7
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_STRING        , OP_GEN_STRING        , //AB
+    OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , //AF
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //B3
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //B7
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //BB
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //BF
+    OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_GEN_BRANCH        , OP_GEN_BRANCH        , //C3
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //C7
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_BRANCH        , OP_GEN_BRANCH        , //CB
+    OP_GEN_BREAK         , OP_GEN_BREAK         , OP_GEN_BREAK         , OP_GEN_BREAK         , //CF
+    OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , //D3
+    OP_GEN_ARITH_DECIMAL , OP_GEN_ARITH_DECIMAL , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //D7
+    OP_X87_ARITH         , OP_X87_DATAMOV       , OP_X87_ARITH         , OP_X87_DATAMOV       , //DB
+    OP_X87_ARITH         , OP_X87_DATAMOV       , OP_X87_ARITH         , OP_X87_DATAMOV       , //DF
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //E3
+    OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , //E7
+    OP_GEN_BRANCH        , OP_GEN_BRANCH        , OP_GEN_BRANCH        , OP_GEN_BRANCH        , //EB
+    OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , //EF
+    OP_PREFIX            , OP_GEN_BREAK         , OP_PREFIX            , OP_PREFIX            , //F3
+    OP_SYSTEM            , OP_GEN_FLAG_CONTROL  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //F7
+    OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , //FB
+    OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , OP_GEN_ARITH_BINARY  , OP_GEN_BRANCH        , //FF
+  };
 
-enum InstructionCategory {
-  OP_INVALID              =  0,
-  OP_PREFIX_SEGREG        =  1,
-  OP_PREFIX               =  2,
-  OP_PREFIX_X87FPU        =  3,
-  OP_GEN_DATAMOV          =  4,
-  OP_GEN_STACK            =  5,
-  OP_GEN_CONVERSION       =  6,
-  OP_GEN_ARITH_DECIMAL    =  7,
-  OP_GEN_ARITH_BINARY     =  8,
-  OP_GEN_LOGICAL          =  9,
-  OP_GEN_SHF_ROT          = 10,
-  OP_GEN_BIT              = 11,
-  OP_GEN_BRANCH           = 12,
-  OP_GEN_BRANCH_COND      = 13,
-  OP_GEN_BREAK            = 14,
-  OP_GEN_STRING           = 15,
-  OP_GEN_INOUT            = 16,
-  OP_GEN_FLAG_CONTROL     = 17,
-  OP_GEN_SEGREG           = 18,
-  OP_GEN_CONTROL          = 19,
-  OP_SYSTEM               = 20,
-  OP_X87_DATAMOV          = 21,
-  OP_X87_ARITH            = 22,
-  OP_X87_COMPARISON       = 23,
-  OP_X87_TRANSCENDENTAL   = 24,
-  OP_X87_LOAD_CONSTANT    = 25,
-  OP_X87_CONTROL          = 26,
-  OP_X87_CONVERSION       = 27,
-  OP_STATE_MANAGEMENT     = 28,
-  OP_MMX                  = 29,
-  OP_SSE                  = 30,
-  OP_SSE_DATAMOV          = 31,
-};
+  static constexpr U8 TypeOp2[256] = {
+    OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //03
+    OP_INVALID           , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //07
+    OP_SYSTEM            , OP_SYSTEM            , OP_INVALID           , OP_GEN_CONTROL       , //0B
+    OP_INVALID           , OP_GEN_CONTROL       , OP_INVALID           , OP_INVALID           , //0F
+    OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , //13
+    OP_SSE               , OP_SSE               , OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , //17
+    OP_SSE               , OP_GEN_CONTROL       , OP_GEN_CONTROL       , OP_GEN_CONTROL       , //1B
+    OP_GEN_CONTROL       , OP_GEN_CONTROL       , OP_GEN_CONTROL       , OP_GEN_CONTROL       , //1F
+    OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //23
+    OP_SYSTEM            , OP_INVALID           , OP_SYSTEM            , OP_INVALID           , //27
+    OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , OP_SSE               , OP_SSE               , //2B
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //2F
+    OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //33
+    OP_SYSTEM            , OP_SYSTEM            , OP_INVALID           , OP_INVALID           , //37
+    OP_PREFIX            , OP_INVALID           , OP_PREFIX            , OP_INVALID           , //3B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //3F
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //43
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //47
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //4B
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //4F
+    OP_SSE_DATAMOV       , OP_SSE               , OP_SSE               , OP_SSE               , //53
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //57
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //5B
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //5F
+    OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //63
+    OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //67
+    OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //6B
+    OP_INVALID           , OP_INVALID           , OP_MMX               , OP_MMX               , //6F
+    OP_SSE               , OP_MMX               , OP_MMX               , OP_MMX               , //73
+    OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //77
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7B
+    OP_INVALID           , OP_INVALID           , OP_MMX               , OP_MMX               , //7F
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //83
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //87
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //8B
+    OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //8F
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //93
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //97
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //9B
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //9F
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_CONTROL       , OP_GEN_BIT           , //A3
+    OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_INVALID           , OP_INVALID           , //A7
+    OP_GEN_STACK         , OP_GEN_STACK         , OP_SYSTEM            , OP_GEN_BIT           , //AB
+    OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_STATE_MANAGEMENT  , OP_GEN_ARITH_BINARY  , //AF
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_BIT           , //B3
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_CONVERSION    , OP_GEN_CONVERSION    , //B7
+    OP_INVALID           , OP_GEN_CONTROL       , OP_GEN_BIT           , OP_GEN_BIT           , //BB
+    OP_GEN_BIT           , OP_GEN_BIT           , OP_GEN_CONVERSION    , OP_GEN_CONVERSION    , //BF
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_SSE               , OP_SSE               , //C3
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_GEN_DATAMOV       , //C7
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //CB
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //CF
+    OP_INVALID           , OP_MMX               , OP_MMX               , OP_MMX               , //D3
+    OP_SSE               , OP_MMX               , OP_INVALID           , OP_SSE               , //D7
+    OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //DB
+    OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //DF
+    OP_SSE               , OP_MMX               , OP_SSE               , OP_MMX               , //E3
+    OP_SSE               , OP_MMX               , OP_INVALID           , OP_SSE               , //E7
+    OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //EB
+    OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //EF
+    OP_INVALID           , OP_MMX               , OP_MMX               , OP_MMX               , //F3
+    OP_SSE               , OP_MMX               , OP_SSE               , OP_SSE               , //F7
+    OP_MMX               , OP_MMX               , OP_MMX               , OP_SSE               , //FB
+    OP_MMX               , OP_MMX               , OP_MMX               , OP_INVALID           , //FF
+  };
 
-static const U8 TypeOp1[256] = {
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //03
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_STACK         , //07
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , //0B
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_STACK         , OP_PREFIX            , //0F
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //13
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_STACK         , //17
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //1B
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_STACK         , //1F
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , //23
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //27
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //2B
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //2F
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , //33
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //37
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //3B
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_PREFIX_SEGREG     , OP_GEN_ARITH_DECIMAL , //3F
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //43
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //47
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //4B
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //4F
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //53
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //57
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //5B
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_STACK         , //5F
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_BREAK         , OP_GEN_CONVERSION    , //63
-  OP_PREFIX_SEGREG     , OP_PREFIX_SEGREG     , OP_PREFIX            , OP_PREFIX            , //67
-  OP_GEN_STACK         , OP_GEN_ARITH_BINARY  , OP_GEN_STACK         , OP_GEN_ARITH_BINARY  , //6B
-  OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , //6F
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //73
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //77
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //7B
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //7F
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //83
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //87
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //8B
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_STACK         , //8F
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //93
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //97
-  OP_GEN_CONVERSION    , OP_GEN_CONVERSION    , OP_GEN_BRANCH        , OP_PREFIX_X87FPU     , //9B
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //9F
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //A3
-  OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , //A7
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_STRING        , OP_GEN_STRING        , //AB
-  OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , OP_GEN_STRING        , //AF
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //B3
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //B7
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //BB
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //BF
-  OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_GEN_BRANCH        , OP_GEN_BRANCH        , //C3
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //C7
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_BRANCH        , OP_GEN_BRANCH        , //CB
-  OP_GEN_BREAK         , OP_GEN_BREAK         , OP_GEN_BREAK         , OP_GEN_BREAK         , //CF
-  OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , //D3
-  OP_GEN_ARITH_DECIMAL , OP_GEN_ARITH_DECIMAL , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //D7
-  OP_X87_ARITH         , OP_X87_DATAMOV       , OP_X87_ARITH         , OP_X87_DATAMOV       , //DB
-  OP_X87_ARITH         , OP_X87_DATAMOV       , OP_X87_ARITH         , OP_X87_DATAMOV       , //DF
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //E3
-  OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , //E7
-  OP_GEN_BRANCH        , OP_GEN_BRANCH        , OP_GEN_BRANCH        , OP_GEN_BRANCH        , //EB
-  OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , OP_GEN_INOUT         , //EF
-  OP_PREFIX            , OP_GEN_BREAK         , OP_PREFIX            , OP_PREFIX            , //F3
-  OP_SYSTEM            , OP_GEN_FLAG_CONTROL  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , //F7
-  OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , //FB
-  OP_GEN_FLAG_CONTROL  , OP_GEN_FLAG_CONTROL  , OP_GEN_ARITH_BINARY  , OP_GEN_BRANCH        , //FF
-};
+  static constexpr U8 TypeOp3_38[256] = {
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //03
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //07
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //0B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //0F
+    OP_SSE               , OP_INVALID           , OP_INVALID           , OP_INVALID           , //13
+    OP_SSE               , OP_SSE               , OP_INVALID           , OP_SSE               , //17
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //1B
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_INVALID           , //1F
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //23
+    OP_SSE               , OP_SSE               , OP_INVALID           , OP_INVALID           , //27
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //2B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //2F
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //33
+    OP_SSE               , OP_SSE               , OP_INVALID           , OP_SSE               , //37
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //3B
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //3F
+    OP_SSE               , OP_SSE               , OP_INVALID           , OP_INVALID           , //43
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //47
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //53
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //57
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //63
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //67
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //73
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //77
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //83
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //87
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //93
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //97
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EF
+    OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_INVALID           , OP_INVALID           , //F3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //F7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FF
+  };
 
-static const U8 TypeOp2[256] = {
-  OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //03
-  OP_INVALID           , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //07
-  OP_SYSTEM            , OP_SYSTEM            , OP_INVALID           , OP_GEN_CONTROL       , //0B
-  OP_INVALID           , OP_GEN_CONTROL       , OP_INVALID           , OP_INVALID           , //0F
-  OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , //13
-  OP_SSE               , OP_SSE               , OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , //17
-  OP_SSE               , OP_GEN_CONTROL       , OP_GEN_CONTROL       , OP_GEN_CONTROL       , //1B
-  OP_GEN_CONTROL       , OP_GEN_CONTROL       , OP_GEN_CONTROL       , OP_GEN_CONTROL       , //1F
-  OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //23
-  OP_SYSTEM            , OP_INVALID           , OP_SYSTEM            , OP_INVALID           , //27
-  OP_SSE_DATAMOV       , OP_SSE_DATAMOV       , OP_SSE               , OP_SSE               , //2B
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //2F
-  OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , OP_SYSTEM            , //33
-  OP_SYSTEM            , OP_SYSTEM            , OP_INVALID           , OP_INVALID           , //37
-  OP_PREFIX            , OP_INVALID           , OP_PREFIX            , OP_INVALID           , //3B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //3F
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //43
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //47
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //4B
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //4F
-  OP_SSE_DATAMOV       , OP_SSE               , OP_SSE               , OP_SSE               , //53
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //57
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //5B
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //5F
-  OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //63
-  OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //67
-  OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //6B
-  OP_INVALID           , OP_INVALID           , OP_MMX               , OP_MMX               , //6F
-  OP_SSE               , OP_MMX               , OP_MMX               , OP_MMX               , //73
-  OP_MMX               , OP_MMX               , OP_MMX               , OP_MMX               , //77
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7B
-  OP_INVALID           , OP_INVALID           , OP_MMX               , OP_MMX               , //7F
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //83
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //87
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //8B
-  OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , OP_GEN_BRANCH_COND   , //8F
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //93
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //97
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //9B
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //9F
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_GEN_CONTROL       , OP_GEN_BIT           , //A3
-  OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_INVALID           , OP_INVALID           , //A7
-  OP_GEN_STACK         , OP_GEN_STACK         , OP_SYSTEM            , OP_GEN_BIT           , //AB
-  OP_GEN_SHF_ROT       , OP_GEN_SHF_ROT       , OP_STATE_MANAGEMENT  , OP_GEN_ARITH_BINARY  , //AF
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_BIT           , //B3
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_CONVERSION    , OP_GEN_CONVERSION    , //B7
-  OP_INVALID           , OP_GEN_CONTROL       , OP_GEN_BIT           , OP_GEN_BIT           , //BB
-  OP_GEN_BIT           , OP_GEN_BIT           , OP_GEN_CONVERSION    , OP_GEN_CONVERSION    , //BF
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_SSE               , OP_SSE               , //C3
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_GEN_DATAMOV       , //C7
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //CB
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , //CF
-  OP_INVALID           , OP_MMX               , OP_MMX               , OP_MMX               , //D3
-  OP_SSE               , OP_MMX               , OP_INVALID           , OP_SSE               , //D7
-  OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //DB
-  OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //DF
-  OP_SSE               , OP_MMX               , OP_SSE               , OP_MMX               , //E3
-  OP_SSE               , OP_MMX               , OP_INVALID           , OP_SSE               , //E7
-  OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //EB
-  OP_MMX               , OP_MMX               , OP_SSE               , OP_MMX               , //EF
-  OP_INVALID           , OP_MMX               , OP_MMX               , OP_MMX               , //F3
-  OP_SSE               , OP_MMX               , OP_SSE               , OP_SSE               , //F7
-  OP_MMX               , OP_MMX               , OP_MMX               , OP_SSE               , //FB
-  OP_MMX               , OP_MMX               , OP_MMX               , OP_INVALID           , //FF
-};
+  static constexpr U8 TypeOp3_3A[256] = {
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //03
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //07
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //0B
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //0F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //13
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //17
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //1B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //1F
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_INVALID           , //23
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //27
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //2B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //2F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //33
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //37
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //3B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //3F
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_INVALID           , //43
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //47
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //53
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //57
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5F
+    OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //63
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //67
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //73
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //77
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //83
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //87
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //93
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //97
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9B
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9F
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EF
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //F3
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //F7
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FB
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FF
+  };
 
-static const U8 TypeOp3_38[256] = {
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //03
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //07
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //0B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //0F
-  OP_SSE               , OP_INVALID           , OP_INVALID           , OP_INVALID           , //13
-  OP_SSE               , OP_SSE               , OP_INVALID           , OP_SSE               , //17
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //1B
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_INVALID           , //1F
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //23
-  OP_SSE               , OP_SSE               , OP_INVALID           , OP_INVALID           , //27
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //2B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //2F
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //33
-  OP_SSE               , OP_SSE               , OP_INVALID           , OP_SSE               , //37
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //3B
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //3F
-  OP_SSE               , OP_SSE               , OP_INVALID           , OP_INVALID           , //43
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //47
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //53
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //57
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //63
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //67
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //73
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //77
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //83
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //87
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //93
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //97
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EF
-  OP_GEN_DATAMOV       , OP_GEN_DATAMOV       , OP_INVALID           , OP_INVALID           , //F3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //F7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FF
-};
+  static constexpr U8 TypeOpX[32] = {
+    // escapes for F6
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_ARITH_BINARY  ,
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  ,
+    // escapes for F7
+    OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_ARITH_BINARY  ,
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  ,
+    // escapes for FE
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_INVALID           , OP_INVALID           ,
+    OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           ,
+    // escapes for FF
+    OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_BRANCH        , OP_GEN_BRANCH        ,
+    OP_GEN_BRANCH        , OP_GEN_BRANCH        , OP_GEN_STACK         , OP_INVALID           ,
+  };
 
-static const U8 TypeOp3_3A[256] = {
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //03
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //07
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //0B
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //0F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //13
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //17
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //1B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //1F
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_INVALID           , //23
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //27
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //2B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //2F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //33
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //37
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //3B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //3F
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_INVALID           , //43
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //47
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //4F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //53
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //57
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //5F
-  OP_SSE               , OP_SSE               , OP_SSE               , OP_SSE               , //63
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //67
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //6F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //73
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //77
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //7F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //83
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //87
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //8F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //93
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //97
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9B
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //9F
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //A7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //AF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //B7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //BF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //C7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //CF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //D7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //DF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //E7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //EF
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //F3
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //F7
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FB
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           , //FF
-};
+  enum Prefixes {
+    ES_OVERRIDE = 0x26,
+    CS_OVERRIDE = 0x2E,
+    SS_OVERRIDE = 0x36,
+    DS_OVERRIDE = 0x3E,
+    FS_OVERRIDE = 0x64,
+    GS_OVERRIDE = 0x65,
+    AD_OVERRIDE = 0x67,
+    WAIT_FPU    = 0x9B,
+    LOCK        = 0xF0,
+    REP_N_STR   = 0xF2,
+    REP_STR     = 0xF3,
+  };
 
-static const U8 TypeOpX[32] = {
-  // escapes for F6
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_ARITH_BINARY  ,
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  ,
-  // escapes for F7
-  OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_LOGICAL       , OP_GEN_ARITH_BINARY  ,
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  ,
-  // escapes for FE
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_INVALID           , OP_INVALID           ,
-  OP_INVALID           , OP_INVALID           , OP_INVALID           , OP_INVALID           ,
-  // escapes for FF
-  OP_GEN_ARITH_BINARY  , OP_GEN_ARITH_BINARY  , OP_GEN_BRANCH        , OP_GEN_BRANCH        ,
-  OP_GEN_BRANCH        , OP_GEN_BRANCH        , OP_GEN_STACK         , OP_INVALID           ,
-};
+  enum Opcodes {
+    // 1-byte opcodes of special interest (for one reason or another)
+    OP_2BYTE  = 0x0f,     // start of 2-byte opcode
+    OP_OSIZE  = 0x66,     // operand size prefix
+    OP_CALLF  = 0x9a,
+    OP_RETNI  = 0xc2,     // ret near+immediate
+    OP_RETN   = 0xc3,
+    OP_ENTER  = 0xc8,
+    OP_INT3   = 0xcc,
+    OP_INTO   = 0xce,
+    OP_CALLN  = 0xe8,
+    OP_JMPF   = 0xea,
+    OP_ICEBP  = 0xf1,
+  };
 
-enum Prefixes {
-  ES_OVERRIDE = 0x26,
-  CS_OVERRIDE = 0x2E,
-  SS_OVERRIDE = 0x36,
-  DS_OVERRIDE = 0x3E,
-  FS_OVERRIDE = 0x64,
-  GS_OVERRIDE = 0x65,
-  AD_OVERRIDE = 0x67,
-  WAIT_FPU    = 0x9B,
-  LOCK        = 0xF0,
-  REP_N_STR   = 0xF2,
-  REP_STR     = 0xF3,
-};
+  enum ExeState {
+    Start             =  0,
+    Pref_Op_Size      =  1,
+    Pref_MultiByte_Op =  2,
+    ParseFlags        =  3,
+    ExtraFlags        =  4,
+    ReadModRM         =  5,
+    Read_OP3_38       =  6,
+    Read_OP3_3A       =  7,
+    ReadSIB           =  8,
+    Read8             =  9,
+    Read16            = 10,
+    Read32            = 11,
+    Read8_ModRM       = 12,
+    Read16_f          = 13,
+    Read32_ModRM      = 14,
+    Error             = 15,
+  };
 
-enum Opcodes {
-  // 1-byte opcodes of special interest (for one reason or another)
-  OP_2BYTE  = 0x0f,     // start of 2-byte opcode
-  OP_OSIZE  = 0x66,     // operand size prefix
-  OP_CALLF  = 0x9a,
-  OP_RETNI  = 0xc2,     // ret near+immediate
-  OP_RETN   = 0xc3,
-  OP_ENTER  = 0xc8,
-  OP_INT3   = 0xcc,
-  OP_INTO   = 0xce,
-  OP_CALLN  = 0xe8,
-  OP_JMPF   = 0xea,
-  OP_ICEBP  = 0xf1,
-};
+  struct OpCache {
+    U32 Op[CacheSize];
+    U32 Index;
+  };
 
-enum ExeState {
-  Start             =  0,
-  Pref_Op_Size      =  1,
-  Pref_MultiByte_Op =  2,
-  ParseFlags        =  3,
-  ExtraFlags        =  4,
-  ReadModRM         =  5,
-  Read_OP3_38       =  6,
-  Read_OP3_3A       =  7,
-  ReadSIB           =  8,
-  Read8             =  9,
-  Read16            = 10,
-  Read32            = 11,
-  Read8_ModRM       = 12,
-  Read16_f          = 13,
-  Read32_ModRM      = 14,
-  Error             = 15,
-};
+  struct Instruction {
+    U32 Data;
+    U8 Prefix, Code, ModRM, SIB, REX, Flags, BytesRead, Size, Category;
+    bool MustCheckREX, Decoding, o16, imm8;
+  };
 
-struct OpCache {
-  U32 Op[CacheSize];
-  U32 Index;
-};
+  static constexpr int CodeShift           = 3;
+  static constexpr U32 CodeMask            = 0xFF<<CodeShift;       // 0x000007F8
+  static constexpr U32 ClearCodeMask       = 0xFFFFFFFF^CodeMask;   // 0xFFFFF807
+  static constexpr U32 PrefixMask          = (1<<CodeShift)-1;      // 0x07
+  static constexpr U32 OperandSizeOverride = 0x01<<(8+CodeShift);   // 0x00000800
+  static constexpr U32 MultiByteOpcode     = 0x02<<(8+CodeShift);   // 0x00001000
+  static constexpr U32 PrefixREX           = 0x04<<(8+CodeShift);   // 0x00002000
+  static constexpr U32 Prefix38            = 0x08<<(8+CodeShift);   // 0x00004000
+  static constexpr U32  Prefix3A           = 0x10<<(8+CodeShift);   // 0x00008000
+  static constexpr U32 HasExtraFlags       = 0x20<<(8+CodeShift);   // 0x00010000
+  static constexpr U32 HasModRM            = 0x40<<(8+CodeShift);   // 0x00020000
+  static constexpr U32 ModRMShift          = 7+8+CodeShift;         // 18
+  static constexpr U32 SIBScaleShift       = ModRMShift+8-6;        // 20
+  static constexpr U32 RegDWordDisplacement= 1<<(8+SIBScaleShift);  // 0x10000000
+  static constexpr U32 AddressMode         = 2<<(8+SIBScaleShift);  // 0x20000000
+  static constexpr U32 TypeShift           = 2+8+SIBScaleShift;     // 30
+  static constexpr U32 CategoryShift       = 5;
+  static constexpr U32 CategoryMask        = ((1<<CategoryShift)-1); //0x1F (31)
+  static constexpr U8  ModRM_mod           = 0xC0;
+  static constexpr U8  ModRM_reg           = 0x38;
+  static constexpr U8  ModRM_rm            = 0x07;
+  static constexpr U8  SIB_scale           = 0xC0;
+  static constexpr U8  SIB_index           = 0x38; //unused
+  static constexpr U8  SIB_base            = 0x07;
+  static constexpr U8  REX_w               = 0x08;
 
-struct Instruction {
-  U32 Data;
-  U8 Prefix, Code, ModRM, SIB, REX, Flags, BytesRead, Size, Category;
-  bool MustCheckREX, Decoding, o16, imm8;
-};
-
-#define CodeShift            3
-#define CodeMask             (0xFF<<CodeShift)
-#define ClearCodeMask        ((-1)^CodeMask)
-#define PrefixMask           ((1<<CodeShift)-1)
-#define OperandSizeOverride  (0x01<<(8+CodeShift))
-#define MultiByteOpcode      (0x02<<(8+CodeShift))
-#define PrefixREX            (0x04<<(8+CodeShift))
-#define Prefix38             (0x08<<(8+CodeShift))
-#define Prefix3A             (0x10<<(8+CodeShift))
-#define HasExtraFlags        (0x20<<(8+CodeShift))
-#define HasModRM             (0x40<<(8+CodeShift))
-#define ModRMShift           (7+8+CodeShift)
-#define SIBScaleShift        (ModRMShift+8-6)
-#define RegDWordDisplacement (0x01<<(8+SIBScaleShift))
-#define AddressMode          (0x02<<(8+SIBScaleShift))
-#define TypeShift            (2+8+SIBScaleShift)
-#define CategoryShift        5
-#define CategoryMask         ((1<<CategoryShift)-1)
-#define ModRM_mod            0xC0
-#define ModRM_reg            0x38
-#define ModRM_rm             0x07
-#define SIB_scale            0xC0
-#define SIB_index            0x38
-#define SIB_base             0x07
-#define REX_w                0x08
-
-#define MinRequired          8 // minimum required consecutive valid instructions to be considered as code
-
-class exeModel {
+  static constexpr U32 MinRequired         = 8; // minimum required consecutive valid instructions to be considered as code
 private:
-  static const int N1=8, N2=10;
+  static constexpr int nCM1=10, nCM2=10, nIM=1;
+public:
+  static constexpr int MIXERINPUTS = (nCM1+nCM2)*(ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUNSTATS + ContextMap2::MIXERINPUTS_BYTEHISTORY) + nIM*IndirectMap::MIXERINPUTS; // 142
+  static constexpr int MIXERCONTEXTS = 1024+1024+1024+8192+8192+8192; // 27648
+  static constexpr int MIXERCONTEXTSETS = 6;
+private:
+  const Shared * const shared;
+  const ModelStats * const stats;
   ContextMap2 cm;
+  IndirectMap iMap;
   OpCache Cache;
   U32 StateBH[256];
   ExeState pState, State;
   Instruction Op;
-  U32 TotalOps, OpMask, OpCategMask, Context, BrkPoint, BrkCtx;
+  U32 TotalOps, OpMask, OpCategMask, Context;
+  U64 BrkCtx; // hash
   bool Valid;
-  inline bool IsInvalidX64Op(U8 Op) {
+  inline bool IsInvalidX64Op(const U8 Op) {
     for (int i=0; i<19; i++) {
       if (Op == InvalidX64Ops[i])
         return true;
     }
     return false;
   }
-  inline bool IsValidX64Prefix(U8 Prefix) {
+  inline bool IsValidX64Prefix(const U8 Prefix) {
     for (int i=0; i<8; i++) {
       if (Prefix == X64Prefixes[i])
         return true;
@@ -7666,58 +9822,48 @@ private:
     else
       ProcessMode(Op, State);
   }
-  void ApplyCodeAndSetFlag(Instruction &Op, U32 Flag = 0) {
-    Op.Data&=ClearCodeMask; \
-      Op.Data|=(Op.Code<<CodeShift)|Flag;
+  void ApplyCodeAndSetFlag(Instruction &Op, const U32 Flag = 0) {
+    Op.Data&=ClearCodeMask; 
+    Op.Data|=(Op.Code<<CodeShift)|Flag;
   }
-  inline U32 OpN(OpCache &Cache, U32 n) {
+  inline U32 OpN(OpCache &Cache, const U32 n) {
     return Cache.Op[ (Cache.Index-n)&(CacheSize-1) ];
   }
-  inline U32 OpNCateg(U32 &Mask, U32 n) {
+  inline U32 OpNCateg(U32 &Mask, const U32 n) {
     return ((Mask>>(CategoryShift*(n-1)))&CategoryMask);
   }
-  inline int pref(int i) { return (buf(i)==0x0f)+2*(buf(i)==0x66)+3*(buf(i)==0x67); }
+  inline int pref(const int i) {
+    INJECT_SHARED_buf
+    return (buf(i)==0x0f)+2*(buf(i)==0x66)+3*(buf(i)==0x67);
+  }
   // Get context at buf(i) relevant to parsing 32-bit x86 code
   U32 execxt(int i, int x=0) {
+    INJECT_SHARED_buf
     int prefix=0, opcode=0, modrm=0, sib=0;
     if (i) prefix+=4*pref(i--);
     if (i) prefix+=pref(i--);
     if (i) opcode+=buf(i--);
     if (i) modrm+=buf(i--)&(ModRM_mod|ModRM_rm);
-    if (i&&((modrm&ModRM_rm)==4)&&(modrm<ModRM_mod)) sib=buf(i)&SIB_scale;
+    if (i && ((modrm&ModRM_rm)==4) && (modrm<ModRM_mod)) sib=buf(i)&SIB_scale;
     return prefix|opcode<<4|modrm<<12|x<<20|sib<<(28-6);
   }
-  void Update(U8 B, bool Forced = false);
-  void Train();
+  void Update();
 public:
-  exeModel() : cm(MEM*2, N1+N2), pState (Start), State( Start), TotalOps(0), OpMask(0), OpCategMask(0), Context(0), BrkPoint(0), BrkCtx(0), Valid(false) {
+  ExeModel(const Shared * const  sh, const ModelStats * const st, const U64 size) : shared(sh), stats(st),
+    cm(sh,size,nCM1+nCM2,64,CM_USE_RUNSTATS|CM_USE_BYTEHISTORY),
+    iMap(sh,20,1,64,1023),
+    pState (Start), State(Start), TotalOps(0), OpMask(0), OpCategMask(0), Context(0), BrkCtx(0), Valid(false) 
+  {
+    assert(ispowerof2(size));
     memset(&Cache, 0, sizeof(OpCache));
     memset(&Op, 0, sizeof(Instruction));
     memset(&StateBH, 0, sizeof(StateBH));
-    if (options&OPTION_TRAINEXE) Train();
   }
-  bool Predict(Mixer& m, bool Forced = false, ModelStats *Stats = nullptr);
+  void mix(Mixer& m);
 };
 
-void exeModel::Train() {
-  FileDisk f;
-  printf("Pre-training x86/x64 model...");
-  OpenFromMyFolder::myself(&f);
-  int i=0;
-  do {
-    Update(buf(1));
-    if (Valid)
-      cm.Train(i);
-    buf[pos++]=i;
-    blpos++;
-  } while ((i=f.getchar())!=EOF);
-  printf(" done [%d bytes]\n",pos-1);
-  f.close();
-  pos=blpos=0;
-  memset(&buf[0], 0, buf.size());
-}
-
-void exeModel::Update(U8 B, bool Forced) {
+void ExeModel::Update() {
+  INJECT_SHARED_buf INJECT_STATS_blpos INJECT_SHARED_c1
   pState = State;
   Op.Size++;
   switch (State) {
@@ -7727,9 +9873,9 @@ void exeModel::Update(U8 B, bool Forced) {
       if (Op.MustCheckREX) {
         Op.MustCheckREX = false;
         // valid x64 code?
-        if (!IsInvalidX64Op(B) && !IsValidX64Prefix(B)) {
+        if (!IsInvalidX64Op(c1) && !IsValidX64Prefix(c1)) {
           Op.REX = Op.Code;
-          Op.Code = B;
+          Op.Code = c1;
           Op.Data = PrefixREX|(Op.Code<<CodeShift)|(Op.Data&PrefixMask);
           Skip = true;
         }
@@ -7737,7 +9883,7 @@ void exeModel::Update(U8 B, bool Forced) {
 
       Op.ModRM = Op.SIB = Op.REX = Op.Flags = Op.BytesRead = 0;
       if (!Skip) {
-        Op.Code = B;
+        Op.Code = c1;
         // possible REX prefix?
         Op.MustCheckREX = ((Op.Code&0xF0)==0x40) && (!(Op.Decoding && ((Op.Data&PrefixMask)==1)));
 
@@ -7765,7 +9911,7 @@ void exeModel::Update(U8 B, bool Forced) {
             Op.Data = Op.Prefix;
             Op.Category = TypeOp1[Op.Code];
             Op.Decoding = true;
-            BrkCtx = hash(1+(BrkPoint = 0), Op.Prefix, OpCategMask&CategoryMask);
+            BrkCtx = hash(0, Op.Prefix, OpCategMask&CategoryMask);
             break;
           }
         }
@@ -7779,7 +9925,7 @@ void exeModel::Update(U8 B, bool Forced) {
           else {
             Op.Data = Op.Prefix;
             Op.Category = TypeOp1[Op.Code];
-            BrkCtx = hash(1+(BrkPoint = 1), Op.Prefix, OpCategMask&CategoryMask);
+            BrkCtx = hash(1, Op.Prefix, OpCategMask&CategoryMask);
             break;
           }
         }
@@ -7791,18 +9937,18 @@ void exeModel::Update(U8 B, bool Forced) {
         State = Pref_MultiByte_Op;
       else
         ReadFlags(Op, State);
-      BrkCtx = hash(1+(BrkPoint = 2), State, Op.Code, (OpCategMask&CategoryMask), OpN(Cache,1)&((ModRM_mod|ModRM_reg|ModRM_rm)<<ModRMShift));
+      BrkCtx = hash(2, State, Op.Code, (OpCategMask&CategoryMask), OpN(Cache,1)&((ModRM_mod|ModRM_reg|ModRM_rm)<<ModRMShift));
       break;
     }
     case Pref_Op_Size : {
-      Op.Code = B;
+      Op.Code = c1;
       ApplyCodeAndSetFlag(Op, OperandSizeOverride);
       ReadFlags(Op, State);
-      BrkCtx = hash(1+(BrkPoint = 3), State);
+      BrkCtx = hash(3, State);
       break;
     }
     case Pref_MultiByte_Op : {
-      Op.Code = B;
+      Op.Code = c1;
       Op.Data|=MultiByteOpcode;
 
       if (Op.Code==0x38)
@@ -7815,16 +9961,16 @@ void exeModel::Update(U8 B, bool Forced) {
         Op.Category = TypeOp2[Op.Code];
         CheckFlags(Op, State);
       }
-      BrkCtx = hash(1+(BrkPoint = 4), State);
+      BrkCtx = hash(4, State);
       break;
     }
     case ParseFlags : {
       ProcessFlags(Op, State);
-      BrkCtx = hash(1+(BrkPoint = 5), State);
+      BrkCtx = hash(5, State);
       break;
     }
     case ExtraFlags : case ReadModRM : {
-      Op.ModRM = B;
+      Op.ModRM = c1;
       Op.Data|=(Op.ModRM<<ModRMShift)|HasModRM;
       Op.SIB = 0;
       if (Op.Flags==fMEXTRA) {
@@ -7835,26 +9981,26 @@ void exeModel::Update(U8 B, bool Forced) {
         if (Op.Flags==fERR) {
           memset(&Op, 0, sizeof(Instruction));
           State = Error;
-          BrkCtx = hash(1+(BrkPoint = 6), State);
+          BrkCtx = hash(6, State);
           break;
         }
         ProcessFlags(Op, State);
-        BrkCtx = hash(1+(BrkPoint = 7), State);
+        BrkCtx = hash(7, State);
         break;
       }
 
       if ((Op.ModRM & ModRM_rm)==4 && Op.ModRM<ModRM_mod) {
         State = ReadSIB;
-        BrkCtx = hash(1+(BrkPoint = 8), State);
+        BrkCtx = hash(8, State);
         break;
       }
 
       ProcessModRM(Op, State);
-      BrkCtx = hash(1+(BrkPoint = 9), State, Op.Code );
+      BrkCtx = hash(9, State, Op.Code );
       break;
     }
     case Read_OP3_38 : case Read_OP3_3A : {
-      Op.Code = B;
+      Op.Code = c1;
       ApplyCodeAndSetFlag(Op, Prefix38<<(State-Read_OP3_38));
       if (State==Read_OP3_38) {
         Op.Flags = Table3_38[Op.Code];
@@ -7865,14 +10011,14 @@ void exeModel::Update(U8 B, bool Forced) {
         Op.Category = TypeOp3_3A[Op.Code];
       }
       CheckFlags(Op, State);
-      BrkCtx = hash(1+(BrkPoint = 10), State);
+      BrkCtx = hash(10, State);
       break;
     }
     case ReadSIB : {
-      Op.SIB = B;
+      Op.SIB = c1;
       Op.Data|=((Op.SIB & SIB_scale)<<SIBScaleShift);
       ProcessModRM(Op, State);
-      BrkCtx = hash(1+(BrkPoint = 11), State, Op.SIB&SIB_scale);
+      BrkCtx = hash(11, State, Op.SIB&SIB_scale);
       break;
     }
     case Read8 : case Read16 : case Read32 : {
@@ -7881,12 +10027,12 @@ void exeModel::Update(U8 B, bool Forced) {
         Op.imm8 = false;
         State = Start;
       }
-      BrkCtx = hash(1+(BrkPoint = 12), State, Op.Flags&fMODE, Op.BytesRead, ((Op.BytesRead>1)?(buf(Op.BytesRead)<<8):0)|((Op.BytesRead)?B:0) );
+      BrkCtx = hash(12, State, Op.Flags&fMODE, Op.BytesRead, ((Op.BytesRead>1)?(buf(Op.BytesRead)<<8):0)|((Op.BytesRead)?c1:0) );
       break;
     }
     case Read8_ModRM : {
       ProcessMode(Op, State);
-      BrkCtx = hash(1+(BrkPoint = 13), State);
+      BrkCtx = hash(13, State);
       break;
     }
     case Read16_f : {
@@ -7894,7 +10040,7 @@ void exeModel::Update(U8 B, bool Forced) {
         Op.BytesRead = 0;
         ProcessFlags2(Op, State);
       }
-      BrkCtx = hash(1+(BrkPoint = 14), State);
+      BrkCtx = hash(14, State);
       break;
     }
     case Read32_ModRM : {
@@ -7903,68 +10049,80 @@ void exeModel::Update(U8 B, bool Forced) {
         Op.BytesRead = 0;
         ProcessMode(Op, State);
       }
-      BrkCtx = hash(1+(BrkPoint = 15), State);
+      BrkCtx = hash(15, State);
       break;
     }
   }
   Valid = (TotalOps>2*MinRequired) && ((OpMask&((1<<MinRequired)-1))==((1<<MinRequired)-1));
   Context = State+16*Op.BytesRead+16*(Op.REX & REX_w);
-  StateBH[Context] = (StateBH[Context]<<8)|B;
+  StateBH[Context] = (StateBH[Context]<<8)|c1;
 
+  bool Forced=stats->blockType==EXE;  
   if (Valid || Forced) {
-    int mask=0, count0=0;
-    for (int i=0, j=0; i<N1; ++i){
-      if (i>1) mask=mask*2+(buf(i-1)==0), count0+=mask&1;
-      j=(i<4)?i+1:5+(i-4)*(2+(i>6));
-      cm.set(hash(execxt(j, buf(1)*(j>6)), ((1<<N1)|mask)*(count0*N1/2>=i), (0x08|(blpos&0x07))*(i<4)));
+    U32 mask=0, count0=0;
+    U32 i=0;
+    while (i<nCM1) {
+      if (i>1) {mask = mask*2 + (buf(i-1)==0); count0+=mask&1;}
+      int j = (i<4) ? i+1 : 5+(i-4)*(2+(i>6));
+      cm.set(hash(i, execxt(j, buf(1)*(j>6)), ((1<<nCM1)|mask)*(count0*nCM1/2>=i), (0x08|(blpos&0x07))*(i<4)));
+      i++;
     }
 
     cm.set(BrkCtx);
+
     mask = PrefixMask|(0xF8<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A;
-    cm.set(hash(OpN(Cache, 1)&(mask|RegDWordDisplacement|AddressMode), State+16*Op.BytesRead, Op.Data&mask, Op.REX, Op.Category));
+    cm.set(hash(++i,OpN(Cache, 1)&(mask|RegDWordDisplacement|AddressMode), State+16*Op.BytesRead, Op.Data&mask, Op.REX, Op.Category));
 
     mask = 0x04|(0xFE<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A|((ModRM_mod|ModRM_reg)<<ModRMShift);
-    cm.set(hash(
+    cm.set(hash(++i,
       OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, OpN(Cache, 3)&mask,
       Context+256*((Op.ModRM & ModRM_mod)==ModRM_mod),
       Op.Data&((mask|PrefixREX)^(ModRM_mod<<ModRMShift))
     ));
 
     mask = 0x04|CodeMask;
-    cm.set(hash(OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, OpN(Cache, 3)&mask, OpN(Cache, 4)&mask, (Op.Data&mask)|(State<<11)|(Op.BytesRead<<15)));
+    cm.set(hash(++i,OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, OpN(Cache, 3)&mask, OpN(Cache, 4)&mask, (Op.Data&mask)|(State<<11)|(Op.BytesRead<<15)));
 
     mask = 0x04|(0xFC<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A;
-    cm.set(hash(State+16*Op.BytesRead, Op.Data&mask, Op.Category*8 + (OpMask&0x07), Op.Flags, ((Op.SIB & SIB_base)==5)*4+((Op.ModRM & ModRM_reg)==ModRM_reg)*2+((Op.ModRM & ModRM_mod)==0)));
+    cm.set(hash(++i,State+16*Op.BytesRead, Op.Data&mask, Op.Category*8 + (OpMask&0x07), Op.Flags, ((Op.SIB & SIB_base)==5)*4+((Op.ModRM & ModRM_reg)==ModRM_reg)*2+((Op.ModRM & ModRM_mod)==0)));
 
     mask = PrefixMask|CodeMask|OperandSizeOverride|MultiByteOpcode|PrefixREX|Prefix38|Prefix3A|HasExtraFlags|HasModRM|((ModRM_mod|ModRM_rm)<<ModRMShift);
-    cm.set(hash(Op.Data&mask, State+16*Op.BytesRead, Op.Flags));
+    cm.set(hash(++i,Op.Data&mask, State+16*Op.BytesRead, Op.Flags));
 
     mask = PrefixMask|CodeMask|OperandSizeOverride|MultiByteOpcode|Prefix38|Prefix3A|HasExtraFlags|HasModRM;
-    cm.set(hash(OpN(Cache, 1)&mask, State, Op.BytesRead*2+((Op.REX&REX_w)>0), Op.Data&((U16)(mask^OperandSizeOverride))));
+    cm.set(hash(++i,OpN(Cache, 1)&mask, State, Op.BytesRead*2+((Op.REX&REX_w)>0), Op.Data&((U16)(mask^OperandSizeOverride))));
 
     mask = 0x04|(0xFE<<CodeShift)|MultiByteOpcode|Prefix38|Prefix3A|(ModRM_reg<<ModRMShift);
-    cm.set(hash(OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, State+16*Op.BytesRead, Op.Data&(mask|PrefixMask|CodeMask)));
+    cm.set(hash(++i,OpN(Cache, 1)&mask, OpN(Cache, 2)&mask, State+16*Op.BytesRead, Op.Data&(mask|PrefixMask|CodeMask)));
 
-    cm.set(State+16*Op.BytesRead);
+    cm.set(hash(++i,State+16*Op.BytesRead));
 
-    cm.set(hash(
-      (0x100|B)*(Op.BytesRead>0),
+    cm.set(hash(++i,
+      (0x100|c1)*(Op.BytesRead>0),
       State+16*pState+256*Op.BytesRead,
       ((Op.Flags&fMODE)==fAM)*16 + (Op.REX & REX_w) + (Op.o16)*4 + ((Op.Code & 0xFE)==0xE8)*2 + ((Op.Data & MultiByteOpcode)!=0 && (Op.Code & 0xF0)==0x80)
     ));
   }
 }
 
-bool exeModel::Predict(Mixer& m, bool Forced, ModelStats *Stats) {
+void ExeModel::mix(Mixer& m) {
+  INJECT_SHARED_bpos 
+  bool Forced=stats->blockType==EXE;
   if (bpos==0)
-    Update(buf(1), Forced);
+    Update();
 
-  if (Valid || Forced)
+  if (Valid || Forced){
+    cm.setscale(Forced?128:64);
     cm.mix(m);
+    iMap.set(hash(BrkCtx, bpos));
+    iMap.setscale(Forced?128:64);
+    iMap.mix(m);
+  }
   else {
-      for (int i=0; i<(N1+N2)*8; ++i)
+      for (int i=0; i<MIXERINPUTS; ++i)
         m.add(0);
   }
+  INJECT_SHARED_c0
   U8 s = ((StateBH[Context]>>(28-bpos))&0x08) |
          ((StateBH[Context]>>(21-bpos))&0x04) |
          ((StateBH[Context]>>(14-bpos))&0x02) |
@@ -7974,229 +10132,412 @@ bool exeModel::Predict(Mixer& m, bool Forced, ModelStats *Stats) {
 
   m.set(Context*4+(s>>4), 1024);
   m.set(State*64+bpos*8+(Op.BytesRead>0)*4+(s>>4), 1024);
-  m.set( (BrkCtx&0x1FF)|((s&0x20)<<4), 1024 );
-
-  if (Stats)
-    (*Stats).x86_64 = (Valid?1:0)|(Context<<1)|(s<<9);
-  return Valid;
+  m.set((BrkCtx&0x1FF)|((s&0x20)<<4), 1024);
+  m.set(finalize64(hash(Op.Code, State, OpN(Cache, 1)&CodeMask),13), 8192);
+  m.set(finalize64(hash(State, bpos, Op.Code, Op.BytesRead),13), 8192);
+  m.set(finalize64(hash(State, (bpos<<2)|(c0&3), OpCategMask&CategoryMask, ((Op.Category==OP_GEN_BRANCH)<<2)|(((Op.Flags&fMODE)==fAM)<<1)|(Op.BytesRead>0)),13), 8192);
 }
 
-//////////////////////////// indirectModel /////////////////////
+//////////////////////////// IndirectModel /////////////////////
 
 // The context is a byte string history that occurs within a
 // 1 or 2 byte context.
 
-void indirectModel(Mixer& m) {
-  static ContextMap cm(MEM, 12);
-  static Array<U32> t1(256);
-  static Array<U16> t2(0x10000);
-  static Array<U16> t3(0x8000);
-  static Array<U16> t4(0x8000);
-
-  if (bpos==0) {
-    U32 d=c4&0xffff, c=d&255, d2=(buf(1)&31)+32*(buf(2)&31)+1024*(buf(3)&31);
-    U32 d3=(buf(1)>>3&31)+32*(buf(3)>>3&31)+1024*(buf(4)>>3&31);
-    U32& r1=t1[d>>8];
-    r1=r1<<8|c;
-    U16& r2=t2[c4>>8&0xffff];
-    r2=r2<<8|c;
-    U16& r3=t3[(buf(2)&31)+32*(buf(3)&31)+1024*(buf(4)&31)];
-    r3=r3<<8|c;
-    U16& r4=t4[(buf(2)>>3&31)+32*(buf(4)>>3&31)+1024*(buf(5)>>3&31)];
-    r4=r4<<8|c;
-    const U32 t=c|t1[c]<<8;
-    const U32 t0=d|t2[d]<<16;
-    const U32 ta=d2|t3[d2]<<16;
-    const U32 tc=d3|t4[d3]<<16;
-    cm.set(t);
-    cm.set(t0);
-    cm.set(ta);
-    cm.set(tc);
-    cm.set(t&0xff00);
-    cm.set(t0&0xff0000);
-    cm.set(ta&0xff0000);
-    cm.set(tc&0xff0000);
-    cm.set(t&0xffff);
-    cm.set(t0&0xffffff);
-    cm.set(ta&0xffffff);
-    cm.set(tc&0xffffff);
+class IndirectModel  {
+private:
+  static constexpr int nCM = 15;
+public:
+  static constexpr int MIXERINPUTS = nCM*(ContextMap::MIXERINPUTS); // 75
+  static constexpr int MIXERCONTEXTS = 0;
+  static constexpr int MIXERCONTEXTSETS = 0;
+private:
+  const Shared * const shared;
+  ContextMap cm;
+  Array<U32> t1{256};
+  Array<U16> t2{0x10000};
+  Array<U16> t3{0x8000};
+  Array<U16> t4{0x8000};
+  IndirectContext<U32> iCtx{16,8}; /* BitsPerContext, InputBits */
+public:
+  IndirectModel(const Shared * const sh, const U64 size) : shared(sh), cm(sh,size,nCM){}
+  void mix(Mixer& m) {
+    INJECT_SHARED_bpos
+    if(bpos==0) {
+      INJECT_SHARED_c4 INJECT_SHARED_buf
+      U32 d=c4&0xffff, c=d&255, d2=(buf(1)&31)+32*(buf(2)&31)+1024*(buf(3)&31);
+      U32 d3=(buf(1)>>3&31)+32*(buf(3)>>3&31)+1024*(buf(4)>>3&31);
+      U32& r1=t1[d>>8];
+      r1=r1<<8|c;
+      U16& r2=t2[c4>>8&0xffff];
+      r2=r2<<8|c;
+      U16& r3=t3[(buf(2)&31)+32*(buf(3)&31)+1024*(buf(4)&31)];
+      r3=r3<<8|c;
+      U16& r4=t4[(buf(2)>>3&31)+32*(buf(4)>>3&31)+1024*(buf(5)>>3&31)];
+      r4=r4<<8|c;
+      const U32 t=c|t1[c]<<8;
+      const U32 t0=d|t2[d]<<16;
+      const U32 ta=d2|t3[d2]<<16;
+      const U32 tc=d3|t4[d3]<<16;
+      const U8 pc=tolower(U8(c4>>8));
+      iCtx+=(c=tolower(c)), iCtx=(pc<<8)|c;
+      const U32 ctx0=iCtx(), mask=(U8(t1[c])==U8(t2[d]))|
+        ((U8(t1[c])==U8(t3[d2]))<<1)|
+        ((U8(t1[c])==U8(t4[d3]))<<2)|
+        ((U8(t1[c])==U8(ctx0))<<3);
+      U64 i=0;
+      cm.set(hash(++i,t));
+      cm.set(hash(++i,t0));
+      cm.set(hash(++i,ta));
+      cm.set(hash(++i,tc));
+      cm.set(hash(++i,t&0xff00, mask));
+      cm.set(hash(++i,t0&0xff0000));
+      cm.set(hash(++i,ta&0xff0000));
+      cm.set(hash(++i,tc&0xff0000));
+      cm.set(hash(++i,t&0xffff));
+      cm.set(hash(++i,t0&0xffffff));
+      cm.set(hash(++i,ta&0xffffff));
+      cm.set(hash(++i,tc&0xffffff));
+      cm.set(hash(++i, ctx0&0xff, c));
+      cm.set(hash(++i, ctx0&0xffff));
+      cm.set(hash(++i, ctx0&0x7f7fff));
+    }
+    cm.mix(m);
   }
-  cm.mix(m);
-}
+};
 
 //////////////////////////// dmcModel //////////////////////////
 
-// Model using DMC.  The bitwise context is represented by a state graph,
-// initilaized to a bytewise order 1 model as in
-// http://plg.uwaterloo.ca/~ftp/dmc/dmc.c but with the following difference:
-// - It uses integer arithmetic.
-// - The threshold for cloning a state increases as memory is used up.
-// - Each state maintains both a 0,1 count and a bit history (as in a
-//   context model).  The 0,1 count is best for stationary data, and the
-//   bit history for nonstationary data.  The bit history is mapped to
-//   a probability adaptively using a StateMap.  The two computed probabilities
-//   are combined.
-// - When memory is used up the state graph is reinitialized to a bytewise
-//   order 1 context as in the original DMC.  However, the bit histories
-//   are not cleared.
+// Model using DMC (Dynamic Markov Compression).
+//
+// The bitwise context is represented by a state graph.
+//
+// See the original paper: http://webhome.cs.uvic.ca/~nigelh/Publications/DMC.pdf
+// See the original DMC implementation: http://maveric0.uwaterloo.ca/ftp/dmc/
+//
+// Main differences:
+// - Instead of floats we use fixed point arithmetic.
+// - The threshold for cloning a state increases gradually as memory is used up.
+// - For probability estimation each state maintains both a 0,1 count ("c0" and "c1") 
+//   and a bit history ("state"). The 0,1 counts are updated adaptively favoring newer events.
+//   The bit history state is mapped to a probability adaptively using a StateMap.
+// - The predictions of multiple "dmcModel"s are combined and stiblilized in "dmcForest". See below.
 
-struct DMCNode {  // 12 bytes
-  U32 nx[2];  // next pointers
-  U8 state;  // bit history
-  U32 c0:12, c1:12;  // counts * 256
+struct DMCNode { // 12 bytes
+  // c0,c1: adaptive counts of zeroes and ones; 
+  //        fixed point numbers with 6 integer and 10 fractional bits, i.e. scaling factor = 1024;
+  //        thus the values 0 .. 65535 represent real counts of 0.0 .. 63.999
+  // nx0, nx1: indexes of next DMC nodes in the state graph
+  // state: bit history state - as in a contextmap
+public:
+  U16 c0, c1;
+private:
+  U32 _nx0, _nx1; // packed: their higher 28 bits are nx0, nx1; the lower 4+4 bits give the bit history state byte
+
+public:
+  U8   get_state() const        {return U8(((_nx0&0xf)<<4) | (_nx1&0xf));}
+  void set_state(const U8 state) {_nx0=(_nx0&0xfffffff0) | (state>>4); _nx1=(_nx1&0xfffffff0) | (state&0xf);}
+  U32  get_nx0() const          {return _nx0>>4;}
+  void set_nx0(const U32 nx0)    {assert((nx0>>28)==0);_nx0=(_nx0&0xf) | (nx0<<4);}
+  U32  get_nx1() const          {return _nx1>>4;}
+  void set_nx1(const U32 nx1)    {assert((nx1>>28)==0);_nx1=(_nx1&0xf) | (nx1<<4);}
 };
 
-void dmcModel(Mixer& m) {
-  static U32 top=0, curr=0;  // allocated, current node
-  static Array<DMCNode> t(MEM*2);  // state graph
-  static StateMap sm;
-  static int threshold=256;
+#define DMC_NODES_BASE (255*256) // = 65280
+#define DMC_NODES_MAX  ((U64(1)<<31)/sizeof(DMCNode)) // = 178 956 970
 
-  // clone next state
-  if (top>0 && top<t.size()) {
-    int next=t[curr].nx[y];
-    int n=y?t[curr].c1:t[curr].c0;
-    int nn=t[next].c0+t[next].c1;
-    if (n>=threshold*2 && nn-n>=threshold*3) {
-      int r=n*4096/nn;
-      assert(r>=0 && r<=4096);
-      t[next].c0 -= t[top].c0 = t[next].c0*r>>12;
-      t[next].c1 -= t[top].c1 = t[next].c1*r>>12;
-      t[top].nx[0]=t[next].nx[0];
-      t[top].nx[1]=t[next].nx[1];
-      t[top].state=t[next].state;
-      t[curr].nx[y]=top;
-      ++top;
-      if (top==(MEM/2) || top==MEM)
-        threshold+=256;
-    }
+class dmcModel {
+private:
+  const Shared * const shared;
+  Random rnd;
+  Array<DMCNode> t;     // state graph
+  StateMap sm;          // statemap for bit history states
+  U32 top, curr;        // index of first unallocated node (i.e. number of allocated nodes); index of current node
+  U32 threshold;        // cloning threshold parameter: fixed point number like c0,c1
+  U32 threshold_fine;   // "threshold" scaled by 11 bits used for increasing the threshold in finer steps
+  U32 extra;            // this value is used for approximating stategraph maturity level when the state graph is already full 
+                        // this is the number of skipped cloning events when the counts were already large enough (>1.0)
+
+  // helper function: adaptively increment a counter
+  U32 increment_counter (const U32 x, const U32 increment) const { // x is a fixed point number as c0,c1 ; "increment"  is 0 or 1
+    return (((x<<6)-x)>>6)+(increment<<10); // x * (1-1/64) + increment
   }
 
-  // Initialize to a bytewise order 1 model at startup or when flushing memory
-  if (top==t.size() && bpos==1) top=0;
-  if (top==0) {
-    assert(t.size()>=65280);
-    for (int i=0; i<255; ++i) {
-      for (int j=0; j<256; ++j) {
-        if (i<127) {
-          t[j*255+i].nx[0]=j*255+i*2+1;
-          t[j*255+i].nx[1]=j*255+i*2+2;
+public: 
+  dmcModel(const Shared * const sh, const U64 dmc_nodes, const U32 th_start) : shared(sh), 
+    t(min(dmc_nodes+DMC_NODES_BASE,DMC_NODES_MAX)), 
+    sm(sh,1,256,256 /*64-512 are all fine*/ ,StateMap::BITHISTORY) //StateMap: s, n, limit, init
+  {
+    resetstategraph(th_start);
+  }
+
+  // Initialize the state graph to a bytewise order 1 model
+  // See an explanation of the initial structure in:
+  // http://wing.comp.nus.edu.sg/~junping/docs/njp-icita2005.pdf
+  void resetstategraph(const U32 th_start) {
+    assert(((t.size()-1)>>28)==0); // the top 4 bits must be unused by nx0 and nx1 for storing the 4+4 bits of the bit history state byte
+    top=curr=extra=0;
+    threshold=th_start;
+    threshold_fine=th_start<<11;
+    for (int j=0; j<256; ++j) { //256 trees
+      for (int i=0; i<255; ++i) { //255 nodes in each tree
+        if (i<127) { //internal tree nodes
+          t[top].set_nx0(top+i+1); // left node 
+          t[top].set_nx1(top+i+2); // right node
         }
-        else {
-          t[j*255+i].nx[0]=(i-127)*255;
-          t[j*255+i].nx[1]=(i+1)*255;
+        else { // 128 leaf nodes - they each references a root node of tree(i)
+          int linked_tree_root=(i-127)*2*255;
+          t[top].set_nx0(linked_tree_root);     // left node  -> root of tree 0,2,4... 
+          t[top].set_nx1(linked_tree_root+255); // right node -> root of tree 1,3,5...
         }
-        t[j*255+i].c0=128;
-        t[j*255+i].c1=128;
-        //reset of the states: (sometimes it's better to reset and sometimes it's better to keep the previous values)
-        //t[j*255+i].state=0x00; 
+        t[top].c0=t[top].c1 = th_start<1024 ? 2048 : 512; // 2.0  0.5
+        t[top].set_state(0);
+        top++;
       }
     }
-    top=65280;
-    curr=0;
-    threshold=256;
   }
 
-  // update count, state
-  if (y) {
-    if (t[curr].c1<3840) t[curr].c1+=256;
-  }
-  else if (t[curr].c0<3840) t[curr].c0+=256;
-  t[curr].state=nex(t[curr].state, y);
-  curr=t[curr].nx[y];
+  //update stategraph
+  void update() {
 
-  // predict
-  const int pr1=sm.p(t[curr].state);
-  const int n1=t[curr].c1;
-  const int n0=t[curr].c0;
-  const int pr2=(n1+5)*4096/(n0+n1+10);
-  m.add(stretch(pr1)/4);
-  m.add(stretch(pr2)/4);
-}
+    U32 c0=t[curr].c0;
+    U32 c1=t[curr].c1;
+    INJECT_SHARED_y
+    const U32 n = y==0 ? c0 : c1;
 
-void nestModel(Mixer& m)
-{
-  static int ic=0, bc=0, pc=0,vc=0, qc=0, lvc=0, wc=0, ac=0, ec=0, uc=0, sense1=0, sense2=0, w=0;
-  static ContextMap cm(MEM, 10+2);
-  if (bpos==0) {
-    int c=c4&255, matched=1, vv;
-    w*=((vc&7)>0 && (vc&7)<3);
-    if (c&0x80) w = w*11*32 + c;
-    const int lc = (c >= 'A' && c <= 'Z'?c+'a'-'A':c);
-    if (lc == 'a' || lc == 'e' || lc == 'i' || lc == 'o' || lc == 'u'){ vv = 1; w = w*997*8 + (lc/4-22); } else
-    if (lc >= 'a' && lc <= 'z'){ vv = 2; w = w*271*32 + lc-97; } else
-    if (lc == ' ' || lc == '.' || lc == ',' || lc == '\n') vv = 3; else
-    if (lc >= '0' && lc <= '9') vv = 4; else
-    if (lc == 'y') vv = 5; else
-    if (lc == '\'') vv = 6; else vv=(c&32)?7:0;
-    vc = (vc << 3) | vv;
-    if (vv != lvc) {
-      wc = (wc << 3) | vv;
-      lvc = vv;
+    // update counts, state
+    t[curr].c0=increment_counter(c0,1-y);
+    t[curr].c1=increment_counter(c1,y);
+    t[curr].set_state( StateTable::next(t[curr].get_state(),y,rnd) );
+
+    // clone next state when threshold is reached
+    if(n>threshold) {
+
+      const U32 next = y==0 ? t[curr].get_nx0() : t[curr].get_nx1();
+      c0=t[next].c0;
+      c1=t[next].c1;
+      const U32 nn=c0+c1;
+
+      if(nn>n+threshold) {
+        if(top!=t.size()) { // state graph is not yet full, let's clone
+          U32 c0_top=U64(c0)*U64(n)/U64(nn);
+          U32 c1_top=U64(c1)*U64(n)/U64(nn);
+          assert(c0>=c0_top);
+          assert(c1>=c1_top);
+          c0-=c0_top;
+          c1-=c1_top;
+
+          t[top].c0=c0_top;
+          t[top].c1=c1_top;
+          t[next].c0=c0;
+          t[next].c1=c1;
+
+          t[top].set_nx0(t[next].get_nx0());
+          t[top].set_nx1(t[next].get_nx1());
+          t[top].set_state(t[next].get_state());
+          if(y==0) t[curr].set_nx0(top);
+          else t[curr].set_nx1(top);
+
+          ++top;
+
+          if(threshold<8*1024)threshold=(++threshold_fine)>>11;
+        }
+        else // state graph was full
+          extra += nn>>10;
+      }
     }
-    switch(c) {
-      case ' ': qc = 0; break;
-      case '(': ic += 31; break;
-      case ')': ic -= 31; break;
-      case '[': ic += 11; break;
-      case ']': ic -= 11; break;
-      case '<': ic += 23; qc += 34; break;
-      case '>': ic -= 23; qc /= 5; break;
-      case ':': pc = 20; break;
-      case '{': ic += 17; break;
-      case '}': ic -= 17; break;
-      case '|': pc += 223; break;
-      case '"': pc += 0x40; break;
-      case '\'': pc += 0x42; if (c!=(U8)(c4>>8)) sense2^=1; else ac+=(2*sense2-1); break;
-      case '\n': pc = qc = 0; break;
-      case '.': pc = 0; break;
-      case '!': pc = 0; break;
-      case '?': pc = 0; break;
-      case '#': pc += 0x08; break;
-      case '%': pc += 0x76; break;
-      case '$': pc += 0x45; break;
-      case '*': pc += 0x35; break;
-      case '-': pc += 0x3; break;
-      case '@': pc += 0x72; break;
-      case '&': qc += 0x12; break;
-      case ';': qc /= 3; break;
-      case '\\': pc += 0x29; break;
-      case '/': pc += 0x11;
-                if (buf.size() > 1 && buf(1) == '<') qc += 74;
-                break;
-      case '=': pc += 87; if (c!=(U8)(c4>>8)) sense1^=1; else ec+=(2*sense1-1); break;
-      default: matched = 0;
-    }
-    if (c4==0x266C743B) uc=min(7,uc+1);
-    else if (c4==0x2667743B) uc-=(uc>0);
-    if (matched) bc = 0; else bc += 1;
-    if (bc > 300) bc = ic = pc = qc = uc = 0;
 
-    cm.set(hash( (vv>0 && vv<3)?0:(lc|0x100), ic&0x3FF, ec&0x7, ac&0x7, uc ));
-    cm.set(hash(ic, w, ilog2(bc+1)));
-    cm.set((3*vc+77*pc+373*ic+qc)&0xffff);
-    cm.set((31*vc+27*pc+281*qc)&0xffff);
-    cm.set((13*vc+271*ic+qc+bc)&0xffff);
-    cm.set((17*pc+7*ic)&0xffff);
-    cm.set((13*vc+ic)&0xffff);
-    cm.set((vc/3+pc)&0xffff);
-    cm.set((7*wc+qc)&0xffff);
-    cm.set((vc&0xffff)|((c4&0xff)<<16));
-    cm.set(((3*pc)&0xffff)|((c4&0xff)<<16));
-    cm.set((ic&0xffff)|((c4&0xff)<<16));
-
+    if(y==0) curr=t[curr].get_nx0();
+    else     curr=t[curr].get_nx1();
   }
-  cm.mix(m);
-}
 
-/*
-  XML Model.
-  Attempts to parse the tag structure and detect specific content types.
+  bool isfull() const {return extra>>7 > U32(t.size());}
+  int pr1() const {
+    const U32 n0=t[curr].c0+1;
+    const U32 n1=t[curr].c1+1;
+    return (n1<<12)/(n0+n1);
+  }
+  int pr2() {
+    const U8 state=t[curr].get_state();
+    return sm.p1(state);
+  }
+  int st() {
+    update();
+    return stretch(pr1()) + stretch(pr2()); // average the predictions for stability
+  }
+};
 
-  Changelog:
-  (17/08/2017) v96: Initial release by Márcio Pais
-  (17/08/2017) v97: Bug fixes (thank you Mauro Vezzosi) and improvements.
-*/
+// This class solves two problems of the DMC model
+// 1) The DMC model is a memory hungry algorithm. In theory it works best when it can clone
+//    nodes forever. But when the state graph is full you can't clone nodes anymore. 
+//    You can either i) reset the model (the state graph) and start over
+//    or ii) you can keep updating the counts forever in the already fixed state graph. Both
+//    choices are troublesome: i) resetting the model degrades the predictive power significantly
+//    until the graph becomes large enough again and ii) a fixed structure can't adapt anymore.
+//    To solve this issue:
+//    Ten models with different arguments work in tandem. Only eight of the ten models
+//    are reset periodically. Due to their different cloning threshold arguments and 
+//    different state graph sizes they are reset at different points in time. 
+//    The remaining two models (having the highest threshold and largest stategraph) are
+//    never reset and are beneficial for semi-stationary files.
+// 2) The DMC model is sensitive to the cloning threshold parameter. Some files prefer
+//    a smaller threshold other files prefer a larger threshold.
+//    The difference in terms of compression is significant.
+//    To solve this issue DMC models with different thresholds are used and their 
+//    predictions are combined.
+//
+//    Disadvantages: with the same memory requirements we have less number of nodes
+//    in each model. Also keeping more models updated at all times requires more
+//    calculations and more memory access than updating one model only.
+//    Advantage: more stable and better compression - even with reduced number of nodes.
+//
+// Further notes: 
+//    Extremely small initial threshold arguments (i) help the state graph become large faster
+//    and model longer input bit sequences sooner. Moreover (ii) when using a small threshold 
+//    parameter the split counts c0 and c1 will be small after cloning, and after updating them
+//    with 0 and 1 the prediction p=c1/(c0+c1) will be biased towards these latest events.
+
+class DmcForest {
+private:
+  static constexpr U32 MODELS = 10; // 8 fast and 2 slow models
+public:
+  static constexpr int MIXERINPUTS = 2 + 8/2; // 6 : fast models (2 individually) + slow models (8 combined pairwise)
+  static constexpr int MIXERCONTEXTS = 0;
+  static constexpr int MIXERCONTEXTSETS = 0;
+private:
+  static constexpr U32 dmcparams [MODELS] = {2,32, 64,4, 128,8, 256,16, 1024,1536};
+  static constexpr U64 dmcmem [MODELS]    = {6,10, 11,7,  12,8,  13, 9,    2,   2};
+  const Shared * const shared;
+  Array<dmcModel*> dmcmodels;
+public:
+  DmcForest(const Shared * const sh, const U64 size) : shared(sh), dmcmodels(MODELS) {
+    for(int i=MODELS-1;i>=0;i--) 
+      dmcmodels[i]=new dmcModel(sh,size/dmcmem[i],dmcparams[i]);
+  }
+  ~DmcForest() {
+    for(int i=MODELS-1;i>=0;i--)
+      delete dmcmodels[i];
+  }
+
+  // update and predict
+  void mix(Mixer &m) {
+    int i=MODELS;
+    // the slow models predict individually
+    m.add(dmcmodels[--i]->st()>>3);
+    m.add(dmcmodels[--i]->st()>>3);
+    // the fast models are combined for better stability
+    while(i>0) {
+      const int pr1=dmcmodels[--i]->st();
+      const int pr2=dmcmodels[--i]->st();
+      m.add((pr1+pr2)>>4);
+    }
+
+    // reset models when their structure can't adapt anymore
+    // the two slow models are never reset
+    INJECT_SHARED_bpos
+    if(bpos==0)
+      for(int i=MODELS-3;i>=0;i--) 
+        if(dmcmodels[i]->isfull())
+          dmcmodels[i]->resetstategraph(dmcparams[i]);
+  }
+};
+
+
+//////////////////////////// NestModel //////////////////////////
+//
+//
+
+class NestModel {
+private:
+  static constexpr int nCM = 12;
+public:
+  static constexpr int MIXERINPUTS = nCM*(ContextMap::MIXERINPUTS); // 60
+  static constexpr int MIXERCONTEXTS = 0;
+  static constexpr int MIXERCONTEXTSETS = 0;
+private:
+  const Shared * const shared;
+  int ic=0, bc=0, pc=0,vc=0, qc=0, lvc=0, wc=0, ac=0, ec=0, uc=0, sense1=0, sense2=0, w=0;
+  ContextMap cm;
+public:
+  NestModel(const Shared * const sh, const U64 size) : shared(sh), cm(sh,size,nCM) {}
+  void mix(Mixer& m) {
+    INJECT_SHARED_bpos 
+    if (bpos==0) {
+      INJECT_SHARED_c1
+      int c=c1, matched=1, vv;
+      w*=((vc&7)>0 && (vc&7)<3);
+      if (c&0x80) w = w*11*32 + c;
+      const int lc = (c >= 'A' && c <= 'Z'?c+'a'-'A':c);
+      if (lc == 'a' || lc == 'e' || lc == 'i' || lc == 'o' || lc == 'u'){ vv = 1; w = w*997*8 + (lc/4-22); } else
+      if (lc >= 'a' && lc <= 'z'){ vv = 2; w = w*271*32 + lc-97; } else
+      if (lc == ' ' || lc == '.' || lc == ',' || lc == '\n') vv = 3; else
+      if (lc >= '0' && lc <= '9') vv = 4; else
+      if (lc == 'y') vv = 5; else
+      if (lc == '\'') vv = 6; else vv=(c&32)?7:0;
+      vc = (vc << 3) | vv;
+      if (vv != lvc) {
+        wc = (wc << 3) | vv;
+        lvc = vv;
+      }
+      INJECT_SHARED_c4
+      switch(c) {
+        case ' ': qc = 0; break;
+        case '(': ic += 31; break;
+        case ')': ic -= 31; break;
+        case '[': ic += 11; break;
+        case ']': ic -= 11; break;
+        case '<': ic += 23; qc += 34; break;
+        case '>': ic -= 23; qc /= 5; break;
+        case ':': pc = 20; break;
+        case '{': ic += 17; break;
+        case '}': ic -= 17; break;
+        case '|': pc += 223; break;
+        case '"': pc += 0x40; break;
+        case '\'': pc += 0x42; if (c!=(U8)(c4>>8)) sense2^=1; else ac+=(2*sense2-1); break;
+        case '\n': pc = qc = 0; break;
+        case '.': pc = 0; break;
+        case '!': pc = 0; break;
+        case '?': pc = 0; break;
+        case '#': pc += 0x08; break;
+        case '%': pc += 0x76; break;
+        case '$': pc += 0x45; break;
+        case '*': pc += 0x35; break;
+        case '-': pc += 0x3; break;
+        case '@': pc += 0x72; break;
+        case '&': qc += 0x12; break;
+        case ';': qc /= 3; break;
+        case '\\': pc += 0x29; break;
+        case '/': pc += 0x11;
+                  if (c1 == '<') qc += 74;
+                  break;
+        case '=': pc += 87; if (c!=(U8)(c4>>8)) sense1^=1; else ec+=(2*sense1-1); break;
+        default: matched = 0;
+      }
+      if (c4==0x266C743B) uc=min(7,uc+1);  //&lt;
+      else if (c4==0x2667743B) uc-=(uc>0); //&gt;
+      if (matched) bc = 0; else bc += 1;
+      if (bc > 300) bc = ic = pc = qc = uc = 0;
+      U64 i=0;
+      cm.set(hash(++i, (vv>0 && vv<3)?0:(lc|0x100), ic&0x3FF, ec&0x7, ac&0x7, uc ));
+      cm.set(hash(++i, ic, w, ilog2(bc+1)));
+      cm.set(hash(++i, (3*vc+77*pc+373*ic+qc)&0xffff));
+      cm.set(hash(++i, (31*vc+27*pc+281*qc)&0xffff));
+      cm.set(hash(++i, (13*vc+271*ic+qc+bc)&0xffff));
+      cm.set(hash(++i, (17*pc+7*ic)&0xffff));
+      cm.set(hash(++i, (13*vc+ic)&0xffff));
+      cm.set(hash(++i, (vc/3+pc)&0xffff));
+      cm.set(hash(++i, (7*wc+qc)&0xffff));
+      cm.set(hash(++i, vc&0xffff,c4&0xff));
+      cm.set(hash(++i, (3*pc)&0xffff,c4&0xff));
+      cm.set(hash(++i, ic&0xffff,c4&0xff));
+
+    }
+    cm.mix(m);
+  }
+};
+
+//////////////////////////// XMLModel //////////////////////////
+//
+//
 
 struct XMLAttribute {
   U32 Name, Value, Length;
@@ -8245,66 +10586,76 @@ enum XMLState {
   ReadComment        = 7,
 };
 
-#define DetectContent(){ \
-  if ((c4&0xF0F0F0F0)==0x30303030){ \
-    int i = 0, j = 0; \
-    while ((i<4) && ( (j=(c4>>(8*i))&0xFF)>=0x30 && j<=0x39 )) \
-      i++; \
-\
-    if (i==4 && ( ((c8&0xFDF0F0FD)==0x2D30302D && buf(9)>=0x30 && buf(9)<=0x39) || ((c8&0xF0FDF0FD)==0x302D302D) )) \
-      (*Content).Type |= Date; \
-  } \
-  else if (((c8&0xF0F0FDF0)==0x30302D30 || (c8&0xF0F0F0FD)==0x3030302D) && buf(9)>=0x30 && buf(9)<=0x39){ \
-    int i = 2, j = 0; \
-    while ((i<4) && ( (j=(c8>>(8*i))&0xFF)>=0x30 && j<=0x39 )) \
-      i++; \
-\
-    if (i==4 && (c4&0xF0FDF0F0)==0x302D3030) \
-      (*Content).Type |= Date; \
-  } \
-\
-  if ((c4&0xF0FFF0F0)==0x303A3030 && buf(5)>=0x30 && buf(5)<=0x39 && ((buf(6)<0x30 || buf(6)>0x39) || ((c8&0xF0F0FF00)==0x30303A00 && (buf(9)<0x30 || buf(9)>0x39)))) \
-    (*Content).Type |= Time; \
-\
-  if ((*Content).Length>=8 && (c8&0x80808080)==0 && (c4&0x80808080)==0) \
-    (*Content).Type |= Text; \
-\
-  if ((c8&0xF0F0FF)==0x3030C2 && (c4&0xFFF0F0FF)==0xB0303027){ \
-    int i = 2; \
-    while ((i<7) && buf(i)>=0x30 && buf(i)<=0x39) \
-      i+=(i&1)*2+1; \
-\
-    if (i==10) \
-      (*Content).Type |= Coordinates; \
-  } \
-\
-  if ((c4&0xFFFFFA)==0xC2B042 && B!=0x47 && (((c4>>24)>=0x30 && (c4>>24)<=0x39) || ((c4>>24)==0x20 && (buf(5)>=0x30 && buf(5)<=0x39)))) \
-    (*Content).Type |= Temperature; \
-\
-  if (B>=0x30 && B<=0x39) \
-    (*Content).Type |= Number; \
-\
-  if (c4==0x4953424E && buf(5)==0x20) \
-    (*Content).Type |= ISBN; \
-}
+class XMLModel {
+private:
+  static constexpr int nCM = 4;
+public:
+  static constexpr int MIXERINPUTS = nCM*(ContextMap::MIXERINPUTS); //20
+  static constexpr int MIXERCONTEXTS = 0;
+  static constexpr int MIXERCONTEXTSETS = 0;
+private:
+  const Shared * const shared;
+  ContextMap cm;
+  XMLTagCache Cache{};
+  U32 StateBH[8]{};
+  XMLState State = None, pState = None;
+  U32 WhiteSpaceRun = 0, pWSRun = 0, IndentTab = 0, IndentStep = 2, LineEnding = 2;
 
-void XMLModel(Mixer& m, ModelStats *Stats = NULL){
-  static ContextMap cm(MEM/4, 4);
-  static XMLTagCache Cache;
-  static U32 StateBH[8];
-  static XMLState State = None, pState = None;
-  static U32 c8, WhiteSpaceRun = 0, pWSRun = 0, IndentTab = 0, IndentStep = 2, LineEnding = 2;
+  void DetectContent(XMLContent *Content){
+    INJECT_SHARED_c4 INJECT_SHARED_c8 INJECT_SHARED_buf
+    if ((c4&0xF0F0F0F0)==0x30303030) { //may be 4 digits (dddd)
+      int i = 0, j = 0;
+      while ((i<4) && ( (j=(c4>>(8*i))&0xFF)>=0x30 && j<=0x39 ))
+        i++;
+      //
+      if (i==4 /*????dddd*/ && ( ((c8&0xFDF0F0FD)==0x2D30302D && buf(9)>=0x30 && buf(9)<=0x39 /*d-dd-dddd or d.dd.dddd*/) || ((c8&0xF0FDF0FD)==0x302D302D) /*d-d-dddd or d.d.dddd*/))
+        (*Content).Type |= ContentFlags::Date;
+    }
+    else if (((c8&0xF0F0FDF0)==0x30302D30 /*dd.d???? or dd-d????*/ || (c8&0xF0F0F0FD)==0x3030302D) && buf(9)>=0x30 && buf(9)<=0x39 /*dddd-???? or dddd.????*/){
+      int i = 2, j = 0;
+      while ((i<4) && ( (j=(c8>>(8*i))&0xFF)>=0x30 && j<=0x39 ))
+        i++;
 
-  if (bpos==0) {
-    U8 B = (U8)c4;
+      if (i==4 && (c4&0xF0FDF0F0)==0x302D3030) //dd??d.dd or dd??d-dd
+        (*Content).Type |= ContentFlags::Date;
+    }
+
+    if ((c4&0xF0FFF0F0)==0x303A3030 && buf(5)>=0x30 && buf(5)<=0x39 && ((buf(6)<0x30 || buf(6)>0x39) /*?dd:dd*/ || ((c8&0xF0F0FF00)==0x30303A00 && (buf(9)<0x30 || buf(9)>0x39) /*?dd:dd:dd*/)))
+      (*Content).Type |= ContentFlags::Time;
+
+    if ((*Content).Length>=8 && (c8&0x80808080)==0 && (c4&0x80808080)==0) //8 ~ascii
+      (*Content).Type |= ContentFlags::Text;
+
+    if ((c8&0xF0F0FF)==0x3030C2 && (c4&0xFFF0F0FF)==0xB0303027){ //dd {utf8 C2B0: degree sign} dd {apostrophe}
+      int i = 2;
+      while ((i<7) && buf(i)>=0x30 && buf(i)<=0x39)
+        i+=(i&1)*2+1;
+
+      if (i==10)
+        (*Content).Type |= ContentFlags::Coordinates;
+    }
+
+    if ((c4&0xFFFFFA)==0xC2B042 && (c4&0xff)!=0x47 && (((c4>>24)>=0x30 && (c4>>24)<=0x39) || ((c4>>24)==0x20 && (buf(5)>=0x30 && buf(5)<=0x39))))
+      (*Content).Type |= ContentFlags::Temperature;
+    
+    INJECT_SHARED_c1
+    if (c1>=0x30 && c1<=0x39)
+      (*Content).Type |= ContentFlags::Number;
+
+    if (c4==0x4953424E && (c8&0xff)==0x20) // " ISBN"
+      (*Content).Type |= ContentFlags::ISBN;
+  }
+public:
+  XMLModel(const Shared * const sh, const U64 size) : shared(sh), cm(sh,size,nCM) {}
+  void update() {
+    INJECT_SHARED_c1 INJECT_SHARED_c4 INJECT_SHARED_c8
     XMLTag *pTag = &Cache.Tags[ (Cache.Index-1)&(CacheSize-1) ], *Tag = &Cache.Tags[ Cache.Index&(CacheSize-1) ];
     XMLAttribute *Attribute = &((*Tag).Attributes.Items[ (*Tag).Attributes.Index&3 ]);
     XMLContent *Content = &(*Tag).Content;
     pState = State;
-    c8 = (c8<<8)|buf(5);
-    if ((B==TAB || B==SPACE) && (B==(U8)(c4>>8) || !WhiteSpaceRun)){
+    if ((c1==TAB || c1==SPACE) && (c1==(U8)(c4>>8) || !WhiteSpaceRun)){
       WhiteSpaceRun++;
-      IndentTab = (B==TAB);
+      IndentTab = (c1==TAB);
     }
     else{
       if ((State==None || (State==ReadContent && (*Content).Length<=LineEnding+WhiteSpaceRun)) && WhiteSpaceRun>1+IndentTab && WhiteSpaceRun!=pWSRun){
@@ -8313,30 +10664,30 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
       }
       WhiteSpaceRun=0;
     }
-    if (B==NEW_LINE)
+    if (c1==NEW_LINE)
       LineEnding = 1+((U8)(c4>>8)==CARRIAGE_RETURN);
 
     switch (State){
       case None : {
-        if (B==0x3C){
+        if (c1==0x3C){
           State = ReadTagName;
           memset(Tag, 0, sizeof(XMLTag));
           (*Tag).Level = ((*pTag).EndTag || (*pTag).Empty)?(*pTag).Level:(*pTag).Level+1;
         }
         if ((*Tag).Level>1)
-          DetectContent();
+          DetectContent(Content);
 
         cm.set(hash(pState, State, ((*pTag).Level+1)*IndentStep - WhiteSpaceRun));
         break;
       }
       case ReadTagName : {
-        if ((*Tag).Length>0 && (B==TAB || B==NEW_LINE || B==CARRIAGE_RETURN || B==SPACE))
+        if ((*Tag).Length>0 && (c1==TAB || c1==NEW_LINE || c1==CARRIAGE_RETURN || c1==SPACE))
           State = ReadTag;
-        else if ((B==0x3A || (B>='A' && B<='Z') || B==0x5F || (B>='a' && B<='z')) || ((*Tag).Length>0 && (B==0x2D || B==0x2E || (B>='0' && B<='9')))){
+        else if ((c1==0x3A || (c1>='A' && c1<='Z') || c1==0x5F || (c1>='a' && c1<='z')) || ((*Tag).Length>0 && (c1==0x2D || c1==0x2E || (c1>='0' && c1<='9')))){
           (*Tag).Length++;
-          (*Tag).Name = (*Tag).Name * 263 * 32 + (B&0xDF);
+          (*Tag).Name = (*Tag).Name * 263 * 32 + (c1&0xDF);
         }
-        else if (B == 0x3E){
+        else if (c1 == 0x3E){
           if ((*Tag).EndTag){
             State = None;
             Cache.Index++;
@@ -8344,12 +10695,12 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
           else
             State = ReadContent;
         }
-        else if (B!=0x21 && B!=0x2D && B!=0x2F && B!=0x5B){
+        else if (c1!=0x21 && c1!=0x2D && c1!=0x2F && c1!=0x5B){
           State = None;
           Cache.Index++;
         }
         else if ((*Tag).Length==0){
-          if (B==0x2F){
+          if (c1==0x2F){
             (*Tag).EndTag = true;
             (*Tag).Level = max(0,(*Tag).Level-1);
           }
@@ -8375,13 +10726,13 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
         }
         while ( i<CacheSize && ((*pTag).EndTag || (*pTag).Empty) );
 
-        cm.set(hash(pState*8+State, (*Tag).Name, (*Tag).Level, (*pTag).Name, (*pTag).Level!=(*Tag).Level ));
+        cm.set(hash(pState, State, (*Tag).Name, (*Tag).Level, (*pTag).Name, (*pTag).Level!=(*Tag).Level ));
         break;
       }
       case ReadTag : {
-        if (B==0x2F)
+        if (c1==0x2F)
           (*Tag).Empty = true;
-        else if (B==0x3E){
+        else if (c1==0x3E){
           if ((*Tag).Empty){
             State = None;
             Cache.Index++;
@@ -8389,32 +10740,32 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
           else
             State = ReadContent;
         }
-        else if (B!=TAB && B!=NEW_LINE && B!=CARRIAGE_RETURN && B!=SPACE){
+        else if (c1!=TAB && c1!=NEW_LINE && c1!=CARRIAGE_RETURN && c1!=SPACE){
           State = ReadAttributeName;
-          (*Attribute).Name = B&0xDF;
+          (*Attribute).Name = c1&0xDF;
         }
-        cm.set(hash(pState, State, (*Tag).Name, B, (*Tag).Attributes.Index ));
+        cm.set(hash(pState, State, (*Tag).Name, c1, (*Tag).Attributes.Index ));
         break;
       }
       case ReadAttributeName : {
-        if ((c4&0xFFF0)==0x3D20 && (B==0x22 || B==0x27)){
+        if ((c4&0xFFF0)==0x3D20 && (c1==0x22 || c1==0x27)){
           State = ReadAttributeValue;
           if ((c8&0xDFDF)==0x4852 && (c4&0xDFDF0000)==0x45460000)
             (*Content).Type |= Link;
         }
-        else if (B!=0x22 && B!=0x27 && B!=0x3D)
-          (*Attribute).Name = (*Attribute).Name * 263 * 32 + (B&0xDF);
+        else if (c1!=0x22 && c1!=0x27 && c1!=0x3D)
+          (*Attribute).Name = (*Attribute).Name * 263 * 32 + (c1&0xDF);
 
-        cm.set(hash(pState*8+State, (*Attribute).Name, (*Tag).Attributes.Index, (*Tag).Name, (*Content).Type ));
+        cm.set(hash(pState, State, (*Attribute).Name, (*Tag).Attributes.Index, (*Tag).Name, (*Content).Type ));
         break;
       }
       case ReadAttributeValue : {
-        if (B==0x22 || B==0x27){
+        if (c1==0x22 || c1==0x27){
           (*Tag).Attributes.Index++;
           State = ReadTag;
         }
         else{
-          (*Attribute).Value = (*Attribute).Value* 263 * 32 + (B&0xDF);
+          (*Attribute).Value = (*Attribute).Value* 263 * 32 + (c1&0xDF);
           (*Attribute).Length++;
           if ((c8&0xDFDFDFDF)==0x48545450 && ((c4>>8)==0x3A2F2F || c4==0x733A2F2F))
             (*Content).Type |= URL;
@@ -8423,7 +10774,7 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
         break;
       }
       case ReadContent : {
-        if (B==0x3C){
+        if (c1==0x3C){
           State = ReadTagName;
           Cache.Index++;
           memset(&Cache.Tags[ Cache.Index&(CacheSize-1) ], 0, sizeof(XMLTag));
@@ -8431,9 +10782,8 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
         }
         else{
           (*Content).Length++;
-          (*Content).Data = (*Content).Data * 997*16 + (B&0xDF);
-
-          DetectContent();
+          (*Content).Data = (*Content).Data * 997*16 + (c1&0xDF);
+          DetectContent(Content);
         }
         cm.set(hash(pState, State, (*Tag).Name, c4&0xC0FF ));
         break;
@@ -8456,249 +10806,638 @@ void XMLModel(Mixer& m, ModelStats *Stats = NULL){
       }
     }
 
-    StateBH[pState] = (StateBH[pState]<<8)|B;
+    StateBH[pState] = (StateBH[pState]<<8)|c1;
     pTag = &Cache.Tags[ (Cache.Index-1)&(CacheSize-1) ];
-    cm.set(hash(State, (*Tag).Level, pState*2+(*Tag).EndTag, (*Tag).Name));
-    cm.set(hash((*pTag).Name, State*2+(*pTag).EndTag, (*pTag).Content.Type, (*Tag).Content.Type));
-    cm.set(hash(State*2+(*Tag).EndTag, (*Tag).Name, (*Tag).Content.Type, c4&0xE0FF));
+    U64 i=64;
+    cm.set(hash(++i,State, (*Tag).Level, pState*2+(*Tag).EndTag, (*Tag).Name));
+    cm.set(hash(++i,(*pTag).Name, State*2+(*pTag).EndTag, (*pTag).Content.Type, (*Tag).Content.Type));
+    cm.set(hash(++i,State*2+(*Tag).EndTag, (*Tag).Name, (*Tag).Content.Type, c4&0xE0FF));
   }
-  cm.mix(m);
-  U8 s = ((StateBH[State]>>(28-bpos))&0x08) |
-         ((StateBH[State]>>(21-bpos))&0x04) |
-         ((StateBH[State]>>(14-bpos))&0x02) |
-         ((StateBH[State]>>( 7-bpos))&0x01) |
-         ((bpos)<<4);
-  if (Stats)
-    (*Stats).XML = (s<<3)|State;
-}
+  void mix(Mixer &m) {
+    INJECT_SHARED_bpos
+    if (bpos==0)
+      update();
+    cm.mix(m);
+  }
+};
+
+
+//////////////////////// Order-N Model //////////////////
+// Model for order 0-14 contexts
+// Contexts are hashes of previous 0..14 bytes
+// Order 0..6, 8 and 14 are used for prediction
+// Note: order 7+ contexts are modeled by matchModel as well
+
+class NormalModel { 
+private:
+  static constexpr int nCM = 9;
+  static constexpr int nSM = 3;
+public:
+  static constexpr int MIXERINPUTS = nCM*(ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUNSTATS + ContextMap2::MIXERINPUTS_BYTEHISTORY) + nSM; //66
+  static constexpr int MIXERCONTEXTS = 64 + 8+1024+256+256+256+256+1536; //3656
+  static constexpr int MIXERCONTEXTSETS = 7;
+private:
+  const Shared * const shared;
+  ModelStats *stats;
+  ContextMap2 cm;
+  StateMap sm_order0_slow;
+  StateMap sm_order1_slow;
+  StateMap sm_order1_fast;
+  U64 cxt[15]{}; // context hashes
+public:
+  NormalModel(const Shared * const sh, ModelStats *st,const U64 cmsize):
+    shared(sh), stats(st),
+    cm(sh,cmsize,nCM,64,CM_USE_RUNSTATS|CM_USE_BYTEHISTORY), 
+    sm_order0_slow(sh,1,255,1023,StateMap::GENERIC),
+    sm_order1_slow(sh,1,255*256,1023,StateMap::GENERIC),
+    sm_order1_fast(sh,1,255*256,64,StateMap::GENERIC) // 64->16 is also ok
+  {
+    assert(ispowerof2(cmsize));
+  }
+  void reset() {
+    memset(&cxt[0], 0, sizeof(cxt));
+  }
+
+  void update_hashes() {
+    // update order 1..14 context hashes
+    // note: order 0 context does not need an update so its hash never changes
+    INJECT_SHARED_c1
+    for (int i=14; i>0; --i)
+      cxt[i]=combine64(cxt[i-1],c1+(i<<10));
+  }
+
+  void mix(Mixer& m) {
+    INJECT_SHARED_bpos
+    if(bpos==0) {
+      update_hashes();
+      for (int i=1; i<=7; ++i)
+        cm.set(cxt[i]);
+      cm.set(cxt[9]);
+      cm.set(cxt[14]);
+    }
+    cm.mix(m);
+
+    INJECT_SHARED_c0
+    m.add((stretch(sm_order0_slow.p1(c0-1)))>>2); //order 0
+    INJECT_SHARED_c1
+    m.add((stretch(sm_order1_fast.p1((c0-1)<<8|c1)))>>2); //order 1
+    m.add((stretch(sm_order1_slow.p1((c0-1)<<8|c1)))>>2); //order 1
+
+    const int order=max(0, cm.order-(nCM-7)); //0-7
+    assert(0<=order && order<=7);
+    m.set(order<<3 | bpos, 64); 
+    stats->order=order;
+  }
+  
+  //setting more mixer contexts after skipping the special blocktypes
+  void mix_post(Mixer& m) {
+    INJECT_SHARED_c4 
+    U32 c2=(c4>>8)&0xff, c3=(c4>>16)&0xff, c;
+
+    INJECT_SHARED_c0 INJECT_SHARED_c1 INJECT_SHARED_bpos 
+    m.set(8+(c1 | (bpos>5)<<8 |  ( ((c0&((1<<bpos)-1))==0) || (c0==((2<<bpos)-1)) )<<9), 8+1024);
+    m.set(c0, 256);
+    m.set(stats->order | ((c4>>6)&3)<<3 | (bpos==0)<<5 | (c1==c2)<<6 | (stats->blockType==EXE)<<7, 256);
+    m.set(c2, 256);
+    m.set(c3, 256);
+    if (bpos!=0)
+    {
+      c=c0<<(8-bpos); if (bpos==1)c|=c3>>1;
+      c=min(bpos,5)<<8 | c1>>5 | (c2>>5)<<3 | (c&192);
+    }
+    else c=c3>>7 | (c4>>31)<<1 | (c2>>6)<<2 | (c1&240);
+    m.set(c, 1536);
+  }
+};
+
+// this is a factory class for lazy object creation for models
+// objects created within this class are instantiated on first use and guaranteed to be destroyed
+class Models {
+private: 
+  const Shared * const shared; //read only 
+  ModelStats *stats; //read-write
+public:
+  Models(const Shared * const sh, ModelStats *st): shared(sh), stats(st) {}
+public:
+  NormalModel& normalModel() {static NormalModel instance{shared, stats, MEM*32};return instance;}
+  DmcForest& dmcForest() {static DmcForest instance{shared, MEM};return instance;}
+  CharGroupModel& charGroupModel() {static CharGroupModel instance{shared, MEM/2};return instance;}
+  RecordModel& recordModel() {static RecordModel instance{shared, stats, MEM*2};return instance;}
+  SparseModel& sparseModel() {static SparseModel instance{shared, MEM*2};return instance;}
+  MatchModel& matchModel() {static MatchModel instance{shared, stats, MEM*4};return instance;}
+  SparseMatchModel& sparseMatchModel() {static SparseMatchModel instance{shared, MEM};return instance;}
+  IndirectModel& indirectModel() {static IndirectModel instance{shared, MEM};return instance;}
+
+#ifdef USE_TEXTMODEL
+  TextModel& textModel() {static TextModel instance{shared, stats, MEM*16};return instance;}
+  WordModel& wordModel() {static WordModel instance{shared, stats, MEM*16};return instance;}
+#endif //USE_TEXTMODEL
+  NestModel& nestModel() {static NestModel instance{shared, MEM};return instance;}
+  XMLModel& xmlModel() {static XMLModel instance{shared, MEM/4};return instance;}
+
+  ExeModel& exeModel() {static ExeModel instance{shared, stats, MEM*4};return instance;}
+  LinearPredictionModel& linearPredictionModel() {static LinearPredictionModel instance{shared};return instance;}
+  
+  JpegModel& jpegModel() {static JpegModel instance{shared, MEM};return instance;}
+
+  Image24bitModel& image24bitModel() {static Image24bitModel instance{shared, stats, MEM*4};return instance;}
+  Image8bitModel& image8bitModel() {static Image8bitModel instance{shared, stats, MEM*4};return instance;}
+  Image4bitModel& image4bitModel() {static Image4bitModel instance{shared, MEM/2};return instance;}
+  Image1bitModel& image1bitModel() {static Image1bitModel instance{shared};return instance;}
+
+#ifdef USE_AUDIOMODEL
+  Audio8bitModel& audio8bitModel() {static Audio8bitModel instance{shared,stats};return instance;}
+  Audio16bitModel& audio16bitModel() {static Audio16bitModel instance{shared,stats};return instance;}
+#endif //USE_AUDIOMODEL
+};
 
 //////////////////////////// contextModel //////////////////////
 
 // This combines all the context models with a Mixer.
 
-class ContextModel{
-  ContextMap2 cm;
-  RunContextMap rcm7, rcm9, rcm10;
-  exeModel exeModel1;
-  JpegModel jpegModel;
-  #ifdef USE_TEXTMODEL
-  TextModel textModel;
-  #endif //USE_TEXTMODEL
+class ContextModel {
+  const Shared * const shared;
+  ModelStats *stats;
+  Models models;
   Mixer *m;
-  U32 cxt[16];
-  Blocktype next_blocktype, blocktype;
-  int blocksize, blockinfo;
-  void UpdateContexts(U8 B);
-  void Train(const char* Dictionary, int Iterations = 1);
+  Blocktype next_blocktype=DEFAULT, blocktype=DEFAULT;
+  int blocksize=0, blockinfo=0, bytesread=0;
+  bool readsize=false;
 public:
-  ContextModel() : cm(MEM*32, 9), rcm7(MEM), rcm9(MEM), rcm10(MEM), 
+  ContextModel(const Shared * const sh, ModelStats *st, Models &mdls) : shared(sh), stats(st), models(mdls) {
+    m=MixerFactory::CreateMixer(
+      sh, 
+      1 +  //bias
+      MatchModel::MIXERINPUTS  + NormalModel::MIXERINPUTS + SparseMatchModel::MIXERINPUTS + 
+      SparseModel::MIXERINPUTS + RecordModel::MIXERINPUTS + CharGroupModel::MIXERINPUTS + 
+      TextModel::MIXERINPUTS   + WordModel::MIXERINPUTS   + IndirectModel::MIXERINPUTS + 
+      DmcForest::MIXERINPUTS   + NestModel::MIXERINPUTS   + XMLModel::MIXERINPUTS + 
+      LinearPredictionModel::MIXERINPUTS  +   ExeModel::MIXERINPUTS
+      ,
+      MatchModel::MIXERCONTEXTS  + NormalModel::MIXERCONTEXTS + SparseMatchModel::MIXERCONTEXTS +
+      SparseModel::MIXERCONTEXTS + RecordModel::MIXERCONTEXTS + CharGroupModel::MIXERCONTEXTS + 
+      TextModel::MIXERCONTEXTS   + WordModel::MIXERCONTEXTS   + IndirectModel::MIXERCONTEXTS +
+      DmcForest::MIXERCONTEXTS   + NestModel::MIXERCONTEXTS   + XMLModel::MIXERCONTEXTS +
+      LinearPredictionModel::MIXERCONTEXTS  +  ExeModel::MIXERCONTEXTS
+      ,
+      MatchModel::MIXERCONTEXTSETS  + NormalModel::MIXERCONTEXTSETS + SparseMatchModel::MIXERCONTEXTSETS +
+      SparseModel::MIXERCONTEXTSETS + RecordModel::MIXERCONTEXTSETS + CharGroupModel::MIXERCONTEXTSETS +
+      TextModel::MIXERCONTEXTSETS   + WordModel::MIXERCONTEXTSETS   + IndirectModel::MIXERCONTEXTSETS +
+      DmcForest::MIXERCONTEXTSETS   + NestModel::MIXERCONTEXTSETS   + XMLModel::MIXERCONTEXTSETS +
+      LinearPredictionModel::MIXERCONTEXTSETS  +  ExeModel::MIXERCONTEXTSETS
+    );
+  }
 
-    #ifdef USE_TEXTMODEL
-      textModel(MEM*16),
-    #endif //USE_TEXTMODEL
-
-    next_blocktype(DEFAULT), blocktype(DEFAULT), blocksize(0), blockinfo(0) {
-    
-    #ifdef USE_WORDMODEL
-      m=MixerFactory::CreateMixer(976+288, 4096+(1024+512+1024*3+6144)*(level>=4), 7+9*(level>=4));
-    #else     
-      m=MixerFactory::CreateMixer(976, 4096+(1024+512+1024*3+6144)*(level>=4), 7+9*(level>=4));
-    #endif //USE_WORD_MODEL
-
-      memset(&cxt[0], 0, sizeof(cxt));
-      if (options&OPTION_TRAINTXT) {
-        Train("english.dic", 3);
-        Train("english.exp");
-      }
-    }
   ~ContextModel() {
     delete m;
   }
-  int Predict(ModelStats *Stats = NULL);
+  int p();
 };
 
-void ContextModel::Train(const char* Dictionary, int Iterations){
-  FileDisk f;
-  printf("Pre-training main model...");
-  OpenFromMyFolder::anotherfile(&f, Dictionary);
-  int i;
-  while (Iterations-->0) {
-    f.setpos(0);
-    i=pos=0;
-    do {
-      if (!i||i==10||i==13)
-        i = SPACE;
-      UpdateContexts(buf(1));
-      cm.Train(i);
-      buf[pos++]=i;
-    } while ((i=f.getchar())!=EOF);
-  }
-  printf(" done [%s, %d bytes]\n", Dictionary, pos);
-  f.close();
-  pos=0;
-  memset(&cxt[0], 0, sizeof(cxt));
-  memset(&buf[0], 0, buf.size());
-}
-
-void ContextModel::UpdateContexts(U8 B){
-  for (int i=15; i>0; --i)
-    cxt[i]=cxt[i-1]*257+B+1;
-  for (int i=0; i<7; ++i)
-    cm.set(cxt[i]);
-  cm.set(cxt[8]);
-  cm.set(cxt[14]);
-  rcm7.set(cxt[7]);
-  rcm9.set(cxt[10]);
-  rcm10.set(cxt[12]);
-}
-
-int ContextModel::Predict(ModelStats *Stats){
+int ContextModel::p(){
+  U32 &blpos=stats->blpos;
   // Parse block type and block size
+  INJECT_SHARED_bpos 
   if (bpos==0) {
     --blocksize;
-    ++blpos;
-    if (blocksize==-1) next_blocktype=(Blocktype)buf(1); //got blocktype but don't switch (we don't have all the info yet)
-    if (blocksize==-5 && !hasInfo(next_blocktype)) {
-      blocksize=buf(4)<<24|buf(3)<<16|buf(2)<<8|buf(1);
-      if (hasRecursion(next_blocktype)) blocksize=0;
-      blpos=0;
+    blpos++;
+    INJECT_SHARED_c1
+    if (blocksize==-1) {
+      next_blocktype=(Blocktype)c1; //got blocktype but don't switch (we don't have all the info yet)
+      bytesread=0;
+      readsize=true;
     }
-    if (blocksize==-9) {
-      blocksize=buf(8)<<24|buf(7)<<16|buf(6)<<8|buf(5);
-      blockinfo=buf(4)<<24|buf(3)<<16|buf(2)<<8|buf(1);
-      blpos=0;
+    else if (blocksize<0) {
+      if (readsize) {
+        bytesread|=int(c1&0x7F)<<((-blocksize-2)*7);
+        if ((c1>>7)==0) {
+          readsize=false;
+          if (!hasInfo(next_blocktype)) {
+            blocksize=bytesread;
+            if (hasRecursion(next_blocktype))
+              blocksize=0;
+            blpos=0;
+          }
+          else
+            blocksize=-1;
+        }
+      }
+      else if (blocksize==-5) {
+        blocksize=bytesread;
+        INJECT_SHARED_c4
+        blockinfo=c4;
+        blpos=0;
+      }
     }
+
     if (blpos==0) blocktype=next_blocktype; //got all the info - switch to next blocktype
     if (blocksize==0) blocktype=DEFAULT;
+
+    stats->blockType = blocktype;
   }
 
-  m->update();
   m->add(256); //network bias
 
+  MatchModel &matchModel=models.matchModel();
+  matchModel.mix(*m);
+  NormalModel &normalModel=models.normalModel();
+  normalModel.mix(*m);
+
   // Test for special block types
-  int matchlength=ilog(matchModel(*m));  // ilog of length of most recent match (0..255)
-  if (blocktype==IMAGE1) im1bitModel(*m, blockinfo);
-  if (blocktype==IMAGE4) return im4bitModel(*m, blockinfo), m->p();
-  if (blocktype==IMAGE8) return im8bitModel(*m, blockinfo), m->p();
-  if (blocktype==IMAGE8GRAY) return im8bitModel(*m, blockinfo, 1), m->p();
-  if (blocktype==IMAGE24) return im24bitModel(*m, blockinfo), m->p();
-  if (blocktype==IMAGE32) return im24bitModel(*m, blockinfo, 1), m->p();
-  if (blocktype==PNG8) return im8bitModel(*m, blockinfo, 0, 1), m->p();
-  if (blocktype==PNG8GRAY) return im8bitModel(*m, blockinfo, 1, 1), m->p();
-  if (blocktype==PNG24) return im24bitModel(*m, blockinfo, 0, 1), m->p();
-  if (blocktype==PNG32) return im24bitModel(*m, blockinfo, 1, 1), m->p();
-  #ifdef USE_WAVMODEL
-  if (blocktype==AUDIO) return wavModel(*m, blockinfo, Stats), m->p();
-  #endif //USE_WAVMODEL
-  if ((blocktype==JPEG || blocktype==HDR)) if (jpegModel.jpegModel(*m)) return m->p();
+  switch(blocktype) {
+    case IMAGE1: {
+      Image1bitModel &image1bitModel=models.image1bitModel();
+      image1bitModel.setparam(blockinfo);
+      image1bitModel.mix(*m);
+      break;
+    }
+    case IMAGE4: {
+      Image4bitModel &image4bitModel=models.image4bitModel();
+      image4bitModel.setparam(blockinfo);
+      m->set_scalefactor(2048,256);
+      return image4bitModel.mix(*m), m->p();
+    }
+    case IMAGE8: {
+      Image8bitModel &image8bitModel=models.image8bitModel();
+      image8bitModel.setparam(blockinfo,0,0);
+      m->set_scalefactor(2048,128);
+      return image8bitModel.mix(*m), m->p();
+    }
+    case IMAGE8GRAY: {
+      Image8bitModel &image8bitModel=models.image8bitModel();
+      image8bitModel.setparam(blockinfo,1,0);
+      m->set_scalefactor(2048,128);
+      return image8bitModel.mix(*m), m->p();
+    }
+    case IMAGE24: {
+      Image24bitModel &image24bitModel=models.image24bitModel();
+      image24bitModel.setparam(blockinfo,0,0);
+      m->set_scalefactor(1024,128);
+      return image24bitModel.mix(*m), m->p();
+    }
+    case IMAGE32: {
+      Image24bitModel &image24bitModel=models.image24bitModel();
+      image24bitModel.setparam(blockinfo,1,0);
+      m->set_scalefactor(2048,128);
+      return image24bitModel.mix(*m), m->p();
+    }
+    case PNG8: {
+      Image8bitModel &image8bitModel=models.image8bitModel();
+      image8bitModel.setparam(blockinfo,0,1);
+      m->set_scalefactor(2048,128);
+      return image8bitModel.mix(*m), m->p();
+    }
+    case PNG8GRAY: {
+      Image8bitModel &image8bitModel=models.image8bitModel();
+      image8bitModel.setparam(blockinfo,1,1);
+      m->set_scalefactor(2048,128);
+      return image8bitModel.mix(*m), m->p();
+    }
+    case PNG24: {
+      Image24bitModel &image24bitModel=models.image24bitModel();
+      image24bitModel.setparam(blockinfo,0,1);
+      m->set_scalefactor(1024,128);
+      return image24bitModel.mix(*m), m->p();
+    }
+    case PNG32: {
+      Image24bitModel &image24bitModel=models.image24bitModel();
+      image24bitModel.setparam(blockinfo,1,1);
+      m->set_scalefactor(2048,128);
+      return image24bitModel.mix(*m), m->p();
+    }
+    #ifdef USE_AUDIOMODEL
+    case AUDIO:
+    case AUDIO_LE: {
+      RecordModel &recordModel=models.recordModel();
+      recordModel.mix(*m);
+      if ((blockinfo&2)==0) {
+        Audio8bitModel &audio8bitModel=models.audio8bitModel();
+        audio8bitModel.setparam(blockinfo);
+        m->set_scalefactor(1024,128);
+        return audio8bitModel.mix(*m), m->p();
+      }
+      else {
+        Audio16bitModel &audio16bitModel=models.audio16bitModel();
+        audio16bitModel.setparam(blockinfo);
+        m->set_scalefactor(1024,128);
+        return audio16bitModel.mix(*m), m->p();
+      }
+    }
+    #endif //USE_AUDIOMODEL
+    case JPEG: {
+      JpegModel &jpegModel=models.jpegModel();
+      m->set_scalefactor(1024,256);
+      if (jpegModel.mix(*m)) return m->p();
+    }
+    case DEFAULT:
+    case HDR: 
+    case FILECONTAINER:
+    case EXE:
+    case CD:
+    case ZLIB:
+    case BASE64:
+    case GIF:
+    case TEXT:
+    case TEXT_EOL:
+    case RLE:
+    case LZW:
+      break;
+  }
 
-  // Normal model
-  if (bpos==0)
-    UpdateContexts(buf(1));
-  int order=cm.mix(*m);
+  normalModel.mix_post(*m);
 
-  rcm7.mix(*m);
-  rcm9.mix(*m);
-  rcm10.mix(*m);
-
-  if (level>=4 && blocktype!=IMAGE1) {
-    sparseModel(*m,matchlength,order);
-    distanceModel(*m);
-    recordModel(*m, blocktype, Stats);
-    #ifdef USE_WORDMODEL
-    wordModel(*m, blocktype);
-    #endif //USE_WORDMODEL
-    indirectModel(*m);
-    dmcModel(*m);
-    nestModel(*m);
-    XMLModel(*m, Stats);
+  if (blocktype!=IMAGE1) {
+    SparseMatchModel &sparseMatchModel=models.sparseMatchModel();
+    sparseMatchModel.mix(*m);
+    SparseModel &sparseModel=models.sparseModel();
+    sparseModel.mix(*m);
+    RecordModel &recordModel=models.recordModel();
+    recordModel.mix(*m);
+    CharGroupModel &charGroupModel=models.charGroupModel();
+    charGroupModel.mix(*m);
     #ifdef USE_TEXTMODEL
-    textModel.Predict(*m, buf, Stats);
+    TextModel &textModel=models.textModel();
+    textModel.mix(*m);
+    WordModel &wordModel=models.wordModel();
+    wordModel.mix(*m);
     #endif //USE_TEXTMODEL
-    exeModel1.Predict(*m, blocktype==EXE, Stats);
+    IndirectModel &indirectModel=models.indirectModel();
+    indirectModel.mix(*m);
+    DmcForest &dmcForest=models.dmcForest();
+    dmcForest.mix(*m);
+    NestModel &nestModel=models.nestModel();
+    nestModel.mix(*m);
+    XMLModel &xmlModel=models.xmlModel();
+    xmlModel.mix(*m);
+    if (blocktype!=TEXT && blocktype!=TEXT_EOL) {
+      LinearPredictionModel &linearPredictionModel=models.linearPredictionModel();
+      linearPredictionModel.mix(*m);
+      ExeModel &exeModel=models.exeModel();
+      exeModel.mix(*m);
+    }
   }
 
-  order = order-2;
-  if (order<0) order=0;
-
-  U32 c1=buf(1), c2=buf(2), c3=buf(3), c;
-
-  m->set(8+(c1 | (bpos>5)<<8 |  ( ((c0&((1<<bpos)-1))==0) || (c0==((2<<bpos)-1)) )<<9), 8+1024);
-  m->set(c0, 256);
-  m->set(order | ((c4>>6)&3)<<3 | (bpos==0)<<5 | (c1==c2)<<6 | (blocktype==EXE)<<7, 256);
-  m->set(c2, 256);
-  m->set(c3, 256);
-  m->set(matchlength, 256);
-
-  if (bpos!=0)
-  {
-    c=c0<<(8-bpos); if (bpos==1)c|=c3>>1;
-    c=min(bpos,5)<<8 | c1>>5 | (c2>>5)<<3 | (c&192);
-  }
-  else c=c3>>7 | (c4>>31)<<1 | (c2>>6)<<2 | (c1&240);
-  m->set(c, 1536);
-  int pr=m->p();
-  return pr;
+  m->set_scalefactor(1024,128);
+  return m->p();
 }
+
+/////////////////// Secondary Symbol Estimation ////////////////
+//
+// Filter the context model with APMs
+
+class SSE {
+private:
+  const Shared * const shared;
+  ModelStats *stats;
+  struct {
+    APM APMs[4];
+    APM1 APM1s[3];
+  } Text;
+  struct {
+    struct {
+      APM APMs[4];
+      APM1 APM1s[2];
+    } Color, Palette;
+    struct {
+      APM APMs[3];
+    } Gray;
+  } Image;
+  struct {
+    APM1 APM1s[7];
+  } Generic;
+public:
+  SSE(const Shared * const sh, ModelStats *st) : shared(sh), stats(st),
+  Text {
+      { /*APM:*/  {sh,0x10000,24}, {sh,0x10000,24}, {sh,0x10000,24}, {sh,0x10000,24}}, /* APM: contexts, steps */
+      { /*APM1:*/ {sh,0x10000,7}, {sh,0x10000,6}, {sh,0x10000,6}} /* APM1: contexts, rate */
+    },
+    Image { 
+      { /*APM:*/ {{sh,0x1000,24}, {sh,0x10000,24}, {sh,0x10000,24}, {sh,0x10000,24}}, /*APM1:*/ {{sh,0x10000,7}, {sh,0x10000,7}} }, // color
+      { /*APM:*/ {{sh,0x1000,24}, {sh,0x10000,24}, {sh,0x10000,24}, {sh,0x10000,24}}, /*APM1:*/ {{sh,0x10000,5}, {sh,0x10000,6}} }, // palette
+      { /*APM:*/ {{sh,0x1000,24}, {sh,0x10000,24}, {sh,0x10000,24}} } //gray
+    },
+    Generic 
+      { /*APM1:*/ {{sh,0x2000,7}, {sh,0x10000,7}, {sh,0x10000,7}, {sh,0x10000,7}, {sh,0x10000,7}, {sh,0x10000,7}, {sh,0x10000,7}} 
+    }
+  {}
+public:
+  int p(int pr0) {
+    INJECT_STATS_blpos INJECT_SHARED_c0 INJECT_SHARED_bpos INJECT_SHARED_c4
+    int pr;
+    int pr1, pr2, pr3;
+    switch (stats->blockType) {
+      case TEXT: case TEXT_EOL: {
+        int limit=0x3FF>>((blpos<0xFFF)*2);
+        pr  = Text.APMs[0].p(pr0, (c0<<8)|(stats->Text.mask&0xF)|((stats->Misses&0xF)<<4), limit);
+        pr1 = Text.APMs[1].p(pr0, finalize64(hash(bpos, stats->Misses&3, c4&0xffff, stats->Text.mask>>4),16), limit);
+        pr2 = Text.APMs[2].p(pr0, finalize64(hash(c0, stats->Match.expectedByte, stats->Match.length3),16), limit);
+        pr3 = Text.APMs[3].p(pr0, finalize64(hash(c0, c4&0xffff, stats->Text.firstLetter),16), limit);
+
+        pr0 = (pr0+pr1+pr2+pr3+2)>>2;
+
+        pr1 = Text.APM1s[0].p(pr0, finalize64(hash(stats->Match.expectedByte, stats->Match.length3, c4&0xff),16));
+        pr2 = Text.APM1s[1].p(pr, finalize64(hash(c0, c4&0x00ffffff),16));
+        pr3 = Text.APM1s[2].p(pr, finalize64(hash(c0, c4&0xffffff00),16));
+
+        pr = (pr+pr1+pr2+pr3+2)>>2;
+        pr = (pr+pr0+1)>>1;
+        break;
+      }
+      case IMAGE24: case IMAGE32: {
+        int limit=0x3FF>>((blpos<0xFFF)*4);
+        pr  = Image.Color.APMs[0].p(pr0, (c0<<4)|(stats->Misses&0xF), limit);
+        pr1 = Image.Color.APMs[1].p(pr0, finalize64(hash(c0, stats->Image.pixels.W, stats->Image.pixels.WW),16), limit);
+        pr2 = Image.Color.APMs[2].p(pr0, finalize64(hash(c0, stats->Image.pixels.N, stats->Image.pixels.NN),16), limit);
+        pr3 = Image.Color.APMs[3].p(pr0, (c0<<8)|stats->Image.ctx, limit);
+
+        pr0 = (pr0+pr1+pr2+pr3+2)>>2;
+        pr1 = Image.Color.APM1s[0].p(pr, finalize64(hash(c0, stats->Image.pixels.W, (c4&0xff)-stats->Image.pixels.Wp1, stats->Image.plane),16));
+        pr2 = Image.Color.APM1s[1].p(pr, finalize64(hash(c0, stats->Image.pixels.N, (c4&0xff)-stats->Image.pixels.Np1, stats->Image.plane),16));
+
+        pr=(pr*2+pr1*3+pr2*3+4)>>3;
+        pr = (pr+pr0+1)>>1;
+        break;
+      }
+      case IMAGE8GRAY: {
+        int limit=0x3FF>>((blpos<0xFFF)*4);
+        pr  = Image.Gray.APMs[0].p(pr0, (c0<<4)|(stats->Misses&0xF), limit);
+        pr1 = Image.Gray.APMs[1].p(pr, (c0<<8)|stats->Image.ctx, limit);
+        pr2 = Image.Gray.APMs[2].p(pr0, bpos|(stats->Image.ctx&0xF8)|(stats->Match.expectedByte<<8), limit);
+
+        pr0 = (2*pr0+pr1+pr2+2)>>2;
+        pr = (pr+pr0+1)>>1;
+        break;
+      }
+      case IMAGE8: {
+        int limit=0x3FF>>((blpos<0xFFF)*4);
+        pr  = Image.Palette.APMs[0].p(pr0, (c0<<4)|(stats->Misses&0xF), limit);
+        pr1 = Image.Palette.APMs[1].p(pr0, finalize64(hash(c0 | stats->Image.pixels.W<<8 | stats->Image.pixels.N <<16),16), limit);
+        pr2 = Image.Palette.APMs[2].p(pr0, finalize64(hash(c0 | stats->Image.pixels.N<<8 | stats->Image.pixels.NN<<16),16), limit);
+        pr3 = Image.Palette.APMs[3].p(pr0, finalize64(hash(c0 | stats->Image.pixels.W<<8 | stats->Image.pixels.WW<<16),16), limit);
+
+        pr0 = (pr0+pr1+pr2+pr3+2)>>2;
+        pr1 = Image.Palette.APM1s[0].p(pr0, finalize64(hash(c0 | stats->Match.expectedByte<<8 | stats->Image.pixels.N<<16),16));
+        pr2 = Image.Palette.APM1s[1].p(pr , finalize64(hash(c0 | stats->Image.pixels.W<<8     | stats->Image.pixels.N<<16),16));
+
+        pr = (pr*2+pr1+pr2+2)>>2;
+        pr = (pr+pr0+1)>>1;
+        break;
+      }
+      case JPEG: {
+        pr = pr0;
+        break;
+      }
+      default: {
+        pr  = Generic.APM1s[0].p(pr0, (stats->Match.length3)<<11 | c0<<3 | (stats->Misses&0x7));
+        const U16 ctx1 = c0 | (c4&0xff)<<8;
+        const U16 ctx2 = c0 ^ finalize64(hash(c4&0xffff),16);
+        const U16 ctx3 = c0 ^ finalize64(hash(c4&0xffffff),16);
+        pr1 = Generic.APM1s[1].p(pr0, ctx1);
+        pr2 = Generic.APM1s[2].p(pr0, ctx2);
+        pr3 = Generic.APM1s[3].p(pr0, ctx3);
+
+        pr0 = (pr0+pr1+pr2+pr3+2)>>2;
+        pr1 = Generic.APM1s[4].p(pr, (stats->Match.expectedByte<<8)|(c4&0xff));
+        pr2 = Generic.APM1s[5].p(pr, ctx2);
+        pr3 = Generic.APM1s[6].p(pr, ctx3);
+
+        pr = (pr+pr1+pr2+pr3+2)>>2;
+        pr = (pr+pr0+1)>>1;
+      }
+    }
+    return pr;
+  }
+};
 
 //////////////////////////// Predictor /////////////////////////
 
 // A Predictor estimates the probability that the next bit of
 // uncompressed data is 1.  Methods:
 // p() returns P(1) as a 12 bit number (0-4095).
-// update(y) trains the predictor with the actual bit (0 or 1).
+// update() trains the models with the actual bit (0 or 1).
 
 class Predictor {
-  int pr;  // next prediction
-  ContextModel ContextModel2;
+  Shared shared;
   ModelStats stats;
-public:
-  Predictor();
-  int p() const {return pr;}
-  void update();
-};
-
-Predictor::Predictor(): pr(2048) {
-  memset(&stats, 0, sizeof(ModelStats));
-}
-
-void Predictor::update() {
-  static APM1 a(256), a1(0x10000), a2(0x10000), a3(0x10000),
-                      a4(0x10000), a5(0x10000), a6(0x10000);
-
-  // Update global context: pos, bpos, c0, c4, buf, f4
-  c0+=c0+y;
-  if (c0>=256) {
-    buf[pos++]=c0;
-    c4=(c4<<8)+c0-256;
-    c0=1;
-
-    int b1=buf(1);
-    b2=b1;
-    if(b1=='.' || b1=='!' || b1=='?' || b1=='/'|| b1==')'|| b1=='}') f4=(f4&0xfffffff0)+2;
-    if (b1==32) --b1;
-    f4=f4*16+(b1>>4);
-
+  Models models;
+  ContextModel contextModel;
+  SSE sse;
+  int pr;  // next prediction, scaled by 12 bits (0-4095)
+  
+  void trainText(const char * const Dictionary, int Iterations) {
+    NormalModel &normalModel=models.normalModel();
+    WordModel &wordModel=models.wordModel();
+    DummyMixer m_dummy(&shared,
+      normalModel.MIXERINPUTS+wordModel.MIXERINPUTS,
+      normalModel.MIXERCONTEXTS+wordModel.MIXERCONTEXTS,
+      normalModel.MIXERCONTEXTSETS+wordModel.MIXERCONTEXTSETS
+    );
+    assert(shared.buf.getpos()==0 && stats.blpos==0);
+    FileDisk f;
+    printf("Pre-training models with text...");
+    OpenFromMyFolder::anotherfile(&f, Dictionary);
+    int c;
+    int training_bytecount=0;
+    while (Iterations-->0) {
+      f.setpos(0);
+      c=SPACE;
+      training_bytecount=0;
+      do {
+        training_bytecount++;
+        U8 c1 = c==NEW_LINE ? SPACE : c;
+        if(c!=CARRIAGE_RETURN) {
+          for (int bpos=0; bpos<8; bpos++) {
+            normalModel.mix(m_dummy); //update (train) model
+              wordModel.mix(m_dummy); //update (train) model
+            m_dummy.p();
+            shared.y=(c1>>(7-bpos))&1;
+            shared.update();
+            updater.broadcast_update();
+          }
+        } 
+        // emulate a space before and after each word/expression
+        // reset models in between
+        if(c==NEW_LINE) {
+          normalModel.reset();
+          wordModel.reset();
+          for (int bpos=0; bpos<8; bpos++) {
+            normalModel.mix(m_dummy); //update (train) model
+            wordModel.mix(m_dummy); //update (train) model
+            m_dummy.p();
+            shared.y=(c1>>(7-bpos))&1;
+            shared.update();
+            updater.broadcast_update();
+          }
+        }
+      } while ((c=f.getchar())!=EOF);
+    }
+    normalModel.reset();
+    wordModel.reset();
+    shared.reset();
+    stats.reset();
+    printf(" done [%s, %d bytes]\n", Dictionary, training_bytecount);
+    f.close();
   }
-  bpos=(bpos+1)&7;
+  
+  void trainExe() {
+    ExeModel &exeModel=models.exeModel();
+    DummyMixer dummy_m(&shared,exeModel.MIXERINPUTS,exeModel.MIXERCONTEXTS,exeModel.MIXERCONTEXTSETS);
+    assert(shared.buf.getpos()==0 && stats.blpos==0);
+    FileDisk f;
+    printf("Pre-training x86/x64 model...");
+    OpenFromMyFolder::myself(&f);
+    int c=0;
+    int training_bytecount=0;
+    do {
+      training_bytecount++;
+      for (int bpos=0; bpos<8; bpos++) {
+        exeModel.mix(dummy_m); //update (train) model
+        dummy_m.p();
+        shared.y=(c>>(7-bpos))&1;
+        shared.update();
+        updater.broadcast_update();
+      }
+    } while ((c=f.getchar())!=EOF);
+    printf(" done [%d bytes]\n",training_bytecount);
+    f.close();
+    shared.reset();
+    stats.reset();
+  }
+  
+public:
+  Predictor(): shared(), stats(), models(&shared,&stats), contextModel(&shared, &stats, models), sse(&shared,&stats), pr(2048) {
+    shared.reset();
+    shared.buf.setsize(MEM*8);
+    //initiate pre-traing
+    if(options & OPTION_TRAINTXT) {
+      trainText("english.dic",3);
+      trainText("english.exp",1);
+    }
+    if(options & OPTION_TRAINEXE)
+      trainExe();
+  }
+  int p() const {return pr;}
+  void update(U8 y) {
+    stats.Misses+=stats.Misses+((pr>>11)!=y);
+    
+    // Update global context: pos, bpos, c0, c4, c8, buf
+    shared.y=y;
+    shared.update(); 
+    // Broadcast to all current subscribers: y (and c0, c1, c4, etc) is known
+    updater.broadcast_update();
 
-  // Filter the context model with APMs
-  int pr0=ContextModel2.Predict(&stats);
+    const U8 bpos=shared.bpos;
+    const U8 c0=shared.c0;
+    const U8 chargrp = (bpos>0)?AsciiGroupC0[0][(1<<bpos)-2+(c0&((1<<bpos)-1))]:0;
+    stats.Text.chargrp = chargrp;
 
-  pr=a.p(pr0, c0);
+    // Predict
+    pr=contextModel.p();
 
-  int pr1=a1.p(pr0, c0+256*buf(1));
-  int pr2=a2.p(pr0, (c0^hash(buf(1), buf(2)))&0xffff);
-  int pr3=a3.p(pr0, (c0^hash(buf(1), buf(2), buf(3)))&0xffff);
-  pr0=(pr0+pr1+pr2+pr3+2)>>2;
-
-  pr1=a4.p(pr, c0+256*buf(1));
-  pr2=a5.p(pr, (c0^hash(buf(1), buf(2)))&0xffff);
-  pr3=a6.p(pr, (c0^hash(buf(1), buf(2), buf(3)))&0xffff);
-  pr=(pr+pr1+pr2+pr3+2)>>2;
-
-  pr=(pr+pr0+1)>>1;
-}
+    // SSE Stage
+    pr=sse.p(pr);
+  }
+};
 
 //////////////////////////// Encoder ////////////////////////////
 
@@ -8737,15 +11476,15 @@ private:
     assert(p>0 && p<4096);
     U32 xmid=x1 + ((x2-x1)>>12)*p + (((x2-x1)&0xfff)*p>>12);
     assert(xmid>=x1 && xmid<x2);
-    if (mode==DECOMPRESS) y=x<=xmid; else y=i;
+    U8 y = (mode==DECOMPRESS) ? x<=xmid : i;
     y ? (x2=xmid) : (x1=xmid+1);
-    predictor.update();
     while (((x1^x2)&0xff000000)==0) {  // pass equal leading bytes of range
       if (mode==COMPRESS) archive->putchar(x2>>24);
       x1<<=8;
       x2=(x2<<8)+255;
       if (mode==DECOMPRESS) x=(x<<8)+(archive->getchar()&255);  // EOF is OK
     }
+    predictor.update(y);
     return y;
   }
 
@@ -8784,30 +11523,34 @@ public:
 
   void encode_blocksize(U64 blocksize) {
     //TODO: Large file support
-    compress((blocksize>>24)&0xFF);
-    compress((blocksize>>16)&0xFF);
-    compress((blocksize>>8)&0xFF);
-    compress((blocksize)&0xFF);
+    while (blocksize>0x7F) {
+      compress(0x80|(blocksize&0x7F));
+      blocksize>>=7;
+    }
+    compress(U8(blocksize));
   }
 
   U64 decode_blocksize() {
     //TODO: Large file support
     U64 blocksize=0;
-    blocksize =U64(decompress())<<24;
-    blocksize|=U64(decompress())<<16;
-    blocksize|=U64(decompress())<<8;
-    blocksize|=U64(decompress());
+    U8 B=0;
+    int i=0;
+    do {
+      B=decompress();
+      blocksize|=U64((B&0x7F)<<i);
+      i+=7;
+    } while ((B>>7)>0);
     return blocksize;
   }
 
   void set_status_range(float perc1, float perc2) { p1=perc1; p2=perc2; }
   void print_status(U64 n, U64 size) {
-    if (to_screen)
-      printf("%6.2f%%\b\b\b\b\b\b\b", (p1+(p2-p1)*n/(size+1))*100), fflush(stdout);
+    fprintf(stderr,"%6.2f%%\b\b\b\b\b\b\b", (p1+(p2-p1)*n/(size+1))*100);
+    fflush(stderr);
   }
   void print_status() {
-    if (to_screen)
-      printf("%6.2f%%\b\b\b\b\b\b\b", float(size())/(p2+1)*100), fflush(stdout);
+    fprintf(stderr,"%6.2f%%\b\b\b\b\b\b\b", float(size())/(p2+1)*100);
+    fflush(stderr);
   }
 };
 
@@ -8817,7 +11560,7 @@ Encoder::Encoder(Mode m, File *f):
     U64 start=size();
     archive->setend();
     U64 end=size();
-    if (end>=(1u<<31))quit("Large archives not yet supported.");
+    if (end>=(UINT64_C(1)<<31))quit("Large archives not yet supported.");
     set_status_range(0.0, (float)end);
     archive->setpos(start);
   }
@@ -8825,9 +11568,6 @@ Encoder::Encoder(Mode m, File *f):
     for (int i=0; i<4; ++i)
       x=(x<<8)+(archive->getchar()&255);
   }
-  for (int i=0; i<1024; ++i)
-    dt[i]=16384/(i+i+3);
-
 }
 
 void Encoder::flush() {
@@ -8879,11 +11619,7 @@ void Encoder::flush() {
 //
 // decodes one byte from en and returns it.  decode() and decode_X()
 // maintain state information using static variables.
-#define bswap(x) \
-+   ((((x) & 0xff000000) >> 24) | \
-+    (((x) & 0x00ff0000) >>  8) | \
-+    (((x) & 0x0000ff00) <<  8) | \
-+    (((x) & 0x000000ff) << 24))
+
 
 #define IMG_DET(type,start_pos,header_len,width,height) return dett=(type),\
 deth=(header_len),detd=(width)*(height),info=(width),\
@@ -8951,7 +11687,7 @@ int expand_cd_sector(U8 *data, int address, int test) {
   eccedc_init();
   //sync pattern: 00 FF FF FF FF FF FF FF FF FF FF 00
   d2[0]=d2[11]=0;
-  for (int i=1; i<11; i++) d2[i]=255; 
+  for (int i=1; i<11; i++) d2[i]=255;
   //determine Mode and Form
   int mode=(data[15]!=1?2:1);
   int form=(data[15]==3?2:1);
@@ -8976,7 +11712,7 @@ int expand_cd_sector(U8 *data, int address, int test) {
       d2[1]=d2[12],d2[2]=d2[13],d2[3]=d2[14];
       d2[12]=d2[13]=d2[14]=d2[15]=0;
     } else {
-      for(int i=2068; i<2076; i++) d2[i]=0; //Mode1: reserved 8 (zero) bytes 
+      for(int i=2068; i<2076; i++) d2[i]=0; //Mode1: reserved 8 (zero) bytes
     }
     for (int i=16+8*(mode==2); i<2064+8*(mode==2); i++) d2[i]=data[i]; //data bytes
     U32 edc=edc_compute(d2+16*(mode==2), 2064-8*(mode==2));
@@ -9026,25 +11762,77 @@ bool IsGrayscalePalette(File *in, int n = 256, int isRGBA = 0){
     }
     if (!i) {
       res = 0x100|b;
-      order = 1-2*(b>0);
+      order = 1-2*(b>int(ilog2(n)/4));
       continue;
     }
-
     //"j" is the index of the current byte in this color entry
     int j = i%stride;
     if (!j){
       // load first component of this entry
-      res = (res&((b-(res&0xFF)==order)<<8));
+      int k = (b-(res&0xFF))*order;
+      res = res&((k>=0 && k<=8)<<8);
       res|=(res)?b:0;
     }
     else if (j==3)
       res&=((!b || (b==0xFF))*0x1FF); // alpha/attribute component must be zero or 0xFF
     else
-      res&=((b==(res&0xFF))<<9)-1;
+      res&=((b==(res&0xFF))*0x1FF);
   }
   in->setpos(offset);
   return (res>>8)>0;
 }
+
+
+#define TEXT_MIN_SIZE 1500   // size of minimum allowed text block (in bytes)
+#define TEXT_MAX_MISSES 2    // threshold: max allowed number of invalid UTF8 sequences seen recently before reporting "fail"
+#define TEXT_ADAPT_RATE 256  // smaller (like 32) = illegal sequences are allowed to come more often, larger (like 1024) = more rigorous detection
+
+struct TextParserStateInfo {
+  Array<U64> _start;
+  Array<U64> _end;      // position of last char with a valid UTF8 state: marks the end of the detected TEXT block
+  Array<U32> _EOLType;  // 0: none or CR-only;   1: CRLF-only (applicable to EOL transform);   2: mixed or LF-only
+  U32 invalidCount;     // adaptive count of invalid UTF8 sequences seen recently
+  U32 UTF8State;        // state of utf8 parser; 0: valid;  12: invalid;  any other value: yet uncertain (more bytes must be read)
+  TextParserStateInfo(): _start(0), _end(0), _EOLType(0) {}
+  void reset(U64 startpos) {
+    _start.resize(1);
+    _end.resize(1);
+    _start[0]=startpos;
+    _end[0]=startpos-1;
+    _EOLType.resize(1);
+    _EOLType[0]=0;
+    invalidCount=0;
+    UTF8State=0;
+  }
+  U64 start(){return _start[_start.size()-1];}
+  U64 end(){return _end[_end.size()-1];}
+  void setend(U64 end){_end[_end.size()-1]=end;}
+  U32 EOLType(){return _EOLType[_EOLType.size()-1];}
+  void setEOLType(U32 EOLType){_EOLType[_EOLType.size()-1]=EOLType;}
+  U64 validlength(){return end() - start() + 1;}
+  void next(U64 startpos) {
+    _start.push_back(startpos);
+    _end.push_back(startpos-1);
+    _EOLType.push_back(0);
+    invalidCount=0;
+    UTF8State=0;
+  }
+  void removefirst() {
+    if(_start.size()==1)
+      reset(0);
+    else {
+      for(int i=0;i<(int)_start.size()-1;i++){
+        _start[i]=_start[i+1];
+        _end[i]=_end[i+1];
+        _EOLType[i]=_EOLType[i+1];
+      }
+      _start.pop_back();
+      _end.pop_back();
+      _EOLType.pop_back();
+    }
+  }
+} textparser;
+
 
 // Detect blocks
 Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
@@ -9061,15 +11849,16 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
   int e8e9last=0;   // offset of most recent CALL or JMP
 
   int soi=0, sof=0, sos=0, app=0;  // For JPEG detection - position where found
-#ifdef USE_WAVMODEL
+#ifdef USE_AUDIOMODEL
   int wavi=0,wavsize=0,wavch=0,wavbps=0,wavm=0,wavtype=0,wavlen=0,wavlist=0;  // For WAVE detection
   int aiff=0,aiffm=0,aiffs=0;  // For AIFF detection
   int s3mi=0,s3mno=0,s3mni=0;  // For S3M detection
-#endif //  USE_WAVMODEL
-  int bmp=0,imgbpp=0,bmpx=0,bmpy=0,bmpof=0,bmps=0,hdrless=0;  // For BMP detection
+#endif //  USE_AUDIOMODEL
+  U32 bmpi=0,dibi=0,imgbpp=0,bmpx=0,bmpy=0,bmpof=0,bmps=0,n_colors=0;  // For BMP detection
   int rgbi=0,rgbx=0,rgby=0;  // For RGB detection
   int tga=0,tgax=0,tgay=0,tgaz=0,tgat=0,tgaid=0,tgamap=0;  // For TGA detection
-  int pgm=0,pgmcomment=0,pgmw=0,pgmh=0,pgm_ptr=0,pgmc=0,pgmn=0,pamatr=0,pamd=0;  // For PBM, PGM, PPM, PAM detection
+  // ascii images are currently not supported
+  int pgm=0,pgmcomment=0,pgmw=0,pgmh=0,pgm_ptr=0,pgmc=0,pgmn=0,pamatr=0,pamd=0,pgmdata=0,pgmdatasize=0;  // For PBM, PGM, PPM, PAM detection
   char pgm_buf[32];
   int cdi=0,cda=0,cdm=0;  // For CD sectors detection
   U32 cdf=0;
@@ -9077,15 +11866,16 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
   int zbufpos=0,zzippos=-1, histogram[256]={0};
   int pdfim=0,pdfimw=0,pdfimh=0,pdfimb=0,pdfgray=0,pdfimp=0;
   int b64s=0,b64i=0,b64line=0,b64nl=0; // For base64 detection
-  int gif=0,gifa=0,gifi=0,gifw=0,gifc=0,gifb=0,gifplt=0,gifgray=0; // For GIF detection
+  int gif=0,gifa=0,gifi=0,gifw=0,gifc=0,gifb=0,gifplt=0; // For GIF detection
+  static int gifgray=0;
   int png=0, pngw=0, pngh=0, pngbps=0, pngtype=0, pnggray=0, lastchunk=0, nextchunk=0; // For PNG detection
-
   // For image detection
   static int deth=0,detd=0;  // detected header/data size in bytes
   static Blocktype dett;  // detected block type
   if (deth) {in->setpos(start+deth);deth=0;return dett;}
-  else if (detd) {in->setpos(start+detd);detd=0;return DEFAULT;}
+  else if (detd) {in->setpos(start+min(blocksize, (U64)detd));detd=0;return DEFAULT;}
 
+  textparser.reset(0);
   for (int i=0; i<n; ++i) {
     int c=in->getchar();
     if (c==EOF) return (Blocktype)(-1);
@@ -9167,7 +11957,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
       }
       if (ret) {
         // Verify valid stream and determine stream length
-        U64 savedpos=in->curpos();
+        const U64 savedpos=in->curpos();
         strm.zalloc=Z_NULL; strm.zfree=Z_NULL; strm.opaque=Z_NULL;
         strm.next_in=Z_NULL; strm.avail_in=0; strm.total_in=strm.total_out=0;
         if (zlib_inflateInit(&strm,zh)==Z_OK) {
@@ -9213,8 +12003,8 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
         if (nlen<256 && i+30+nlen<n) zzippos=i+30+nlen;
     }
     #endif //USE_ZLIB
-    
-    if (i-pdfimp>1024) pdfim=pdfimw=pdfimh=pdfimb=pdfgray=0;
+
+    if (i-pdfimp>1024) pdfim=pdfimw=pdfimh=pdfimb=pdfgray=0; // fail
     if (pdfim>1 && !(isspace(c) || isdigit(c))) pdfim=1;
     if (pdfim==2 && isdigit(c)) pdfimw=pdfimw*10+(c-'0');
     if (pdfim==3 && isdigit(c)) pdfimh=pdfimh*10+(c-'0');
@@ -9233,7 +12023,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
       if (p==8 && (buf1!=0xffffff00 || ((buf0&0xff)!=1 && (buf0&0xff)!=2))) cdi=0;
       else if (p==16 && i+2336<n) {
         U8 data[2352];
-        U64 savedpos=in->curpos();
+        const U64 savedpos=in->curpos();
         in->setpos(start+i-23);
         in->blockread(data, 2352);
         in->setpos(savedpos);
@@ -9271,45 +12061,45 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
     }
     if (type==JPEG && sos && i>sos && (buf0&0xff00)==0xff00
         && (buf0&0xff)!=0 && (buf0&0xf8)!=0xd0) return DEFAULT;
-#ifdef USE_WAVMODEL
+#ifdef USE_AUDIOMODEL
     // Detect .wav file header
-    if (buf0==0x52494646) wavi=i,wavm=wavlen=0;
+    if (buf0==0x52494646) wavi=i,wavm=wavlen=0; //"RIFF"
     if (wavi) {
       int p=i-wavi;
-      if (p==4) wavsize=bswap(buf0);
+      if (p==4) wavsize=bswap(buf0); //filesize
       else if (p==8){
-        wavtype=(buf0==0x57415645)?1:(buf0==0x7366626B)?2:0;
+        wavtype=(buf0==0x57415645 /*WAVE*/)?1:(buf0==0x7366626B /*sfbk*/)?2:0; 
         if (!wavtype) wavi=0;
       }
       else if (wavtype){
         if (wavtype==1) {
-          if (p==16+wavlen && (buf1!=0x666d7420 || bswap(buf0)!=16)) wavlen=((bswap(buf0)+1)&(-2))+8, wavi*=(buf1==0x666d7420 && bswap(buf0)!=16);
-          else if (p==22+wavlen) wavch=bswap(buf0)&0xffff;
-          else if (p==34+wavlen) wavbps=bswap(buf0)&0xffff;
-          else if (p==40+wavlen+wavm && buf1!=0x64617461) wavm+=((bswap(buf0)+1)&(-2))+8,wavi=(wavm>0xfffff?0:wavi);
+          if (p==16+wavlen && (buf1!=0x666d7420 /*"fmt "*/|| ((wavm=bswap(buf0)-16)&0xFFFFFFFD)!=0)) wavlen=((bswap(buf0)+1)&(-2))+8, wavi*=(buf1==0x666d7420 /*"fmt "*/ && (wavm&0xFFFFFFFD)!=0);
+          else if (p==22+wavlen) wavch=bswap(buf0)&0xffff; // number of channels: 1 or 2
+          else if (p==34+wavlen) wavbps=bswap(buf0)&0xffff; // bits per smaple: 8 or 16
+          else if (p==40+wavlen+wavm && buf1!=0x64617461 /*"data"*/) wavm+=((bswap(buf0)+1)&(-2))+8,wavi=(wavm>0xfffff?0:wavi);
           else if (p==40+wavlen+wavm) {
-            int wavd=bswap(buf0);
+            int wavd=bswap(buf0); // size of data section
             wavlen=0;
             if ((wavch==1 || wavch==2) && (wavbps==8 || wavbps==16) && wavd>0 && wavsize>=wavd+36
-               && wavd%((wavbps/8)*wavch)==0) AUD_DET(AUDIO,wavi-3,44+wavm,wavd,wavch+wavbps/4-3);
+               && wavd%((wavbps/8)*wavch)==0) AUD_DET((wavbps==8)?AUDIO:AUDIO_LE,wavi-3,44+wavm,wavd,wavch+wavbps/4-3);
             wavi=0;
           }
         }
         else{
-          if ((p==16 && buf1!=0x4C495354) || (p==20 && buf0!=0x494E464F))
+          if ((p==16 && buf1!=0x4C495354 /*LIST*/) || (p==20 && buf0!=0x494E464F /*INFO*/))
             wavi=0;
-          else if (p>20 && buf1==0x4C495354 && (wavi*=(buf0!=0))){
+          else if (p>20 && buf1==0x4C495354 /*LIST*/ && (wavi*=(buf0!=0))){
             wavlen = bswap(buf0);
             wavlist = i;
           }
           else if (wavlist){
             p=i-wavlist;
-            if (p==8 && (buf1!=0x73647461 || buf0!=0x736D706C))
+            if (p==8 && (buf1!=0x73647461 /*sdta*/ || buf0!=0x736D706C /*smpl*/))
               wavi=0;
             else if (p==12){
               int wavd = bswap(buf0);
               if (wavd && (wavd+12)==wavlen)
-                AUD_DET(AUDIO,wavi-3,(12+wavlist-(wavi-3)+1)&~1,wavd,1+16/4-3);
+                AUD_DET(AUDIO_LE,wavi-3,(12+wavlist-(wavi-3)+1)&~1,wavd,1+16/4-3 /*mono, 16-bit*/);
               wavi=0;
             }
           }
@@ -9324,7 +12114,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
       if (p==12 && (buf1!=0x41494646 || buf0!=0x434f4d4d)) aiff=0; // AIFF COMM
       else if (p==24) {
         const int bits=buf0&0xffff, chn=buf1>>16;
-        if ((bits==8 || bits==16) && (chn==1 || chn==2)) aiffm=chn+bits/4+1; else aiff=0;
+        if ((bits==8 || bits==16) && (chn==1 || chn==2)) aiffm=chn+bits/4-3+4; else aiff=0;
       } else if (p==42+aiffs && buf1!=0x53534e44) aiffs+=(buf0+8)+(buf0&1),aiff=(aiffs>0x400?0:aiff);
       else if (p==42+aiffs) AUD_DET(AUDIO,aiff-3,54+aiffs,buf0-8,aiffm);
     }
@@ -9332,7 +12122,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
     // Detect .mod file header
     if ((buf0==0x4d2e4b2e || buf0==0x3643484e || buf0==0x3843484e  // M.K. 6CHN 8CHN
        || buf0==0x464c5434 || buf0==0x464c5438) && (buf1&0xc0c0c0c0)==0 && i>=1083) {
-      U64 savedpos=in->curpos();
+      const U64 savedpos=in->curpos();
       const int chn=((buf0>>24)==0x36?6:(((buf0>>24)==0x38 || (buf0&0xff)==0x38)?8:4));
       int len=0; // total length of samples
       int numpat=1; // number of patterns
@@ -9347,18 +12137,21 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
         int x=in->getchar();
         if (x+1>numpat) numpat=x+1;
       }
-      if (numpat<65) AUD_DET(AUDIO,i-1083,1084+numpat*256*chn,len,4);
+      if (numpat<65) AUD_DET(AUDIO,i-1083,1084+numpat*256*chn,len,4 /*mono, 8-bit*/);
       in->setpos(savedpos);
     }
 
     // Detect .s3m file header
-    if (buf0==0x1a100000) s3mi=i,s3mno=s3mni=0;
+    if (buf0==0x1a100000) s3mi=i,s3mno=s3mni=0; //0x1A: signature byte, 0x10: song type, 0x0000: reserved
     if (s3mi) {
       const int p=i-s3mi;
-      if (p==4) s3mno=bswap(buf0)&0xffff,s3mni=(bswap(buf0)>>16);
-      else if (p==16 && (((buf1>>16)&0xff)!=0x13 || buf0!=0x5343524d)) s3mi=0;
+      if (p==4) {
+        s3mno=bswap(buf0)&0xffff; //Number of entries in the order table, should be even 
+        s3mni=(bswap(buf0)>>16);  //Number of instruments in the song
+      }
+      else if (p==16 && (((buf1>>16)&0xff)!=0x13 || buf0!=0x5343524d /*SCRM*/)) s3mi=0;
       else if (p==16) {
-        U64 savedpos=in->curpos();
+        const U64 savedpos=in->curpos();
         int b[31],sam_start=(1<<16),sam_end=0,ok=1;
         for (int j=0;j<s3mni;j++) {
           in->setpos(start+s3mi-31+0x60+s3mno+j*2);
@@ -9375,30 +12168,42 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
             if (ofs*16+len>sam_end) sam_end=ofs*16+len;
           }
         }
-        if (ok && sam_start<(1<<16)) AUD_DET(AUDIO,s3mi-31,sam_start,sam_end-sam_start,0);
+        if (ok && sam_start<(1<<16)) AUD_DET(AUDIO,s3mi-31,sam_start,sam_end-sam_start,0 /*mono, 8-bit*/);
         s3mi=0;
         in->setpos(savedpos);
       }
     }
-#endif //  USE_WAVMODEL
+#endif //  USE_AUDIOMODEL
+    
     // Detect .bmp image
-    if ( !(bmp || hdrless) && (((buf0&0xffff)==16973) || (!(buf0&0xFFFFFF) && ((buf0>>24)==0x28))) ) //possible 'BM' or headerless DIB
-      imgbpp=bmpx=bmpy=0,hdrless=!(U8)buf0,bmpof=hdrless*54,bmp=i-hdrless*16;
-    if (bmp || hdrless) {
-      const int p=i-bmp;
-      if (p==12) bmpof=bswap(buf0);
-      else if (p==16 && buf0!=0x28000000) bmp=hdrless=0; //BITMAPINFOHEADER (0x28)
-      else if (p==20) bmpx=bswap(buf0),bmp=((bmpx==0||bmpx>0x30000)?(hdrless=0):bmp); //width
-      else if (p==24) bmpy=abs((int)bswap(buf0)),bmp=((bmpy==0||bmpy>0x10000)?(hdrless=0):bmp); //height
-      else if (p==27) imgbpp=c,bmp=((imgbpp!=1 && imgbpp!=4 && imgbpp!=8 && imgbpp!=24 && imgbpp!=32)?(hdrless=0):bmp);
-      else if ((p==31) && buf0) bmp=hdrless=0;
-      else if (p==36) bmps=bswap(buf0);
-      // check number of colors in palette (4 bytes), must be 0 (default) or <= 1<<bpp.
-      // also check if image is too small, since it might not be worth it to use the image models
-      else if (p==48){
-        if ( (!buf0 || ((bswap(buf0)<=(U32)(1<<imgbpp)) && (imgbpp<=8))) && (((bmpx*bmpy*imgbpp)>>3)>64) ) {
-          // possible icon/cursor?
-          if (hdrless && (bmpx*2==bmpy) && imgbpp>1 &&
+    if (!bmpi && !dibi) {
+      if((buf0&0xffff)==16973) { // 'BM'
+        bmpi=i; // header start: bmpi-1
+        dibi=i-1+18; // we expect a DIB header to come
+      }
+      else if ((buf0==0x28000000))  // headerless (DIB-only)
+        dibi=i+1;
+    }
+    else {
+      const U32 p=i-dibi+1+18;
+           if (p==10+4) bmpof=bswap(buf0),bmpi=(bmpof<54 || start+blocksize<bmpi-1+bmpof)?(dibi=0):bmpi; //offset of pixel data (this field is still located in the BMP Header)
+      else if (p==14+4 && buf0!=0x28000000) bmpi=dibi=0; //BITMAPINFOHEADER (0x28)
+      else if (p==18+4) bmpx=bswap(buf0),bmpi=(((bmpx&0xff000000)!=0 || bmpx==0)?(dibi=0):bmpi); //width
+      else if (p==22+4) bmpy=abs(int(bswap(buf0))),bmpi=(((bmpy&0xff000000)!=0 || bmpy==0)?(dibi=0):bmpi); //height
+      else if (p==26+2) bmpi=((bswap(buf0<<16))!=1)?(dibi=0):bmpi; //number of color planes (must be 1)
+      else if (p==28+2) imgbpp=bswap(buf0<<16),bmpi=((imgbpp!=1 && imgbpp!=4 && imgbpp!=8 && imgbpp!=24 && imgbpp!=32)?(dibi=0):bmpi); //color depth
+      else if (p==30+4) bmpi=((buf0!=0)?(dibi=0):bmpi); //compression method must be: BI_RGB (uncompressed)
+      else if (p==34+4) bmps=bswap(buf0); //image size or 0
+    //else if (p==38+4) ; // the horizontal resolution of the image (ignored)
+    //else if (p==42+4) ; // the vertical resolution of the image (ignored)
+      else if (p==46+4) { 
+        n_colors=bswap(buf0); // the number of colors in the color palette, or 0 to default to (1<<imgbpp)
+        if(n_colors==0 && imgbpp<=8) n_colors=1<<imgbpp;
+        if(n_colors>(1u<<imgbpp) || (imgbpp>8 && n_colors>0))bmpi=dibi=0;
+      }
+      else if (p==50+4) { //the number of important colors used
+        if (bswap(buf0)<=n_colors || bswap(buf0)==0x10000000) {
+          if (bmpi==0 /*headerless*/ && (bmpx*2==bmpy) && imgbpp>1 && // possible icon/cursor?
              (
               (bmps>0 && bmps==( (bmpx*bmpy*(imgbpp+1))>>4 )) ||
               ((!bmps || bmps<((bmpx*bmpy*imgbpp)>>3)) && (
@@ -9411,63 +12216,90 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
           )
             bmpy=bmpx;
 
-          // if DIB and not 24bpp, we must calculate the data offset based on BPP or num. of entries in color palette
-          if (hdrless && (imgbpp<24))
-            bmpof+=((buf0)?bswap(buf0)*4:4<<imgbpp);
-          bmpof+=(bmp-1)*(bmp<1);
-
-          if (hdrless && bmps && bmps<((bmpx*bmpy*imgbpp)>>3)) { /*Guard against erroneous DIB detections*/ }
-          else if (imgbpp==1) IMG_DET(IMAGE1,max(0,bmp-1),bmpof,(((bmpx-1)>>5)+1)*4,bmpy);
-          else if (imgbpp==4) IMG_DET(IMAGE4,max(0,bmp-1),bmpof,((bmpx*4+31)>>5)*4,bmpy);
-          else if (imgbpp==8){
-            in->setpos(start+bmp+53);
-            IMG_DET( (IsGrayscalePalette(in, (buf0)?bswap(buf0):1<<imgbpp, 1))?IMAGE8GRAY:IMAGE8,max(0,bmp-1),bmpof,(bmpx+3)&-4,bmpy);
+          Blocktype blocktype=DEFAULT;
+          U32 width_in_bytes=0;
+          if      (imgbpp==1)  {blocktype=IMAGE1; width_in_bytes=(((bmpx-1)>>5)+1)*4;}
+          else if (imgbpp==4)  {blocktype=IMAGE4; width_in_bytes=((bmpx*4+31)>>5)*4;}
+          else if (imgbpp==8)  {blocktype=IMAGE8; width_in_bytes=(bmpx+3)&-4;}
+          else if (imgbpp==24) {blocktype=IMAGE24;width_in_bytes=((bmpx*3)+3)&-4;}
+          else if (imgbpp==32) {blocktype=IMAGE32;width_in_bytes=bmpx*4;}
+          
+          if (imgbpp==8){
+            const U64 color_palette_pos=dibi-18+54;
+            const U64 savedpos=in->curpos();
+            in->setpos(color_palette_pos);
+            if(IsGrayscalePalette(in, n_colors, 1)) blocktype=IMAGE8GRAY;
+            in->setpos(savedpos);
           }
-          else if (imgbpp==24) IMG_DET(IMAGE24,max(0,bmp-1),bmpof,((bmpx*3)+3)&-4,bmpy);
-          else if (imgbpp==32) IMG_DET(IMAGE32,max(0,bmp-1),bmpof,bmpx*4,bmpy);
+
+          const U32 headerpos=bmpi>0 ? bmpi-1 : dibi-4;
+          const U32 minheadersize=(bmpi>0 ? 54: 54-14)+n_colors*4;
+          const U32 headersize= bmpi>0 ? bmpof : minheadersize;
+          
+          // some final sanity checks
+          if(bmps!=0 && bmps<width_in_bytes*bmpy) { /*printf("\nBMP guard: image is larger than reported in header\n",bmps,width_in_bytes*bmpy);*/ }
+          else if(start+blocksize<headerpos+headersize+width_in_bytes*bmpy) {/*printf("\nBMP guard: cropped data\n");*/ }
+          else if(headersize==(bmpi>0 ? 54: 54-14) && n_colors>0) { /*printf("\nBMP guard: missing palette\n");*/ }
+          else if(bmpi>0 && bmpof<minheadersize) { /*printf("\nBMP guard: overlapping color palette\n");*/ }
+          else if(bmpi>0 && U64(bmpi)-1+bmpof+width_in_bytes*bmpy>start+blocksize) { /*printf("\nBMP guard: reported pixel data offset is incorrect\n");*/ }
+          else if(width_in_bytes*bmpy<=64){ /*printf("\nBMP guard: too small\n");*/ }  // too small - not worthy to use the image models
+          else IMG_DET(blocktype,headerpos,headersize,width_in_bytes,bmpy);
         }
-        bmp=hdrless=0;
+        bmpi=dibi=0;
       }
     }
 
-    // Detect .pbm .pgm .ppm .pam image
-    if ((buf0&0xfff0ff)==0x50300a) { //"P0"
-      pgmn=(buf0&0xf00)>>8;
-      if ((pgmn>=4 && pgmn<=6) || pgmn==7) pgm=i,pgm_ptr=pgmw=pgmh=pgmc=pgmcomment=pamatr=pamd=0;
+    // Detect binary .pbm .pgm .ppm .pam images
+    if ((buf0&0xfff0ff)==0x50300a) { //"Px" + line feed, where "x" shall be a number
+      pgmn=(buf0&0xf00)>>8; // extract "x"
+      if ((pgmn>=4 && pgmn<=6) || pgmn==7) pgm=i,pgm_ptr=pgmw=pgmh=pgmc=pgmcomment=pamatr=pamd=pgmdata=pgmdatasize=0; // "P4" (pbm), "P5" (pgm), "P6" (ppm), "P7" (pam)
     }
     if (pgm) {
-      if (i-pgm==1 && c==0x23) pgmcomment=1; //pgm comment
-      if (!pgmcomment && pgm_ptr) {
-        int s=0;
-        if (pgmn==7) {
-           if ((buf1&0xdfdf)==0x5749 && (buf0&0xdfdfdfff)==0x44544820) pgm_ptr=0, pamatr=1; // WIDTH
-           if ((buf1&0xdfdfdf)==0x484549 && (buf0&0xdfdfdfff)==0x47485420) pgm_ptr=0, pamatr=2; // HEIGHT
-           if ((buf1&0xdfdfdf)==0x4d4158 && (buf0&0xdfdfdfff)==0x56414c20) pgm_ptr=0, pamatr=3; // MAXVAL
-           if ((buf1&0xdfdf)==0x4445 && (buf0&0xdfdfdfff)==0x50544820) pgm_ptr=0, pamatr=4; // DEPTH
-           if ((buf2&0xdf)==0x54 && (buf1&0xdfdfdfdf)==0x55504c54 && (buf0&0xdfdfdfff)==0x59504520) pgm_ptr=0, pamatr=5; // TUPLTYPE
-           if ((buf1&0xdfdfdf)==0x454e44 && (buf0&0xdfdfdfff)==0x4844520a) pgm_ptr=0, pamatr=6; // ENDHDR
-           if (c==0x0a) {
-             if (pamatr==0) pgm=0;
-             else if (pamatr<5) s=pamatr;
-             if (pamatr!=6) pamatr=0;
-           }
-        } else if (c==0x20 && !pgmw) s=1;
-        else if (c==0x0a && !pgmh) s=2;
-        else if (c==0x0a && !pgmc && pgmn!=4) s=3;
-        if (s) {
-          pgm_buf[pgm_ptr++]=0;
-          int v=atoi(pgm_buf);
-          if (s==1) pgmw=v; else if (s==2) pgmh=v; else if (s==3) pgmc=v; else if (s==4) pamd=v;
-          if (v==0 || (s==3 && v>255)) pgm=0; else pgm_ptr=0;
+      if (pgmdata==0) { // parse header
+        if (i-pgm==1 && c==0x23) pgmcomment=1; // # (pgm comment)
+        if (!pgmcomment && pgm_ptr) {
+          int s=0;
+          if (pgmn==7) {
+             if ((buf1&0xdfdf)==0x5749 && (buf0&0xdfdfdfff)==0x44544820) pgm_ptr=0, pamatr=1; // WIDTH
+             if ((buf1&0xdfdfdf)==0x484549 && (buf0&0xdfdfdfff)==0x47485420) pgm_ptr=0, pamatr=2; // HEIGHT
+             if ((buf1&0xdfdfdf)==0x4d4158 && (buf0&0xdfdfdfff)==0x56414c20) pgm_ptr=0, pamatr=3; // MAXVAL
+             if ((buf1&0xdfdf)==0x4445 && (buf0&0xdfdfdfff)==0x50544820) pgm_ptr=0, pamatr=4; // DEPTH
+             if ((buf2&0xdf)==0x54 && (buf1&0xdfdfdfdf)==0x55504c54 && (buf0&0xdfdfdfff)==0x59504520) pgm_ptr=0, pamatr=5; // TUPLTYPE
+             if ((buf1&0xdfdfdf)==0x454e44 && (buf0&0xdfdfdfff)==0x4844520a) pgm_ptr=0, pamatr=6; // ENDHDR
+             if (c==0x0a) {
+               if (pamatr==0) pgm=0;
+               else if (pamatr<5) s=pamatr;
+               if (pamatr!=6) pamatr=0;
+             }
+          } else if (c==0x20 && !pgmw) s=1;
+          else if (c==0x0a && !pgmh) s=2;
+          else if (c==0x0a && !pgmc && pgmn!=4) s=3;
+          if (s) {
+            pgm_buf[pgm_ptr++]=0;
+            int v=atoi(pgm_buf); // parse width/height/depth/maxval value
+            if (s==1) pgmw=v; else if (s==2) pgmh=v; else if (s==3) pgmc=v; else if (s==4) pamd=v;
+            if (v==0 || (s==3 && v>255)) pgm=0; else pgm_ptr=0;
+          }
         }
+        if (!pgmcomment) pgm_buf[pgm_ptr++]=c;
+        if (pgm_ptr>=32) pgm=0;
+        if (pgmcomment && c==0x0a) pgmcomment=0;
+        if (pgmw && pgmh && !pgmc && pgmn==4) {pgmdata=i;pgmdatasize=(pgmw+7)/8*pgmh;}
+        if (pgmw && pgmh && pgmc && (pgmn==5 || (pgmn==7 && pamd==1 && pamatr==6))) {pgmdata=i;pgmdatasize=pgmw*pgmh;}
+        if (pgmw && pgmh && pgmc && (pgmn==6 || (pgmn==7 && pamd==3 && pamatr==6))) {pgmdata=i;pgmdatasize=pgmw*3*pgmh;}
+        if (pgmw && pgmh && pgmc && (pgmn==7 && pamd==4 && pamatr==6)) {pgmdata=i;pgmdatasize=pgmw*4*pgmh;}
       }
-      if (!pgmcomment) pgm_buf[pgm_ptr++]=c;
-      if (pgm_ptr>=32) pgm=0;
-      if (pgmcomment && c==0x0a) pgmcomment=0;
-      if (pgmw && pgmh && !pgmc && pgmn==4) IMG_DET(IMAGE1,pgm-2,i-pgm+3,(pgmw+7)/8,pgmh);
-      if (pgmw && pgmh && pgmc && (pgmn==5 || (pgmn==7 && pamd==1 && pamatr==6))) IMG_DET(IMAGE8GRAY,pgm-2,i-pgm+3,pgmw,pgmh);
-      if (pgmw && pgmh && pgmc && (pgmn==6 || (pgmn==7 && pamd==3 && pamatr==6))) IMG_DET(IMAGE24,pgm-2,i-pgm+3,pgmw*3,pgmh);
-      if (pgmw && pgmh && pgmc && (pgmn==7 && pamd==4 && pamatr==6)) IMG_DET(IMAGE32,pgm-2,i-pgm+3,pgmw*4,pgmh);
+      else { // pixel data
+        if(textparser.start()==U32(i) ||         // for any sign of non-text data in pixel area
+           (pgm-2==0 && n-pgmdatasize==i))        // or the image is the whole file/block -> finish (success)
+        {
+          if (pgmw && pgmh && !pgmc && pgmn==4) IMG_DET(IMAGE1,pgm-2,pgmdata-pgm+3,(pgmw+7)/8,pgmh);
+          if (pgmw && pgmh && pgmc && (pgmn==5 || (pgmn==7 && pamd==1 && pamatr==6))) IMG_DET(IMAGE8GRAY,pgm-2,pgmdata-pgm+3,pgmw,pgmh);
+          if (pgmw && pgmh && pgmc && (pgmn==6 || (pgmn==7 && pamd==3 && pamatr==6))) IMG_DET(IMAGE24,pgm-2,pgmdata-pgm+3,pgmw*3,pgmh);
+          if (pgmw && pgmh && pgmc && (pgmn==7 && pamd==4 && pamatr==6)) IMG_DET(IMAGE32,pgm-2,pgmdata-pgm+3,pgmw*4,pgmh);
+        }
+        else if((--pgmdatasize)==0)pgm=0; // all data was probably text in pixel area: fail
+      }
     }
 
     // Detect .rgb image
@@ -9488,12 +12320,12 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
 
     // Detect .tiff file header (2/8/24 bit color, not compressed).
     if (buf1==0x49492a00 && n>i+(int)bswap(buf0)) {
-      U64 savedpos=in->curpos();
+      const U64 savedpos=in->curpos();
       in->setpos(start+i+ (U64)bswap(buf0)-7);
 
       // read directory
       int dirsize=in->getchar();
-      int tifx=0,tify=0,tifz=0,tifzb=0,tifc=0,tifofs=0,tifofval=0,b[12];
+      int tifx=0,tify=0,tifz=0,tifzb=0,tifc=0,tifofs=0,tifofval=0,tifsize=0,b[12];
       if (in->getchar()==0) {
         for (int i=0; i<dirsize; i++) {
           for (int j=0; j<12; j++) b[j]=in->getchar();
@@ -9509,40 +12341,86 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
             else if (tag==259) tifc=tagval; // 1 = no compression
             else if (tag==273 && tagfmt==4) tifofs=tagval,tifofval=(taglen<=1);
             else if (tag==277) tifz=tagval; // components per pixel
+            else if (tag==279 && taglen==1) tifsize=tagval;
           }
         }
       }
-      if (tifx && tify && tifzb && (tifz==1 || tifz==3) && (tifc==1) && (tifofs && tifofs+i<n)) {
+      if (tifx && tify && tifzb && (tifz==1 || tifz==3) && ((tifc==1) || (tifc==5/*LZW*/ && tifsize>0)) && (tifofs && tifofs+i<n)) {
         if (!tifofval) {
           in->setpos(start+i+tifofs-7);
           for (int j=0; j<4; j++) b[j]=in->getchar();
           tifofs=b[0]+(b[1]<<8)+(b[2]<<16)+(b[3]<<24);
         }
         if (tifofs && tifofs<(1<<18) && tifofs+i<n) {
-          if (tifz==1 && tifzb==1) IMG_DET(IMAGE1,i-7,tifofs,((tifx-1)>>3)+1,tify);
-          else if (tifz==1 && tifzb==8) IMG_DET(IMAGE8,i-7,tifofs,tifx,tify);
-          else if (tifz==3 && tifzb==8) IMG_DET(IMAGE24,i-7,tifofs,tifx*3,tify);
+          if (tifc==1) {
+            if (tifz==1 && tifzb==1) IMG_DET(IMAGE1,i-7,tifofs,((tifx-1)>>3)+1,tify);
+            else if (tifz==1 && tifzb==8) IMG_DET(IMAGE8,i-7,tifofs,tifx,tify);
+            else if (tifz==3 && tifzb==8) IMG_DET(IMAGE24,i-7,tifofs,tifx*3,tify);
+          }
+          else if (tifc==5 && tifsize>0) {
+            tifx=((tifx+8-tifzb)/(9-tifzb))*tifz;
+            info=tifz*tifzb;
+            info=(((info==1)?IMAGE1:((info==8)?IMAGE8:IMAGE24))<<24)|tifx;
+            detd=tifsize;
+            in->setpos(start+i-7+tifofs);
+            return dett=LZW;
+          }
         }
       }
       in->setpos(savedpos);
     }
 
     // Detect .tga image (8-bit 256 colors or 24-bit uncompressed)
-    if ((buf1&0xFFFFFF)==0x00010100 && (buf0&0xFFFFFFC7)==0x00000100 && (c==16 || c==24 || c==32)) tga=i,tgax=tgay,tgaz=8,tgat=1,tgaid=buf1>>24,tgamap=c/8;
+    if ((buf1&0xFFF7FF)==0x00010100 && (buf0&0xFFFFFFC7)==0x00000100 && (c==16 || c==24 || c==32)) tga=i,tgax=tgay,tgaz=8,tgat=(buf1>>8)&0xF,tgaid=buf1>>24,tgamap=c/8;
     else if ((buf1&0xFFFFFF)==0x00000200 && buf0==0x00000000) tga=i,tgax=tgay,tgaz=24,tgat=2;
-    else if ((buf1&0xFFFFFF)==0x00000300 && buf0==0x00000000) tga=i,tgax=tgay,tgaz=8,tgat=3;
+    else if ((buf1&0xFFF7FF)==0x00000300 && buf0==0x00000000) tga=i,tgax=tgay,tgaz=8,tgat=(buf1>>8)&0xF;
     if (tga) {
       if (i-tga==8) tga=(buf1==0?tga:0),tgax=(bswap(buf0)&0xffff),tgay=(bswap(buf0)>>16);
       else if (i-tga==10) {
         if ((buf0&0xFFF7)==32<<8)
           tgaz=32;
-        if ((tgaz<<8)==(int)(buf0&0xFFD7) && tgax && tgay) {
+        if ((tgaz<<8)==(int)(buf0&0xFFD7) && tgax && tgay && U32(tgax*tgay)<0xFFFFFFF) {
           if (tgat==1){
-            in->setpos(start+tga+11);
+            in->setpos(start+tga+11+tgaid);
             IMG_DET( (IsGrayscalePalette(in))?IMAGE8GRAY:IMAGE8,tga-7,18+tgaid+256*tgamap,tgax,tgay);
           }
           else if (tgat==2) IMG_DET((tgaz==24)?IMAGE24:IMAGE32,tga-7,18+tgaid,tgax*(tgaz>>3),tgay);
           else if (tgat==3) IMG_DET(IMAGE8GRAY,tga-7,18+tgaid,tgax,tgay);
+          else if (tgat==9 || tgat==11) {
+            const U64 savedpos=in->curpos();
+            in->setpos(start+tga+11+tgaid);
+            if (tgat==9) {
+              info=(IsGrayscalePalette(in)?IMAGE8GRAY:IMAGE8)<<24;
+              in->setpos(start+tga+11+tgaid+256*tgamap);
+            }
+            else
+              info=IMAGE8GRAY<<24;
+            info|=tgax;
+            // now detect compressed image data size
+            detd=0;
+            int c=in->getchar(), b=0, total=tgax*tgay, line=0;
+            while (total>0 && c>=0 && (++detd, b=in->getchar())>=0){
+              if (c==0x80) { c=b; continue; }
+              else if (c>0x7F) {
+                total-=(c=(c&0x7F)+1); line+=c;
+                c=in->getchar();
+                detd++;
+              }
+              else {
+                in->setpos(in->curpos()+c); 
+                detd+=++c; total-=c; line+=c;
+                c=in->getchar();
+              }
+              if (line>tgax) break;
+              else if (line==tgax) line=0;
+            }
+            if (total==0) {
+              in->setpos(start+tga+11+tgaid+256*tgamap);
+              return dett=RLE;
+            }
+            else
+              in->setpos(savedpos);
+          }
         }
         tga=0;
       }
@@ -9552,18 +12430,20 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
     if (type==DEFAULT && dett==GIF && i==0) {
       dett=DEFAULT;
       if (c==0x2c || c==0x21) gif=2,gifi=2;
+      else gifgray=0;
     }
     if (!gif && (buf1&0xffff)==0x4749 && (buf0==0x46383961 || buf0==0x46383761)) gif=1,gifi=i+5;
     if (gif) {
       if (gif==1 && i==gifi) gif=2, gifi = i+5+(gifplt=(c&128)?(3*(2<<(c&7))):0);
-      if (gif==2 && gifplt && i==gifi-gifplt-2) gifgray = IsGrayscalePalette(in, gifplt/3), gifplt = 0;
+      if (gif==2 && gifplt && i==gifi-gifplt-3) gifgray = IsGrayscalePalette(in, gifplt/3), gifplt = 0;
       if (gif==2 && i==gifi) {
         if ((buf0&0xff0000)==0x210000) gif=5,gifi=i;
         else if ((buf0&0xff0000)==0x2c0000) gif=3,gifi=i;
         else gif=0;
       }
       if (gif==3 && i==gifi+6) gifw=(bswap(buf0)&0xffff);
-      if (gif==3 && i==gifi+7) gif=4,gifc=gifb=0,gifa=gifi=i+2+((c&128)?(3*(2<<(c&7))):0);
+      if (gif==3 && i==gifi+7) gif=4,gifc=gifb=0,gifa=gifi=i+2+(gifplt=((c&128)?(3*(2<<(c&7))):0));
+      if (gif==4 && gifplt) gifgray = IsGrayscalePalette(in, gifplt/3), gifplt = 0;
       if (gif==4 && i==gifi) {
         if (c>0 && gifb && gifc!=gifb) gifw=0;
         if (c>0) gifb=gifc,gifc=c,gifi+=c+1;
@@ -9611,7 +12491,7 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
     if (b64s==0 && buf0==0x73653634 && ((buf1&0xffffff)==0x206261 || (buf1&0xffffff)==0x204261)) b64s=1,b64i=i-6; //' base64' ' Base64'
     if (b64s==0 && ((buf1==0x3b626173 && buf0==0x6536342c) || (buf1==0x215b4344 && buf0==0x4154415b))) b64s=3,b64i=i+1; // ';base64,' '![CDATA['
     if (b64s>0) {
-      if (b64s==1 && buf0==0x0d0a0d0a) b64s=((i-b64i>=128)?0:2),b64i=i+1,b64line=0;
+      if (b64s==1 && buf0==0x0d0a0d0a) b64i=i+1,b64line=0,b64s=2;
       else if (b64s==2 && (buf0&0xffff)==0x0d0a && b64line==0) b64line=i+1-b64i,b64nl=i;
       else if (b64s==2 && (buf0&0xffff)==0x0d0a && b64line>0 && (buf0&0xffffff)!=0x3d0d0a) {
          if (i-b64nl<b64line && buf0!=0x0d0a0d0a) i-=1,b64s=5;
@@ -9625,6 +12505,38 @@ Blocktype detect(File *in, U64 blocksize, Blocktype type, int &info) {
       if (b64s==3 && i>=b64i && !(isalnum(c) || c=='+' || c=='/' || c=='=')) b64s=4;
       if ((b64s==4 && i-b64i>128) || (b64s==5 && i-b64i>512 && i-b64i<(1<<27))) return in->setpos(start+b64i),detd=i-b64i,BASE64;
       if (b64s>3) b64s=0;
+      if (b64s==1 && i-b64i>=128)b64s=0; // detect false positives after 128 bytes
+    }
+
+
+    // Detect text
+    // This is different from the above detection routines: it's a negative detection (it detects a failure)
+    U32 t = utf8_state_table[c];
+    textparser.UTF8State = utf8_state_table[256 + textparser.UTF8State + t];
+    if(textparser.UTF8State == UTF8_ACCEPT) { // proper end of a valid utf8 sequence
+      if (c==NEW_LINE) {
+        if (((buf0>>8)&0xff) != CARRIAGE_RETURN)
+          textparser.setEOLType(2); // mixed or LF-only
+        else 
+          if (textparser.EOLType()==0)textparser.setEOLType(1); // CRLF-only
+      }
+      textparser.invalidCount=textparser.invalidCount*(TEXT_ADAPT_RATE-1)/TEXT_ADAPT_RATE;
+      if(textparser.invalidCount==0)
+        textparser.setend(i); // a possible end of block position
+    }
+    else
+    if(textparser.UTF8State == UTF8_REJECT) { // illegal state
+      textparser.invalidCount = textparser.invalidCount*(TEXT_ADAPT_RATE-1)/TEXT_ADAPT_RATE + TEXT_ADAPT_RATE;
+      textparser.UTF8State = UTF8_ACCEPT; // reset state
+      if (textparser.validlength()<TEXT_MIN_SIZE) {
+        textparser.reset(i+1); // it's not text (or not long enough) - start over
+      }
+      else if (textparser.invalidCount >= TEXT_MAX_MISSES*TEXT_ADAPT_RATE) {
+        if (textparser.validlength()<TEXT_MIN_SIZE)
+          textparser.reset(i+1); // it's not text (or not long enough) - start over
+        else // Commit text block validation
+          textparser.next(i+1);
+      }
     }
   }
   return type;
@@ -9673,11 +12585,11 @@ U64 decode_cd(File *in, U64 size, File *out, FMode mode, U64 &diffFound) {
       return nextblockpos+residual;
     } else if (i==0) { //first sector
       in->blockread(blk+12, 4); //header (4 bytes) consisting of address (Minutes, Seconds, Sectors) and mode (1 = Mode1, 2 = Mode2/Form1, 3 = Mode2/Form2)
-      if (blk[15]!=1) in->blockread(blk+16, 4);  //Mode2: 4 bytes from the read 8-byte subheader 
+      if (blk[15]!=1) in->blockread(blk+16, 4);  //Mode2: 4 bytes from the read 8-byte subheader
       datasize=2048+(blk[15]==3)*276; //user data bytes: Mode1 and Mode2/Form1: 2048 (ECC is present) or Mode2/Form2: 2048+276=2324 bytes (ECC is not present)
       i+=4+4*(blk[15]!=1); //4 byte header + ( Mode2: 4 bytes from the 8-byte subheader )
     } else { //normal sector
-      address=(blk[12]<<16)+(blk[13]<<8)+blk[14]; //3-byte address (Minutes, Seconds, Sectors) 
+      address=(blk[12]<<16)+(blk[13]<<8)+blk[14]; //3-byte address (Minutes, Seconds, Sectors)
     }
     in->blockread(blk+16+(blk[15]!=1)*8, datasize);  //read data bytes, but skip 8-byte subheader in Mode 2 (which we processed alread above)
     i+=datasize;
@@ -9695,42 +12607,70 @@ U64 decode_cd(File *in, U64 size, File *out, FMode mode, U64 &diffFound) {
 }
 
 
-// 24-bit image data transform:
-// simple color transform (b, g, r) -> (g, g-r, g-b)
+// 24-bit image data transforms, controlled by OPTION_SKIPRGB:
+// - simple color transform (b, g, r) -> (g, g-r, g-b)
+// - channel reorder only (b, g, r) -> (g, r, b)
+// Detects RGB565 to RGB888 conversions
+
+#define RGB565_MIN_RUN 63
 
 void encode_bmp(File *in, File *out, U64 len, int width) {
-  int r,g,b;
+  int r, g, b, total=0;
+  bool isPossibleRGB565 = true;
   for (int i=0; i<(int)(len/width); i++) {
     for (int j=0; j<width/3; j++) {
       b=in->getchar();
       g=in->getchar();
       r=in->getchar();
+      if (isPossibleRGB565) {
+        int pTotal=total;
+        total=min(total+1, 0xFFFF)*((b&7)==((b&8)-((b>>3)&1)) && (g&3)==((g&4)-((g>>2)&1)) && (r&7)==((r&8)-((r>>3)&1)));
+        if (total>RGB565_MIN_RUN || pTotal>=RGB565_MIN_RUN) {
+          b^=(b&8)-((b>>3)&1);
+          g^=(g&4)-((g>>2)&1);
+          r^=(r&8)-((r>>3)&1);
+        }
+        isPossibleRGB565=total>0;
+      }
       out->putchar(g);
       out->putchar(options&OPTION_SKIPRGB?r:g-r);
       out->putchar(options&OPTION_SKIPRGB?b:g-b);
     }
     for (int j=0; j<width%3; j++) out->putchar(in->getchar());
   }
+  for (int i=len%width; i>0; i--) out->putchar(in->getchar());
 }
 
 U64 decode_bmp(Encoder& en, U64 size, int width, File *out, FMode mode, U64 &diffFound) {
-  int r,g,b,p;
+  int r, g, b, p, total=0;
+  bool isPossibleRGB565 = true;
   for (int i=0; i<(int)(size/width); i++) {
     p=i*width;
     for (int j=0; j<width/3; j++) {
-      b=en.decompress();
       g=en.decompress();
       r=en.decompress();
+      b=en.decompress();
+      if (!(options&OPTION_SKIPRGB))
+        r=g-r, b=g-b;
+      if (isPossibleRGB565){
+        if (total>=RGB565_MIN_RUN) {
+          b^=(b&8)-((b>>3)&1);
+          g^=(g&4)-((g>>2)&1);
+          r^=(r&8)-((r>>3)&1);
+        }
+        total=min(total+1, 0xFFFF)*((b&7)==((b&8)-((b>>3)&1)) && (g&3)==((g&4)-((g>>2)&1)) && (r&7)==((r&8)-((r>>3)&1)));
+        isPossibleRGB565=total>0;
+      }
       if (mode==FDECOMPRESS) {
-        out->putchar(options&OPTION_SKIPRGB?r:b-r);
         out->putchar(b);
-        out->putchar(options&OPTION_SKIPRGB?g:b-g);
+        out->putchar(g);
+        out->putchar(r);
         if (!j && !(i&0xf)) en.print_status();
       }
       else if (mode==FCOMPARE) {
-        if (((options&OPTION_SKIPRGB?r:b-r)&255)!=out->getchar() && !diffFound) diffFound=p+1;
-        if (b!= out->getchar() && !diffFound) diffFound=p+2;
-        if (((options&OPTION_SKIPRGB?g:b-g)&255)!= out->getchar() && !diffFound) diffFound=p+3;
+        if ((b&255)!=out->getchar() && !diffFound) diffFound=p+1;
+        if (g!=out->getchar() && !diffFound) diffFound=p+2;
+        if ((r&255)!=out->getchar() && !diffFound) diffFound=p+3;
         p+=3;
       }
     }
@@ -9741,6 +12681,14 @@ U64 decode_bmp(Encoder& en, U64 size, int width, File *out, FMode mode, U64 &dif
       else if (mode==FCOMPARE) {
         if (en.decompress()!= out->getchar() && !diffFound) diffFound=p+j+1;
       }
+    }
+  }
+  for (int i=size%width; i>0; i--) {
+    if (mode==FDECOMPRESS) {
+      out->putchar(en.decompress());
+    }
+    else if (mode==FCOMPARE) {
+      if (en.decompress()!=out->getchar()&&!diffFound) { diffFound=size-i; break; }
     }
   }
   return size;
@@ -9762,6 +12710,7 @@ void encode_im32(File *in, File *out, U64 len, int width) {
     }
     for (int j=0; j<width%4; j++) out->putchar(in->getchar());
   }
+  for (int i=len%width; i>0; i--) out->putchar(in->getchar());
 }
 
 U64 decode_im32(Encoder& en, U64 size, int width, File *out, FMode mode, U64 &diffFound) {
@@ -9793,7 +12742,343 @@ U64 decode_im32(Encoder& en, U64 size, int width, File *out, FMode mode, U64 &di
       }
     }
   }
+  for (int i=size%width; i>0; i--) {
+    if (mode==FDECOMPRESS) {
+      out->putchar(en.decompress());
+    }
+    else if (mode==FCOMPARE) {
+      if (en.decompress()!= out->getchar() && !diffFound){ diffFound=size-i; break; }
+    }
+  }
   return size;
+}
+
+void encode_endianness16b(File *in, File *out, U64 size) {
+  for (U64 i=0, l=size>>1; i<l; i++) {
+    U8 B = in->getchar();
+    out->putchar(in->getchar());
+    out->putchar(B);
+  }
+  if ((size&1)>0)
+    out->putchar(in->getchar());
+}
+
+U64 decode_endianness16b(Encoder& en, U64 size, File *out, FMode mode, U64 &diffFound) {
+  for (U64 i=0, l=size>>1; i<l; i++) {
+    U8 B1 = en.decompress(), B2 = en.decompress();
+    if (mode==FDECOMPRESS) {
+      out->putchar(B2);
+      out->putchar(B1);
+    }
+    else if (mode==FCOMPARE){
+      bool ok = out->getchar()==B2;
+      ok&=out->getchar()==B1;
+      if (!ok && !diffFound){
+        diffFound=size-i*2;
+        break;
+      }
+    }
+    if (mode==FDECOMPRESS && !(i&0x7FF))
+      en.print_status();
+  }
+  if (!diffFound && (size&1)>0) {
+    if (mode==FDECOMPRESS)
+      out->putchar(en.decompress());
+    else if (mode==FCOMPARE) {
+      if (out->getchar()!=en.decompress())
+        diffFound=size-1;
+    }
+  }
+  return size;
+}
+
+// EOL transform
+
+void encode_eol(File *in, File *out, U64 len) {
+  U8 B=0, pB=0;
+  for (int i=0; i<(int)len; i++){
+    B = in->getchar();
+    if (pB==CARRIAGE_RETURN && B!=NEW_LINE)
+      out->putchar(pB);
+    if (B!=CARRIAGE_RETURN)
+      out->putchar(B);
+    pB = B;
+  }
+  if (B==CARRIAGE_RETURN)
+    out->putchar(B);
+}
+
+U64 decode_eol(Encoder& en, U64 size, File *out, FMode mode, U64 &diffFound) {
+  U8 B;
+  U64 count = 0;
+  for (int i=0; i<(int)size; i++, count++){
+    if ((B=en.decompress())==NEW_LINE){
+      if (mode==FDECOMPRESS)
+        out->putchar(CARRIAGE_RETURN);
+      else if (mode == FCOMPARE){
+        if (out->getchar()!=CARRIAGE_RETURN && !diffFound){
+          diffFound=size-i;
+          break;
+        }
+      }
+      count++;
+    }
+    if (mode==FDECOMPRESS)
+      out->putchar(B);
+    else if (mode==FCOMPARE){
+      if (B!=out->getchar() && !diffFound){
+        diffFound=size-i;
+        break;
+      }
+    }
+    if (mode==FDECOMPRESS && !(i&0xFFF))
+      en.print_status();
+  }
+  return count;
+}
+
+void encode_rle(File *in, File *out, U64 size, int info, int &hdrsize) {
+  U8 b, c = in->getchar();
+  int i = 1, maxBlockSize = info&0xFFFFFF;
+  out->putVLI(maxBlockSize);
+  hdrsize=VLICost(maxBlockSize);
+  while (i<(int)size) {
+    b = in->getchar(), i++;
+    if (c==0x80) { c = b; continue; }
+    else if (c>0x7F) {
+      for (int j=0; j<=(c&0x7F); j++) out->putchar(b);
+      c = in->getchar(), i++;
+    }
+    else {
+      for (int j=0; j<=c; j++, i++) { out->putchar(b), b = in->getchar(); }
+      c = b;
+    }
+  }
+}
+
+#define rleOutputRun { \
+  while (run > 128) { \
+    *outPtr++ = 0xFF, *outPtr++ = byte; \
+    run-=128; \
+  } \
+  *outPtr++ = (U8)(0x80|(run-1)), *outPtr++ = byte; \
+}
+
+U64 decode_rle(File *in, U64 size, File *out, FMode mode, U64 &diffFound) {
+  U8 inBuffer[0x10000]={0};
+  U8 outBuffer[0x10200]={0};
+  U64 pos = 0;
+  int maxBlockSize = (int)in->getVLI();
+  enum { BASE, LITERAL, RUN, LITERAL_RUN } state;
+  do {
+    U64 remaining = in->blockread(&inBuffer[0], maxBlockSize);
+    U8 *inPtr = (U8*)inBuffer;
+    U8 *outPtr= (U8*)outBuffer;
+    U8 *lastLiteral = nullptr;
+    state = BASE;
+    while (remaining>0){
+      U8 byte = *inPtr++, loop = 0;
+      int run = 1;
+      for (remaining--; remaining>0 && byte==*inPtr; remaining--, run++, inPtr++);
+      do {
+        loop = 0;
+        switch (state) {
+          case BASE: case RUN: {
+            if (run>1) {
+              state = RUN;
+              rleOutputRun;
+            }
+            else {
+              lastLiteral = outPtr;
+              *outPtr++ = 0, *outPtr++ = byte;
+              state = LITERAL;
+            }
+            break;
+          }
+          case LITERAL: {
+            if (run>1) {
+              state = LITERAL_RUN;
+              rleOutputRun;
+            }
+            else {
+              if (++(*lastLiteral)==127)
+                state = BASE;
+              *outPtr++ = byte;
+            }
+            break;
+          }
+          case LITERAL_RUN: {
+            if (outPtr[-2]==0x81 && *lastLiteral<(125)) {
+              state = (((*lastLiteral)+=2)==127)?BASE:LITERAL;
+              outPtr[-2] = outPtr[-1];
+            }
+            else
+              state = RUN;
+            loop = 1;
+          }
+        }
+      } while (loop);
+    }
+
+    U64 length = outPtr-(U8*)(&outBuffer[0]);
+    if (mode==FDECOMPRESS)
+      out->blockwrite(&outBuffer[0], length);
+    else if (mode==FCOMPARE) {
+      for (int j=0; j<(int)length; ++j) {
+        if (outBuffer[j]!=out->getchar() && !diffFound) {
+          diffFound = pos+j+1;
+          break; 
+        }
+      }
+    }
+    pos+=length;
+  } while (!in->eof() && !diffFound);
+  return pos;
+}
+
+struct LZWentry{
+  short prefix;
+  short suffix;
+};
+
+#define LZW_RESET_CODE 256
+#define LZW_EOF_CODE   257
+
+class LZWDictionary{
+private:
+  static constexpr int HashSize = 9221;
+  LZWentry dictionary[4096];
+  short table[HashSize];
+  U8 buffer[4096];
+public:
+  int index;
+  LZWDictionary(): index(0){ reset(); }
+  void reset(){
+    memset(&dictionary, 0xFF, sizeof(dictionary));
+    memset(&table, 0xFF, sizeof(table));
+    for (int i=0; i<256; i++){
+      table[-findEntry(-1, i)-1] = (short)i;
+      dictionary[i].suffix = i;
+    }
+    index = 258; //2 extra codes, one for resetting the dictionary and one for signaling EOF
+  }
+  int findEntry(const int prefix, const int suffix){
+    int i = finalize64(hash(prefix, suffix), 13);
+    int offset = (i>0)?HashSize-i:1;
+    while (true){
+      if (table[i]<0) //free slot?
+        return -i-1;
+      else if (dictionary[table[i]].prefix==prefix && dictionary[table[i]].suffix==suffix) //is it the entry we want?
+        return table[i];
+      i-=offset;
+      if (i<0)
+        i+=HashSize;
+    }
+  }
+  void addEntry(const int prefix, const int suffix, const int offset = -1){
+    if (prefix==-1 || prefix>=index || index>4095 || offset>=0)
+      return;
+    dictionary[index].prefix = prefix;
+    dictionary[index].suffix = suffix;
+    table[-offset-1] = index;
+    index+=(index<4096);
+  }
+  int dumpEntry(File *f, int code){
+    int n = 4095;
+    while (code>256 && n>=0){
+      buffer[n] = U8(dictionary[code].suffix);
+      n--;
+      code = dictionary[code].prefix;
+    }
+    buffer[n] = U8(code);
+    f->blockwrite(&buffer[n], 4096-n);
+    return code;
+  }
+};
+
+int encode_lzw(File *in, File *out, U64 size, int &hdrsize) {
+  LZWDictionary dic;
+  int parent=-1, code=0, buffer=0, bitsPerCode=9, bitsUsed=0;
+  bool done = false;
+  while (!done) {
+    buffer = in->getchar();
+    if (buffer<0) { return 0; }
+    for (int j=0; j<8; j++ ) {
+      code+=code+((buffer>>(7-j))&1), bitsUsed++;
+      if (bitsUsed>=bitsPerCode) {
+        if (code==LZW_EOF_CODE){ done=true; break; }
+        else if (code==LZW_RESET_CODE){
+          dic.reset();
+          parent=-1; bitsPerCode=9;
+        }
+        else{
+          if (code<dic.index){
+            if (parent!=-1)
+              dic.addEntry(parent, dic.dumpEntry(out, code));
+            else
+              out->putchar(code);
+          }
+          else if (code==dic.index){
+            int a = dic.dumpEntry(out, parent);
+            out->putchar(a);
+            dic.addEntry(parent,a);
+          }
+          else return 0;
+          parent = code;
+        }
+        bitsUsed=0; code=0;
+        if ((1<<bitsPerCode)==dic.index+1 && dic.index<4096)
+          bitsPerCode++;
+      }
+    }
+  }
+  return 1;
+}
+
+inline void writeCode(File *f, const FMode mode, int *buffer, U64 *pos, int *bitsUsed, const int bitsPerCode, const int code, U64 *diffFound){
+  *buffer<<=bitsPerCode; *buffer|=code;
+  (*bitsUsed)+=bitsPerCode;
+  while ((*bitsUsed)>7) {
+    const U8 B = *buffer>>(*bitsUsed-=8);
+    (*pos)++;
+    if (mode==FDECOMPRESS) f->putchar(B);
+    else if (mode==FCOMPARE && B!=f->getchar()) *diffFound=*pos;
+  }
+}
+
+U64 decode_lzw(File *in, U64 size, File *out, FMode mode, U64 &diffFound) {
+  LZWDictionary dic;
+  U64 pos=0;
+  int parent=-1, code=0, buffer=0, bitsPerCode=9, bitsUsed=0;
+  writeCode(out, mode, &buffer, &pos, &bitsUsed, bitsPerCode, LZW_RESET_CODE, &diffFound);
+  while ((code=in->getchar())>=0 && diffFound==0) {
+    int index = dic.findEntry(parent, code);
+    if (index<0){ // entry not found
+      writeCode(out, mode, &buffer, &pos, &bitsUsed, bitsPerCode, parent, &diffFound);
+      if (dic.index>4092){
+        writeCode(out, mode, &buffer, &pos, &bitsUsed, bitsPerCode, LZW_RESET_CODE, &diffFound);
+        dic.reset();
+        bitsPerCode = 9;
+      }
+      else{
+        dic.addEntry(parent, code, index);
+        if (dic.index>=(1<<bitsPerCode))
+          bitsPerCode++;
+      }
+      parent = code;
+    }
+    else
+      parent = index;
+  }
+  if (parent>=0)
+    writeCode(out, mode, &buffer, &pos, &bitsUsed, bitsPerCode, parent, &diffFound);
+  writeCode(out, mode, &buffer, &pos, &bitsUsed, bitsPerCode, LZW_EOF_CODE, &diffFound);
+  if (bitsUsed>0) { // flush buffer
+    pos++;
+    if (mode==FDECOMPRESS) out->putchar(U8(buffer));
+    else if (mode==FCOMPARE && U8(buffer)!=out->getchar()) diffFound=pos;
+  }
+  return pos;
 }
 
 // EXE transform: <encoded-size> <begin> <block>...
@@ -9809,7 +13094,7 @@ U64 decode_im32(Encoder& en, U64 size, int width, File *out, FMode mode, U64 &di
 void encode_exe(File *in, File *out, U64 len, U64 begin) {
   const int BLOCK=0x10000;
   Array<U8> blk(BLOCK);
-  out->put32((U32)begin); //TODO: Large file support
+  out->putVLI(begin); //TODO: Large file support
 
   // Transform
   for (U64 offset=0; offset<len; offset+=BLOCK) {
@@ -9837,7 +13122,7 @@ U64 decode_exe(Encoder& en, U64 size, File *out, FMode mode, U64 &diffFound) {
   int begin, offset=6, a;
   U8 c[6];
   begin=(int)en.decode_blocksize(); //TODO: Large file support
-  size-=4;
+  size-=VLICost(U64(begin));
   for (int i=4; i>=0; i--) c[i]=en.decompress();  // Fill queue
 
   while (offset<(int)size+6) {
@@ -9863,39 +13148,7 @@ U64 decode_exe(Encoder& en, U64 size, File *out, FMode mode, U64 &diffFound) {
 }
 
 #ifdef USE_ZLIB
-class zLibMTF{
-private:
-  int Root, Index;
-  Array<int, 16> Previous;
-  Array<int, 16> Next;
-public:
-  zLibMTF(): Root(0), Index(0), Previous(81), Next(81) {
-    for (int i=0;i<81;i++) {
-      Previous[i] = i-1;
-      Next[i] = i+1;
-    }
-    Next[80] = -1;
-  }
-  inline int GetFirst(){
-    return Index=Root;
-  }
-  inline int GetNext(){
-    if(Index>=0){Index=Next[Index];return Index;}
-    return Index; //-1
-  }
-  inline void MoveToFront(int i){
-    assert(i>=0 && i<=80);
-    if ((Index=i)==Root) return;
-    int p=Previous[Index];
-    int n=Next[Index];
-    if(p>=0)Next[p] = Next[Index];
-    if(n>=0)Previous[n] = Previous[Index];
-    Previous[Root] = Index;
-    Next[Index] = Root;
-    Root=Index;
-    Previous[Root]=-1;
-  }
-} MTF;
+MTFList  MTF(81);
 
 int encode_zlib(File *in, File *out, U64 len, int &hdrsize) {
   const int BLOCK=1<<16, LIMIT=128;
@@ -9903,14 +13156,15 @@ int encode_zlib(File *in, File *out, U64 len, int &hdrsize) {
   U64 diffPos[81*LIMIT];
 
   // Step 1 - parse offset type form zlib stream header
-  U64 pos=in->curpos();
+  U64 pos_backup=in->curpos();
   U32 h1=in->getchar(), h2=in->getchar();
-  in->setpos(pos);
+  in->setpos(pos_backup);
   int zh=parse_zlib_header(h1*256+h2);
   int memlevel,clevel,window=zh==-1?0:MAX_WBITS+10+zh/4,ctype=zh%4;
   int minclevel=window==0?1:ctype==3?7:ctype==2?6:ctype==1?2:1;
   int maxclevel=window==0?9:ctype==3?9:ctype==2?6:ctype==1?5:1;
-  int index=-1, found=0, nTrials=0;
+  int index=-1, nTrials=0;
+  bool found=false;
 
   // Step 2 - check recompressiblitiy, determine parameters and save differences
   z_stream main_strm, rec_strm[81];
@@ -9939,7 +13193,7 @@ int encode_zlib(File *in, File *out, U64 len, int &hdrsize) {
     U32 blsize=min(U32(len-i),BLOCK);
     nTrials=0;
     for (int j=0; j<81; j++) {
-      if (diffCount[j]>=LIMIT) continue;
+      if (diffCount[j]==LIMIT) continue;
       nTrials++;
       if (recpos[j]>=BLOCK)
         recpos[j]-=BLOCK;
@@ -9960,7 +13214,7 @@ int encode_zlib(File *in, File *out, U64 len, int &hdrsize) {
 
       // Recompress/deflate block with all possible parameters
       for (int j=MTF.GetFirst(); j>=0; j=MTF.GetNext()){
-        if (diffCount[j]>=LIMIT) continue;
+        if (diffCount[j]==LIMIT) continue;
         nTrials++;
         rec_strm[j].next_in=&zout[0];  rec_strm[j].avail_in=BLOCK-main_strm.avail_out;
         rec_strm[j].next_out=&zrec[recpos[j]]; rec_strm[j].avail_out=BLOCK*2-recpos[j];
@@ -9981,9 +13235,9 @@ int encode_zlib(File *in, File *out, U64 len, int &hdrsize) {
           }
         }
         // Early break on perfect match
-        if (main_ret==Z_STREAM_END && !diffCount[j]){
+        if (main_ret==Z_STREAM_END && diffCount[j]==0){
           index=j;
-          found=1;
+          found=true;
           break;
         }
         recpos[j]=2*BLOCK-rec_strm[j].avail_out;
@@ -10014,7 +13268,7 @@ int encode_zlib(File *in, File *out, U64 len, int &hdrsize) {
   }
   for (int i=0; i<diffCount[index]; i++) out->putchar(diffByte[index*LIMIT+i+1]);
 
-  in->setpos(pos);
+  in->setpos(pos_backup);
   main_strm.zalloc=Z_NULL; main_strm.zfree=Z_NULL; main_strm.opaque=Z_NULL;
   main_strm.next_in=Z_NULL; main_strm.avail_in=0;
   if (zlib_inflateInit(&main_strm,zh)!=Z_OK) return false;
@@ -10029,6 +13283,7 @@ int encode_zlib(File *in, File *out, U64 len, int &hdrsize) {
     } while (main_strm.avail_out==0 && main_ret==Z_BUF_ERROR);
     if (main_ret!=Z_BUF_ERROR && main_ret!=Z_STREAM_END) break;
   }
+  inflateEnd(&main_strm);
   hdrsize=diffCount[index]*5+7;
   return main_ret==Z_STREAM_END;
 }
@@ -10227,8 +13482,24 @@ void encode_base64(File *in, File *out, U64 len64) {
   out->blockwrite(&ptr[0], olen);
 }
 
+#define LZW_TABLE_SIZE 9221
+
+#define lzw_find(k) {\
+  offset = (int)finalize64(k*PHI64,13); \
+  int stride = (offset>0)?LZW_TABLE_SIZE-offset:1; \
+  while (true){ \
+    if ((index=table[offset])<0){ index=-offset-1; break; } \
+    else if (dict[index]==int(k)){ break; } \
+    offset-=stride; \
+    if (offset<0) \
+      offset+=LZW_TABLE_SIZE; \
+  } \
+}
+
+#define lzw_reset { for (int i=0; i<LZW_TABLE_SIZE; table[i]=-1, i++); }
+
 int encode_gif(File *in, File *out, U64 len, int &hdrsize) {
-  int codesize=in->getchar(),diffpos=0,clearpos=0,bsize=0;
+  int codesize=in->getchar(),diffpos=0,clearpos=0,bsize=0,code,offset=0;
   U64 beginin=in->curpos(),beginout=out->curpos();
   Array<U8> output(4096);
   hdrsize=6;
@@ -10238,18 +13509,20 @@ int encode_gif(File *in, File *out, U64 len, int &hdrsize) {
   out->putchar(clearpos>>8);
   out->putchar(clearpos&255);
   out->putchar(codesize);
+  Array<int> table(LZW_TABLE_SIZE);  
   for (int phase=0; phase<2; phase++) {
     in->setpos(beginin);
     int bits=codesize+1,shift=0,buffer=0;
     int blocksize=0,maxcode=(1<<codesize)+1,last=-1;
     Array<int> dict(4096);
+    lzw_reset;
     bool end=false;
     while ((blocksize=in->getchar())>0 && in->curpos()-beginin<len && !end) {
       for (int i=0; i<blocksize; i++) {
         buffer|=in->getchar()<<shift;
         shift+=8;
         while (shift>=bits && !end) {
-          int code=buffer&((1<<bits)-1);
+          code=buffer&((1<<bits)-1);
           buffer>>=bits;
           shift-=bits;
           if (!bsize && code!=(1<<codesize)) {
@@ -10262,6 +13535,7 @@ int encode_gif(File *in, File *out, U64 len, int &hdrsize) {
               clearpos=69631-maxcode;
             }
             bits=codesize+1, maxcode=(1<<codesize)+1, last=-1;
+            lzw_reset;
           }
           else if (code==(1<<codesize)+1) end=true;
           else if (code>maxcode+1) return 0;
@@ -10278,16 +13552,15 @@ int encode_gif(File *in, File *out, U64 len, int &hdrsize) {
               if (++maxcode>=8191) return 0;
               if (maxcode<=4095)
               {
-                dict[maxcode]=(last<<8)+j;
-                if (phase==0) {
-                  bool diff=false;
-                  for (int m=(1<<codesize)+2;m<min(maxcode,4095);m++) if (dict[maxcode]==dict[m]) { diff=true; break; }
-                  if (diff) {
-                    hdrsize+=4;
-                    j=diffpos-size-(code==maxcode);
-                    out->put32(j);
-                    diffpos=size+(code==maxcode);
-                  }
+                int key=(last<<8)+j, index=-1;
+                lzw_find(key);
+                dict[maxcode]=key;
+                table[(index<0)?-index-1:offset]=maxcode;
+                if (phase==0 && index>0) {
+                  hdrsize+=4;
+                  j=diffpos-size-(code==maxcode);
+                  out->put32(j);
+                  diffpos=size+(code==maxcode);
                 }
               }
               if (maxcode>=((1<<bits)-1) && bits<12) bits++;
@@ -10311,7 +13584,7 @@ int encode_gif(File *in, File *out, U64 len, int &hdrsize) {
 
 #define gif_write_block(count) { output[0]=(count);\
 if (mode==FDECOMPRESS) out->blockwrite(&output[0], (count)+1);\
-else if (mode==FCOMPARE) for (int j=0; j<(count)+1; j++) if (output[j]!=out->getchar() && !diffFound) diffFound=outsize+j+1;\
+else if (mode==FCOMPARE) for (int j=0; j<(count)+1; j++) if (output[j]!=out->getchar() && !diffFound) { diffFound=outsize+j+1; return 1; } \
 outsize+=(count)+1; blocksize=0; }
 
 #define gif_write_code(c) { buffer+=(c)<<shift; shift+=bits;\
@@ -10327,8 +13600,10 @@ int decode_gif(File *in, U64 size, File *out, FMode mode, U64 &diffFound) {
   clearpos=(69631-clearpos)&0xffff;
   int codesize=in->getchar(),bits=codesize+1,shift=0,buffer=0,blocksize=0;
   if (diffcount>4096 || clearpos<=(1<<codesize)+2) return 1;
-  int maxcode=(1<<codesize)+1,input;
+  int maxcode=(1<<codesize)+1,input,code,offset=0;
   Array<int> dict(4096);
+  Array<int> table(LZW_TABLE_SIZE);
+  lzw_reset;
   for (int i=0; i<diffcount; i++) {
     diffpos[i]=in->getchar();
     diffpos[i]=(diffpos[i]<<8)+in->getchar();
@@ -10342,17 +13617,19 @@ int decode_gif(File *in, U64 size, File *out, FMode mode, U64 &diffFound) {
   if (mode==FDECOMPRESS) out->putchar(codesize);
   else if (mode==FCOMPARE) if (codesize!=out->getchar() && !diffFound) diffFound=1;
   if (diffcount==0 || diffpos[0]!=0) gif_write_code(1<<codesize) else curdiff++;
-  while (size-->=0 && (input=in->getchar())>=0) {
-    int code=-1, key=(last<<8)+input;
-    for (int i=(1<<codesize)+2; i<=min(maxcode,4095); i++) if (dict[i]==key) code=i;
-    if (curdiff<diffcount && total-(int)size>diffpos[curdiff]) curdiff++,code=-1;
-    if (code==-1) {
+  while (size!=0 && (input=in->getchar())!=EOF) {
+    size--;
+    int key=(last<<8)+input, index=(code=-1);
+    if (last<0) index=input; else lzw_find(key);
+    code = index;
+    if (curdiff<diffcount && total-(int)size>diffpos[curdiff]) curdiff++, code=-1;
+    if (code<0) {
       gif_write_code(last);
-      if (maxcode==clearpos) { gif_write_code(1<<codesize); bits=codesize+1, maxcode=(1<<codesize)+1; }
+      if (maxcode==clearpos) { gif_write_code(1<<codesize); bits=codesize+1, maxcode=(1<<codesize)+1; lzw_reset }
       else
       {
         ++maxcode;
-        if (maxcode<=4095) dict[maxcode]=key;
+        if (maxcode<=4095) { dict[maxcode]=key; table[(index<0)?-index-1:offset]=maxcode; }
         if (maxcode>=(1<<bits) && bits<12) bits++;
       }
       code=input;
@@ -10384,14 +13661,12 @@ void direct_encode_block(Blocktype type, File *in, U64 len, Encoder &en, int inf
     en.compress((info>>8)&0xFF);
     en.compress((info)&0xFF);
   }
-  if (to_screen)
-    printf("Compressing... ");
+  fprintf(stderr,"Compressing... ");
   for (U64 j=0; j<len; ++j) {
     if ((j&0xfff)==0) en.print_status(j, len);
     en.compress(in->getchar());
   }
-  if (to_screen)
-    printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+  fprintf(stderr,"\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
 }
 
 void compressRecursive(File *in, U64 blocksize, Encoder &en, String &blstr, int recursion_level, float p1, float p2);
@@ -10399,13 +13674,17 @@ void compressRecursive(File *in, U64 blocksize, Encoder &en, String &blstr, int 
 U64 decode_func(Blocktype type, Encoder &en, File *tmp, U64 len, int info, File *out, FMode mode, U64 &diffFound) {
   if (type==IMAGE24) return decode_bmp(en, len, info, out, mode, diffFound);
   else if (type==IMAGE32) return decode_im32(en, len, info, out, mode, diffFound);
+  else if (type==AUDIO_LE) return decode_endianness16b(en, len, out, mode, diffFound);
   else if (type==EXE) return decode_exe(en, len, out, mode, diffFound);
+  else if (type == TEXT_EOL) return decode_eol(en, len, out, mode, diffFound);
   else if (type==CD) return decode_cd(tmp, len, out, mode, diffFound);
   #ifdef USE_ZLIB
   else if (type==ZLIB) return decode_zlib(tmp, len, out, mode, diffFound);
   #endif //USE_ZLIB
   else if (type==BASE64) return decode_base64(tmp, out, mode, diffFound);
   else if (type==GIF) return decode_gif(tmp, len, out, mode, diffFound);
+  else if (type==RLE) return decode_rle(tmp, len, out, mode, diffFound);
+  else if (type==LZW) return decode_lzw(tmp, len, out, mode, diffFound);
   else assert(false);
   return 0;
 }
@@ -10413,13 +13692,17 @@ U64 decode_func(Blocktype type, Encoder &en, File *tmp, U64 len, int info, File 
 U64 encode_func(Blocktype type, File *in, File *tmp, U64 len, int info, int &hdrsize) {
   if (type==IMAGE24) encode_bmp(in, tmp, len, info);
   else if (type==IMAGE32) encode_im32(in, tmp, len, info);
+  else if (type==AUDIO_LE) encode_endianness16b(in, tmp, len);
   else if (type==EXE) encode_exe(in, tmp, len, info);
+  else if (type == TEXT_EOL) encode_eol(in, tmp, len);
   else if (type==CD) encode_cd(in, tmp, len, info);
   #ifdef USE_ZLIB
   else if (type==ZLIB) return encode_zlib(in, tmp, len, hdrsize)?0:1;
   #endif //USE_ZLIB
   else if (type==BASE64) encode_base64(in, tmp, len);
   else if (type==GIF) return encode_gif(in, tmp, len, hdrsize)?0:1;
+  else if (type==RLE) encode_rle(in, tmp, len, info, hdrsize);
+  else if (type==LZW) return encode_lzw(in, tmp, len, hdrsize)?0:1;
   else assert(false);
   return 0;
 }
@@ -10450,7 +13733,13 @@ void transform_encode_block(Blocktype type, File *in, U64 len, Encoder &en, int 
         en.encode_blocksize(tmpsize);
         Blocktype type2=(Blocktype)((info>>24)&0xFF);
         if (type2!=DEFAULT) {
+          String blstr_sub0;blstr_sub0+=blstr.c_str();blstr_sub0+="->";
+          String blstr_sub1;blstr_sub1+=blstr.c_str();blstr_sub1+="-->";
+          String blstr_sub2;blstr_sub2+=blstr.c_str();blstr_sub2+="-->";
+          printf(" %-11s | ->  exploded     |%10d bytes [%d - %d]\n",blstr_sub0.c_str(),int(tmpsize),0,int(tmpsize-1));
+          printf(" %-11s | --> added header |%10d bytes [%d - %d]\n",blstr_sub1.c_str(),hdrsize,0,hdrsize-1);
           direct_encode_block(HDR, &tmp, hdrsize, en);
+          printf(" %-11s | --> data         |%10d bytes [%d - %d]\n",blstr_sub2.c_str(),int(tmpsize-hdrsize),hdrsize,int(tmpsize-1));
           transform_encode_block(type2, &tmp, tmpsize-hdrsize, en, info&0xffffff, blstr, recursion_level, p1, p2, hdrsize);
         } else {
           compressRecursive(&tmp, tmpsize, en, blstr, recursion_level+1, p1, p2);
@@ -10466,8 +13755,8 @@ void transform_encode_block(Blocktype type, File *in, U64 len, Encoder &en, int 
 }
 
 void compressRecursive(File *in, const U64 blocksize, Encoder &en, String &blstr, int recursion_level, float p1, float p2) {
-  static const char* typenames[20]={"default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
-    "24b-image", "32b-image", "audio", "exe", "cd", "zlib", "base64", "gif", "png-8b", "png-8b-grayscale", "png-24b", "png-32b"};
+  static const char* typenames[25]={"default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
+    "24b-image", "32b-image", "audio", "audio - le", "exe", "cd", "zlib", "base64", "gif", "png-8b", "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol", "rle", "lzw"};
   static const char* audiotypes[4]={"8b-mono", "8b-stereo", "16b-mono","16b-stereo"};
   Blocktype type=DEFAULT;
   int blnum=0, info=0;  // image width or audio type
@@ -10480,19 +13769,55 @@ void compressRecursive(File *in, const U64 blocksize, Encoder &en, String &blstr
   float pscale=blocksize>0?(p2-p1)/blocksize:0;
 
   // Transform and test in blocks
+  U64 nextblock_start;
+  U64 textstart;
+  U64 textend=0;
+  Blocktype nextblock_type;
+  Blocktype nextblock_type_bak=DEFAULT; //initialized only to suppress a compiler warning, will be overwritten
   U64 bytes_to_go=blocksize;
   while (bytes_to_go>0) {
-    Blocktype nextType=detect(in, bytes_to_go, type, info);
-    U64 detected_end=in->curpos();
-    in->setpos(begin);
-    if (detected_end>block_end) {  // if a detection reports a larger size than the actual block size, fall back
-      detected_end=begin+1;
-      type=DEFAULT;
+    if(type==TEXT || type==TEXT_EOL) { // it was a split block in the previous iteration: TEXT -> DEFAULT -> ...
+      nextblock_type=nextblock_type_bak;
+      nextblock_start=textend+1;
     }
-    U64 len=detected_end-begin;
+    else {
+      nextblock_type=detect(in, bytes_to_go, type, info);
+      nextblock_start=in->curpos();
+      in->setpos(begin);
+    }
+
+    // override (any) next block detection by a preceding text block
+    textstart=begin+textparser._start[0];
+    textend=begin+textparser._end[0];
+    if(textend>nextblock_start-1)textend=nextblock_start-1;
+    if(type==DEFAULT && textstart<textend) { // only DEFAULT blocks may be overridden
+      if(textstart==begin && textend == nextblock_start-1) { // whole first block is text
+        type=(textparser._EOLType[0]==1)?TEXT_EOL:TEXT; // DEFAULT -> TEXT
+      }
+      else if (textend - textstart + 1 >= TEXT_MIN_SIZE) { // we have one (or more) large enough text portion that splits DEFAULT
+        if (textstart != begin) { // text is not the first block 
+          nextblock_start=textstart; // first block is still DEFAULT
+          nextblock_type_bak=nextblock_type;
+          nextblock_type=(textparser._EOLType[0]==1)?TEXT_EOL:TEXT; //next block is text
+          textparser.removefirst();
+        } else {
+          type=(textparser._EOLType[0]==1)?TEXT_EOL:TEXT; // first block is text
+          nextblock_type=DEFAULT;     // next block is DEFAULT
+          nextblock_start=textend+1; 
+        }
+      }
+      // no text block is found, still DEFAULT
+    }
+
+    if (nextblock_start>block_end) {  // if a detection reports a larger size than the actual block size, fall back
+      nextblock_start=begin+1;
+      type=nextblock_type=DEFAULT;
+    }
+
+    U64 len=nextblock_start-begin;
     if (len>0) {
       en.set_status_range(p1,p2=p1+pscale*len);
-      
+
       //Compose block enumeration string
       String blstr_sub;
       blstr_sub+=blstr.c_str();
@@ -10500,18 +13825,18 @@ void compressRecursive(File *in, const U64 blocksize, Encoder &en, String &blstr
       blstr_sub+=U64(blnum);
       blnum++;
 
-      printf(" %-11s | %-16s |%10" PRIu64 " bytes [%" PRIu64 " - %" PRIu64 "]",blstr_sub.c_str(),typenames[(type==ZLIB && (info>>24)>=PNG8)?info>>24:type],len,begin,detected_end-1);
-      if (type==AUDIO) printf(" (%s)", audiotypes[info%4]);
-      else if (type==IMAGE1 || type==IMAGE4 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32 || (type==ZLIB && (info>>24)>=PNG8)) printf(" (width: %d)", (type==ZLIB)?(info&0xFFFFFF):info);
-      else if (hasRecursion(type) && (info>>24) > 0) printf(" (%s)",typenames[info>>24]);
-      else if (type==CD) printf(" (mode%d/form%d)", info==1?1:2, info!=3?1:2); 
+      printf(" %-11s | %-16s |%10" PRIu64 " bytes [%" PRIu64 " - %" PRIu64 "]",blstr_sub.c_str(),typenames[(type==ZLIB && isPNG(Blocktype(info>>24)))?info>>24:type],len,begin,nextblock_start-1);
+      if (type==AUDIO || type==AUDIO_LE) printf(" (%s)", audiotypes[info%4]);
+      else if (type==IMAGE1 || type==IMAGE4 || type==IMAGE8 || type==IMAGE8GRAY || type==IMAGE24 || type==IMAGE32 || (type==ZLIB && isPNG(Blocktype(info>>24)))) printf(" (width: %d)", (type==ZLIB)?(info&0xFFFFFF):info);
+      else if (hasRecursion(type) && (info>>24)!=DEFAULT) printf(" (%s)",typenames[info>>24]);
+      else if (type==CD) printf(" (mode%d/form%d)", info==1?1:2, info!=3?1:2);
       printf("\n");
       transform_encode_block(type, in, len, en, info, blstr_sub, recursion_level, p1, p2, begin);
       p1=p2;
       bytes_to_go-=len;
     }
-    type=nextType;
-    begin=detected_end;
+    type=nextblock_type;
+    begin=nextblock_start;
   }
 }
 
@@ -10533,11 +13858,13 @@ void compressfile(const char* filename, U64 filesize, Encoder& en, bool verbose)
   String blstr;
   compressRecursive(&in, filesize, en, blstr, 0, 0.0f, 1.0f);
   in.close();
-  
-  if(verbose)
-  printf("File size to encode   : 4\n"); //This string must be long enough. "Compressing ..." is still on screen, we need to overwrite it.
-  printf("File input size       : %" PRIu64 "\n",filesize); 
-  printf("File compressed size  : %" PRIu64 "\n",en.size()-start);
+
+  if(options & OPTION_MULTIPLE_FILE_MODE) { //multiple file mode
+    if(verbose)
+    printf("File size to encode   : 4\n"); //This string must be long enough. "Compressing ..." is still on screen, we need to overwrite it.
+    printf("File input size       : %" PRIu64 "\n",filesize);
+    printf("File compressed size  : %" PRIu64 "\n",en.size()-start);
+  }
 }
 
 U64 decompressRecursive(File *out, U64 blocksize, Encoder& en, FMode mode, int recursion_level) {
@@ -10584,7 +13911,7 @@ void decompressfile(const char* filename, FMode fmode, Encoder& en) {
   assert(filename && filename[0]);
 
   Blocktype blocktype=(Blocktype)en.decompress();
-  assert(blocktype==FILECONTAINER);
+  if(blocktype!=FILECONTAINER)quit("Bad archive.");
   U64 filesize=en.decode_blocksize();
 
   FileDisk f;
@@ -10628,11 +13955,11 @@ public:
   void addchar(char c) {
     if(c!=EOF)list_of_files+=c;
     if(c==10 || c==13 || c==EOF) //got a newline
-      state=FINISHED_A_LINE; //empty lines / extra newlines (cr, crlf or lf) are ignored 
+      state=FINISHED_A_LINE; //empty lines / extra newlines (cr, crlf or lf) are ignored
     else if(state==IN_HEADER)return; //ignore anything in header
     else if(c==TAB) //got a tab
       state=FINISHED_A_FILENAME; //ignore the rest (other columns)
-    else { // got a character 
+    else { // got a character
       if(state==FINISHED_A_FILENAME)return; //ignore the rest (other columns)
       if(state==FINISHED_A_LINE) {
         names.push_back(new FileName(basepath.c_str()));
@@ -10651,10 +13978,11 @@ public:
   String * getstring() {return &list_of_files;}
 };
 
-
-int main(int argc, char** argv) {
+int main_utf8(int argc, char** argv) {
   try {
 
+    if(!to_screen) //we need a minimal feedback when redirected
+      fprintf(stderr,PROGNAME " archiver v" PROGVERSION " (C) " PROGYEAR ", Matt Mahoney et al.\n");
     printf(PROGNAME " archiver v" PROGVERSION " (C) " PROGYEAR ", Matt Mahoney et al.\n");
 
     // Print help message
@@ -10667,9 +13995,9 @@ int main(int argc, char** argv) {
         "  " PROGNAME " -LEVEL[SWITCHES] INPUTSPEC [OUTPUTSPEC]\n"
         "\n"
         "    -LEVEL:\n"
-        "      -0 = store (uses 30 MB)\n"
-        "      -1 -2 -3 = faster (uses 60, 69, 88 MB)\n"
-        "      -4 -5 -6 -7 -8 -9 = smaller (uses 202, 330, 586, 1099, 2125, 4177 MB)\n"
+        "      -0 = store (uses 322 MB)\n"
+        "      -1 -2 -3 = faster (uses 417, 431, 459 MB)\n"
+        "      -4 -5 -6 -7 -8 -9 = smaller (uses 514, 624, 845, 1288, 2172, 3941 MB)\n"
         "    The listed memory requirements are indicative, actual usage may vary\n"
         "    depending on several factors including need for temporary files,\n"
         "    temporary memory needs of some preprocessing (transformations), etc.\n"
@@ -10680,7 +14008,7 @@ int main(int argc, char** argv) {
         "      t = Pre-train main model with word and expression list\n"
         "          (english.dic, english.exp)\n"
         "      a = Adaptive learning rate\n"
-        "      s = Skip the color transform, just reorder the RGB channels\n\n"
+        "      s = Skip the color transform, just reorder the RGB channels\n"
         "    INPUTSPEC:\n"
         "    The input may be a FILE or a PATH/FILE or a [PATH/]@FILELIST.\n"
         "    Only file content and the file size is kept in the archive. Filename,\n"
@@ -10701,12 +14029,13 @@ int main(int argc, char** argv) {
         "    input file resides. The archive filename will be constructed from the\n"
         "    input file name by appending ." PROGNAME PROGVERSION " extension\n"
         "    to it.\n"
-        "    When OUTPUTSPEC is a filename (with an optional path) it will be\n" 
+        "    When OUTPUTSPEC is a filename (with an optional path) it will be\n"
         "    used as the archive filename.\n"
         "    When OUTPUTSPEC is a folder the archive file will be generated from\n"
         "    the input filename and will be created in the specified folder.\n"
+        "    If the archive file already exists it will be overwritten.\n"
         "\n"
-        "    Examples:\n" 
+        "    Examples:\n"
         "      " PROGNAME " -8 enwik8\n"
         "      " PROGNAME " -8ba b64sample.xml\n"
         "      " PROGNAME " -8 @myfolder/myfilelist.txt\n"
@@ -10732,7 +14061,7 @@ int main(int argc, char** argv) {
         "To list archive contents:\n"
         "\n"
         "  " PROGNAME " -l [INPUTFOLDER/]ARCHIVEFILE\n"
-        "    Extracts @FILELIST from archive (to memory) and prints its content\n" 
+        "    Extracts @FILELIST from archive (to memory) and prints its content\n"
         "    to screen. This command is only applicable to multi-file archives.\n"
         "\n"
         "Additional optional swithes:\n"
@@ -10741,24 +14070,24 @@ int main(int argc, char** argv) {
         "    Print more detailed (verbose) information to screen.\n"
         "\n"
         "    -log LOGFILE\n"
-        "    Logs (appends) compression results in the specified tab separated LOGFILE.\n" 
+        "    Logs (appends) compression results in the specified tab separated LOGFILE.\n"
         "    Logging is only applicable for compression.\n"
         "\n"
         "    -simd [NONE|SSE2|AVX2]\n"
         "    Overrides detected SIMD instruction set for neural network operations\n"
         "\n"
-        "Remark: the command line parameters may be used in any order except the input\n"
+        "Remark: the command line arguments may be used in any order except the input\n"
         "and output: always the input comes first then (the optional) output.\n"
         "\n"
-        "    Example:\n" 
+        "    Example:\n"
         "      " PROGNAME " -8 enwik8 folder/ -v -log logfile.txt -simd sse2\n"
-        "    is equivalent to:\n" 
+        "    is equivalent to:\n"
         "      " PROGNAME " -v -simd sse2 enwik8 -log logfile.txt folder/ -8\n"
       );
       quit();
     }
 
-    // Parse command line parameters
+    // Parse command line arguments
     typedef enum {doNone, doCompress, doExtract, doCompare, doList} WHATTODO;
     WHATTODO whattodo=doNone;
     bool verbose=false;
@@ -10771,6 +14100,7 @@ int main(int argc, char** argv) {
     FileName outputpath;
     FileName archiveName;
     FileName logfile;
+    String hashconfig;
 
     for(int i=1;i<argc;i++) {
       int arg_len = (int)strlen(argv[i]);
@@ -10812,6 +14142,14 @@ int main(int argc, char** argv) {
           if(++i==argc)quit("The -log switch requires a filename.");
           logfile+=argv[i];
         }
+        #ifndef NHASHCONFIG
+        else if (strcasecmp(argv[i],"-hash")==0) {
+          if(hashconfig.strsize()!=0)quit("Only one hash configuration may be specified.");
+          if(++i==argc)quit("The -hash switch requires more parameters: 14 magic hash constants delimited by non-spaces.");
+          hashconfig+=argv[i];
+          loadHashesFromCmd(hashconfig.c_str());
+        }
+        #endif
         else if (strcasecmp(argv[i],"-simd")==0) {
           if(++i==argc)quit("The -simd switch requires an instruction set name (NONE,SSE2,AVX2).");
           if(strcasecmp(argv[i],"NONE")==0)simd_iset=0;
@@ -10832,10 +14170,10 @@ int main(int argc, char** argv) {
           output+=argv[i];
           output.replaceslashes();
         }
-        else 
+        else
           quit("More than two filenames specified. Only an input and an output is needed.");
       }
-    }    
+    }
 
     if(verbose) {
       //print compiled-in modules
@@ -10846,9 +14184,9 @@ int main(int argc, char** argv) {
       #else
       printf("NO_ZLIB ");
       #endif
-    
-      #ifdef USE_WAVMODEL
-      printf("USE_WAVMODEL ");
+
+      #ifdef USE_AUDIOMODEL
+      printf("USE_AUDIOMODEL ");
       #else
       printf("NO_WAVMODEL ");
       #endif
@@ -10856,43 +14194,35 @@ int main(int argc, char** argv) {
       #ifdef USE_TEXTMODEL
       printf("USE_TEXTMODEL ");
       #else
-      printf("NO_ TEXTMODEL ");
+      printf("NO_TEXTMODEL ");
       #endif
 
-      #ifdef USE_WORDMODEL
-      printf("USE_WORDMODEL ");
-      #else
-      printf("NO_WORDMODEL ");
-      #endif
       printf("\n");
     }
-    
-    printf("\n");
 
     // Determine CPU's (and OS) support for SIMD vectorization istruction set 
-    printf("Highest SIMD vectorization support on this system: ");
     int detected_simd_iset = simd_detect();
-    if(detected_simd_iset<0 || detected_simd_iset>9)quit("Oop, sorry. Unexpected result.");
-    static const char* vectorization_string[10]={"None","MMX","SSE","SSE2","SSE3","SSSE3","SSE4.1","SSE4.2","AVX","AVX2"};
-    printf("%s.\n", vectorization_string[detected_simd_iset]);
     if(simd_iset==-1)simd_iset=detected_simd_iset;
-    if(simd_iset>detected_simd_iset)printf("Overriding system highest vectorization support. Expect a crash.");
+    if(simd_iset>detected_simd_iset)printf("\nOverriding system highest vectorization support. Expect a crash.");
+
+    // Print anything only if the user wants/needs to know
+    if(verbose || simd_iset!=detected_simd_iset) {
+      printf("\nHighest SIMD vectorization support on this system: ");
+      if(detected_simd_iset<0 || detected_simd_iset>9)quit("Oops, sorry. Unexpected result.");
+      static const char* vectorization_string[10]={"None","MMX","SSE","SSE2","SSE3","SSSE3","SSE4.1","SSE4.2","AVX","AVX2"};
+      printf("%s.\n", vectorization_string[detected_simd_iset]);
+
+      printf("Using ");
+      if(simd_iset>=9) printf("AVX2");
+      else if(simd_iset>=3) printf("SSE2");  
+      else printf("non-vectorized");  
+      printf(" neural network functions.\n");  
+    }
 
     // Set highest or user selected vectorization mode
-    printf("Using ");
-    if(simd_iset>=9) {//AVX2
-      MixerFactory::set_simd(SIMD_AVX2);
-      printf("AVX2");  
-    }
-    else if(simd_iset>=3) { //SSE2 or higher
-      MixerFactory::set_simd(SIMD_SSE2);
-      printf("SSE2");  
-    }
-    else { //nothing we can use
-      MixerFactory::set_simd(SIMD_NONE);
-      printf("non-vectorized");  
-    }
-    printf(" neural network functions.\n");  
+    if(simd_iset>=9) MixerFactory::set_simd(SIMD_AVX2);
+    else if(simd_iset>=3) MixerFactory::set_simd(SIMD_SSE2);
+    else MixerFactory::set_simd(SIMD_NONE);
 
     if(verbose) {
       printf("\n");
@@ -10901,7 +14231,7 @@ int main(int argc, char** argv) {
       printf("\n");
     }
 
-    // Successfully parsed command line parameters
+    // Successfully parsed command line arguments
     // Let's check their validity
     if(whattodo==doNone)
       quit("A command switch is required: -0..-9 to compress, -d to decompress, -t to test, -l to list.");
@@ -10933,7 +14263,7 @@ int main(int argc, char** argv) {
       if(whattodo!=doCompress)
         quit("A log file may only be specified for compression.");
       pathtype=examinepath(logfile.c_str());
-      if(pathtype==2 && pathtype==4)
+      if(pathtype==2 || pathtype==4)
         quit("Specified log file should be a file not a directory.");
       if(pathtype==0) {
         printf("\nThere is a problem with the log file: %s",logfile.c_str());
@@ -10989,7 +14319,7 @@ int main(int argc, char** argv) {
         archiveName+=input.c_str();
         archiveName+="." PROGNAME PROGVERSION;
       }
-      else 
+      else
         archiveName+=output.c_str();
     } else { // extract/compare/list: archivename is simply the input
       archiveName+=inputpath.c_str();
@@ -11001,13 +14331,13 @@ int main(int argc, char** argv) {
       printf(" Output folder  = %s\n",outputpath.strsize()==0 ? "." : outputpath.c_str());
     }
 
-    Mode mode = whattodo==doCompress ? COMPRESS : DECOMPRESS; 
+    Mode mode = whattodo==doCompress ? COMPRESS : DECOMPRESS;
 
     ListOfFiles listoffiles;
 
     //set basepath for filelist
     listoffiles.setbasepath(whattodo==doCompress ? inputpath.c_str() : outputpath.c_str());
-    
+
     // Process file list (in multiple file mode)
     if(options & OPTION_MULTIPLE_FILE_MODE) { //multiple file mode
       assert(whattodo==doCompress);
@@ -11019,12 +14349,12 @@ int main(int argc, char** argv) {
       f.close();
       //Verify input files
       for(int i=0;i<listoffiles.getcount();i++)
-        getfilesize(listoffiles.getfilename(i)); // Does file exist? Is it readable? (we don't actially need the filesize now)
+        getfilesize(listoffiles.getfilename(i)); // Does file exist? Is it readable? (we don't actually need the filesize now)
     } else { //single file mode or extract/compare/list
       FileName fn(inputpath.c_str());fn+=input.c_str();
-      getfilesize(fn.c_str()); // Does file exist? Is it readable? (we don't actially need the filesize now)
+      getfilesize(fn.c_str()); // Does file exist? Is it readable? (we don't actually need the filesize now)
     }
-  
+
     FileDisk archive;  // compressed file
 
     if(mode==DECOMPRESS) {
@@ -11034,8 +14364,9 @@ int main(int argc, char** argv) {
       for(int i=0;i<len;i++)
         if(archive.getchar()!=PROGNAME[i]) {printf("%s: not a valid %s file.", archiveName.c_str(), PROGNAME); quit();}
       level=archive.getchar();
-      options=archive.getchar();
-      if(options==EOF) printf("Unexpected end of archive file.\n");
+      c=archive.getchar();
+      if(c==EOF) printf("Unexpected end of archive file.\n");
+      options=(U8)c;
     }
 
     if(verbose) {
@@ -11054,7 +14385,7 @@ int main(int argc, char** argv) {
       printf(" Train txt  (t) = %s\n",options&OPTION_TRAINTXT ? "On  (Pre-train main model with word and expression list)" : "Off");
       printf(" Adaptive   (a) = %s\n",options&OPTION_ADAPTIVE ? "On  (Adaptive learning rate)" : "Off");
       printf(" Skip RGB   (s) = %s\n",options&OPTION_SKIPRGB  ? "On  (Skip the color transform, just reorder the RGB channels)" : "Off");
-      printf(" File mode      = %s\n",options & OPTION_MULTIPLE_FILE_MODE ? "Multiple": "Single");
+      printf(" File mode      = %s\n",options&OPTION_MULTIPLE_FILE_MODE ? "Multiple": "Single");
     }
     printf("\n");
 
@@ -11089,8 +14420,6 @@ int main(int argc, char** argv) {
 
     // Set globals according to requested compression level
     assert(level>=0 && level<=9);
-    buf.setsize(MEM*8);
-
     Encoder en(mode, &archive);
     U64 content_size=0;
     U64 total_size=0;
@@ -11102,13 +14431,18 @@ int main(int argc, char** argv) {
       printf("Writing header : %" PRIu64 " bytes\n", start);
       total_size+=start;
       if ((options & OPTION_MULTIPLE_FILE_MODE)!=0) { //multiple file mode
-        U64 len1=input.size(); //with ending zero
-        for (U64 i=0; i<len1; i++) 
-          en.compress(input[i]); //ASCIIZ filename
+
+        en.compress(TEXT);
+        U64 len1=input.size(); //ASCIIZ filename of listfile - with ending zero
         const String * const s=listoffiles.getstring();
-        U64 len2=s->size(); //with ending zero
-        for (U64 i=0; i<len2; i++) 
-          en.compress((*s)[i]); //ASCIIZ filenames
+        U64 len2=s->size(); //ASCIIZ filenames of files to compress - with ending zero
+        en.encode_blocksize(len1+len2);
+        
+        for (U64 i=0; i<len1; i++)
+          en.compress(input[i]); //ASCIIZ filename of listfile
+        for (U64 i=0; i<len2; i++)
+          en.compress((*s)[i]); //ASCIIZ filenames of files to compress
+
         printf("1/2 - Filename of listfile : %" PRIu64 " bytes\n", len1);
         printf("2/2 - Content of listfile  : %" PRIu64 " bytes\n", len2);
         printf("----- Compressed to        : %" PRIu64 " bytes\n", en.size()-start);
@@ -11118,25 +14452,28 @@ int main(int argc, char** argv) {
 
     // Decompress list of files
     if (mode==DECOMPRESS && (options & OPTION_MULTIPLE_FILE_MODE)!=0) {
+      const char* errmsg_invalid_char="Invalid character or unexpected end of archive file.";
       // name of listfile
       FileName list_filename(outputpath.c_str());
       if(output.strsize()!=0)
         quit("Output filename must not be specified when extracting multiple files.");
+      if((c=en.decompress())!=TEXT)quit(errmsg_invalid_char);
+      en.decode_blocksize(); //we don't really need it
       while((c=en.decompress())!=0) {
-        if(c==255)quit("Invalid character or unexpected end of archive file.");
+        if(c==255)quit(errmsg_invalid_char);
         list_filename+=(char)c;
       }
       while((c=en.decompress())!=0) {
-        if(c==255)quit("Invalid character or unexpected end of archive file.");
+        if(c==255)quit(errmsg_invalid_char);
         listoffiles.addchar((char)c);
       }
-      if (whattodo==doList) 
+      if (whattodo==doList)
         printf("File list of %s archive:\n", archiveName.c_str());
 
       number_of_files=listoffiles.getcount();
 
       //write filenames to screen or listfile or verify (compare) contents
-      if (whattodo==doList) 
+      if (whattodo==doList)
         printf("%s\n",listoffiles.getstring()->c_str());
       else if (whattodo==doExtract) {
         FileDisk f;
@@ -11149,23 +14486,27 @@ int main(int argc, char** argv) {
         FileDisk f;
         f.open(list_filename.c_str(),true);
         String *s=listoffiles.getstring();
-        for(int i=0;i<s->strsize();i++)
-          if(f.getchar()!=(*s)[i])
+        for(U64 i=0;i<s->strsize();i++)
+          if(f.getchar()!=(U8)(*s)[i])
             quit("Mismatch in list of files.");
         if(f.getchar()!=EOF) printf("Filelist on disk is larger than in archive.\n");
         f.close();
       }
     }
 
-    if(whattodo==doList && (options & OPTION_MULTIPLE_FILE_MODE)==0) 
+    if(whattodo==doList && (options & OPTION_MULTIPLE_FILE_MODE)==0)
       quit("Can't list. Filenames are not stored in single file mode.\n");
 
     // Compress or decompress files
     if (mode==COMPRESS) {
+      if(!to_screen) //we need a minimal feedback when redirected
+        fprintf(stderr,"Output is redirected - only minimal feedback is on screen\n");
       if ((options & OPTION_MULTIPLE_FILE_MODE)!=0) { //multiple file mode
         for (int i=0; i<number_of_files; i++) {
           const char* fname=listoffiles.getfilename(i);
           U64 fsize=getfilesize(fname);
+          if(!to_screen) //we need a minimal feedback when redirected
+            fprintf(stderr,"\n%d/%d - Filename: %s (%" PRIu64 " bytes)\n", i+1, number_of_files, fname, fsize);
           printf("\n%d/%d - Filename: %s (%" PRIu64 " bytes)\n", i+1, number_of_files, fname, fsize);
           compressfile(fname, fsize, en, verbose);
           total_size+=fsize+4; //4: file size information
@@ -11175,20 +14516,22 @@ int main(int argc, char** argv) {
         FileName fn;fn+=inputpath.c_str();fn+=input.c_str();
         const char * fname=fn.c_str();
         U64 fsize=getfilesize(fname);
+        if(!to_screen) //we need a minimal feedback when redirected
+          fprintf(stderr,"\nFilename: %s (%" PRIu64 " bytes)\n",fname, fsize);
         printf("\nFilename: %s (%" PRIu64 " bytes)\n",fname, fsize);
         compressfile(fname, fsize, en, verbose);
         total_size+=fsize+4; //4: file size information
         content_size+=fsize;
       }
-      
+
       U64 pre_flush=en.size();
       en.flush();
       total_size+=en.size()-pre_flush; //we consider padding bytes as auxiliary bytes
       printf("-----------------------\n");
-      printf("Total input bytes     : %" PRIu64 "\n", content_size);
+      printf("Total input size     : %" PRIu64 "\n", content_size);
       if(verbose)
-      printf("Total auxiliary bytes : %" PRIu64 "\n", total_size-content_size);
-      printf("Total archive size    : %" PRIu64 "\n", en.size());
+      printf("Total metadata bytes : %" PRIu64 "\n", total_size-content_size);
+      printf("Total archive size   : %" PRIu64 "\n", en.size());
       printf("\n");
       // Log compression results
       if(logfile.strsize()!=0) {
@@ -11231,7 +14574,43 @@ int main(int argc, char** argv) {
   }
   // we catch only the intentional exceptions from quit() to exit gracefully
   // any other exception should result in a crash and must be investigated
-  catch(IntentionalException const& e) {} 
+  catch(IntentionalException const&) {}
 
   return 0;
+}
+
+int main(int argc, char** argv) {
+  #ifdef WINDOWS
+    // On Windows, argv is encoded in the effective codepage, therefore unsuitable for acquiring command line arguments (file names
+    // in our case) not representable in that particular codepage.
+    // -> We will recreate argv as UTF8 (like in Linux)
+    U32 oldcp = GetConsoleOutputCP();
+    SetConsoleOutputCP(CP_UTF8);
+    wchar_t **szArglist;
+    int argc_utf8;
+    char** argv_utf8;
+    if( (szArglist = CommandLineToArgvW(GetCommandLineW(), &argc_utf8)) == NULL) {
+      printf("CommandLineToArgvW failed\n");
+      return 0;
+    } else {
+      if(argc!=argc_utf8)quit("Error preparing command line arguments.");
+      argv_utf8=new char*[argc_utf8+1];
+      for(int i=0; i<argc_utf8; i++) { 
+        wchar_t *s=szArglist[i];
+        int buffersize = WideCharToMultiByte(CP_UTF8,0,s,-1,NULL,0,NULL,NULL);
+        argv_utf8[i] = new char[buffersize];
+        WideCharToMultiByte(CP_UTF8,0,s,-1,argv_utf8[i],buffersize,NULL,NULL);
+        //printf("%d: %s\n", i, argv_utf8[i]); //debug: see if conversion is successful
+      }
+      argv_utf8[argc_utf8]=nullptr;
+      int retval=main_utf8(argc_utf8, argv_utf8);
+      for(int i=0; i<argc_utf8; i++)
+        delete[] argv_utf8[i]; 
+      delete[] argv_utf8;
+      SetConsoleOutputCP(oldcp);
+      return retval;
+    }
+  #else
+    return main_utf8(argc, argv);
+  #endif
 }
