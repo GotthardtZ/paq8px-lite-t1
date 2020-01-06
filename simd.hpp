@@ -38,8 +38,7 @@ static inline unsigned long long xgetbv(unsigned long ctr) {
   : "=a"(a), "=d"(d)
   : "c"(ctr)
   :);
-  return a | (((uint64_t) d) << U
-  32UU);
+  return a | (((uint64_t) d) << 32U);
 #else
 #error Unknown compiler
 #endif

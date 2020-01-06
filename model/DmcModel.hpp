@@ -2,6 +2,11 @@
 #define PAQ8PX_DMCMODEL_HPP
 
 #include <cstdint>
+#include <cassert>
+#include "../Shared.hpp"
+#include "../Random.hpp"
+#include "../StateMap.hpp"
+#include "../utils.hpp"
 
 /**
  * c0,c1: adaptive counts of zeroes and ones;
