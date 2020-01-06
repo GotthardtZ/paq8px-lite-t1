@@ -589,11 +589,11 @@ public:
           }
 
           int i = -1;
-          map[++i].set_direct((W & 0xC0) | ((N & 0xC0) >> 2) | ((WW & 0xC0) >> 4) | (NN >> 6));
-          map[++i].set_direct((N & 0xC0) | ((NN & 0xC0) >> 2) | ((NE & 0xC0) >> 4) | (NEE >> 6));
-          map[++i].set_direct(buf(1 + (isPNG && x < 2)));
-          map[++i].set_direct(min(color, stride - 1));
-          map[++i].set_direct(0);
+          map[++i].setDirect((W & 0xC0) | ((N & 0xC0) >> 2) | ((WW & 0xC0) >> 4) | (NN >> 6));
+          map[++i].setDirect((N & 0xC0) | ((NN & 0xC0) >> 2) | ((NE & 0xC0) >> 4) | (NEE >> 6));
+          map[++i].setDirect(buf(1 + (isPNG && x < 2)));
+          map[++i].setDirect(min(color, stride - 1));
+          map[++i].setDirect(0);
           stats->Image.plane = min(color, stride - 1);
           stats->Image.pixels.W = W;
           stats->Image.pixels.N = N;
@@ -609,28 +609,28 @@ public:
         uint8_t B = (c0 << (8 - bpos));
         int i = 4;
 
-        map[++i].set_direct(
+        map[++i].setDirect(
                 (((uint8_t) (clip(W + N - NW) - px - B)) * 8 + bpos) | (logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) << 11));
-        map[++i].set_direct((((uint8_t) (clip(N * 2 - NN) - px - B)) * 8 + bpos) | (logMeanDiffQt(W, clip(NW * 2 - NNW)) << 11));
-        map[++i].set_direct((((uint8_t) (clip(W * 2 - WW) - px - B)) * 8 + bpos) | (logMeanDiffQt(N, clip(NW * 2 - NWW)) << 11));
-        map[++i].set_direct((((uint8_t) (clip(W + N - NW) - px - B)) * 8 + bpos) | (logMeanDiffQt(p1, clip(Wp1 + Np1 - NWp1)) << 11));
-        map[++i].set_direct((((uint8_t) (clip(W + N - NW) - px - B)) * 8 + bpos) | (logMeanDiffQt(p2, clip(Wp2 + Np2 - NWp2)) << 11));
+        map[++i].setDirect((((uint8_t) (clip(N * 2 - NN) - px - B)) * 8 + bpos) | (logMeanDiffQt(W, clip(NW * 2 - NNW)) << 11));
+        map[++i].setDirect((((uint8_t) (clip(W * 2 - WW) - px - B)) * 8 + bpos) | (logMeanDiffQt(N, clip(NW * 2 - NWW)) << 11));
+        map[++i].setDirect((((uint8_t) (clip(W + N - NW) - px - B)) * 8 + bpos) | (logMeanDiffQt(p1, clip(Wp1 + Np1 - NWp1)) << 11));
+        map[++i].setDirect((((uint8_t) (clip(W + N - NW) - px - B)) * 8 + bpos) | (logMeanDiffQt(p2, clip(Wp2 + Np2 - NWp2)) << 11));
         map[++i].set(hash(W - px - B, N - px - B) * 8 + bpos);
         map[++i].set(hash(W - px - B, WW - px - B) * 8 + bpos);
         map[++i].set(hash(N - px - B, NN - px - B) * 8 + bpos);
         map[++i].set(hash(clip(N + NE - NNE) - px - B, clip(N + NW - NNW) - px - B) * 8 + bpos);
-        map[++i].set_direct((min(color, stride - 1) << 11) | (((uint8_t) (clip(N + p1 - Np1) - px - B)) * 8 + bpos));
-        map[++i].set_direct((min(color, stride - 1) << 11) | (((uint8_t) (clip(N + p2 - Np2) - px - B)) * 8 + bpos));
-        map[++i].set_direct((min(color, stride - 1) << 11) | (((uint8_t) (clip(W + p1 - Wp1) - px - B)) * 8 + bpos));
-        map[++i].set_direct((min(color, stride - 1) << 11) | (((uint8_t) (clip(W + p2 - Wp2) - px - B)) * 8 + bpos));
+        map[++i].setDirect((min(color, stride - 1) << 11) | (((uint8_t) (clip(N + p1 - Np1) - px - B)) * 8 + bpos));
+        map[++i].setDirect((min(color, stride - 1) << 11) | (((uint8_t) (clip(N + p2 - Np2) - px - B)) * 8 + bpos));
+        map[++i].setDirect((min(color, stride - 1) << 11) | (((uint8_t) (clip(W + p1 - Wp1) - px - B)) * 8 + bpos));
+        map[++i].setDirect((min(color, stride - 1) << 11) | (((uint8_t) (clip(W + p2 - Wp2) - px - B)) * 8 + bpos));
         ++i;
         assert(i == nSM0);
 
         for( int j = 0; j < nSM1; i++, j++ )
-          map[i].set_direct((mapCtxs[j] - px - B) * 8 + bpos);
+          map[i].setDirect((mapCtxs[j] - px - B) * 8 + bpos);
 
         for( int j = 0; i < nSM; i++, j++ )
-          map[i].set_direct((pOLS[j] - px - B) * 8 + bpos);
+          map[i].setDirect((pOLS[j] - px - B) * 8 + bpos);
 
         for( int i = 0; i < nSSM; i++ )
           SCMap[i].set((scMapCtxs[i] - px - B) * 8 + bpos);

@@ -10,7 +10,7 @@
  */
 class UpdateBroadcaster {
 private:
-    int n; // number of subscribed predictors, (number of items in "subscribers" array)
+    int n; /**< number of subscribed predictors, (number of items in "subscribers" array)*/
     IPredictor *subscribers[1024];
 public:
     UpdateBroadcaster() : n(0) {}

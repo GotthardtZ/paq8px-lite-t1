@@ -7,6 +7,10 @@
 #include "../Random.hpp"
 #include "../StateMap.hpp"
 #include "../utils.hpp"
+#include "../Array.hpp"
+#include "../StateTable.hpp"
+#include "../Stretch.hpp"
+#include "../Mixer.hpp"
 
 /**
  * c0,c1: adaptive counts of zeroes and ones;
@@ -69,7 +73,7 @@ class DmcModel {
 private:
     const Shared *const shared;
     Random rnd;
-    Array<DMCNode> t; // state graph
+    Array <DMCNode> t; // state graph
     StateMap sm; // stateMap for bit history states
     uint32_t top, curr; // index of first unallocated node (i.e. number of allocated nodes); index of current node
     uint32_t threshold; // cloning threshold parameter: fixed point number like c0,c1
@@ -261,22 +265,22 @@ public:
     void mix(Mixer &m) {
       int i = MODELS;
       // the slow models predict individually
-      m.add(dmcModels[--i]->st() >> 3);
-      m.add(dmcModels[--i]->st() >> 3);
+      m.add(dmcModels[--i]->st() >> 3U);
+      m.add(dmcModels[--i]->st() >> 3U);
       // the fast models are combined for better stability
       while( i > 0 ) {
         const int pr1 = dmcModels[--i]->st();
         const int pr2 = dmcModels[--i]->st();
-        m.add((pr1 + pr2) >> 4);
+        m.add((pr1 + pr2) >> 4U);
       }
 
       // reset models when their structure can't adapt anymore
       // the two slow models are never reset
       INJECT_SHARED_bpos
       if( bpos == 0 )
-        for( int i = MODELS - 3; i >= 0; i-- )
-          if( dmcModels[i]->isFull())
-            dmcModels[i]->resetStateGraph(dmcParams[i]);
+        for( int j = MODELS - 3; j >= 0; j-- )
+          if( dmcModels[j]->isFull())
+            dmcModels[j]->resetStateGraph(dmcParams[j]);
     }
 };
 

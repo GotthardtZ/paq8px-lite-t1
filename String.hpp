@@ -70,7 +70,7 @@ public:
       chk_consistency();
     }
 
-    bool endswith(const char *ending) const {
+    bool endsWith(const char *ending) const {
       const uint64_t endingSize = strlen(ending);
       if( endingSize > strsize())
         return false;
@@ -96,9 +96,9 @@ public:
 
     void stripStart(uint64_t count) {
       assert(strsize() >= count);
-      const uint64_t newsize = strsize() - count;
-      memmove(&(*this)[0], &(*this)[count], newsize);
-      resize(newsize);
+      const uint64_t newSize = strsize() - count;
+      memmove(&(*this)[0], &(*this)[count], newSize);
+      resize(newSize);
       pushBack(0); //Append NUL
       chk_consistency();
     }

@@ -124,14 +124,14 @@ public:
             dbase.version = 0;
           else if( dbase.version == 0 && stats->blockType == DEFAULT && blpos >= 31 ) {
             uint8_t b = buf(32);
-            if(((b & 7) == 3 || (b & 7) == 4 || (b >> 4) == 3 || b == 0xF5) && ((b = buf(30)) > 0 && b < 13) &&
+            if(((b & 7U) == 3 || (b & 7U) == 4 || (b >> 4U) == 3 || b == 0xF5) && ((b = buf(30)) > 0 && b < 13) &&
                ((b = buf(29)) > 0 && b < 32) &&
-               ((dbase.nRecords = buf(28) | (buf(27) << 8) | (buf(26) << 16) | (buf(25) << 24)) > 0 && dbase.nRecords < 0xFFFFF) &&
-               ((dbase.headerLength = buf(24) | (buf(23) << 8)) > 32 && (((dbase.headerLength - 32 - 1) % 32) == 0 ||
+               ((dbase.nRecords = buf(28) | (buf(27) << 8U) | (buf(26) << 16U) | (buf(25) << 24U)) > 0 && dbase.nRecords < 0xFFFFF) &&
+               ((dbase.headerLength = buf(24) | (buf(23) << 8U)) > 32 && (((dbase.headerLength - 32 - 1) % 32) == 0 ||
                                                                          (dbase.headerLength > 255 + 8 &&
                                                                           (((dbase.headerLength -= 255 + 8) - 32 - 1) % 32) == 0))) &&
-               ((dbase.recordLength = buf(22) | (buf(21) << 8)) > 8) && (buf(20) == 0 && buf(19) == 0 && buf(17) <= 1 && buf(16) <= 1)) {
-              dbase.version = (((b = buf(32)) >> 4) == 3) ? 3 : b & 7;
+               ((dbase.recordLength = buf(22) | (buf(21) << 8U)) > 8) && (buf(20) == 0 && buf(19) == 0 && buf(17) <= 1 && buf(16) <= 1)) {
+              dbase.version = (((b = buf(32)) >> 4U) == 3) ? 3 : b & 7U;
               dbase.start = blpos - 32 + dbase.headerLength;
               dbase.end = dbase.start + dbase.nRecords * dbase.recordLength;
               if( dbase.version == 3 ) {
@@ -162,8 +162,8 @@ public:
             if((int) rcount[i] > max(0, 12 - (int) ilog2(rlen[i + 1]))) {
               if( rlen[0] != rlen[i + 1] ) {
                 if( mayBeImg24B && rlen[i + 1] == 3 ) {
-                  rcount[0] >>= 1;
-                  rcount[1] >>= 1;
+                  rcount[0] >>= 1U;
+                  rcount[1] >>= 1U;
                   continue;
                 } else if((rlen[i + 1] > rlen[0]) && (rlen[i + 1] % rlen[0] == 0)) {
                   // maybe we found a multiple of the real record size..?
@@ -171,8 +171,8 @@ public:
                   // that is probably more likely the bigger the length, so
                   // check for small lengths too
                   if((rlen[0] > 32) && (rlen[i + 1] == rlen[0] * 2)) {
-                    rcount[0] >>= 1;
-                    rcount[1] >>= 1;
+                    rcount[0] >>= 1U;
+                    rcount[1] >>= 1U;
                     continue;
                   }
                 }
@@ -184,7 +184,7 @@ public:
               } else
                 // we found the same length again, that's positive reinforcement that
                 // this really is the correct record size, so give it a little boost
-                rcount[i] >>= 2;
+                rcount[i] >>= 2U;
 
               // if the other candidate record length is orders of
               // magnitude larger, it will probably never have enough time
@@ -192,8 +192,8 @@ public:
               // this length is not a multiple of the other, than it might
               // really be worthwhile to investigate it, so we won't set its
               // counter to 0
-              if( rlen[i + 1] << 4 > rlen[1 + (i ^ 1)] )
-                rcount[i ^ 1] = 0;
+              if( rlen[i + 1] << 4 > rlen[1 + (i ^ 1U)] )
+                rcount[i ^ 1U] = 0;
             }
           }
         }
@@ -281,13 +281,13 @@ public:
         int k = 0x300;
         if( mayBeImg24B ) {
           k = (col % 3) << 8;
-          maps[0].set_direct(clip(((uint8_t) (c4 >> 16)) + c - (c4 >> 24)) | k);
+          maps[0].setDirect(clip(((uint8_t) (c4 >> 16)) + c - (c4 >> 24)) | k);
         } else
-          maps[0].set_direct(clip(c * 2 - d) | k);
-        maps[1].set_direct(clip(c + N - buf(rlen[0] + 1)) | k);
-        maps[2].set_direct(clip(N + NN - NNN));
-        maps[3].set_direct(clip(N * 2 - NN));
-        maps[4].set_direct(clip(N * 3 - NN * 3 + NNN));
+          maps[0].setDirect(clip(c * 2 - d) | k);
+        maps[1].setDirect(clip(c + N - buf(rlen[0] + 1)) | k);
+        maps[2].setDirect(clip(N + NN - NNN));
+        maps[3].setDirect(clip(N * 2 - NN));
+        maps[4].setDirect(clip(N * 3 - NN * 3 + NNN));
         iMap[0].setDirect(N + NN - NNN);
         iMap[1].setDirect(N * 2 - NN);
         iMap[2].setDirect(N * 3 - NN * 3 + NNN);
@@ -309,7 +309,7 @@ public:
       INJECT_SHARED_y
       iCtx[nIndCtxs - 1] += y;
       iCtx[nIndCtxs - 1] = ctx;
-      maps[5].set_direct(ctx);
+      maps[5].setDirect(ctx);
 
       sMap[0].set(ctx);
       sMap[1].set(iCtx[nIndCtxs - 1]());

@@ -210,7 +210,7 @@ public:
         iCtx += y;
         const uint8_t C = length3Rm << 1 | expectedBit; // 4 bits
         iCtx = (bpos << 11) | (c1 << 3) | C;
-        Maps[1].set_direct(iCtx());
+        Maps[1].setDirect(iCtx());
         SCM.set((bpos << 3) | C);
       }
       Maps[0].mix(m);

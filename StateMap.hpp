@@ -29,7 +29,7 @@ protected:
       dt = DivisionTable::getDT();
     }
 
-    ~AdaptiveMap() override = default;;
+    ~AdaptiveMap() override = default;
 
     void update(uint32_t *const p) {
       uint32_t p0 = p[0];
@@ -57,7 +57,7 @@ class StateMap : public AdaptiveMap {
 protected:
     const uint32_t S; // Number of context sets
     const uint32_t N; // Number of contexts in each context set
-    uint32_t ncxt; // Number of context indexes present in cxt array (0..s-1)
+    uint32_t numContexts; // Number of context indexes present in cxt array (0..s-1)
     Array<uint32_t> cxt; // context index of last prediction per context set
 public:
     enum MAPTYPE {
@@ -73,7 +73,7 @@ public:
      * @param mapType
      */
     StateMap(const Shared *const sh, const int s, const int n, const int lim, const MAPTYPE mapType) : AdaptiveMap(sh, n * s, lim), S(s),
-                                                                                                       N(n), ncxt(0), cxt(s) {
+            N(n), numContexts(0), cxt(s) {
       assert(S > 0 && N > 0);
       assert(limit > 0 && limit < 1024);
       if( mapType == BIT_HISTORY ) { // when the context is a bit history byte, we have a-priory for p
@@ -87,8 +87,8 @@ public:
         }
       } else if( mapType == RUN ) { // when the context is a run count: we have a-priory for p
         for( uint32_t cx = 0; cx < N; ++cx ) {
-          const int predictedBit = (cx) & 1;
-          const int uncertainty = (cx >> 1) & 1;
+          const int predictedBit = (cx) & 1U;
+          const int uncertainty = (cx >> 1U) & 1U;
           //const int bp = (cx>>2)&1; // unused in calculation - a-priory does not seem to depend on bitPosition in the general case
           const int runCount = (cx >> 4); // 0..254
           uint32_t n0 = uncertainty * 16 + 16;
@@ -100,23 +100,23 @@ public:
         }
       } else { // no a-priory
         for( uint32_t i = 0; i < N * S; ++i )
-          t[i] = (1u << 31) + 0; //initial p=0.5, initial count=0
+          t[i] = (1U << 31U) + 0; //initial p=0.5, initial count=0
       }
     }
 
     void reset(const int rate) {
       for( uint32_t i = 0; i < N * S; ++i )
-        t[i] = (t[i] & 0xfffffc00) | min(rate, t[i] & 0x3FF);
+        t[i] = (t[i] & 0xfffffc00u) | min(rate, t[i] & 0x3FFU);
     }
 
     void update() override {
-      assert(ncxt <= S);
-      while( ncxt > 0 ) {
-        ncxt--;
-        const uint32_t idx = cxt[ncxt];
+      assert(numContexts <= S);
+      while( numContexts > 0 ) {
+        numContexts--;
+        const uint32_t idx = cxt[numContexts];
         if( idx + 1 == 0 )
           continue; // UINT32_MAX: skipped context
-        assert(ncxt * N <= idx && idx < (ncxt + 1) * N);
+        assert(numContexts * N <= idx && idx < (numContexts + 1) * N);
         AdaptiveMap::update(&t[idx]);
       }
     }
@@ -127,7 +127,7 @@ public:
       updater.subscribe(this);
       assert(cx >= 0 && cx < N);
       cxt[0] = cx;
-      ncxt++;
+      numContexts++;
       return t[cx] >> 20;
     }
 
@@ -146,10 +146,10 @@ public:
     int p2(const uint32_t s, const uint32_t cx) {
       assert(s >= 0 && s < S);
       assert(cx >= 0 && cx < N);
-      assert(s == ncxt);
-      const uint32_t idx = ncxt * N + cx;
-      cxt[ncxt] = idx;
-      ncxt++;
+      assert(s == numContexts);
+      const uint32_t idx = numContexts * N + cx;
+      cxt[numContexts] = idx;
+      numContexts++;
       return t[idx] >> 20U;
     }
 
@@ -164,9 +164,9 @@ public:
      */
     void skip(const uint32_t s) {
       assert(s >= 0 && s < S);
-      assert(s == ncxt);
-      cxt[ncxt] = 0 - 1; // UINT32_MAX: mark for skipping
-      ncxt++;
+      assert(s == numContexts);
+      cxt[numContexts] = 0 - 1; // UINT32_MAX: mark for skipping
+      numContexts++;
     }
 
     void print() const {

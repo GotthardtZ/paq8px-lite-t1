@@ -67,7 +67,7 @@ private:
         uint32_t maskUpper; // binary mask of uppercase letters seen (in the last 32 bytes)
         uint32_t lastLetter; // distance to last letter
         uint32_t lastDigit; // distance to last digit
-        uint32_t lastPunct; // distance to last punctuation character
+        uint32_t lastPunctuation; // distance to last punctuation character
         uint32_t lastNewLine; // distance to last new line character
         uint32_t prevNewLine; // distance to penultimate new line character
         uint32_t wordGap; // distance between the last words
@@ -75,7 +75,7 @@ private:
         uint32_t spaceCount; // count of whitespace characters seen (in the last 32 bytes)
         uint32_t commas; // number of commas seen in this line (not this segment/sentence)
         uint32_t quoteLength; // length (in words) of current quote
-        uint32_t maskPunct; // mask of relative position of last comma related to other punctuation
+        uint32_t maskPunctuation; // mask of relative position of last comma related to other punctuation
         uint32_t nestHash; // hash representing current nesting state
         uint32_t lastNest; // distance to last nesting character
         uint32_t masks[5], wordLength[2];
@@ -83,7 +83,7 @@ private:
         uint8_t firstLetter; // first letter of current word
         uint8_t firstChar; // first character of current line
         uint8_t expectedDigit; // next expected digit of detected numerical sequence
-        uint8_t prevPunct; // most recent punctuation character seen
+        uint8_t prevPunctuation; // most recent punctuation character seen
         Word topicDescriptor; // last word before ':'
     } Info;
     uint64_t ParseCtx; // state of parser + relevant features used as a context (hash)
@@ -126,29 +126,29 @@ public:
       }
       cm.mix(m);
 
-      const uint8_t chargrp = stats->Text.chargrp;
+      const uint8_t characterGroup = stats->Text.chargrp;
       INJECT_SHARED_c1
       INJECT_SHARED_c0
       m.set(finalize64(hash((Lang.id != Language::Unknown) ? 1 + stemmers[Lang.id - 1]->isVowel(c1) : 0, Info.masks[1] & 0xFF, c0), 11),
             2048);
       m.set(finalize64(hash(ilog2(Info.wordLength[0] + 1), c0, (Info.lastDigit < Info.wordLength[0] + Info.wordGap) |
                                                                ((Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1) |
-                                                               ((Info.lastPunct < Info.wordLength[0] + Info.wordGap) << 2) |
+                                                               ((Info.lastPunctuation < Info.wordLength[0] + Info.wordGap) << 2) |
                                                                ((Info.lastUpper < Info.wordLength[0]) << 3)), 11), 2048);
-      m.set(finalize64(hash(Info.masks[1] & 0x3FF, chargrp, Info.lastUpper < Info.wordLength[0],
+      m.set(finalize64(hash(Info.masks[1] & 0x3FF, characterGroup, Info.lastUpper < Info.wordLength[0],
                             Info.lastUpper < Info.lastLetter + Info.wordLength[1]), 12), 4096);
-      m.set(finalize64(hash(Info.spaces & 0x1FF, chargrp,
+      m.set(finalize64(hash(Info.spaces & 0x1FF, characterGroup,
                             (Info.lastUpper < Info.wordLength[0]) | ((Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1) |
-                            ((Info.lastPunct < Info.lastLetter) << 2) | ((Info.lastPunct < Info.wordLength[0] + Info.wordGap) << 3) |
-                            ((Info.lastPunct < Info.lastLetter + Info.wordLength[1] + Info.wordGap) << 4)), 12), 4096);
+                            ((Info.lastPunctuation < Info.lastLetter) << 2) | ((Info.lastPunctuation < Info.wordLength[0] + Info.wordGap) << 3) |
+                            ((Info.lastPunctuation < Info.lastLetter + Info.wordLength[1] + Info.wordGap) << 4)), 12), 4096);
       m.set(finalize64(hash(Info.firstLetter * (Info.wordLength[0] < 4), min(6, Info.wordLength[0]), c0), 11), 2048);
-      m.set(finalize64(hash((*pWord)[0], (*pWord)(0), min(4, Info.wordLength[0]), Info.lastPunct < Info.lastLetter), 11), 2048);
-      m.set(finalize64(hash(min(4, Info.wordLength[0]), chargrp, Info.lastUpper < Info.wordLength[0],
+      m.set(finalize64(hash((*pWord)[0], (*pWord)(0), min(4, Info.wordLength[0]), Info.lastPunctuation < Info.lastLetter), 11), 2048);
+      m.set(finalize64(hash(min(4, Info.wordLength[0]), characterGroup, Info.lastUpper < Info.wordLength[0],
                             (Info.nestHash > 0) ? Info.nestHash & 0xFF : 0x100 | (Info.firstLetter *
                                                                                   (Info.wordLength[0] > 0 && Info.wordLength[0] < 4))), 12),
             4096);
-      m.set(finalize64(hash(chargrp, Info.masks[4] & 0x1F, (Info.masks[4] >> 5) & 0x1F), 13), 8192);
-      m.set(finalize64(hash(chargrp, uint8_t(pWord->embedding), Lang.id, State), 11), 2048);
+      m.set(finalize64(hash(characterGroup, Info.masks[4] & 0x1F, (Info.masks[4] >> 5) & 0x1F), 13), 8192);
+      m.set(finalize64(hash(characterGroup, uint8_t(pWord->embedding), Lang.id, State), 11), 2048);
     }
 };
 
@@ -156,7 +156,7 @@ void TextModel::Update() {
   Info.lastUpper = min(0xFF, Info.lastUpper + 1), Info.maskUpper <<= 1;
   Info.lastLetter = min(0x1F, Info.lastLetter + 1);
   Info.lastDigit = min(0xFF, Info.lastDigit + 1);
-  Info.lastPunct = min(0x3F, Info.lastPunct + 1);
+  Info.lastPunctuation = min(0x3F, Info.lastPunctuation + 1);
   Info.lastNewLine++;
   Info.prevNewLine++;
   Info.lastNest++;
@@ -212,7 +212,7 @@ void TextModel::Update() {
       if( Info.wordLength[0] == 1 ) {
         if( Info.quoteLength == 0 && pC == SPACE )
           Info.quoteLength = 1;
-        else if( Info.quoteLength > 0 && Info.lastPunct == 1 ) {
+        else if( Info.quoteLength > 0 && Info.lastPunctuation == 1 ) {
           Info.quoteLength = 0;
           State = Parse::AfterQuote;
           ParseCtx = hash(State, pC);
@@ -359,7 +359,7 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
           cSentence->segmentCount++;
           Info.masks[3] += 4;
         }
-        Info.lastPunct = 0, Info.prevPunct = c;
+        Info.lastPunctuation = 0, Info.prevPunctuation = c;
         Info.masks[0] += 3, Info.masks[1] += 2, Info.masks[2] += 15;
         cSegment = &segments.next();
         break;
@@ -501,8 +501,8 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
     Info.UTF8Remaining--;
   else
     Info.UTF8Remaining = (leadingBitsSet != 1) ? (c != 0xC0 && c != 0xC1 && c < 0xF5) ? (leadingBitsSet - (leadingBitsSet > 0)) : -1 : 0;
-  Info.maskPunct = (bytePos[','] > bytePos['.']) | ((bytePos[','] > bytePos['!']) << 1) | ((bytePos[','] > bytePos['?']) << 2) |
-                   ((bytePos[','] > bytePos[':']) << 3) | ((bytePos[','] > bytePos[';']) << 4);
+  Info.maskPunctuation = (bytePos[','] > bytePos['.']) | ((bytePos[','] > bytePos['!']) << 1) | ((bytePos[','] > bytePos['?']) << 2) |
+                         ((bytePos[','] > bytePos[':']) << 3) | ((bytePos[','] > bytePos[';']) << 4);
 
   stats->Text.firstLetter = Info.firstLetter;
   stats->Text.mask = Info.masks[1] & 0xFF;
@@ -535,23 +535,23 @@ void TextModel::setContexts() {
   cm.set(hash(++i, (Info.lastLetter == 0) ? cWordHash0 : pWordHash0, c, cSegment->firstWord.Hash[1],
               min(3, ilog2(cSegment->wordCount + 1))));
   cm.set(hash(++i, cWordHash0, c, segments(1).firstWord.Hash[1]));
-  cm.set(hash(++i, max(31, lc), Info.masks[1] & 0xFFC, (Info.spaces & 0xFE) | (Info.lastPunct < Info.lastLetter),
+  cm.set(hash(++i, max(31, lc), Info.masks[1] & 0xFFC, (Info.spaces & 0xFE) | (Info.lastPunctuation < Info.lastLetter),
               (Info.maskUpper & 0xFF) | (((0x100 | Info.firstLetter) * (Info.wordLength[0] > 1)) << 8)));
-  cm.set(hash(++i, column, min(7, ilog2(Info.lastUpper + 1)), ilog2(Info.lastPunct + 1)));
+  cm.set(hash(++i, column, min(7, ilog2(Info.lastUpper + 1)), ilog2(Info.lastPunctuation + 1)));
   cm.set(hash(++i,
               (column & 0xF8) | (Info.masks[1] & 3) | ((Info.prevNewLine - Info.lastNewLine > 63) << 2) | (min(3, Info.lastLetter) << 8) |
               (Info.firstChar << 10) | ((Info.commas > 4) << 18) | ((m2 >= 1 && m2 <= 5) << 19) | ((m2 >= 6 && m2 <= 10) << 20) |
               ((m2 == 11 || m2 == 12) << 21) | ((Info.lastUpper < column) << 22) | ((Info.lastDigit < column) << 23) |
               ((column < Info.prevNewLine - Info.lastNewLine) << 24)));
-  cm.set(hash(++i, (2 * column) / 3, min(13, Info.lastPunct) + (Info.lastPunct > 16) + (Info.lastPunct > 32) + Info.maskPunct * 16,
+  cm.set(hash(++i, (2 * column) / 3, min(13, Info.lastPunctuation) + (Info.lastPunctuation > 16) + (Info.lastPunctuation > 32) + Info.maskPunctuation * 16,
               ilog2(Info.lastUpper + 1), ilog2(Info.prevNewLine - Info.lastNewLine),
               ((Info.masks[1] & 3) == 0) | ((m2 < 6) << 1) | ((m2 < 11) << 2)));
   cm.set(hash(++i, column >> 1, Info.spaces & 0xF));
   cm.set(hash(++i, Info.masks[3] & 0x3F, min((max(Info.wordLength[0], 3) - 2) * (Info.wordLength[0] < 8), 3),
               Info.firstLetter * (Info.wordLength[0] < 5), w,
-              (c == buf(2)) | ((Info.masks[2] > 0) << 1) | ((Info.lastPunct < Info.wordLength[0] + Info.wordGap) << 2) |
+              (c == buf(2)) | ((Info.masks[2] > 0) << 1) | ((Info.lastPunctuation < Info.wordLength[0] + Info.wordGap) << 2) |
               ((Info.lastUpper < Info.wordLength[0]) << 3) | ((Info.lastDigit < Info.wordLength[0] + Info.wordGap) << 4) |
-              ((Info.lastPunct < 2 + Info.wordLength[0] + Info.wordGap + Info.wordLength[1]) << 5)));
+              ((Info.lastPunctuation < 2 + Info.wordLength[0] + Info.wordGap + Info.wordLength[1]) << 5)));
   cm.set(hash(++i, w, c, Info.numHashes[1]));
   INJECT_SHARED_pos
   cm.set(hash(++i, w, c, llog(pos - wordPos[w & (wordPos.size() - 1)]) >> 1));
@@ -561,11 +561,11 @@ void TextModel::setContexts() {
   cm.set(hash(++i, w, c, Info.masks[3] & 0x1FF,
               ((cSentence->verbIndex == 0 && cSentence->lastVerb.length() > 0) << 6) | ((Info.wordLength[1] > 3) << 5) |
               ((cSegment->wordCount == 0) << 4) | ((cSentence->segmentCount == 0 && cSentence->wordCount < 2) << 3) |
-              ((Info.lastPunct >= Info.lastLetter + Info.wordLength[1] + Info.wordGap) << 2) |
+              ((Info.lastPunctuation >= Info.lastLetter + Info.wordLength[1] + Info.wordGap) << 2) |
               ((Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1) |
               (Info.lastUpper < Info.wordLength[0] + Info.wordGap + Info.wordLength[1])));
-  cm.set(hash(++i, c, pWordHash1, Info.firstLetter * (Info.wordLength[0] < 6), ((Info.lastPunct < Info.wordLength[0] + Info.wordGap) << 1) |
-                                                                               (Info.lastPunct >=
+  cm.set(hash(++i, c, pWordHash1, Info.firstLetter * (Info.wordLength[0] < 6), ((Info.lastPunctuation < Info.wordLength[0] + Info.wordGap) << 1) |
+                                                                               (Info.lastPunctuation >=
                                                                                 Info.lastLetter + Info.wordLength[1] + Info.wordGap)));
   cm.set(hash(++i, w, c, words[Lang.pId](1 + (Info.wordLength[0] == 0)).letters[words[Lang.pId](1 + (Info.wordLength[0] == 0)).start],
               Info.firstLetter * (Info.wordLength[0] < 7)));

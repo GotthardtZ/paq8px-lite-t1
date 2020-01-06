@@ -479,15 +479,15 @@ public:
       if( x || !isPNG ) {
         if( gray ) {
           int i = 0;
-          map[i++].set_direct(0);
-          map[i++].set_direct(
+          map[i++].setDirect(0);
+          map[i++].setDirect(
                   (((uint8_t) (clip(W + N - NW) - px - B)) * 8 + bpos) | (logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) << 11));
 
           for( int j = 0; j < nSM1; i++, j++ )
-            map[i].set_direct((MapCtxs[j] - px - B) * 8 + bpos);
+            map[i].setDirect((MapCtxs[j] - px - B) * 8 + bpos);
 
           for( int j = 0; i < nSM; i++, j++ )
-            map[i].set_direct((pOLS[j] - px - B) * 8 + bpos);
+            map[i].setDirect((pOLS[j] - px - B) * 8 + bpos);
         }
         sceneMap[2].setDirect(finalize64(hash(x, line), 19) * 8 + bpos);
         sceneMap[3].setDirect((prvFrmPx - B) * 8 + bpos);

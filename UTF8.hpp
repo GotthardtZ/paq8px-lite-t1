@@ -8,7 +8,7 @@
 #define UTF8_ACCEPT 0
 #define UTF8_REJECT 12
 
-static const uint8_t utf8StateTable[] = {
+static const constexpr uint8_t utf8StateTable[] = {
         // byte -> character class
         // character_class = utf8StateTable[byte]
         1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 00..1f

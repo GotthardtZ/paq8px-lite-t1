@@ -573,7 +573,7 @@ public:
 };
 
 // Verify that the specified file exists and is readable, determine file size
-static uint64_t getfileSize(const char *filename) {
+static uint64_t getFileSize(const char *filename) {
   FileDisk f;
   f.open(filename, true);
   f.setEnd();

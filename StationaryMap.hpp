@@ -39,7 +39,7 @@ public:
       set(0);
     }
 
-    void set_direct(uint32_t ctx) { // ctx must be a direct context (no hash)
+    void setDirect(uint32_t ctx) { // ctx must be a direct context (no hash)
       context = (ctx & mask) * stride;
       bCount = B = 0;
     }
@@ -51,14 +51,14 @@ public:
 
     void reset(const int rate) {
       for( uint32_t i = 0; i < data.size(); ++i )
-        data[i] = (0x7FF << 20) | min(1023, rate);
+        data[i] = (0x7FFU << 20U) | min(1023, rate);
       cp = &data[0];
     }
 
     void update() override {
       INJECT_SHARED_y
       uint32_t count = min(min(limit, 0x3FF), ((*cp) & 0x3FFU) + 1);
-      int prediction = (*cp) >> 10, error = (y << 22U) - prediction;
+      int prediction = (*cp) >> 10U, error = (y << 22U) - prediction;
       error = ((error / 8) * dt[count]) / 1024;
       prediction = min(0x3FFFFF, max(0, prediction + error));
       *cp = (prediction << 10U) | count;
@@ -70,7 +70,7 @@ public:
     void mix(Mixer &m) {
       updater.subscribe(this);
       cp = &data[context + B];
-      int prediction = (*cp) >> 20;
+      int prediction = (*cp) >> 20U;
       m.add((stretch(prediction) * scale) >> 8);
       m.add(((prediction - 2048) * scale) >> 9);
       bCount++;

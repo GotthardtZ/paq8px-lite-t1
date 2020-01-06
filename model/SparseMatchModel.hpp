@@ -106,11 +106,11 @@ public:
         INJECT_SHARED_c4
         Maps[0].set(hash(expectedByte, c0, c1, (c4 >> 8) & 0xff, ilog2(length + 1) * NumHashes + hashIndex));
         const uint32_t c1_expectedByte = (c1 << 8) | expectedByte;
-        Maps[1].set_direct(c1_expectedByte);
+        Maps[1].setDirect(c1_expectedByte);
         iCtx8 = c1_expectedByte;
         iCtx16 = c1_expectedByte;
-        Maps[2].set_direct(iCtx8());
-        Maps[3].set_direct(iCtx16());
+        Maps[2].setDirect(iCtx8());
+        Maps[3].setDirect(iCtx16());
       }
     }
 
@@ -125,12 +125,12 @@ public:
         INJECT_SHARED_c4
         Maps[0].set(hash(expectedByte, c0, c1, (c4 >> 8) & 0xff, ilog2(length + 1) * NumHashes + hashIndex));
         if( bpos == 4 )
-          Maps[1].set_direct(0x10000 | ((expectedByte ^ uint8_t(c0 << 4)) << 8) | c1);
+          Maps[1].setDirect(0x10000 | ((expectedByte ^ uint8_t(c0 << 4)) << 8) | c1);
         INJECT_SHARED_y
         iCtx8 += y;
         iCtx8 = (bpos << 16) | (c1 << 8) | (expectedByte ^ B);
-        Maps[2].set_direct(iCtx8());
-        Maps[3].set_direct((bpos << 16) | (iCtx16() ^ uint32_t(B | (B << 8))));
+        Maps[2].setDirect(iCtx8());
+        Maps[3].setDirect((bpos << 16) | (iCtx16() ^ uint32_t(B | (B << 8))));
       }
 
       // check if next bit matches the prediction, accounting for the required bitmask
