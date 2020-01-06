@@ -80,44 +80,16 @@ public:
     int order = 0; // is set after mix()
     // Construct using size bytes of memory for count contexts
     ContextMap2(const Shared *const sh, const uint64_t size, const uint32_t count, const int scale, const uint32_t uw) : shared(sh),
-                                                                                                                         c(count),
-                                                                                                                         table(size >> 6U),
-                                                                                                                         bitState(count),
-                                                                                                                         bitState0(count),
-                                                                                                                         byteHistory(count),
-                                                                                                                         contexts(count),
-                                                                                                                         checksums(count),
-                                                                                                                         runMap(sh, count,
-                                                                                                                                (1 << 12U),
-                                                                                                                                127,
-                                                                                                                                StateMap::RUN),
+            c(count), table(size >> 6U), bitState(count), bitState0(count), byteHistory(count), contexts(count), checksums(count),
+            runMap(sh, count, (1U << 12U), 127, StateMap::RUN),
             /* StateMap : s, n, lim, init */ // 63-255
-                                                                                                                         stateMap(sh, count,
-                                                                                                                                  (1 << 8U),
-                                                                                                                                  511,
-                                                                                                                                  StateMap::BIT_HISTORY),
+            stateMap(sh, count, (1U << 8U), 511, StateMap::BIT_HISTORY),
             /* StateMap : s, n, lim, init */ // 511-1023
-                                                                                                                         bhmap8b(sh, count,
-                                                                                                                                 (1 << 8U),
-                                                                                                                                 511,
-                                                                                                                                 StateMap::GENERIC),
+            bhmap8b(sh, count, (1U << 8U), 511, StateMap::GENERIC),
             /* StateMap : s, n, lim, init */ // 511-1023
-                                                                                                                         bhmap12b(sh, count,
-                                                                                                                                  (1
-                                                                                                                                          << 12U),
-                                                                                                                                  511,
-                                                                                                                                  StateMap::GENERIC),
+            bhmap12b(sh, count, (1U << 12U), 511, StateMap::GENERIC),
             /* StateMap : s, n, lim, init */ // 255-1023
-                                                                                                                         index(0),
-                                                                                                                         mask(uint32_t(
-                                                                                                                                 table.size() -
-                                                                                                                                 1)),
-                                                                                                                         hashBits(
-                                                                                                                                 ilog2(mask +
-                                                                                                                                       1)),
-                                                                                                                         validFlags(0),
-                                                                                                                         scale(scale),
-                                                                                                                         useWhat(uw) {
+            index(0), mask(uint32_t(table.size() - 1)), hashBits(ilog2(mask + 1)), validFlags(0), scale(scale), useWhat(uw) {
       assert(size >= 64 && isPowerOf2(size));
       assert(sizeof(Bucket) == 64);
       assert(c <= (int) sizeof(validFlags) * 8); // validFlags is 64 bits - it can't support more than 64 contexts

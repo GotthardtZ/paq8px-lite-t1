@@ -89,16 +89,15 @@ private:
 
 public:
     RecordModel(const Shared *const sh, ModelStats *st, const uint64_t size) : shared(sh), stats(st), cm(sh, 32768, 3),
-                                                                               cn(sh, 32768 / 2, 3), co(sh, 32768 * 2, 3), cp(sh, size, 16),
-                                                                               maps {{sh, 10, 8, 86, 1023},
-                                                                                     {sh, 10, 8, 86, 1023},
-                                                                                     {sh, 8,  8, 86, 1023},
-                                                                                     {sh, 8,  8, 86, 1023},
-                                                                                     {sh, 8,  8, 86, 1023},
-                                                                                     {sh, 11, 1, 86, 1023}}, sMap {{sh, 11, 1, 6, 86},
-                                                                                                                   {sh, 3,  1, 6, 86},
-                                                                                                                   {sh, 19, 1, 5, 128},
-                                                                                                                   {sh, 8,  8, 5, 64} // pos&255
+            cn(sh, 32768 / 2, 3), co(sh, 32768 * 2, 3), cp(sh, size, 16), maps {{sh, 10, 8, 86, 1023},
+                                                                                {sh, 10, 8, 86, 1023},
+                                                                                {sh, 8,  8, 86, 1023},
+                                                                                {sh, 8,  8, 86, 1023},
+                                                                                {sh, 8,  8, 86, 1023},
+                                                                                {sh, 11, 1, 86, 1023}}, sMap {{sh, 11, 1, 6, 86},
+                                                                                                              {sh, 3,  1, 6, 86},
+                                                                                                              {sh, 19, 1, 5, 128},
+                                                                                                              {sh, 8,  8, 5, 64} // pos&255
             }, iMap {{sh, 8, 8, 86, 255},
                      {sh, 8, 8, 86, 255},
                      {sh, 8, 8, 86, 255}}, iCtx {{16, 8},
@@ -289,9 +288,9 @@ public:
         maps[2].set_direct(clip(N + NN - NNN));
         maps[3].set_direct(clip(N * 2 - NN));
         maps[4].set_direct(clip(N * 3 - NN * 3 + NNN));
-        iMap[0].set_direct(N + NN - NNN);
-        iMap[1].set_direct(N * 2 - NN);
-        iMap[2].set_direct(N * 3 - NN * 3 + NNN);
+        iMap[0].setDirect(N + NN - NNN);
+        iMap[1].setDirect(N * 2 - NN);
+        iMap[2].setDirect(N * 3 - NN * 3 + NNN);
 
         sMap[3].set(pos & 255); // mozilla
 

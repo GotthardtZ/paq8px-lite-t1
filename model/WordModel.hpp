@@ -498,11 +498,9 @@ private:
     Info info_pdf; //used only in case of pdf text - in place of info_normal
     uint8_t pdf_text_parser_state; // 0..7
 public:
-    WordModel(const Shared *const sh, ModelStats const *st, const uint64_t size) : shared(sh), stats(st), cm(sh, size, nCM, 74,
-                                                                                                             CM_USE_RUN_STATS |
-                                                                                                             CM_USE_BYTE_HISTORY),
-                                                                                   info_normal(sh, st, cm), info_pdf(sh, st, cm),
-                                                                                   pdf_text_parser_state(0) {}
+    WordModel(const Shared *const sh, ModelStats const *st, const uint64_t size) : shared(sh), stats(st),
+            cm(sh, size, nCM, 74, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY), info_normal(sh, st, cm), info_pdf(sh, st, cm),
+            pdf_text_parser_state(0) {}
 
     void reset() {
       info_normal.reset();

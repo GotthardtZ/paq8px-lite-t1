@@ -3,24 +3,6 @@
 
 #include "utils.hpp"
 
-// Mixer m(n, M, s=1, w=0) combines models using M neural networks with
-//   n inputs each, of which up to s may be selected.  If s > 1 then
-//   the outputs of these neural networks are combined using another
-//   neural network (with arguments s, 1, 1).  If s = 1 then the
-//   output is direct.  The weights are initially w (+-32K).
-//   It is used as follows:
-// m.update() trains the network where the expected output is the
-//   last bit (in the global variable y).
-// m.add(stretch(p)) inputs prediction from one of n models.  The
-//   prediction should be positive to predict a 1 bit, negative for 0,
-//   nominally +-256 to +-2K.  The maximum allowed value is +-32K but
-//   using such large values may cause overflow if n is large.
-// m.set(cxt, range) selects cxt as one of 'range' neural networks to
-//   use.  0 <= cxt < range.  Should be called up to s times such
-//   that the total of the ranges is <= M.
-// m.p() returns the output prediction that the next bit is 1 as a
-//   12 bit number (0 to 4095).
-
 #ifdef __GNUC__
 
 __attribute__((target("avx2")))
@@ -130,13 +112,24 @@ protected:
     Array<uint32_t> cxt; // s contexts
     Array<ErrorInfo> info; // stats for the adaptive learning rates
     Array<int> rates; // learning rates
-    uint32_t ncxt; // number of contexts (0 to s)
-    uint32_t base; // offset of next context
-    uint32_t nx; // number of inputs in tx, 0 to n
+    uint32_t numContexts {}; // number of contexts (0 to s)
+    uint32_t base {}; // offset of next context
+    uint32_t nx {}; // number of inputs in tx, 0 to n
     Array<int> pr; // last result (scaled 12 bits)
 public:
+    /**
+     * Mixer m(n, M, s=1, w=0) combines models using M neural networks with
+     * n inputs each, of which up to s may be selected.  If s > 1 then
+     * the outputs of these neural networks are combined using another
+     * neural network (with arguments s, 1, 1).  If s = 1 then the
+     * output is direct.  The weights are initially w (+-32K).
+     * @param sh
+     * @param n
+     * @param m
+     * @param s
+     */
     Mixer(const Shared *const sh, const int n, const int m, const int s) : shared(sh), N(n), M(m), S(s), scaleFactor(0), tx(N), wx(N * M),
-                                                                           cxt(S), info(S), rates(S), pr(S) {
+            cxt(S), info(S), rates(S), pr(S) {
       for( uint64_t i = 0; i < S; ++i ) {
         pr[i] = 2048; //initial p=0.5
         rates[i] = DEFAULT_LEARNING_RATE;
@@ -145,31 +138,50 @@ public:
       reset();
     }
 
-    ~Mixer() override = default;;
+    ~Mixer() override = default;
+    /**
+     * // m.p() returns the output prediction that the next bit is 1 as a 12 bit number (0 to 4095).
+     * @return
+     */
     virtual int p() = 0;
     virtual void setScaleFactor(int sf0, int sf1) = 0;
 
-    // Input x (call up to n times)
+    /**
+     * Input x (call up to n times)
+     * m.add(stretch(p)) inputs a prediction from one of \n models.  The
+     * prediction should be positive to predict a 1 bit, negative for 0,
+     * nominally +-256 to +-2K.  The maximum allowed value is +-32K but
+     * using such large values may cause overflow if \n is large.
+     * @param x
+     */
+
     void add(const int x) {
       assert(nx < N);
       assert(x == short(x));
       tx[nx++] = (short) x;
     }
 
-    // Set a context (call s times, sum of ranges <= M)
+    /**
+     *  m.set(cx, range) selects cx as one of \range neural networks to
+     *  use.  0 <= cx < range. Should be called up to s times such
+     *  that the total of the ranges is <= M.
+     * @param cx
+     * @param range
+     * @param rate
+     */
     void set(const uint32_t cx, const uint32_t range, const int rate = DEFAULT_LEARNING_RATE) {
-      assert(ncxt < S);
+      assert(numContexts < S);
       assert(cx < range);
       assert(base + range <= M);
       if( !(options & OPTION_ADAPTIVE))
-        rates[ncxt] = rate;
-      cxt[ncxt++] = base + cx;
+        rates[numContexts] = rate;
+      cxt[numContexts++] = base + cx;
       base += range;
-      //printf("ncxt: %d base: %d\n",ncxt,range); //for debugging: how many input sets do we have?
+      //printf("numContexts: %d base: %d\n",numContexts,range); //for debugging: how many input sets do we have?
     }
 
     void reset() {
-      nx = base = ncxt = 0;
+      nx = base = numContexts = 0;
     }
 };
 
@@ -220,12 +232,15 @@ public:
       }
     }
 
-    // Adjust weights to minimize coding cost of last prediction
+    /**
+     * Adjust weights to minimize coding cost of last prediction
+     * m.update() trains the network where the expected output is the last bit (in the global variable y).
+     */
     void update() override {
       INJECT_SHARED_y
       const int target = y << 12U;
       if( nx > 0 )
-        for( uint64_t i = 0; i < ncxt; ++i ) {
+        for( uint64_t i = 0; i < numContexts; ++i ) {
           const int err = target - pr[i];
           if( simd == SIMD_NONE )
             trainSimdNone(&tx[0], &wx[cxt[i] * N], nx, err * rates[i]);
@@ -235,21 +250,21 @@ public:
             trainSimdAvx2(&tx[0], &wx[cxt[i] * N], nx, err * rates[i]);
           if( options & OPTION_ADAPTIVE ) {
             const uint32_t logErr = min(0xF, ilog2(abs(err)));
-            info[i].sum -= SQR(info[i].data[1] >> 28);
-            info[i].data[1] <<= 4;
-            info[i].data[1] |= info[i].data[0] >> 28;
-            info[i].data[0] <<= 4;
+            info[i].sum -= square(info[i].data[1] >> 28U);
+            info[i].data[1] <<= 4U;
+            info[i].data[1] |= info[i].data[0] >> 28U;
+            info[i].data[0] <<= 4U;
             info[i].data[0] |= logErr;
-            info[i].sum += SQR(logErr);
+            info[i].sum += square(logErr);
             info[i].collected += info[i].collected < 4096;
-            info[i].mask <<= 1;
-            info[i].mask |= (logErr <= ((info[i].data[0] >> 4) & 0xF));
+            info[i].mask <<= 1U;
+            info[i].mask |= (logErr <= ((info[i].data[0] >> 4U) & 0xFU));
             const uint32_t count = bitCount(info[i].mask);
-            if( info[i].collected >= 64 && (info[i].sum > 1500 + uint32_t(rates[i]) * 64 || count < 9 || (info[i].mask & 0xFF) == 0)) {
+            if( info[i].collected >= 64 && (info[i].sum > 1500 + uint32_t(rates[i]) * 64 || count < 9 || (info[i].mask & 0xFFU) == 0)) {
               rates[i] = DEFAULT_LEARNING_RATE;
               memset(&info[i], 0, sizeof(ErrorInfo));
             } else if( info[i].collected == 4096 && info[i].sum >= 56 && info[i].sum <= 144 && count > 28 - uint32_t(rates[i]) &&
-                       ((info[i].mask & 0xFF) == 0xFF)) {
+                       ((info[i].mask & 0xFFU) == 0xFFU)) {
               rates[i] -= rates[i] > 2;
               info[i].reset();
             }
@@ -262,11 +277,11 @@ public:
     int p() override {
       updater.subscribe(this);
       assert(scaleFactor > 0);
-      //if(mp)printf("nx: %d, ncxt: %d, base: %d\n",nx, ncxt, base); //for debugging: how many inputs do we have?
+      //if(mp)printf("nx: %d, numContexts: %d, base: %d\n",nx, numContexts, base); //for debugging: how many inputs do we have?
       while( nx & (simdWidth() - 1))
         tx[nx++] = 0; // pad
       if( mp ) { // combine outputs
-        for( uint64_t i = 0; i < ncxt; ++i ) {
+        for( uint64_t i = 0; i < numContexts; ++i ) {
           int dp = 0;
           if( simd == SIMD_NONE )
             dp = dotProductSimdNone(&tx[0], &wx[cxt[i] * N], nx);
@@ -274,7 +289,7 @@ public:
             dp = dotProductSimdSse2(&tx[0], &wx[cxt[i] * N], nx);
           if( simd == SIMD_AVX2 )
             dp = dotProductSimdAvx2(&tx[0], &wx[cxt[i] * N], nx);
-          dp = (dp * scaleFactor) >> 16;
+          dp = (dp * scaleFactor) >> 16U;
           if( dp < -2047 )
             dp = -2047;
           else if( dp > 2047 )
@@ -292,7 +307,7 @@ public:
           dp = dotProductSimdSse2(&tx[0], &wx[cxt[0] * N], nx);
         if( simd == SIMD_AVX2 )
           dp = dotProductSimdAvx2(&tx[0], &wx[cxt[0] * N], nx);
-        dp = (dp * scaleFactor) >> 16;
+        dp = (dp * scaleFactor) >> 16U;
         return pr[0] = squash(dp);
       }
     }

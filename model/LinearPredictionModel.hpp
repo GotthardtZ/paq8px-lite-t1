@@ -1,7 +1,7 @@
 #ifndef PAQ8PX_LINEARPREDICTIONMODEL_HPP
 #define PAQ8PX_LINEARPREDICTIONMODEL_HPP
 
-#include "OLS.hpp"
+#include "../OLS.hpp"
 
 class LinearPredictionModel {
 private:
@@ -23,12 +23,12 @@ private:
 
 public:
     LinearPredictionModel(const Shared *const sh) : shared(sh),
-                                                    sMap {/* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
-                                                            {sh, 11, 1, 6, 128},
-                                                            {sh, 11, 1, 6, 128},
-                                                            {sh, 11, 1, 6, 128},
-                                                            {sh, 11, 1, 6, 128},
-                                                            {sh, 11, 1, 6, 128}} {}
+            sMap {/* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
+                    {sh, 11, 1, 6, 128},
+                    {sh, 11, 1, 6, 128},
+                    {sh, 11, 1, 6, 128},
+                    {sh, 11, 1, 6, 128},
+                    {sh, 11, 1, 6, 128}} {}
 
     void mix(Mixer &m) {
       INJECT_SHARED_bpos

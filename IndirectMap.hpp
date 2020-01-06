@@ -17,26 +17,17 @@ private:
 
 public:
     IndirectMap(const Shared *const sh, const int bitsOfContext, const int inputBits, const int scale, const int limit) : shared(sh),
-                                                                                                                          data((UINT64_C(1)
-                                                                                                                                  << bitsOfContext) *
-                                                                                                                               ((UINT64_C(1)
-                                                                                                                                       << inputBits) -
-                                                                                                                                1)),
-                                                                                                                          sm {sh, 1, 256,
-                                                                                                                              1023,
-                                                                                                                              StateMap::BIT_HISTORY}, /* StateMap : s, n, lim, init */
-                                                                                                                          mask((1U
-                                                                                                                                  << bitsOfContext) -
-                                                                                                                               1), maskBits(
-                    bitsOfContext), stride((1U << inputBits) - 1), bTotal(inputBits), scale(scale) {
+            data((UINT64_C(1) << bitsOfContext) * ((UINT64_C(1) << inputBits) - 1)),
+            sm {sh, 1, 256, 1023, StateMap::BIT_HISTORY}, /* StateMap : s, n, lim, init */
+            mask((1U << bitsOfContext) - 1), maskBits(bitsOfContext), stride((1U << inputBits) - 1), bTotal(inputBits), scale(scale) {
       assert(inputBits > 0 && inputBits <= 8);
       assert(bitsOfContext + inputBits <= 24);
       cp = &data[0];
-      set_direct(0);
+      setDirect(0);
       sm.setLimit(limit);
     }
 
-    void set_direct(const uint32_t ctx) {
+    void setDirect(const uint32_t ctx) {
       context = (ctx & mask) * stride;
       bCount = B = 0;
     }

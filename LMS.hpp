@@ -17,11 +17,7 @@ private:
 
 public:
     LMS(const int S, const int D, const F lRate, const F rRate, const F rho = (F) 0.95, const F eps = (F) 1e-3) : rates {lRate, rRate},
-                                                                                                                  rho(rho),
-                                                                                                                  complement(1.0f - rho),
-                                                                                                                  eps(eps),
-                                                                                                                  prediction(0.0f), S(S),
-                                                                                                                  D(D) {
+            rho(rho), complement(1.0f - rho), eps(eps), prediction(0.0f), S(S), D(D) {
       assert(S > 0 && D > 0);
       weights = new F[S + D], eg = new F[S + D], buffer = new F[S + D];
       reset();

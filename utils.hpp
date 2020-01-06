@@ -4,9 +4,6 @@
 #include <cstdint>
 #include <algorithm>
 #include <cstdio>
-
-//////////////////////// Includes /////////////////////////////////////////
-
 // Determining the proper printf() format specifier for 64 bit unsigned integers:
 // - on Windows MSVC and MinGW-w64 use the MSVCRT runtime where it is "%I64u"
 // - on Linux it is "%llu"
@@ -43,11 +40,10 @@ struct ErrorInfo {
     }
 };
 
-static inline uint32_t SQR(uint32_t x) {
+static inline uint32_t square(uint32_t x) {
   return x * x;
 }
 
-// min, max functions
 static inline int min(int a, int b) { return std::min<int>(a, b); }
 
 static inline uint64_t min(uint64_t a, uint64_t b) { return std::min<uint64_t>(a, b); }
@@ -151,7 +147,7 @@ inline bool hasTransform(BlockType ft) {
 
 inline bool isPNG(BlockType ft) { return ft == PNG8 || ft == PNG8GRAY || ft == PNG24 || ft == PNG32; }
 
-int level = 0; //this value will be overwritten at the beginning of compression/decompression
+uint32_t level = 0; //this value will be overwritten at the beginning of compression/decompression
 #define MEM (uint64_t(65536) << level)
 
 uint8_t options = 0;

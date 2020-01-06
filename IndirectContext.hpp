@@ -24,9 +24,7 @@ void IndirectContext<T>::operator+=(const uint32_t i) {
 
 template<typename T>
 IndirectContext<T>::IndirectContext(const int bitsPerContext, const int inputBits): data(UINT64_C(1) << bitsPerContext), ctx(&data[0]),
-                                                                                    ctxMask((UINT32_C(1) << bitsPerContext) - 1),
-                                                                                    inputMask((UINT32_C(1) << inputBits) - 1),
-                                                                                    inputBits(inputBits) {
+        ctxMask((UINT32_C(1) << bitsPerContext) - 1), inputMask((UINT32_C(1) << inputBits) - 1), inputBits(inputBits) {
   assert(bitsPerContext > 0 && bitsPerContext <= 20);
   assert(inputBits > 0 && inputBits <= 8);
 }

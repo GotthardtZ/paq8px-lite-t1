@@ -63,98 +63,94 @@ public:
 
 public:
     Image8bitModel(const Shared *const sh, ModelStats *st, const uint64_t size) : shared(sh), stats(st),
-                                                                                  cm(sh, size, nCM, 64, CM_USE_RUN_STATS),
-                                                                                  map {/* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
-                                                                                          /*nSM0: 0- 1*/ {sh, 0,  8, 64, 1023},
-                                                                                                         {sh, 15, 1, 64, 1023},
-                                                                                          /*nSM1: 0- 4*/
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                          /*nSM1: 5- 9*/
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                          /*nSM1:10-14*/
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                          /*nSM1:15-19*/
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                          /*nSM1:20-24*/
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                          /*nSM1:25-29*/
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                          /*nSM1:30-34*/
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                          /*nSM1:35-39*/
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                          /*nSM1:40-44*/
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                          /*nSM1:45-49*/
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                          /*nSM1:50-54*/
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                          /*nOLS:   0- 4*/
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023},
-                                                                                                         {sh, 11, 1, 64, 1023}},
-                                                                                  pltMap {/* SmallStationaryContextMap: BitsOfContext, InputBits, Rate, Scale */
-                                                                                          {sh, 11, 1, 7, 64},
-                                                                                          {sh, 11, 1, 7, 64},
-                                                                                          {sh, 11, 1, 7, 64},
-                                                                                          {sh, 11, 1, 7, 64}},
-                                                                                  sceneMap {/* IndirectMap: BitsOfContext, InputBits, Scale, Limit */
-                                                                                          {sh, 8,  8, 64, 255},
-                                                                                          {sh, 8,  8, 64, 255},
-                                                                                          {sh, 22, 1, 64, 255},
-                                                                                          {sh, 11, 1, 64, 255},
-                                                                                          {sh, 11, 1, 64, 255}},
-                                                                                  iCtx {/* IndirectContext<uint8_t>: BitsPerContext, InputBits */
-                                                                                          {16, 8},
-                                                                                          {16, 8},
-                                                                                          {16, 8},
-                                                                                          {16, 8}} {}
+            cm(sh, size, nCM, 64, CM_USE_RUN_STATS), map {/* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
+                    /*nSM0: 0- 1*/ {sh, 0,  8, 64, 1023},
+                                   {sh, 15, 1, 64, 1023},
+                    /*nSM1: 0- 4*/
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                    /*nSM1: 5- 9*/
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                    /*nSM1:10-14*/
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                    /*nSM1:15-19*/
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                    /*nSM1:20-24*/
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                    /*nSM1:25-29*/
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                    /*nSM1:30-34*/
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                    /*nSM1:35-39*/
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                    /*nSM1:40-44*/
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                    /*nSM1:45-49*/
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                    /*nSM1:50-54*/
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                    /*nOLS:   0- 4*/
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023},
+                                   {sh, 11, 1, 64, 1023}}, pltMap {/* SmallStationaryContextMap: BitsOfContext, InputBits, Rate, Scale */
+                    {sh, 11, 1, 7, 64},
+                    {sh, 11, 1, 7, 64},
+                    {sh, 11, 1, 7, 64},
+                    {sh, 11, 1, 7, 64}}, sceneMap {/* IndirectMap: BitsOfContext, InputBits, Scale, Limit */
+                    {sh, 8,  8, 64, 255},
+                    {sh, 8,  8, 64, 255},
+                    {sh, 22, 1, 64, 255},
+                    {sh, 11, 1, 64, 255},
+                    {sh, 11, 1, 64, 255}}, iCtx {/* IndirectContext<uint8_t>: BitsPerContext, InputBits */
+                    {16, 8},
+                    {16, 8},
+                    {16, 8},
+                    {16, 8}} {}
 
     void setParam(int info0, uint32_t gray0, uint32_t isPNG0) {
       w = info0;
@@ -301,8 +297,8 @@ public:
           } else {
             prvFrmPx = prvFrmPrediction = W;
           }
-          sceneMap[0].set_direct(prvFrmPx);
-          sceneMap[1].set_direct(prvFrmPrediction);
+          sceneMap[0].setDirect(prvFrmPx);
+          sceneMap[1].setDirect(prvFrmPrediction);
 
           int j = 0;
           jump = jumps[min(x, (int) jumps.size() - 1)];
@@ -493,9 +489,9 @@ public:
           for( int j = 0; i < nSM; i++, j++ )
             map[i].set_direct((pOLS[j] - px - B) * 8 + bpos);
         }
-        sceneMap[2].set_direct(finalize64(hash(x, line), 19) * 8 + bpos);
-        sceneMap[3].set_direct((prvFrmPx - B) * 8 + bpos);
-        sceneMap[4].set_direct((prvFrmPrediction - B) * 8 + bpos);
+        sceneMap[2].setDirect(finalize64(hash(x, line), 19) * 8 + bpos);
+        sceneMap[3].setDirect((prvFrmPx - B) * 8 + bpos);
+        sceneMap[4].setDirect((prvFrmPrediction - B) * 8 + bpos);
       }
 
       // predict next bit

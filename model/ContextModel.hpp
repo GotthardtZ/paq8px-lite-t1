@@ -1,8 +1,8 @@
 #ifndef PAQ8PX_CONTEXTMODEL_HPP
 #define PAQ8PX_CONTEXTMODEL_HPP
 
-#include "text/TextModel.hpp"
-#include "ModelStats.hpp"
+#include "../text/TextModel.hpp"
+#include "../ModelStats.hpp"
 
 /**
  * This combines all the context models with a Mixer.
@@ -19,24 +19,20 @@ class ContextModel {
 public:
     ContextModel(const Shared *const sh, ModelStats *st, Models &models) : shared(sh), stats(st), models(models) {
       m = MixerFactory::createMixer(sh, 1 + //bias
-                                        MatchModel::MIXERINPUTS + NormalModel::MIXERINPUTS +
-                                        SparseMatchModel::MIXERINPUTS + SparseModel::MIXERINPUTS +
-                                        RecordModel::MIXERINPUTS + CharGroupModel::MIXERINPUTS +
+                                        MatchModel::MIXERINPUTS + NormalModel::MIXERINPUTS + SparseMatchModel::MIXERINPUTS +
+                                        SparseModel::MIXERINPUTS + RecordModel::MIXERINPUTS + CharGroupModel::MIXERINPUTS +
                                         TextModel::MIXERINPUTS + WordModel::MIXERINPUTS + IndirectModel::MIXERINPUTS +
                                         DmcForest::MIXERINPUTS + NestModel::MIXERINPUTS + XMLModel::MIXERINPUTS +
                                         LinearPredictionModel::MIXERINPUTS + ExeModel::MIXERINPUTS,
-                                    MatchModel::MIXERCONTEXTS + NormalModel::MIXERCONTEXTS +
-                                    SparseMatchModel::MIXERCONTEXTS + SparseModel::MIXERCONTEXTS +
-                                    RecordModel::MIXERCONTEXTS + CharGroupModel::MIXERCONTEXTS +
+                                    MatchModel::MIXERCONTEXTS + NormalModel::MIXERCONTEXTS + SparseMatchModel::MIXERCONTEXTS +
+                                    SparseModel::MIXERCONTEXTS + RecordModel::MIXERCONTEXTS + CharGroupModel::MIXERCONTEXTS +
                                     TextModel::MIXERCONTEXTS + WordModel::MIXERCONTEXTS + IndirectModel::MIXERCONTEXTS +
                                     DmcForest::MIXERCONTEXTS + NestModel::MIXERCONTEXTS + XMLModel::MIXERCONTEXTS +
                                     LinearPredictionModel::MIXERCONTEXTS + ExeModel::MIXERCONTEXTS,
-                                    MatchModel::MIXERCONTEXTSETS + NormalModel::MIXERCONTEXTSETS +
-                                    SparseMatchModel::MIXERCONTEXTSETS + SparseModel::MIXERCONTEXTSETS +
-                                    RecordModel::MIXERCONTEXTSETS + CharGroupModel::MIXERCONTEXTSETS +
-                                    TextModel::MIXERCONTEXTSETS + WordModel::MIXERCONTEXTSETS +
-                                    IndirectModel::MIXERCONTEXTSETS + DmcForest::MIXERCONTEXTSETS +
-                                    NestModel::MIXERCONTEXTSETS + XMLModel::MIXERCONTEXTSETS +
+                                    MatchModel::MIXERCONTEXTSETS + NormalModel::MIXERCONTEXTSETS + SparseMatchModel::MIXERCONTEXTSETS +
+                                    SparseModel::MIXERCONTEXTSETS + RecordModel::MIXERCONTEXTSETS + CharGroupModel::MIXERCONTEXTSETS +
+                                    TextModel::MIXERCONTEXTSETS + WordModel::MIXERCONTEXTSETS + IndirectModel::MIXERCONTEXTSETS +
+                                    DmcForest::MIXERCONTEXTSETS + NestModel::MIXERCONTEXTSETS + XMLModel::MIXERCONTEXTSETS +
                                     LinearPredictionModel::MIXERCONTEXTSETS + ExeModel::MIXERCONTEXTSETS);
     }
 

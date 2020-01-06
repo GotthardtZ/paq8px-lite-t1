@@ -44,12 +44,11 @@ private:
 
 public:
     SparseMatchModel(const Shared *const sh, const uint64_t Size) : shared(sh), Table(Size / sizeof(uint32_t)),
-                                                                    Maps {/* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
-                                                                            {sh, 22, 1, 128, 1023},
-                                                                            {sh, 17, 4, 128, 1023},
-                                                                            {sh, 8,  1, 128, 1023},
-                                                                            {sh, 19, 1, 128, 1023}},
-                                                                    mask(uint32_t(Size / sizeof(uint32_t) - 1)), hashBits(ilog2(mask + 1)) {
+            Maps {/* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
+                    {sh, 22, 1, 128, 1023},
+                    {sh, 17, 4, 128, 1023},
+                    {sh, 8,  1, 128, 1023},
+                    {sh, 19, 1, 128, 1023}}, mask(uint32_t(Size / sizeof(uint32_t) - 1)), hashBits(ilog2(mask + 1)) {
       assert(isPowerOf2(Size));
     }
 

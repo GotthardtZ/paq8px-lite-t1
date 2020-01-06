@@ -1,5 +1,5 @@
-#ifndef PAQ8PX_DMC_HPP
-#define PAQ8PX_DMC_HPP
+#ifndef PAQ8PX_DMCMODEL_HPP
+#define PAQ8PX_DMCMODEL_HPP
 
 #include <cstdint>
 
@@ -80,9 +80,8 @@ private:
 
 public:
     DmcModel(const Shared *const sh, const uint64_t dmcNodes, const uint32_t thStart) : shared(sh),
-                                                                                        t(min(dmcNodes + DMC_NODES_BASE, DMC_NODES_MAX)),
-                                                                                        sm(sh, 1, 256, 256 /*64-512 are all fine*/,
-                                                                                           StateMap::BIT_HISTORY) //StateMap: s, n, limit, init
+            t(min(dmcNodes + DMC_NODES_BASE, DMC_NODES_MAX)),
+            sm(sh, 1, 256, 256 /*64-512 are all fine*/, StateMap::BIT_HISTORY) //StateMap: s, n, limit, init
     {
       resetStateGraph(thStart);
     }
@@ -276,4 +275,4 @@ public:
     }
 };
 
-#endif //PAQ8PX_DMC_HPP
+#endif //PAQ8PX_DMCMODEL_HPP

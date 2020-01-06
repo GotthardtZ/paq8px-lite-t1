@@ -25,10 +25,9 @@ public:
     void mix(Mixer &m);
 };
 
-Image4BitModel::Image4BitModel(const Shared *const sh, const uint64_t size) : shared(sh), t(size), sm {sh, S, 256, 1023,
-                                                                                                       StateMap::BIT_HISTORY}, //StateMap: s, n, lim, init
-                                                                              map {sh, 1, 16, 1023,
-                                                                                   StateMap::GENERIC} //StateMap: s, n, lim, init
+Image4BitModel::Image4BitModel(const Shared *const sh, const uint64_t size) : shared(sh), t(size),
+        sm {sh, S, 256, 1023, StateMap::BIT_HISTORY}, //StateMap: s, n, lim, init
+        map {sh, 1, 16, 1023, StateMap::GENERIC} //StateMap: s, n, lim, init
 {}
 
 void Image4BitModel::setParam(int info0) {

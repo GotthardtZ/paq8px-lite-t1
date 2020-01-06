@@ -3,7 +3,9 @@
 
 #include "AudioModel.hpp"
 #include <cstdint>
+
 #ifdef USE_AUDIOMODEL
+
 class Audio8BitModel : AudioModel {
 private:
     static constexpr int nOLS = 8;
@@ -35,24 +37,24 @@ private:
 
 public:
     Audio8BitModel(const Shared *const sh, ModelStats *st) : AudioModel(sh, st),
-                                                             sMap1b {/* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
-                                                                     /*nOLS: 0-3*/ {{sh, 11, 1, 6, 128}, {sh, 11, 1, 9, 128}, {sh, 11, 1, 7, 86}},
-                                                                                   {{sh, 11, 1, 6, 128}, {sh, 11, 1, 9, 128}, {sh, 11, 1, 7, 86}},
-                                                                                   {{sh, 11, 1, 6, 128}, {sh, 11, 1, 9, 128}, {sh, 11, 1, 7, 86}},
-                                                                                   {{sh, 11, 1, 6, 86},  {sh, 11, 1, 9, 86},  {sh, 11, 1, 7, 86}},
-                                                                     /*nOLS: 4-7*/
-                                                                                   {{sh, 11, 1, 6, 128}, {sh, 11, 1, 9, 128}, {sh, 11, 1, 7, 86}},
-                                                                                   {{sh, 11, 1, 6, 128}, {sh, 11, 1, 9, 128}, {sh, 11, 1, 7, 86}},
-                                                                                   {{sh, 11, 1, 6, 128}, {sh, 11, 1, 9, 128}, {sh, 11, 1, 7, 86}},
-                                                                                   {{sh, 11, 1, 6, 128}, {sh, 11, 1, 9, 128}, {sh, 11, 1, 7, 86}},
-                                                                     /*nLMS: 0-2*/
-                                                                                   {{sh, 11, 1, 6, 86},  {sh, 11, 1, 9, 86},  {sh, 11, 1, 7, 86}},
-                                                                                   {{sh, 11, 1, 6, 86},  {sh, 11, 1, 9, 86},  {sh, 11, 1, 7, 86}},
-                                                                                   {{sh, 11, 1, 6, 86},  {sh, 11, 1, 9, 86},  {sh, 11, 1, 7, 86}},
-                                                                     /*nSSM: 0-2*/
-                                                                                   {{sh, 11, 1, 6, 86},  {sh, 11, 1, 9, 86},  {sh, 11, 1, 7, 86}},
-                                                                                   {{sh, 11, 1, 6, 86},  {sh, 11, 1, 9, 86},  {sh, 11, 1, 7, 86}},
-                                                                                   {{sh, 11, 1, 6, 86},  {sh, 11, 1, 9, 86},  {sh, 11, 1, 7, 86}}} {}
+            sMap1b {/* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
+                    /*nOLS: 0-3*/ {{sh, 11, 1, 6, 128}, {sh, 11, 1, 9, 128}, {sh, 11, 1, 7, 86}},
+                                  {{sh, 11, 1, 6, 128}, {sh, 11, 1, 9, 128}, {sh, 11, 1, 7, 86}},
+                                  {{sh, 11, 1, 6, 128}, {sh, 11, 1, 9, 128}, {sh, 11, 1, 7, 86}},
+                                  {{sh, 11, 1, 6, 86},  {sh, 11, 1, 9, 86},  {sh, 11, 1, 7, 86}},
+                    /*nOLS: 4-7*/
+                                  {{sh, 11, 1, 6, 128}, {sh, 11, 1, 9, 128}, {sh, 11, 1, 7, 86}},
+                                  {{sh, 11, 1, 6, 128}, {sh, 11, 1, 9, 128}, {sh, 11, 1, 7, 86}},
+                                  {{sh, 11, 1, 6, 128}, {sh, 11, 1, 9, 128}, {sh, 11, 1, 7, 86}},
+                                  {{sh, 11, 1, 6, 128}, {sh, 11, 1, 9, 128}, {sh, 11, 1, 7, 86}},
+                    /*nLMS: 0-2*/
+                                  {{sh, 11, 1, 6, 86},  {sh, 11, 1, 9, 86},  {sh, 11, 1, 7, 86}},
+                                  {{sh, 11, 1, 6, 86},  {sh, 11, 1, 9, 86},  {sh, 11, 1, 7, 86}},
+                                  {{sh, 11, 1, 6, 86},  {sh, 11, 1, 9, 86},  {sh, 11, 1, 7, 86}},
+                    /*nSSM: 0-2*/
+                                  {{sh, 11, 1, 6, 86},  {sh, 11, 1, 9, 86},  {sh, 11, 1, 7, 86}},
+                                  {{sh, 11, 1, 6, 86},  {sh, 11, 1, 9, 86},  {sh, 11, 1, 7, 86}},
+                                  {{sh, 11, 1, 6, 86},  {sh, 11, 1, 9, 86},  {sh, 11, 1, 7, 86}}} {}
 
     void setParam(int info) {
       INJECT_STATS_blpos
@@ -83,7 +85,7 @@ public:
           residuals[i][pCh] = s - prd[i][pCh][0];
           const auto absResidual = (uint32_t) abs(residuals[i][pCh]);
           mask += mask + (absResidual > 4);
-          errLog += SQR(absResidual);
+          errLog += square(absResidual);
         }
         for( int j = 0; j < nLMS; j++ )
           lms[j][pCh].update(s);
@@ -160,5 +162,6 @@ public:
       m.set(mxCtx, 10);
     }
 };
+
 #endif //USE_AUDIOMODEL
 #endif //PAQ8PX_AUDIO8BITMODEL_HPP

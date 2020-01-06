@@ -26,7 +26,7 @@ public:
     static constexpr int MIXERCONTEXTSETS = 0;
 
     CharGroupModel(const Shared *const sh, const uint64_t size) : shared(sh),
-                                                                  cm(sh, size, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY) {}
+            cm(sh, size, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY) {}
 
     void mix(Mixer &m) {
       INJECT_SHARED_bpos

@@ -23,7 +23,7 @@ public:
 };
 
 Image1BitModel::Image1BitModel(const Shared *const sh) : shared(sh),
-                                                         sm {sh, S, 256, 1023, StateMap::BIT_HISTORY} // StateMap: s, n, limit, init
+        sm {sh, S, 256, 1023, StateMap::BIT_HISTORY} // StateMap: s, n, limit, init
 {}
 
 void Image1BitModel::setParam(int info0) {

@@ -75,7 +75,7 @@ public:
     [[nodiscard]] uint32_t distanceTo(const Word w) const {
       uint32_t res = 0;
       for( int i = 0, j = 0; i < WORD_EMBEDDING_SIZE; i++, j += 8 )
-        res += SQR(abs(int(uint8_t(embedding >> j) - uint8_t(w.embedding >> j))));
+        res += square(abs(int(uint8_t(embedding >> j) - uint8_t(w.embedding >> j))));
       return (uint32_t) sqrt(res);
     }
 

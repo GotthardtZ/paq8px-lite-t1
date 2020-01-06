@@ -1,7 +1,7 @@
 #ifndef PAQ8PX_EXEMODEL_HPP
 #define PAQ8PX_EXEMODEL_HPP
 
-#include "RingBuffer.hpp"
+#include "../RingBuffer.hpp"
 #include <cstdint>
 
 /**
@@ -742,13 +742,9 @@ private:
     void update();
 
 public:
-    ExeModel(const Shared *const sh, const ModelStats *const st, const uint64_t size) : shared(sh), stats(st), cm(sh, size, nCM1 + nCM2, 64,
-                                                                                                                  CM_USE_RUN_STATS |
-                                                                                                                  CM_USE_BYTE_HISTORY),
-                                                                                        iMap(sh, 20, 1, 64, 1023), pState(Start),
-                                                                                        state(Start), totalOps(0), opMask(0),
-                                                                                        opCategoryMask(0), context(0), brkCtx(0),
-                                                                                        valid(false) {
+    ExeModel(const Shared *const sh, const ModelStats *const st, const uint64_t size) : shared(sh), stats(st),
+            cm(sh, size, nCM1 + nCM2, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY), iMap(sh, 20, 1, 64, 1023), pState(Start), state(Start),
+            totalOps(0), opMask(0), opCategoryMask(0), context(0), brkCtx(0), valid(false) {
         assert(isPowerOf2(size));
         memset(&cache, 0, sizeof(OpCache));
         memset(&op, 0, sizeof(Instruction));

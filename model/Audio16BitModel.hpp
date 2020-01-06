@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #ifdef USE_AUDIOMODEL
+
 class Audio16BitModel : AudioModel {
 private:
     static constexpr int nOLS = 8;
@@ -88,7 +89,7 @@ public:
             residuals[i][pCh] = sample - prd[i][pCh][0];
             const auto absResidual = (uint32_t) abs(residuals[i][pCh]);
             mask += mask + (absResidual > 128);
-            errLog += SQR(absResidual >> 6U);
+            errLog += square(absResidual >> 6U);
           }
           for( int j = 0; j < nLMS; j++ )
             lms[j][pCh].update(sample);
@@ -177,5 +178,6 @@ public:
       m.set(mxCtx, 20);
     }
 };
+
 #endif // USE_AUDIOMODEL
 #endif //PAQ8PX_AUDIO16BITMODEL_HPP

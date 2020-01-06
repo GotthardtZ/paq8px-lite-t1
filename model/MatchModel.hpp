@@ -48,18 +48,15 @@ private:
 
 public:
     MatchModel(const Shared *const sh, ModelStats *st, const uint64_t Size) : shared(sh), stats(st), Table(Size / sizeof(uint32_t)),
-                                                                              StateMaps {//StateMap:  s, n, lim,
-                                                                                      {sh, 1, 56 * 256,          1023, StateMap::GENERIC},
-                                                                                      {sh, 1, 8 * 256 * 256 + 1, 1023, StateMap::GENERIC},
-                                                                                      {sh, 1, 256 * 256,         1023, StateMap::GENERIC}},
-                                                                              cm(sh, MEM / 32, nCM, 74, CM_USE_RUN_STATS), SCM {sh, 6, 1, 6,
-                                                                                                                                64}, /* SmallStationaryContextMap: BitsOfContext, InputBits, Rate, Scale */
-                                                                              Maps {/* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
-                                                                                      {sh, 23, 1, 64, 1023},
-                                                                                      {sh, 15, 1, 64, 1023}}, iCtx {15,
-                                                                                                                    1}, // IndirectContext<uint8_t>: BitsPerContext, InputBits
-                                                                              mask(uint32_t(Size / sizeof(uint32_t) - 1)),
-                                                                              hashBits(ilog2(mask + 1)) {
+            StateMaps {//StateMap:  s, n, lim,
+                    {sh, 1, 56 * 256,          1023, StateMap::GENERIC},
+                    {sh, 1, 8 * 256 * 256 + 1, 1023, StateMap::GENERIC},
+                    {sh, 1, 256 * 256,         1023, StateMap::GENERIC}}, cm(sh, MEM / 32, nCM, 74, CM_USE_RUN_STATS),
+            SCM {sh, 6, 1, 6, 64}, /* SmallStationaryContextMap: BitsOfContext, InputBits, Rate, Scale */
+            Maps {/* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
+                    {sh, 23, 1, 64, 1023},
+                    {sh, 15, 1, 64, 1023}}, iCtx {15, 1}, // IndirectContext<uint8_t>: BitsPerContext, InputBits
+            mask(uint32_t(Size / sizeof(uint32_t) - 1)), hashBits(ilog2(mask + 1)) {
       assert(isPowerOf2(Size));
     }
 

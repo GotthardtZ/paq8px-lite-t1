@@ -38,7 +38,8 @@ static inline unsigned long long xgetbv(unsigned long ctr) {
   : "=a"(a), "=d"(d)
   : "c"(ctr)
   :);
-  return a | (((uint64_t) d) << 32U);
+  return a | (((uint64_t) d) << U
+  32UU);
 #else
 #error Unknown compiler
 #endif
@@ -64,35 +65,35 @@ int simdDetect() {
   if( cpuidResult[0] == 0 )
     return 0; //cpuid is not supported
   cpuid(cpuidResult, 1); // call cpuid function 1 ("Processor Info and Feature Bits")
-  if((cpuidResult[3] & (1 << 23)) == 0 )
+  if((cpuidResult[3] & (1U << 23U)) == 0 )
     return 0; //no MMX
-  if((cpuidResult[3] & (1 << 25)) == 0 )
+  if((cpuidResult[3] & (1U << 25U)) == 0 )
     return 1; //no SSE
   //SSE: OK
-  if((cpuidResult[3] & (1 << 26)) == 0 )
+  if((cpuidResult[3] & (1U << 26U)) == 0 )
     return 2; //no SSE2
   //SSE2: OK
-  if((cpuidResult[2] & (1 << 0)) == 0 )
+  if((cpuidResult[2] & (1U << 0U)) == 0 )
     return 3; //no SSE3
   //SSE3: OK
-  if((cpuidResult[2] & (1 << 9)) == 0 )
+  if((cpuidResult[2] & (1U << 9U)) == 0 )
     return 4; //no SSSE3
   //SSSE3: OK
-  if((cpuidResult[2] & (1 << 19)) == 0 )
+  if((cpuidResult[2] & (1U << 19U)) == 0 )
     return 5; //no SSE4.1
   //SSE4.1: OK
-  if((cpuidResult[2] & (1 << 20)) == 0 )
+  if((cpuidResult[2] & (1U << 20U)) == 0 )
     return 6; //no SSE4.2
   //SSE4.2: OK
-  if((cpuidResult[2] & (1 << 27)) == 0 )
+  if((cpuidResult[2] & (1U << 27U)) == 0 )
     return 7; //no OSXSAVE (no XGETBV)
   if((xgetbv(0) & 6) != 6 )
     return 7; //AVX is not enabled in OS
-  if((cpuidResult[2] & (1 << 28)) == 0 )
+  if((cpuidResult[2] & (1U << 28U)) == 0 )
     return 7; //no AVX
   //AVX: OK
   cpuid(cpuidResult, 7); // call cpuid function 7 ("Extended Feature Bits")
-  if((cpuidResult[1] & (1 << 5)) == 0 )
+  if((cpuidResult[1] & (1U << 5U)) == 0 )
     return 8; //no AVX2
   //AVX2: OK
   return 9;

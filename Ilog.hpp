@@ -15,12 +15,16 @@ public:
       uint32_t x = 14155776;
       for( uint32_t i = 2; i < 65536; ++i ) {
         x += 774541002 / (i * 2 - 1); // numerator is 2^29/ln 2
-        t[i] = x >> 24;
+        t[i] = x >> 24U;
       }
     }
 } ilog;
 
-// llog(x) accepts 32 bits
+/**
+ * llog(x) accepts 32 bits
+ * @param x
+ * @return
+ */
 inline int llog(uint32_t x) {
   if( x >= 0x1000000 )
     return 256 + ilog(uint16_t(x >> 16U));
@@ -42,7 +46,7 @@ inline uint32_t bitCount(uint32_t v) {
 inline int VLICost(uint64_t n) {
   int cost = 1;
   while( n > 0x7F ) {
-    n >>= 7;
+    n >>= 7U;
     cost++;
   }
   return cost;

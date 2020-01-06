@@ -146,9 +146,8 @@ private:
 
 public:
     JpegModel(const Shared *const sh, const uint64_t size) : shared(sh), t(size),
-                                                             MJPEGMap(sh, 21, 3, 128, 127), /* BitsOfContext, InputBits, Scale, Limit */
-                                                             sm(sh, N, 256, 1023, StateMap::BIT_HISTORY), apm1(sh, 0x8000, 24),
-                                                             apm2(sh, 0x20000, 24) {
+            MJPEGMap(sh, 21, 3, 128, 127), /* BitsOfContext, InputBits, Scale, Limit */
+            sm(sh, N, 256, 1023, StateMap::BIT_HISTORY), apm1(sh, 0x8000, 24), apm2(sh, 0x20000, 24) {
       m1 = MixerFactory::createMixer(sh, N + 1, 2050, 3);
       m1->setScaleFactor(1024, 128);
     }

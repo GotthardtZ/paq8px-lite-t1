@@ -1,7 +1,7 @@
 #ifndef PAQ8PX_INDIRECTMODEL_HPP
 #define PAQ8PX_INDIRECTMODEL_HPP
 
-#include "RingBuffer.hpp"
+#include "../RingBuffer.hpp"
 
 /**
  * The context is a byte string history that occurs within a 1 or 2 byte context.

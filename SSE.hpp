@@ -33,14 +33,14 @@ public:
 
 
 SSE::SSE(const Shared *const sh, ModelStats *st) : shared(sh), stats(st),
-                                                   Text {{/*APM:*/  {sh, 0x10000, 24}, {sh, 0x10000, 24}, {sh, 0x10000, 24}, {sh, 0x10000, 24}}, /* APM: contexts, steps */
-                                                         {/*APM1:*/ {sh, 0x10000, 7},  {sh, 0x10000, 6},  {sh, 0x10000, 6}} /* APM1: contexts, rate */
-                                                   },
-                                                   Image {{/*APM:*/ {{sh, 0x1000, 24}, {sh, 0x10000, 24}, {sh, 0x10000, 24}, {sh, 0x10000, 24}}, /*APM1:*/ {{sh, 0x10000, 7}, {sh, 0x10000, 7}}}, // color
-                                                          {/*APM:*/ {{sh, 0x1000, 24}, {sh, 0x10000, 24}, {sh, 0x10000, 24}, {sh, 0x10000, 24}}, /*APM1:*/ {{sh, 0x10000, 5}, {sh, 0x10000, 6}}}, // palette
-                                                          {/*APM:*/ {{sh, 0x1000, 24}, {sh, 0x10000, 24}, {sh, 0x10000, 24}}} //gray
-                                                   },
-                                                   Generic {/*APM1:*/ {{sh, 0x2000, 7}, {sh, 0x10000, 7}, {sh, 0x10000, 7}, {sh, 0x10000, 7}, {sh, 0x10000, 7}, {sh, 0x10000, 7}, {sh, 0x10000, 7}}} {}
+        Text {{/*APM:*/  {sh, 0x10000, 24}, {sh, 0x10000, 24}, {sh, 0x10000, 24}, {sh, 0x10000, 24}}, /* APM: contexts, steps */
+              {/*APM1:*/ {sh, 0x10000, 7},  {sh, 0x10000, 6},  {sh, 0x10000, 6}} /* APM1: contexts, rate */
+        },
+        Image {{/*APM:*/ {{sh, 0x1000, 24}, {sh, 0x10000, 24}, {sh, 0x10000, 24}, {sh, 0x10000, 24}}, /*APM1:*/ {{sh, 0x10000, 7}, {sh, 0x10000, 7}}}, // color
+               {/*APM:*/ {{sh, 0x1000, 24}, {sh, 0x10000, 24}, {sh, 0x10000, 24}, {sh, 0x10000, 24}}, /*APM1:*/ {{sh, 0x10000, 5}, {sh, 0x10000, 6}}}, // palette
+               {/*APM:*/ {{sh, 0x1000, 24}, {sh, 0x10000, 24}, {sh, 0x10000, 24}}} //gray
+        },
+        Generic {/*APM1:*/ {{sh, 0x2000, 7}, {sh, 0x10000, 7}, {sh, 0x10000, 7}, {sh, 0x10000, 7}, {sh, 0x10000, 7}, {sh, 0x10000, 7}, {sh, 0x10000, 7}}} {}
 
 int SSE::p(int pr0) {
   INJECT_STATS_blpos

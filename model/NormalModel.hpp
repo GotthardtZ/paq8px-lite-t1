@@ -27,13 +27,10 @@ private:
     StateMap sm_order1_fast;
     uint64_t cxt[15] {}; // context hashes
 public:
-    NormalModel(const Shared *const sh, ModelStats *st, const uint64_t cmsize) : shared(sh), stats(st), cm(sh, cmsize, nCM, 64,
-                                                                                                           CM_USE_RUN_STATS |
-                                                                                                           CM_USE_BYTE_HISTORY),
-                                                                                 sm_order0_slow(sh, 1, 255, 1023, StateMap::GENERIC),
-                                                                                 sm_order1_slow(sh, 1, 255 * 256, 1023, StateMap::GENERIC),
-                                                                                 sm_order1_fast(sh, 1, 255 * 256, 64,
-                                                                                                StateMap::GENERIC) // 64->16 is also ok
+    NormalModel(const Shared *const sh, ModelStats *st, const uint64_t cmsize) : shared(sh), stats(st),
+            cm(sh, cmsize, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY), sm_order0_slow(sh, 1, 255, 1023, StateMap::GENERIC),
+            sm_order1_slow(sh, 1, 255 * 256, 1023, StateMap::GENERIC),
+            sm_order1_fast(sh, 1, 255 * 256, 64, StateMap::GENERIC) // 64->16 is also ok
     {
       assert(isPowerOf2(cmsize));
     }

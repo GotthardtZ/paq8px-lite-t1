@@ -9,7 +9,7 @@
 
 /**
  * Track time and memory used
- * Remark: only Array<T> reports its memory usage, we don't know about other types
+ * \remark: only Array<T> reports its memory usage, we don't know about other types
  */
 class ProgramChecker {
 private:
