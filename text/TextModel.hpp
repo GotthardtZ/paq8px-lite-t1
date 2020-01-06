@@ -3,16 +3,6 @@
 
 #include <cstdint>
 #include <cassert>
-
-//////////////////////////// Text modelling /////////////////////////
-
-#ifdef USE_TEXTMODEL
-
-#define MAX_WORD_SIZE 64
-#define WORD_EMBEDDING_SIZE 3
-
-#endif //USE_TEXTMODEL
-
 #include "Cache.hpp"
 
 static constexpr uint8_t AsciiGroupC0[2][254] = {{0, 10, 0, 1, 10, 10, 0, 4, 2, 3, 10, 10, 10, 10, 0, 0, 5, 4, 2, 2, 3, 3, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 5, 5, 9, 4, 2, 2, 2, 2, 3, 3, 3, 3, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 0, 0, 0, 0, 5, 8, 8, 5, 9, 9, 6, 5, 2, 2, 2, 2, 2, 2, 2, 8, 3, 3, 3, 3, 3, 3, 3, 8, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 8, 8, 8, 8, 8, 5, 5, 9, 9, 9, 9, 9, 7, 8, 5, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 8, 8, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 8, 8, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10},
@@ -62,9 +52,9 @@ private:
         Unknown, ReadingWord, PossibleHyphenation, WasAbbreviation, AfterComma, AfterQuote, AfterAbbreviation, ExpectDigit
     } State, pState;
     struct {
-        uint32_t Count[Language::Count - 1]; // number of recognized words of each language in the last 64 words seen
-        uint64_t Mask[Language::Count - 1]; // binary mask with the recognition status of the last 64 words for each language
-        int Id; // current detected language
+        uint32_t count[Language::Count - 1]; // number of recognized words of each language in the last 64 words seen
+        uint64_t mask[Language::Count - 1]; // binary mask with the recognition status of the last 64 words for each language
+        int id; // current detected language
         int pId; // detected language of the previous word
     } Lang;
     struct {
@@ -94,14 +84,14 @@ private:
         uint8_t firstChar; // first character of current line
         uint8_t expectedDigit; // next expected digit of detected numerical sequence
         uint8_t prevPunct; // most recent punctuation character seen
-        Word TopicDescriptor; // last word before ':'
+        Word topicDescriptor; // last word before ':'
     } Info;
     uint64_t ParseCtx; // state of parser + relevant features used as a context (hash)
-    void SetContexts();
+    void setContexts();
 
 public:
-    TextModel(const Shared *const sh, ModelStats *st, const uint64_t Size) : shared(sh), stats(st),
-                                                                             cm(sh, Size, nCM2, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY),
+    TextModel(const Shared *const sh, ModelStats *st, const uint64_t size) : shared(sh), stats(st),
+                                                                             cm(sh, size, nCM2, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY),
                                                                              stemmers(Language::Count - 1), languages(Language::Count - 1),
                                                                              dictionaries(Language::Count - 1), wordPos(0x10000),
                                                                              State(Parse::Unknown), pState(State),
@@ -113,8 +103,8 @@ public:
       languages[Language::English - 1] = new English();
       languages[Language::French - 1] = new French();
       languages[Language::German - 1] = new German();
-      cWord = &words[Lang.Id](0);
-      pWord = &words[Lang.Id](1);
+      cWord = &words[Lang.id](0);
+      pWord = &words[Lang.id](1);
       cSegment = &segments(0);
       cSentence = &sentences(0);
       cParagraph = &paragraphs(0);
@@ -135,14 +125,14 @@ public:
       INJECT_SHARED_bpos
       if( bpos == 0 ) {
         Update();
-        SetContexts();
+        setContexts();
       }
       cm.mix(m);
 
       const uint8_t chargrp = stats->Text.chargrp;
       INJECT_SHARED_c1
       INJECT_SHARED_c0
-      m.set(finalize64(hash((Lang.Id != Language::Unknown) ? 1 + stemmers[Lang.Id - 1]->isVowel(c1) : 0, Info.masks[1] & 0xFF, c0), 11),
+      m.set(finalize64(hash((Lang.id != Language::Unknown) ? 1 + stemmers[Lang.id - 1]->isVowel(c1) : 0, Info.masks[1] & 0xFF, c0), 11),
             2048);
       m.set(finalize64(hash(ilog2(Info.wordLength[0] + 1), c0, (Info.lastDigit < Info.wordLength[0] + Info.wordGap) |
                                                                ((Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1) |
@@ -161,7 +151,7 @@ public:
                                                                                   (Info.wordLength[0] > 0 && Info.wordLength[0] < 4))), 12),
             4096);
       m.set(finalize64(hash(chargrp, Info.masks[4] & 0x1F, (Info.masks[4] >> 5) & 0x1F), 13), 8192);
-      m.set(finalize64(hash(chargrp, uint8_t(pWord->embedding), Lang.Id, State), 11), 2048);
+      m.set(finalize64(hash(chargrp, uint8_t(pWord->embedding), Lang.id, State), 11), 2048);
     }
 };
 
@@ -209,8 +199,8 @@ void TextModel::Update() {
         for( uint32_t i = 0; i < Info.wordLength[0]; i++ )
           (*cWord) += buf(Info.wordLength[0] - i + Info.lastLetter);
         Info.wordLength[1] = (*pWord).length();
-        cSegment->WordCount--;
-        cSentence->WordCount--;
+        cSegment->wordCount--;
+        cSentence->wordCount--;
       } else {
         Info.wordGap = Info.lastLetter;
         Info.firstLetter = c;
@@ -218,7 +208,7 @@ void TextModel::Update() {
     }
     Info.lastLetter = 0;
     Info.wordLength[0]++;
-    Info.masks[0] += (Lang.Id != Language::Unknown) ? 1 + stemmers[Lang.Id - 1]->isVowel(c) : 1, Info.masks[1]++, Info.masks[3] +=
+    Info.masks[0] += (Lang.id != Language::Unknown) ? 1 + stemmers[Lang.id - 1]->isVowel(c) : 1, Info.masks[1]++, Info.masks[3] +=
             Info.masks[0] & 3;
     if( c == APOSTROPHE ) {
       Info.masks[2] += 12;
@@ -238,32 +228,32 @@ void TextModel::Update() {
     ParseCtx = hash(State, cWord->Hash[0]);
   } else {
     if( cWord->length() > 0 ) {
-      if( Lang.Id != Language::Unknown )
+      if( Lang.id != Language::Unknown )
         memcpy(&words[Language::Unknown](0), cWord, sizeof(Word));
 
       for( int i = Language::Count - 1; i > Language::Unknown; i-- ) {
-        Lang.Count[i - 1] -= (Lang.Mask[i - 1] >> 63), Lang.Mask[i - 1] <<= 1;
-        if( i != Lang.Id )
+        Lang.count[i - 1] -= (Lang.mask[i - 1] >> 63), Lang.mask[i - 1] <<= 1;
+        if( i != Lang.id )
           memcpy(&words[i](0), cWord, sizeof(Word));
         if( stemmers[i - 1]->stem(&words[i](0)))
-          Lang.Count[i - 1]++, Lang.Mask[i - 1] |= 1;
+          Lang.count[i - 1]++, Lang.mask[i - 1] |= 1;
       }
-      Lang.Id = Language::Unknown;
+      Lang.id = Language::Unknown;
       uint32_t best = MIN_RECOGNIZED_WORDS;
       for( int i = Language::Count - 1; i > Language::Unknown; i-- ) {
-        if( Lang.Count[i - 1] >= best ) {
-          best = Lang.Count[i - 1] + (i == Lang.pId); //bias to prefer the previously detected language
-          Lang.Id = i;
+        if( Lang.count[i - 1] >= best ) {
+          best = Lang.count[i - 1] + (i == Lang.pId); //bias to prefer the previously detected language
+          Lang.id = i;
         }
         words[i]++;
       }
       words[Language::Unknown]++;
 
-      if( Lang.Id != Lang.pId ) {
+      if( Lang.id != Lang.pId ) {
 #ifndef NVERBOSE
         INJECT_STATS_blpos
 if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-        switch (Lang.Id) {
+        switch (Lang.id) {
         case Language::Unknown: {
           printf("[language: Unknown, blpos: %d]\n", blpos);
           break;
@@ -282,65 +272,65 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
         };
         }
 #endif
-        if( options & OPTION_TRAINTXT && Lang.Id != Language::Unknown && dictionaries[Lang.Id - 1] == nullptr ) {
-          switch( Lang.Id ) {
+        if( options & OPTION_TRAINTXT && Lang.id != Language::Unknown && dictionaries[Lang.id - 1] == nullptr ) {
+          switch( Lang.id ) {
             case Language::English: {
-              dictionaries[Lang.Id - 1] = new WordEmbeddingDictionary();
-              dictionaries[Lang.Id - 1]->loadFromFile("english.emb");
+              dictionaries[Lang.id - 1] = new WordEmbeddingDictionary();
+              dictionaries[Lang.id - 1]->loadFromFile("english.emb");
             }
           }
         }
       }
 
-      Lang.pId = Lang.Id;
-      pWord = &words[Lang.Id](1);
-      cWord = &words[Lang.Id](0);
+      Lang.pId = Lang.id;
+      pWord = &words[Lang.id](1);
+      cWord = &words[Lang.id](0);
       cWord->reset();
       if( options & OPTION_TRAINTXT ) {
-        if( Lang.Id != Language::Unknown && dictionaries[Lang.Id - 1] != nullptr )
-          dictionaries[Lang.Id - 1]->getWordEmbedding(pWord);
+        if( Lang.id != Language::Unknown && dictionaries[Lang.id - 1] != nullptr )
+          dictionaries[Lang.id - 1]->getWordEmbedding(pWord);
         wordDistances++;
         for( uint32_t i = wordDistances.size - 1; i > 0; i-- )
           memcpy(&wordDistances(i), &wordDistances(i - 1), sizeof(WordDistance));
         uint32_t minDistance = UINT32_MAX;
         for( uint32_t i = 1; i <= 4; i++ ) {
-          uint32_t d = pWord->distanceTo(words[Lang.Id](i + 1));
+          uint32_t d = pWord->distanceTo(words[Lang.id](i + 1));
           wordDistances(0).distance[i - 1] = d;
           if( d < minDistance ) {
             minDistance = d;
-            wordDistances(0).closest = words[Lang.Id](i + 1).embedding;
+            wordDistances(0).closest = words[Lang.id](i + 1).embedding;
           }
         }
       }
       wordPos[pWord->Hash[0] & (wordPos.size() - 1)] = pos;
-      if( cSegment->WordCount == 0 )
-        memcpy(&cSegment->FirstWord, pWord, sizeof(Word));
-      cSegment->WordCount++;
-      if( cSentence->WordCount == 0 )
-        memcpy(&cSentence->FirstWord, pWord, sizeof(Word));
-      cSentence->WordCount++;
+      if( cSegment->wordCount == 0 )
+        memcpy(&cSegment->firstWord, pWord, sizeof(Word));
+      cSegment->wordCount++;
+      if( cSentence->wordCount == 0 )
+        memcpy(&cSentence->firstWord, pWord, sizeof(Word));
+      cSentence->wordCount++;
       Info.wordLength[1] = Info.wordLength[0], Info.wordLength[0] = 0;
       Info.quoteLength += (Info.quoteLength > 0);
       if( Info.quoteLength > 0x1F )
         Info.quoteLength = 0;
-      cSentence->VerbIndex++, cSentence->NounIndex++, cSentence->CapitalIndex++;
+      cSentence->verbIndex++, cSentence->nounIndex++, cSentence->capitalIndex++;
       if((pWord->type & Language::Verb) != 0 ) {
-        cSentence->VerbIndex = 0;
+        cSentence->verbIndex = 0;
         memcpy(&cSentence->lastVerb, pWord, sizeof(Word));
       }
       if((pWord->type & Language::Noun) != 0 ) {
-        cSentence->NounIndex = 0;
+        cSentence->nounIndex = 0;
         memcpy(&cSentence->lastNoun, pWord, sizeof(Word));
       }
-      if( cSentence->WordCount > 1 && Info.lastUpper < Info.wordLength[1] ) {
-        cSentence->CapitalIndex = 0;
+      if( cSentence->wordCount > 1 && Info.lastUpper < Info.wordLength[1] ) {
+        cSentence->capitalIndex = 0;
         memcpy(&cSentence->lastCapital, pWord, sizeof(Word));
       }
     }
     bool skip = false;
     switch( c ) {
       case '.': {
-        if( Lang.Id != Language::Unknown && Info.lastUpper == Info.wordLength[1] && languages[Lang.Id - 1]->isAbbreviation(pWord)) {
+        if( Lang.id != Language::Unknown && Info.lastUpper == Info.wordLength[1] && languages[Lang.id - 1]->isAbbreviation(pWord)) {
           State = Parse::WasAbbreviation;
           ParseCtx = hash(State, pWord->Hash[0]);
           break;
@@ -348,12 +338,12 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
       }
       case '?':
       case '!': {
-        cSentence->Type = (c == '.') ? Sentence::Types::Declarative : (c == '?') ? Sentence::Types::Interrogative
+        cSentence->type = (c == '.') ? Sentence::Types::Declarative : (c == '?') ? Sentence::Types::Interrogative
                                                                                  : Sentence::Types::Exclamative;
-        cSentence->SegmentCount++;
-        cParagraph->SentenceCount++;
-        cParagraph->TypeCount[cSentence->Type]++;
-        cParagraph->TypeMask <<= 2, cParagraph->TypeMask |= cSentence->Type;
+        cSentence->segmentCount++;
+        cParagraph->sentenceCount++;
+        cParagraph->typeCount[cSentence->type]++;
+        cParagraph->typeMask <<= 2, cParagraph->typeMask |= cSentence->type;
         cSentence = &sentences.next();
         Info.masks[3] += 3;
         skip = true;
@@ -367,9 +357,9 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
           ParseCtx = hash(State, ilog2(Info.quoteLength + 1), ilog2(Info.lastNewLine),
                           Info.lastUpper < Info.lastLetter + Info.wordLength[1]);
         } else if( c == ':' )
-          memcpy(&Info.TopicDescriptor, pWord, sizeof(Word));
+          memcpy(&Info.topicDescriptor, pWord, sizeof(Word));
         if( !skip ) {
-          cSentence->SegmentCount++;
+          cSentence->segmentCount++;
           Info.masks[3] += 4;
         }
         Info.lastPunct = 0, Info.prevPunct = c;
@@ -499,11 +489,11 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
       Info.numbers[1] = Info.numbers[0], Info.numbers[0] = 0;
       Info.numHashes[1] = Info.numHashes[0], Info.numHashes[0] = 0;
       Info.numLength[1] = Info.numLength[0], Info.numLength[0] = 0;
-      cSegment->NumCount++, cSentence->NumCount++;
+      cSegment->numCount++, cSentence->numCount++;
     }
   }
   if( Info.lastNewLine == 1 )
-    Info.firstChar = (Lang.Id != Language::Unknown) ? c : min(c, 96);
+    Info.firstChar = (Lang.id != Language::Unknown) ? c : min(c, 96);
   if( Info.lastNest > 512 )
     Info.nestHash = 0;
   int leadingBitsSet = 0;
@@ -521,7 +511,7 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
   stats->Text.mask = Info.masks[1] & 0xFF;
 }
 
-void TextModel::SetContexts() {
+void TextModel::setContexts() {
   INJECT_SHARED_buf
   const uint8_t c = buf(1), lc = tolower(c), m2 = Info.masks[2] & 0xF, column = min(0xFF, Info.lastNewLine);
   const uint64_t w = State == Parse::ReadingWord ? cWord->Hash[0] : pWord->Hash[0];
@@ -543,11 +533,11 @@ void TextModel::SetContexts() {
   cm.set(hash(++i, cWordHash0, pWordHash1));
   cm.set(hash(++i, cWordHash0, pWordHash1, words[Lang.pId](2).Hash[1]));
   cm.set(hash(++i, w, words[Lang.pId](2).Hash[0], words[Lang.pId](3).Hash[0]));
-  cm.set(hash(++i, cWordHash0, c, (cSentence->VerbIndex < cSentence->WordCount) ? cSentence->lastVerb.Hash[0] : 0));
+  cm.set(hash(++i, cWordHash0, c, (cSentence->verbIndex < cSentence->wordCount) ? cSentence->lastVerb.Hash[0] : 0));
   cm.set(hash(++i, pWordHash1, Info.masks[1] & 0xFC, lc, Info.wordGap));
-  cm.set(hash(++i, (Info.lastLetter == 0) ? cWordHash0 : pWordHash0, c, cSegment->FirstWord.Hash[1],
-              min(3, ilog2(cSegment->WordCount + 1))));
-  cm.set(hash(++i, cWordHash0, c, segments(1).FirstWord.Hash[1]));
+  cm.set(hash(++i, (Info.lastLetter == 0) ? cWordHash0 : pWordHash0, c, cSegment->firstWord.Hash[1],
+              min(3, ilog2(cSegment->wordCount + 1))));
+  cm.set(hash(++i, cWordHash0, c, segments(1).firstWord.Hash[1]));
   cm.set(hash(++i, max(31, lc), Info.masks[1] & 0xFFC, (Info.spaces & 0xFE) | (Info.lastPunct < Info.lastLetter),
               (Info.maskUpper & 0xFF) | (((0x100 | Info.firstLetter) * (Info.wordLength[0] > 1)) << 8)));
   cm.set(hash(++i, column, min(7, ilog2(Info.lastUpper + 1)), ilog2(Info.lastPunct + 1)));
@@ -568,12 +558,12 @@ void TextModel::SetContexts() {
   cm.set(hash(++i, w, c, Info.numHashes[1]));
   INJECT_SHARED_pos
   cm.set(hash(++i, w, c, llog(pos - wordPos[w & (wordPos.size() - 1)]) >> 1));
-  cm.set(hash(++i, w, c, Info.TopicDescriptor.Hash[0]));
-  cm.set(hash(++i, Info.numLength[0], c, Info.TopicDescriptor.Hash[0]));
+  cm.set(hash(++i, w, c, Info.topicDescriptor.Hash[0]));
+  cm.set(hash(++i, Info.numLength[0], c, Info.topicDescriptor.Hash[0]));
   cm.set(hash(++i, (Info.lastLetter > 0) ? c : 0x100, Info.masks[1] & 0xFFC, Info.nestHash & 0x7FF));
   cm.set(hash(++i, w, c, Info.masks[3] & 0x1FF,
-              ((cSentence->VerbIndex == 0 && cSentence->lastVerb.length() > 0) << 6) | ((Info.wordLength[1] > 3) << 5) |
-              ((cSegment->WordCount == 0) << 4) | ((cSentence->SegmentCount == 0 && cSentence->WordCount < 2) << 3) |
+              ((cSentence->verbIndex == 0 && cSentence->lastVerb.length() > 0) << 6) | ((Info.wordLength[1] > 3) << 5) |
+              ((cSegment->wordCount == 0) << 4) | ((cSentence->segmentCount == 0 && cSentence->wordCount < 2) << 3) |
               ((Info.lastPunct >= Info.lastLetter + Info.wordLength[1] + Info.wordGap) << 2) |
               ((Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1) |
               (Info.lastUpper < Info.wordLength[0] + Info.wordGap + Info.wordLength[1])));
@@ -584,8 +574,8 @@ void TextModel::SetContexts() {
               Info.firstLetter * (Info.wordLength[0] < 7)));
   cm.set(hash(++i, column, Info.spaces & 7, Info.nestHash & 0x7FF));
   cm.set(hash(++i, cWordHash0, (Info.lastUpper < column) | ((Info.lastUpper < Info.wordLength[0]) << 1), min(5, Info.wordLength[0])));
-  cm.set(hash(++i, Lang.Id, w, uint8_t(words[Lang.Id](1 + (State != Parse::ReadingWord)).embedding),
-              (Info.lastUpper < Info.wordLength[0]) | ((cSegment->WordCount == 0) << 1)));
+  cm.set(hash(++i, Lang.id, w, uint8_t(words[Lang.id](1 + (State != Parse::ReadingWord)).embedding),
+              (Info.lastUpper < Info.wordLength[0]) | ((cSegment->wordCount == 0) << 1)));
   assert(i - State * 64 + 1 == nCM2);
 }
 

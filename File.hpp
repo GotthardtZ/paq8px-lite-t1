@@ -360,11 +360,12 @@ public:
     bool eof() override { return feof(file) != 0; }
 };
 
-// This class is responsible for temporary files in RAM or on disk
-// Initially it uses RAM for temporary file content.
-// In case of the content size in RAM grows too large, it is written to disk,
-// the RAM is freed and all subsequent file operations will use the file on disk.
-
+/**
+ * This class is responsible for temporary files in RAM or on disk
+ * Initially it uses RAM for temporary file content.
+ * In case of the content size in RAM grows too large, it is written to disk,
+ * the RAM is freed and all subsequent file operations will use the file on disk.
+ */
 class FileTmp : public File {
 private:
     //file content in ram
@@ -536,6 +537,7 @@ public:
       } else
         quit(myPathError);
 #else
+      // TODO: this doesn't work on mac OS
       Array<char> myFileName(PATH_MAX + 1);
       if( readlink("/proc/self/exe", &myFileName[0], PATH_MAX) != -1 )
         f->open(&myFileName[0], true);
@@ -555,6 +557,7 @@ public:
         char *endofpath = strrchr(&myFileName[0], '\\');
 #endif
 #ifdef UNIX
+      // TODO: this doesn't work on mac OS
       char myFileName[PATH_MAX + fLength];
       if( readlink("/proc/self/exe", myFileName, PATH_MAX) != -1 ) {
         char *endOfPath = strrchr(&myFileName[0], '/');
@@ -574,9 +577,9 @@ static uint64_t getfileSize(const char *filename) {
   FileDisk f;
   f.open(filename, true);
   f.setEnd();
-  const uint64_t fileSize = f.curPos();
+  const auto fileSize = f.curPos();
   f.close();
-  if((fileSize >> 31) != 0 )
+  if((fileSize >> 31U) != 0 )
     quit("Large files not supported.");
   return fileSize;
 }

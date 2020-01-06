@@ -11,7 +11,7 @@ public:
     };
 
     virtual ~Language() = default;
-    virtual bool isAbbreviation(Word *W) = 0;
+    virtual bool isAbbreviation(Word *w) = 0;
 };
 
 #endif //PAQ8PX_LANGUAGE_HPP

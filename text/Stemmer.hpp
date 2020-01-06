@@ -19,6 +19,14 @@ protected:
       return (w->start != w->end && rn <= w->length() - strlen(suffix));
     }
 
+    static inline bool charInArray(const char c, const char a[], const int len) {
+      if( a == nullptr )
+        return false;
+      int i = 0;
+      for( ; i < len && c != a[i]; i++ );
+      return i < len;
+    }
+
 public:
     virtual ~Stemmer() = default;;
     virtual bool isVowel(char c) = 0;

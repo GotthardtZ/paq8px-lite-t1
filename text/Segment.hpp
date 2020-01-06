@@ -6,9 +6,9 @@
 
 class Segment {
 public:
-    Word FirstWord; // useful following questions
-    uint32_t WordCount;
-    uint32_t NumCount;
+    Word firstWord; // useful following questions
+    uint32_t wordCount{};
+    uint32_t numCount{};
 };
 
 #endif //PAQ8PX_SEGMENT_HPP

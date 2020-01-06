@@ -1,6 +1,9 @@
 #ifndef PAQ8PX_WORD_HPP
 #define PAQ8PX_WORD_HPP
 
+#define MAX_WORD_SIZE 64
+#define WORD_EMBEDDING_SIZE 3
+
 class Word {
 private:
     uint64_t calculateHash() {
@@ -44,14 +47,14 @@ public:
     uint32_t operator-(const Word w) const {
       uint32_t res = 0;
       for( int i = 0, j = 0; i < WORD_EMBEDDING_SIZE; i++, j += 8 )
-        res = (res << 8) | uint8_t(uint8_t(embedding >> j) - uint8_t(w.embedding >> j));
+        res = (res << 8U) | uint8_t(uint8_t(embedding >> j) - uint8_t(w.embedding >> j));
       return res;
     }
 
-    uint32_t operator+(const Word W) const {
+    uint32_t operator+(const Word w) const {
       uint32_t res = 0;
       for( int i = 0, j = 0; i < WORD_EMBEDDING_SIZE; i++, j += 8 )
-        res = (res << 8) | uint8_t(uint8_t(embedding >> j) + uint8_t(W.embedding >> j));
+        res = (res << 8U) | uint8_t(uint8_t(embedding >> j) + uint8_t(w.embedding >> j));
       return res;
     }
 

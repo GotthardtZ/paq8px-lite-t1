@@ -1,8 +1,9 @@
 #ifndef PAQ8PX_FRENCHSTEMMER_HPP
 #define PAQ8PX_FRENCHSTEMMER_HPP
 
-// French suffix stemmer, based on the Porter stemmer.
-
+/**
+ * French suffix stemmer, based on the Porter stemmer.
+ */
 class FrenchStemmer : public Stemmer {
 private:
     static constexpr int NUM_VOWELS = 17;
@@ -237,20 +238,20 @@ private:
       return false;
     }
 
-    bool step2B(Word *W, const uint32_t rv, const uint32_t r2) {
+    bool step2B(Word *w, const uint32_t rv, const uint32_t r2) {
       for( int i = 0; i < NUM_SUFFIXES_STEP2b; i++ ) {
-        if( W->endsWith(SuffixesStep2b[i]) && suffixInRn(W, rv, SuffixesStep2b[i])) {
+        if( w->endsWith(SuffixesStep2b[i]) && suffixInRn(w, rv, SuffixesStep2b[i])) {
           switch( SuffixesStep2b[i][0] ) {
             case 'a':
             case '\xE2': {
-              W->end -= uint8_t(strlen(SuffixesStep2b[i]));
-              if( W->endsWith("e") && suffixInRn(W, rv, "e"))
-                W->end--;
+              w->end -= uint8_t(strlen(SuffixesStep2b[i]));
+              if( w->endsWith("e") && suffixInRn(w, rv, "e"))
+                w->end--;
               return true;
             }
             default: {
-              if( i != 14 || suffixInRn(W, r2, SuffixesStep2b[i])) {
-                W->end -= uint8_t(strlen(SuffixesStep2b[i]));
+              if( i != 14 || suffixInRn(w, r2, SuffixesStep2b[i])) {
+                w->end -= uint8_t(strlen(SuffixesStep2b[i]));
                 return true;
               }
             }
@@ -268,36 +269,36 @@ private:
         (*final) = 'c';
     }
 
-    bool step4(Word *W, const uint32_t rv, const uint32_t r2) {
+    bool step4(Word *w, const uint32_t rv, const uint32_t r2) {
       bool res = false;
-      if( W->length() >= 2 && W->letters[W->end] == 's' && !charInArray((*W)(1), SetStep4, NUM_SET_STEP4)) {
-        W->end--;
+      if( w->length() >= 2 && w->letters[w->end] == 's' && !charInArray((*w)(1), SetStep4, NUM_SET_STEP4)) {
+        w->end--;
         res = true;
       }
       for( int i = 0; i < NUM_SUFFIXES_STEP4; i++ ) {
-        if( W->endsWith(SuffixesStep4[i]) && suffixInRn(W, rv, SuffixesStep4[i])) {
+        if( w->endsWith(SuffixesStep4[i]) && suffixInRn(w, rv, SuffixesStep4[i])) {
           switch( i ) {
             case 2: { //ion
-              char prec = (*W)(3);
-              if( suffixInRn(W, r2, SuffixesStep4[i]) && suffixInRn(W, rv + 1, SuffixesStep4[i]) && (prec == 's' || prec == 't')) {
-                W->end -= 3;
+              char prec = (*w)(3);
+              if( suffixInRn(w, r2, SuffixesStep4[i]) && suffixInRn(w, rv + 1, SuffixesStep4[i]) && (prec == 's' || prec == 't')) {
+                w->end -= 3;
                 return true;
               }
               break;
             }
             case 5: { //e
-              W->end--;
+              w->end--;
               return true;
             }
             case 6: { //\xEB
-              if( W->endsWith("gu\xEB")) {
-                W->end--;
+              if( w->endsWith("gu\xEB")) {
+                w->end--;
                 return true;
               }
               break;
             }
             default: {
-              W->changeSuffix(SuffixesStep4[i], "i");
+              w->changeSuffix(SuffixesStep4[i], "i");
               return true;
             }
           }
@@ -319,7 +320,7 @@ private:
     bool step6(Word *w) {
       for( int i = w->end; i >= w->start; i-- ) {
         if( isVowel(w->letters[i])) {
-          if( i < w->end && (w->letters[i] & 0xFE) == 0xE8 ) {
+          if( i < w->end && (w->letters[i] & 0xFEU) == 0xE8U ) {
             w->letters[i] = 'e';
             return true;
           }

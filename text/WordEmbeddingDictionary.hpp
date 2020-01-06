@@ -3,7 +3,7 @@
 
 class WordEmbeddingDictionary {
 private:
-    static constexpr int HashSize = 81929;
+    static constexpr int hashSize = 81929;
     Array<Entry> entries;
     Array<short> table;
     int index;
@@ -12,8 +12,8 @@ private:
 #endif
 
     int findEntry(const short prefix, const uint8_t suffix) {
-      int i = hash(prefix, suffix) % HashSize;
-      int offset = (i > 0) ? HashSize - i : 1;
+      int i = hash(prefix, suffix) % hashSize;
+      int offset = (i > 0) ? hashSize - i : 1;
       while( true ) {
         if( table[i] < 0 ) //free slot?
           return -i - 1;
@@ -21,7 +21,7 @@ private:
           return table[i];
         i -= offset;
         if( i < 0 )
-          i += HashSize;
+          i += hashSize;
       }
     }
 
@@ -35,7 +35,7 @@ private:
     }
 
 public:
-    WordEmbeddingDictionary() : entries(0x8000), table(HashSize), index(0) { reset(); }
+    WordEmbeddingDictionary() : entries(0x8000), table(hashSize), index(0) { reset(); }
 
     ~WordEmbeddingDictionary() {
 #ifndef NVERBOSE
@@ -45,7 +45,7 @@ public:
     }
 
     void reset() {
-      for( index = 0; index < HashSize; table[index] = -1, index++ );
+      for( index = 0; index < hashSize; table[index] = -1, index++ );
       for( index = 0; index < 256; index++ ) {
         table[-findEntry(-1, index) - 1] = index;
         entries[index].prefix = -1;
@@ -56,13 +56,13 @@ public:
 #endif
     }
 
-    bool addWord(const Word *W, const uint32_t embedding) {
+    bool addWord(const Word *w, const uint32_t embedding) {
       bool res = false;
-      int parent = -1, code = 0, len = W->length();
+      int parent = -1, code = 0, len = w->length();
       if( len == 0 )
         return res;
       for( int i = 0; i < len; i++ ) {
-        int idx = findEntry(parent, code = (*W)[i]);
+        int idx = findEntry(parent, code = (*w)[i]);
         if( idx < 0 ) {
           addEntry(parent, code, idx);
           parent = index - 1;
@@ -78,19 +78,19 @@ public:
       return res;
     }
 
-    void getWordEmbedding(Word *W) {
+    void getWordEmbedding(Word *w) {
       int parent = -1;
 #ifndef NVERBOSE
       requests++;
 #endif
-      W->embedding = -1;
-      for( uint32_t i = 0; i < W->length(); i++ ) {
-        if((parent = findEntry(parent, (*W)[i])) < 0 )
+      w->embedding = -1;
+      for( uint32_t i = 0; i < w->length(); i++ ) {
+        if((parent = findEntry(parent, (*w)[i])) < 0 )
           return;
       }
       if( !entries[parent].termination )
         return;
-      W->embedding = entries[parent].embedding;
+      w->embedding = entries[parent].embedding;
 #ifndef NVERBOSE
       hits++;
 #endif
@@ -103,15 +103,15 @@ public:
     printf("Loading word embeddings...");
 #endif
       OpenFromMyFolder::anotherFile(&f, filename);
-      Word W;
+      Word w;
       int byte = 0, embedding = 0, total = 0;
       do {
         if( f.blockRead((uint8_t *) (&embedding), WORD_EMBEDDING_SIZE) != WORD_EMBEDDING_SIZE )
           break;
-        W.reset();
+        w.reset();
         while((byte = f.getchar()) >= 0 && byte != 0x0A )
-          W += byte;
-        if( addWord(&W, embedding))
+          w += byte;
+        if( addWord(&w, embedding))
           total++;
       } while( byte >= 0 );
 #ifndef NVERBOSE

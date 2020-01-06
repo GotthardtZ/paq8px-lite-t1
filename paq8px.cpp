@@ -27,9 +27,6 @@
 //////////////////////// Debug options /////////////////////////////////////
 
 #define NDEBUG    // Remove (comment out) this line for debugging (turns on Array bound checks and asserts)
-
-#include <cassert>
-
 #define NVERBOSE  // Remove (comment out) this line for more on-screen progress information
 
 //
@@ -51,7 +48,7 @@
 #endif
 #endif
 
-#if !defined(WINDOWS ) && !defined(UNIX)
+#if !defined(WINDOWS) && !defined(UNIX)
 #error Unknown target system
 #endif
 
@@ -77,7 +74,6 @@
 #include <sys/stat.h> //stat(), mkdir()
 #include <cmath>     //floor(), sqrt()
 #include <stdexcept>  //std::exception
-#include <chrono>     //std::chrono::high_resolution_clock
 
 // zlib
 #ifdef USE_ZLIB
@@ -131,8 +127,6 @@
 
 #include "simd.hpp"
 
-//////////////////////// Type definitions /////////////////////////////////////////
-
 static_assert(sizeof(uint8_t) == 1, "sizeof(uint8_t)");
 static_assert(sizeof(uint16_t) == 2, "sizeof(uint16_t)");
 static_assert(sizeof(uint32_t) == 4, "sizeof(uint32_t)");
@@ -171,21 +165,7 @@ static_assert(sizeof(int) == 4, "sizeof(int)");
 #include "IndirectContext.hpp"
 #include "MTFList.hpp"
 
-//////////////////////////// Text modelling /////////////////////////
-
 #ifdef USE_TEXTMODEL
-
-inline bool charInArray(const char c, const char a[], const int len) {
-  if( a == nullptr )
-    return false;
-  int i = 0;
-  for( ; i < len && c != a[i]; i++ );
-  return i < len;
-}
-
-#define MAX_WORD_SIZE 64
-#define WORD_EMBEDDING_SIZE 3
-
 #include "text/Word.hpp"
 #include "text/Segment.hpp"
 #include "text/Sentence.hpp"
@@ -200,10 +180,7 @@ inline bool charInArray(const char c, const char a[], const int len) {
 #include "text/GermanStemmer.hpp"
 #include "text/Entry.hpp"
 #include "text/WordEmbeddingDictionary.hpp"
-
 #endif //USE_TEXTMODEL
-#define CM_USE_RUN_STATS 1
-#define CM_USE_BYTE_HISTORY 2
 
 #include "text/TextModel.hpp"
 #include "MatchModel.hpp"
@@ -369,7 +346,7 @@ int main_utf8(int argc, char **argv) {
           level = argv[i][1] - '0';
           //process optional compression switches
           for( int j = 2; j < arg_len; j++ ) {
-            switch( argv[i][j] & 0xDF ) {
+            switch( argv[i][j] & 0xDFU ) {
               case 'B':
                 options |= OPTION_BRUTE;
                 break;

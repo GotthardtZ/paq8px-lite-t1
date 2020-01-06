@@ -17,7 +17,7 @@ class ContextModel {
     bool readSize = false;
 
 public:
-    ContextModel(const Shared *const sh, ModelStats *st, Models &mdls) : shared(sh), stats(st), models(mdls) {
+    ContextModel(const Shared *const sh, ModelStats *st, Models &models) : shared(sh), stats(st), models(models) {
       m = MixerFactory::createMixer(sh, 1 + //bias
                                         MatchModel::MIXERINPUTS + NormalModel::MIXERINPUTS +
                                         SparseMatchModel::MIXERINPUTS + SparseModel::MIXERINPUTS +

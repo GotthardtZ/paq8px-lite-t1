@@ -3,7 +3,7 @@
 
 #include "AudioModel.hpp"
 #include <cstdint>
-
+#ifdef USE_AUDIOMODEL
 class Audio8BitModel : AudioModel {
 private:
     static constexpr int nOLS = 8;
@@ -160,5 +160,5 @@ public:
       m.set(mxCtx, 10);
     }
 };
-
+#endif //USE_AUDIOMODEL
 #endif //PAQ8PX_AUDIO8BITMODEL_HPP

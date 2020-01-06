@@ -4,6 +4,7 @@
 #include "AudioModel.hpp"
 #include <cstdint>
 
+#ifdef USE_AUDIOMODEL
 class Audio16BitModel : AudioModel {
 private:
     static constexpr int nOLS = 8;
@@ -176,5 +177,5 @@ public:
       m.set(mxCtx, 20);
     }
 };
-
+#endif // USE_AUDIOMODEL
 #endif //PAQ8PX_AUDIO16BITMODEL_HPP

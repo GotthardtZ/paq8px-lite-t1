@@ -417,7 +417,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
         png *= ((buf1 & 0xFF) == 0);
         nextchunk = (png) ? i + 8 : 0;
       } else if( p > 17 && i == nextchunk ) {
-        nextchunk += buf1 + 4 /*CRC*/ + 8 /*Chunk length+Id*/;
+        nextchunk += buf1 + 4 /*CRC*/ + 8 /*Chunk length+id*/;
         lastchunk = buf0;
         png *= (lastchunk != 0x49454E44 /*IEND*/);
         if( lastchunk == 0x504C5445 /*PLTE*/) {

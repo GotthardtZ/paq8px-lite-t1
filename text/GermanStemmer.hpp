@@ -3,8 +3,9 @@
 
 #include <cstdint>
 
-// German suffix stemmer, based on the Porter stemmer.
-
+/**
+ * German suffix stemmer, based on the Porter stemmer.
+ */
 class GermanStemmer : public Stemmer {
 private:
     static constexpr int NUM_VOWELS = 9;
@@ -20,14 +21,14 @@ private:
     static constexpr int NUM_SUFFIXES_STEP3 = 7;
     const char *SuffixesStep3[NUM_SUFFIXES_STEP3] = {"end", "ung", "ik", "ig", "isch", "lich", "heit"};
 
-    void convertUtf8(Word *W) {
-      for( int i = W->start; i < W->end; i++ ) {
-        uint8_t c = W->letters[i + 1] + ((W->letters[i + 1] < 0x9F) ? 0x60 : 0x40);
-        if( W->letters[i] == 0xC3 && (isVowel(c) || c == 0xDF)) {
-          W->letters[i] = c;
-          if( i + 1 < W->end )
-            memmove(&W->letters[i + 1], &W->letters[i + 2], W->end - i - 1);
-          W->end--;
+    void convertUtf8(Word *w) {
+      for( int i = w->start; i < w->end; i++ ) {
+        uint8_t c = w->letters[i + 1] + ((w->letters[i + 1] < 0x9F) ? 0x60 : 0x40);
+        if( w->letters[i] == 0xC3 && (isVowel(c) || c == 0xDF)) {
+          w->letters[i] = c;
+          if( i + 1 < w->end )
+            memmove(&w->letters[i + 1], &w->letters[i + 2], w->end - i - 1);
+          w->end--;
         }
       }
     }

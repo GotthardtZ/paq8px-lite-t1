@@ -19,7 +19,7 @@ DIFFERENCES FROM PAQ8A
 The user interface supports directory compression and drag and drop.
 The preprocessor segments the input into blocks and uses more robust
 EXE detection.  An indirect context model was added.  There is no
-dictionary preprocesor like PAQ8B/C/D/E.
+dictionary preprocessor like PAQ8B/C/D/E.
 
 DIFFERENCES FROM PAQ8F
 
@@ -40,9 +40,9 @@ reduced on 1-2%.
 
 DIFFERENCES FROM PAQ8JA
 
-Introduced distance model. Distance model uses distance to last occurence
+Introduced distance model. Distance model uses distance to last occurrence
 of some anchor char (0x00, space, newline, 0xff), combined with previous
-charactes as context. This slightly improves compression of files with
+characters as context. This slightly improves compression of files with
 variable-width record data.
 
 DIFFERENCES FROM PAQ8JB
@@ -114,8 +114,8 @@ pap8px_v0
 
 pap8px_v1
 2009.04.26
-- Fixed "Transform fails at 79385" when compressiong WcgopFsd.dll
-- A fix for properly compressing partially currupted images (e.g. 2359362 bytes 1024x768 bitmap)
+- Fixed "Transform fails at 79385" when compressing WcgopFsd.dll
+- A fix for properly compressing partially corrupted images (e.g. 2359362 bytes 1024x768 bitmap)
 - JPEG model wasn't replaced in previous version
 
 
@@ -126,7 +126,7 @@ pap8px_v2
 
 pap8px_v4
 2009.05.01
-- There was a problem with compressing files larger than 1 block (512MB for -7 switch, 4MB for -0 swtich). Fixed.
+- There was a problem with compressing files larger than 1 block (512MB for -7 switch, 4MB for -0 switch). Fixed.
 
 
 pap8px_v5
@@ -157,7 +157,7 @@ pap8px_v9
 - every image is divided into 2 blocks - IMAGEHDR (header) and IMAGEx (where x is 1, 8 or 24)
 - there are additional 8 bytes in compressed stream (for size of IMAGEHDR block and for image width)
 - experimental improved tiff detection (should detect uncompressed tiff created by IrfanView)
-- RGB detection can detect images with more chanels (3 or 4) - chanels are compressed independently using im8bitModel (IMAGE8 block)
+- RGB detection can detect images with more channels (3 or 4) - channels are compressed independently using im8bitModel (IMAGE8 block)
 - during compression can't be printed such info BMP(width x height), instead of it program prints info about blocks: blocktype(size in bytes)
 
 
@@ -406,7 +406,7 @@ pap8px_v52
 
 pap8px_v53
 2009.06.06
-- changed xor-parameter of exe transformation (old: 64=01000000, new: 176=10110000) -> three bytes of absolute adress are xored using this value before encoding
+- changed xor-parameter of exe transformation (old: 64=01000000, new: 176=10110000) -> three bytes of absolute address are xored using this value before encoding
 
 
 pap8px_v54
@@ -423,7 +423,7 @@ pap8px_v55
 
 pap8px_v56
 2009.06.13
-- before value from sum is used it is coverted to float:  sum=float(sum);
+- before value from sum is used it is converted to float:  sum=float(sum);
 
 
 pap8px_v57
@@ -1061,7 +1061,7 @@ paq8px_v138_e1w3fix
 paq8px_v139
 2017.02.25
 - Slightly improved text model (now uses 26 contexts)
-- French stemmer nows handles UTF8 Unicode code points common to that language
+- French stemmer now handles UTF8 Unicode code points common to that language
 
 
 paq8px_v140 
@@ -1481,7 +1481,7 @@ Paq8px_v179fix3
 - Modified Mixer, APM1, StateMap, APM, RunContextMap, SmallStationaryContextMap, StationaryMap, IndirectMap (with 
   unchanged behavior), they are now independent of the global context
 - Modified most of the Model classes - small steps toward clarity and independence of the global context
-- Refactored Trainig (NormalModel, ExeModel)
+- Refactored Training (NormalModel, ExeModel)
 - Refactored APM and StateMap, StateMap now handles context sets (it processed single-contexts until now)
 - Scaling of stretched probabilities is now performed by *>> instead of */ in the maps
 - Fixed an Image8bitModel context (thank you Márcio)
@@ -1591,7 +1591,7 @@ paq8px_v183:
   - models utilizing ContextMap2 may now indicate whether they want the "extra" features (run statistics, byte history statistics)
   - miscellaneous tweaks
   - the following models switched from ContextMap to ContextMap2: WordModel, MatchModel, CharGroupModel, Image24bitModel, Image8bitModel
-    (previous ComtextMap2 users: TextModel, ExeModel and NormalModel)
+    (previous ContextMap2 users: TextModel, ExeModel and NormalModel)
 - Enhancements in WordModel
   - added 6 new contexts
   - many small tweaks

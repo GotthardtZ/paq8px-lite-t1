@@ -1,10 +1,11 @@
 #ifndef PAQ8PX_ENGLISHSTEMMER_HPP
 #define PAQ8PX_ENGLISHSTEMMER_HPP
 
-//  English affix stemmer, based on the Porter2 stemmer.
-
 #include <cstdint>
 
+/**
+ * English affix stemmer, based on the Porter2 stemmer.
+ */
 class EnglishStemmer : public Stemmer {
 private:
     static constexpr int NUM_VOWELS = 6;
@@ -136,142 +137,142 @@ private:
       return getRegion(w, 0);
     }
 
-    bool endsInShortSyllable(const Word *W) {
-      if( W->end == W->start )
+    bool endsInShortSyllable(const Word *w) {
+      if( w->end == w->start )
         return false;
-      else if( W->end == W->start + 1 )
-        return isVowel((*W)(1)) && isConsonant((*W)(0));
+      else if( w->end == w->start + 1 )
+        return isVowel((*w)(1)) && isConsonant((*w)(0));
       else
-        return (isConsonant((*W)(2)) && isVowel((*W)(1)) && isConsonant((*W)(0)) && isShortConsonant((*W)(0)));
+        return (isConsonant((*w)(2)) && isVowel((*w)(1)) && isConsonant((*w)(0)) && isShortConsonant((*w)(0)));
     }
 
-    bool isShortWord(const Word *W) {
-      return (endsInShortSyllable(W) && getRegion1(W) == W->length());
+    bool isShortWord(const Word *w) {
+      return (endsInShortSyllable(w) && getRegion1(w) == w->length());
     }
 
-    inline bool hasVowels(const Word *W) {
-      for( int i = W->start; i <= W->end; i++ ) {
-        if( isVowel(W->letters[i]))
+    inline bool hasVowels(const Word *w) {
+      for( int i = w->start; i <= w->end; i++ ) {
+        if( isVowel(w->letters[i]))
           return true;
       }
       return false;
     }
 
-    static bool trimApostrophes(Word *W) {
+    static bool trimApostrophes(Word *w) {
       bool result = false;
       //trim all apostrophes from the beginning
       int cnt = 0;
-      while( W->start != W->end && (*W)[0] == APOSTROPHE ) {
+      while( w->start != w->end && (*w)[0] == APOSTROPHE ) {
         result = true;
-        W->start++;
+        w->start++;
         cnt++;
       }
       //trim the same number of apostrophes from the end (if there are)
-      while( W->start != W->end && (*W)(0) == APOSTROPHE ) {
+      while( w->start != w->end && (*w)(0) == APOSTROPHE ) {
         if( cnt == 0 )
           break;
-        W->end--;
+        w->end--;
         cnt--;
       }
       return result;
     }
 
-    void markYsAsConsonants(Word *W) {
-      if((*W)[0] == 'y' )
-        W->letters[W->start] = 'Y';
-      for( int i = W->start + 1; i <= W->end; i++ ) {
-        if( isVowel(W->letters[i - 1]) && W->letters[i] == 'y' )
-          W->letters[i] = 'Y';
+    void markYsAsConsonants(Word *w) {
+      if((*w)[0] == 'y' )
+        w->letters[w->start] = 'Y';
+      for( int i = w->start + 1; i <= w->end; i++ ) {
+        if( isVowel(w->letters[i - 1]) && w->letters[i] == 'y' )
+          w->letters[i] = 'Y';
       }
     }
 
-    static bool processPrefixes(Word *W) {
-      if( W->startsWith("irr") && W->length() > 5 && ((*W)[3] == 'a' || (*W)[3] == 'e'))
-        W->start += 2, W->type |= English::Negation;
-      else if( W->startsWith("over") && W->length() > 5 )
-        W->start += 4, W->type |= English::PrefixOver;
-      else if( W->startsWith("under") && W->length() > 6 )
-        W->start += 5, W->type |= English::PrefixUnder;
-      else if( W->startsWith("unn") && W->length() > 5 )
-        W->start += 2, W->type |= English::Negation;
-      else if( W->startsWith("non") && W->length() > (uint32_t) (5 + ((*W)[3] == '-')))
-        W->start += 2 + ((*W)[3] == '-'), W->type |= English::Negation;
+    static bool processPrefixes(Word *w) {
+      if( w->startsWith("irr") && w->length() > 5 && ((*w)[3] == 'a' || (*w)[3] == 'e'))
+        w->start += 2, w->type |= English::Negation;
+      else if( w->startsWith("over") && w->length() > 5 )
+        w->start += 4, w->type |= English::PrefixOver;
+      else if( w->startsWith("under") && w->length() > 6 )
+        w->start += 5, w->type |= English::PrefixUnder;
+      else if( w->startsWith("unn") && w->length() > 5 )
+        w->start += 2, w->type |= English::Negation;
+      else if( w->startsWith("non") && w->length() > (uint32_t) (5 + ((*w)[3] == '-')))
+        w->start += 2 + ((*w)[3] == '-'), w->type |= English::Negation;
       else
         return false;
       return true;
     }
 
-    bool processSuperlatives(Word *W) {
-      if( W->endsWith("est") && W->length() > 4 ) {
-        uint8_t i = W->end;
-        W->end -= 3;
-        W->type |= English::AdjectiveSuperlative;
+    bool processSuperlatives(Word *w) {
+      if( w->endsWith("est") && w->length() > 4 ) {
+        uint8_t i = w->end;
+        w->end -= 3;
+        w->type |= English::AdjectiveSuperlative;
 
-        if((*W)(0) == (*W)(1) && (*W)(0) != 'r' && !(W->length() >= 4 && memcmp("sugg", &W->letters[W->end - 3], 4) == 0)) {
-          W->end -= (((*W)(0) != 'f' && (*W)(0) != 'l' && (*W)(0) != 's') ||
-                     (W->length() > 4 && (*W)(1) == 'l' && ((*W)(2) == 'u' || (*W)(3) == 'u' || (*W)(3) == 'v'))) &&
-                    (!(W->length() == 3 && (*W)(1) == 'd' && (*W)(2) == 'o'));
-          if( W->length() == 2 && ((*W)[0] != 'i' || (*W)[1] != 'n'))
-            W->end = i, W->type &= ~English::AdjectiveSuperlative;
+        if((*w)(0) == (*w)(1) && (*w)(0) != 'r' && !(w->length() >= 4 && memcmp("sugg", &w->letters[w->end - 3], 4) == 0)) {
+          w->end -= (((*w)(0) != 'f' && (*w)(0) != 'l' && (*w)(0) != 's') ||
+                     (w->length() > 4 && (*w)(1) == 'l' && ((*w)(2) == 'u' || (*w)(3) == 'u' || (*w)(3) == 'v'))) &&
+                    (!(w->length() == 3 && (*w)(1) == 'd' && (*w)(2) == 'o'));
+          if( w->length() == 2 && ((*w)[0] != 'i' || (*w)[1] != 'n'))
+            w->end = i, w->type &= ~English::AdjectiveSuperlative;
         } else {
-          switch((*W)(0)) {
+          switch((*w)(0)) {
             case 'd':
             case 'k':
             case 'm':
             case 'y':
               break;
             case 'g': {
-              if( !(W->length() > 3 && ((*W)(1) == 'n' || (*W)(1) == 'r') && memcmp("cong", &W->letters[W->end - 3], 4) != 0))
-                W->end = i, W->type &= ~English::AdjectiveSuperlative;
+              if( !(w->length() > 3 && ((*w)(1) == 'n' || (*w)(1) == 'r') && memcmp("cong", &w->letters[w->end - 3], 4) != 0))
+                w->end = i, w->type &= ~English::AdjectiveSuperlative;
               else
-                W->end += ((*W)(2) == 'a');
+                w->end += ((*w)(2) == 'a');
               break;
             }
             case 'i': {
-              W->letters[W->end] = 'y';
+              w->letters[w->end] = 'y';
               break;
             }
             case 'l': {
-              if( W->end == W->start + 1 || memcmp("mo", &W->letters[W->end - 2], 2) == 0 )
-                W->end = i, W->type &= ~English::AdjectiveSuperlative;
+              if( w->end == w->start + 1 || memcmp("mo", &w->letters[w->end - 2], 2) == 0 )
+                w->end = i, w->type &= ~English::AdjectiveSuperlative;
               else
-                W->end += isConsonant((*W)(1));
+                w->end += isConsonant((*w)(1));
               break;
             }
             case 'n': {
-              if( W->length() < 3 || isConsonant((*W)(1)) || isConsonant((*W)(2)))
-                W->end = i, W->type &= ~English::AdjectiveSuperlative;
+              if( w->length() < 3 || isConsonant((*w)(1)) || isConsonant((*w)(2)))
+                w->end = i, w->type &= ~English::AdjectiveSuperlative;
               break;
             }
             case 'r': {
-              if( W->length() > 3 && isVowel((*W)(1)) && isVowel((*W)(2)))
-                W->end += ((*W)(2) == 'u') && ((*W)(1) == 'a' || (*W)(1) == 'i');
+              if( w->length() > 3 && isVowel((*w)(1)) && isVowel((*w)(2)))
+                w->end += ((*w)(2) == 'u') && ((*w)(1) == 'a' || (*w)(1) == 'i');
               else
-                W->end = i, W->type &= ~English::AdjectiveSuperlative;
+                w->end = i, w->type &= ~English::AdjectiveSuperlative;
               break;
             }
             case 's': {
-              W->end++;
+              w->end++;
               break;
             }
             case 'w': {
-              if( !(W->length() > 2 && isVowel((*W)(1))))
-                W->end = i, W->type &= ~English::AdjectiveSuperlative;
+              if( !(w->length() > 2 && isVowel((*w)(1))))
+                w->end = i, w->type &= ~English::AdjectiveSuperlative;
               break;
             }
             case 'h': {
-              if( !(W->length() > 2 && isConsonant((*W)(1))))
-                W->end = i, W->type &= ~English::AdjectiveSuperlative;
+              if( !(w->length() > 2 && isConsonant((*w)(1))))
+                w->end = i, w->type &= ~English::AdjectiveSuperlative;
               break;
             }
             default: {
-              W->end += 3;
-              W->type &= ~English::AdjectiveSuperlative;
+              w->end += 3;
+              w->type &= ~English::AdjectiveSuperlative;
             }
           }
         }
       }
-      return (W->type & English::AdjectiveSuperlative) > 0;
+      return (w->type & English::AdjectiveSuperlative) > 0;
     }
 
     //Search for the longest among the suffixes, 's' or 's or ' and remove if found.
@@ -352,179 +353,184 @@ private:
       return false;
     }
 
-    //Search for the longest among the following suffixes, and perform the action indicated.
-    bool step1B(Word *W, const uint32_t R1) {
+    /**
+     * Search for the longest among the following suffixes, and perform the action indicated.
+     * @param w
+     * @param r1
+     * @return
+     */
+    bool step1B(Word *w, const uint32_t r1) {
       for( int i = 0; i < NUM_SUFFIXES_STEP1b; i++ ) {
-        if( W->endsWith(SuffixesStep1b[i])) {
+        if( w->endsWith(SuffixesStep1b[i])) {
           switch( i ) {
             case 0:
             case 1: {
-              if( suffixInRn(W, R1, SuffixesStep1b[i]))
-                W->end -= 1 + i * 2;
+              if( suffixInRn(w, r1, SuffixesStep1b[i]))
+                w->end -= 1 + i * 2;
               break;
             }
             default: {
-              uint8_t j = W->end;
-              W->end -= uint8_t(strlen(SuffixesStep1b[i]));
-              if( hasVowels(W)) {
-                if( W->endsWith("at") || W->endsWith("bl") || W->endsWith("iz") || isShortWord(W))
-                  (*W) += 'e';
-                else if( W->length() > 2 ) {
-                  if((*W)(0) == (*W)(1) && isDouble((*W)(0)))
-                    W->end--;
+              uint8_t j = w->end;
+              w->end -= uint8_t(strlen(SuffixesStep1b[i]));
+              if( hasVowels(w)) {
+                if( w->endsWith("at") || w->endsWith("bl") || w->endsWith("iz") || isShortWord(w))
+                  (*w) += 'e';
+                else if( w->length() > 2 ) {
+                  if((*w)(0) == (*w)(1) && isDouble((*w)(0)))
+                    w->end--;
                   else if( i == 2 || i == 3 ) {
-                    switch((*W)(0)) {
+                    switch((*w)(0)) {
                       case 'c':
                       case 's':
                       case 'v': {
-                        W->end += !(W->endsWith("ss") || W->endsWith("ias"));
+                        w->end += !(w->endsWith("ss") || w->endsWith("ias"));
                         break;
                       }
                       case 'd': {
                         static constexpr char nAllowed[4] = {'a', 'e', 'i', 'o'};
-                        W->end += isVowel((*W)(1)) && (!charInArray((*W)(2), nAllowed, 4));
+                        w->end += isVowel((*w)(1)) && (!charInArray((*w)(2), nAllowed, 4));
                         break;
                       }
                       case 'k': {
-                        W->end += W->endsWith("uak");
+                        w->end += w->endsWith("uak");
                         break;
                       }
                       case 'l': {
                         static constexpr char allowed1[10] = {'b', 'c', 'd', 'f', 'g', 'k', 'p', 't', 'y', 'z'};
                         static constexpr char allowed2[4] = {'a', 'i', 'o', 'u'};
-                        W->end += charInArray((*W)(1), allowed1, 10) || (charInArray((*W)(1), allowed2, 4) && isConsonant((*W)(2)));
+                        w->end += charInArray((*w)(1), allowed1, 10) || (charInArray((*w)(1), allowed2, 4) && isConsonant((*w)(2)));
                         break;
                       }
                     }
                   } else if( i >= 4 ) {
-                    switch((*W)(0)) {
+                    switch((*w)(0)) {
                       case 'd': {
-                        if( isVowel((*W)(1)) && (*W)(2) != 'a' && (*W)(2) != 'e' && (*W)(2) != 'o' )
-                          (*W) += 'e';
+                        if( isVowel((*w)(1)) && (*w)(2) != 'a' && (*w)(2) != 'e' && (*w)(2) != 'o' )
+                          (*w) += 'e';
                         break;
                       }
                       case 'g': {
                         static constexpr char Allowed[7] = {'a', 'd', 'e', 'i', 'l', 'r', 'u'};
-                        if( charInArray((*W)(1), Allowed, 7) || ((*W)(1) == 'n' &&
-                                                                 ((*W)(2) == 'e' || ((*W)(2) == 'u' && (*W)(3) != 'b' && (*W)(3) != 'd') ||
-                                                                  ((*W)(2) == 'a' &&
-                                                                   ((*W)(3) == 'r' || ((*W)(3) == 'h' && (*W)(4) == 'c'))) ||
-                                                                  (W->endsWith("ring") && ((*W)(4) == 'c' || (*W)(4) == 'f')))))
-                          (*W) += 'e';
+                        if( charInArray((*w)(1), Allowed, 7) || ((*w)(1) == 'n' &&
+                                                                 ((*w)(2) == 'e' || ((*w)(2) == 'u' && (*w)(3) != 'b' && (*w)(3) != 'd') ||
+                                                                  ((*w)(2) == 'a' &&
+                                                                   ((*w)(3) == 'r' || ((*w)(3) == 'h' && (*w)(4) == 'c'))) ||
+                                                                  (w->endsWith("ring") && ((*w)(4) == 'c' || (*w)(4) == 'f')))))
+                          (*w) += 'e';
                         break;
                       }
                       case 'l': {
-                        if( !((*W)(1) == 'l' || (*W)(1) == 'r' || (*W)(1) == 'w' || (isVowel((*W)(1)) && isVowel((*W)(2)))))
-                          (*W) += 'e';
-                        if( W->endsWith("uell") && W->length() > 4 && (*W)(4) != 'q' )
-                          W->end--;
+                        if( !((*w)(1) == 'l' || (*w)(1) == 'r' || (*w)(1) == 'w' || (isVowel((*w)(1)) && isVowel((*w)(2)))))
+                          (*w) += 'e';
+                        if( w->endsWith("uell") && w->length() > 4 && (*w)(4) != 'q' )
+                          w->end--;
                         break;
                       }
                       case 'r': {
-                        if((((*W)(1) == 'i' && (*W)(2) != 'a' && (*W)(2) != 'e' && (*W)(2) != 'o') ||
-                            ((*W)(1) == 'a' && (!((*W)(2) == 'e' || (*W)(2) == 'o' || ((*W)(2) == 'l' && (*W)(3) == 'l')))) ||
-                            ((*W)(1) == 'o' && (!((*W)(2) == 'o' || ((*W)(2) == 't' && (*W)(3) != 's')))) || (*W)(1) == 'c' ||
-                            (*W)(1) == 't') && (!W->endsWith("str")))
-                          (*W) += 'e';
+                        if((((*w)(1) == 'i' && (*w)(2) != 'a' && (*w)(2) != 'e' && (*w)(2) != 'o') ||
+                            ((*w)(1) == 'a' && (!((*w)(2) == 'e' || (*w)(2) == 'o' || ((*w)(2) == 'l' && (*w)(3) == 'l')))) ||
+                            ((*w)(1) == 'o' && (!((*w)(2) == 'o' || ((*w)(2) == 't' && (*w)(3) != 's')))) || (*w)(1) == 'c' ||
+                            (*w)(1) == 't') && (!w->endsWith("str")))
+                          (*w) += 'e';
                         break;
                       }
                       case 't': {
-                        if((*W)(1) == 'o' && (*W)(2) != 'g' && (*W)(2) != 'l' && (*W)(2) != 'i' && (*W)(2) != 'o' )
-                          (*W) += 'e';
+                        if((*w)(1) == 'o' && (*w)(2) != 'g' && (*w)(2) != 'l' && (*w)(2) != 'i' && (*w)(2) != 'o' )
+                          (*w) += 'e';
                         break;
                       }
                       case 'u': {
-                        if( !(W->length() > 3 && isVowel((*W)(1)) && isVowel((*W)(2))))
-                          (*W) += 'e';
+                        if( !(w->length() > 3 && isVowel((*w)(1)) && isVowel((*w)(2))))
+                          (*w) += 'e';
                         break;
                       }
                       case 'z': {
-                        if( W->endsWith("izz") && W->length() > 3 && ((*W)(3) == 'h' || (*W)(3) == 'u'))
-                          W->end--;
-                        else if((*W)(1) != 't' && (*W)(1) != 'z' )
-                          (*W) += 'e';
+                        if( w->endsWith("izz") && w->length() > 3 && ((*w)(3) == 'h' || (*w)(3) == 'u'))
+                          w->end--;
+                        else if((*w)(1) != 't' && (*w)(1) != 'z' )
+                          (*w) += 'e';
                         break;
                       }
                       case 'k': {
-                        if( W->endsWith("uak"))
-                          (*W) += 'e';
+                        if( w->endsWith("uak"))
+                          (*w) += 'e';
                         break;
                       }
                       case 'b':
                       case 'c':
                       case 's':
                       case 'v': {
-                        if( !(((*W)(0) == 'b' && ((*W)(1) == 'm' || (*W)(1) == 'r')) || W->endsWith("ss") || W->endsWith("ias") ||
-                              (*W) == "zinc"))
-                          (*W) += 'e';
+                        if( !(((*w)(0) == 'b' && ((*w)(1) == 'm' || (*w)(1) == 'r')) || w->endsWith("ss") || w->endsWith("ias") ||
+                              (*w) == "zinc"))
+                          (*w) += 'e';
                         break;
                       }
                     }
                   }
                 }
               } else {
-                W->end = j;
+                w->end = j;
                 return false;
               }
             }
           }
-          W->type |= TypesStep1b[i];
+          w->type |= TypesStep1b[i];
           return true;
         }
       }
       return false;
     }
 
-    bool step1C(Word *W) {
-      if( W->length() > 2 && tolower((*W)(0)) == 'y' && isConsonant((*W)(1))) {
-        W->letters[W->end] = 'i';
+    bool step1C(Word *w) {
+      if( w->length() > 2 && tolower((*w)(0)) == 'y' && isConsonant((*w)(1))) {
+        w->letters[w->end] = 'i';
         return true;
       }
       return false;
     }
 
-    bool step2(Word *W, const uint32_t R1) {
+    bool step2(Word *w, const uint32_t r1) {
       for( int i = 0; i < NUM_SUFFIXES_STEP2; i++ ) {
-        if( W->endsWith(SuffixesStep2[i][0]) && suffixInRn(W, R1, SuffixesStep2[i][0])) {
-          W->changeSuffix(SuffixesStep2[i][0], SuffixesStep2[i][1]);
-          W->type |= TypesStep2[i];
+        if( w->endsWith(SuffixesStep2[i][0]) && suffixInRn(w, r1, SuffixesStep2[i][0])) {
+          w->changeSuffix(SuffixesStep2[i][0], SuffixesStep2[i][1]);
+          w->type |= TypesStep2[i];
           return true;
         }
       }
-      if( W->endsWith("logi") && suffixInRn(W, R1, "ogi")) {
-        W->end--;
+      if( w->endsWith("logi") && suffixInRn(w, r1, "ogi")) {
+        w->end--;
         return true;
-      } else if( W->endsWith("li")) {
-        if( suffixInRn(W, R1, "li") && isLiEnding((*W)(2))) {
-          W->end -= 2;
-          W->type |= English::AdverbOfManner;
+      } else if( w->endsWith("li")) {
+        if( suffixInRn(w, r1, "li") && isLiEnding((*w)(2))) {
+          w->end -= 2;
+          w->type |= English::AdverbOfManner;
           return true;
-        } else if( W->length() > 3 ) {
-          switch((*W)(2)) {
+        } else if( w->length() > 3 ) {
+          switch((*w)(2)) {
             case 'b': {
-              W->letters[W->end] = 'e';
-              W->type |= English::AdverbOfManner;
+              w->letters[w->end] = 'e';
+              w->type |= English::AdverbOfManner;
               return true;
             }
             case 'i': {
-              if( W->length() > 4 ) {
-                W->end -= 2;
-                W->type |= English::AdverbOfManner;
+              if( w->length() > 4 ) {
+                w->end -= 2;
+                w->type |= English::AdverbOfManner;
                 return true;
               }
               break;
             }
             case 'l': {
-              if( W->length() > 5 && ((*W)(3) == 'a' || (*W)(3) == 'u')) {
-                W->end -= 2;
-                W->type |= English::AdverbOfManner;
+              if( w->length() > 5 && ((*w)(3) == 'a' || (*w)(3) == 'u')) {
+                w->end -= 2;
+                w->type |= English::AdverbOfManner;
                 return true;
               }
               break;
             }
             case 's': {
-              W->end -= 2;
-              W->type |= English::AdverbOfManner;
+              w->end -= 2;
+              w->type |= English::AdverbOfManner;
               return true;
             }
             case 'e':
@@ -533,9 +539,9 @@ private:
             case 'n':
             case 'r':
             case 'w': {
-              if( W->length() > (uint32_t) (4 + ((*W)(2) == 'r'))) {
-                W->end -= 2;
-                W->type |= English::AdverbOfManner;
+              if( w->length() > (uint32_t) (4 + ((*w)(2) == 'r'))) {
+                w->end -= 2;
+                w->type |= English::AdverbOfManner;
                 return true;
               }
             }
