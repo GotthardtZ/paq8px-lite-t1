@@ -18,7 +18,7 @@
 // - you would like to slim the executable by eliminating unnecessary code for benchmarks where exe size matters or
 // - you would like to experiment with the model-mixture
 // TODO: make more models "optional"
-//#define USE_ZLIB
+#define USE_ZLIB
 #define USE_AUDIOMODEL
 #define USE_TEXTMODEL
 
