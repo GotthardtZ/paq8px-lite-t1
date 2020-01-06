@@ -211,7 +211,7 @@ static_assert(sizeof(int) == 4, "sizeof(int)");
 #include "SSE.hpp"
 #include "Predictor.hpp"
 #include "Encoder.hpp"
-#include "Filters.hpp"
+#include "filter/Filters.hpp"
 #include "ListOfFiles.hpp"
 
 typedef enum { doNone, doCompress, doExtract, doCompare, doList } WHATTODO;

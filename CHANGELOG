@@ -278,7 +278,7 @@ pap8px_v29
 pap8px_v30
 2009.05.21
 - Removed some redundant code from compress procedure
-- Added direct_encode_block() procedure for repeated task in compress() procedure
+- Added directEncodeBlock() procedure for repeated task in compress() procedure
 
 
 pap8px_v31
@@ -948,7 +948,7 @@ paq8px_v130_fix1
 - Fixed decode_cd(): dealing with the "residual" data was buggy
 - Removed unnecessary includes
 - Corrected comments here and there
-- Heavily commented expand_cd_sector(), encode_cd() and decode_cd() functions
+- Heavily commented expandCdSector(), encodeCd() and decodeCd() functions
 
 
 paq8px_v130_fix2 

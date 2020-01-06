@@ -15,7 +15,9 @@
 #define INJECT_SHARED_c8 const uint32_t c8 = shared->c8;
 #define INJECT_STATS_blpos const uint32_t blpos = stats->blpos;
 
-// Global context available to all models.
+/**
+ * Global context available to all models.
+ */
 struct Shared {
     Buf buf; // Rotating input queue set by Predictor
     uint8_t y = 0; // Last bit, 0 or 1

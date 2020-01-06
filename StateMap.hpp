@@ -83,20 +83,20 @@ public:
           uint32_t n0 = StateTable::next(state, 2) * 3 + 1;
           uint32_t n1 = StateTable::next(state, 3) * 3 + 1;
           for( uint32_t s = 0; s < S; ++s )
-            t[s * N + cx] = ((n1 << 20) / (n0 + n1)) << 12U;
+            t[s * N + cx] = ((n1 << 20U) / (n0 + n1)) << 12U;
         }
       } else if( mapType == RUN ) { // when the context is a run count: we have a-priory for p
         for( uint32_t cx = 0; cx < N; ++cx ) {
           const int predictedBit = (cx) & 1U;
           const int uncertainty = (cx >> 1U) & 1U;
           //const int bp = (cx>>2)&1; // unused in calculation - a-priory does not seem to depend on bitPosition in the general case
-          const int runCount = (cx >> 4); // 0..254
+          const int runCount = (cx >> 4U); // 0..254
           uint32_t n0 = uncertainty * 16 + 16;
           uint32_t n1 = runCount * 128 + 16;
           if( predictedBit == 0 )
             std::swap(n0, n1);
           for( uint32_t s = 0; s < S; ++s )
-            t[s * N + cx] = ((n1 << 20) / (n0 + n1)) << 12 | min(runCount, limit);
+            t[s * N + cx] = ((n1 << 20U) / (n0 + n1)) << 12U | min(runCount, limit);
         }
       } else { // no a-priory
         for( uint32_t i = 0; i < N * S; ++i )

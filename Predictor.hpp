@@ -12,18 +12,19 @@ class Predictor {
     SSE sse;
     int pr; // next prediction, scaled by 12 bits (0-4095)
 
-    void trainText(const char *const Dictionary, int Iterations) {
+    void trainText(const char *const dictionary, int iterations) {
       NormalModel &normalModel = models.normalModel();
       WordModel &wordModel = models.wordModel();
-      DummyMixer m_dummy(&shared, normalModel.MIXERINPUTS + wordModel.MIXERINPUTS, normalModel.MIXERCONTEXTS + wordModel.MIXERCONTEXTS,
-                         normalModel.MIXERCONTEXTSETS + wordModel.MIXERCONTEXTSETS);
+      DummyMixer mDummy(&shared, NormalModel::MIXERINPUTS + WordModel::MIXERINPUTS, NormalModel::MIXERCONTEXTS + WordModel::MIXERCONTEXTS,
+                         NormalModel::MIXERCONTEXTSETS + WordModel::MIXERCONTEXTSETS);
+      stats.blockType=TEXT;
       assert(shared.buf.getpos() == 0 && stats.blpos == 0);
       FileDisk f;
       printf("Pre-training models with text...");
-      OpenFromMyFolder::anotherFile(&f, Dictionary);
+      OpenFromMyFolder::anotherFile(&f, dictionary);
       int c;
       int trainingByteCount = 0;
-      while( Iterations-- > 0 ) {
+      while( iterations-- > 0 ) {
         f.setpos(0);
         c = SPACE;
         trainingByteCount = 0;
@@ -31,13 +32,13 @@ class Predictor {
           trainingByteCount++;
           uint8_t c1 = c == NEW_LINE ? SPACE : c;
           if( c != CARRIAGE_RETURN ) {
-            for( int bpos = 0; bpos < 8; bpos++ ) {
-              normalModel.mix(m_dummy); //update (train) model
+            for( int bitPosition = 0; bitPosition < 8; bitPosition++ ) {
+              normalModel.mix(mDummy); //update (train) model
 #ifdef USE_TEXTMODEL
-              wordModel.mix(m_dummy); //update (train) model
+              wordModel.mix(mDummy); //update (train) model
 #endif
-              m_dummy.p();
-              shared.y = (c1 >> (7 - bpos)) & 1;
+              mDummy.p();
+              shared.y = (c1 >> (7 - bitPosition)) & 1U;
               shared.update();
               updater.broadcastUpdate();
             }
@@ -49,13 +50,13 @@ class Predictor {
 #ifdef USE_TEXTMODEL
             wordModel.reset();
 #endif
-            for( int bpos = 0; bpos < 8; bpos++ ) {
-              normalModel.mix(m_dummy); //update (train) model
+            for( int bitPosition = 0; bitPosition < 8; bitPosition++ ) {
+              normalModel.mix(mDummy); //update (train) model
 #ifdef USE_TEXTMODEL
-              wordModel.mix(m_dummy); //update (train) model
+              wordModel.mix(mDummy); //update (train) model
 #endif
-              m_dummy.p();
-              shared.y = (c1 >> (7 - bpos)) & 1;
+              mDummy.p();
+              shared.y = (c1 >> (7 - bitPosition)) & 1U;
               shared.update();
               updater.broadcastUpdate();
             }
@@ -68,13 +69,13 @@ class Predictor {
 #endif
       shared.reset();
       stats.reset();
-      printf(" done [%s, %d bytes]\n", Dictionary, trainingByteCount);
+      printf(" done [%s, %d bytes]\n", dictionary, trainingByteCount);
       f.close();
     }
 
     void trainExe() {
       ExeModel &exeModel = models.exeModel();
-      DummyMixer dummy_m(&shared, exeModel.MIXERINPUTS, exeModel.MIXERCONTEXTS, exeModel.MIXERCONTEXTSETS);
+      DummyMixer dummyM(&shared, ExeModel::MIXERINPUTS, ExeModel::MIXERCONTEXTS, ExeModel::MIXERCONTEXTSETS);
       assert(shared.buf.getpos() == 0 && stats.blpos == 0);
       FileDisk f;
       printf("Pre-training x86/x64 model...");
@@ -83,10 +84,10 @@ class Predictor {
       int trainingByteCount = 0;
       do {
         trainingByteCount++;
-        for( int bpos = 0; bpos < 8; bpos++ ) {
-          exeModel.mix(dummy_m); //update (train) model
-          dummy_m.p();
-          shared.y = (c >> (7 - bpos)) & 1;
+        for( uint32_t bitPosition = 0; bitPosition < 8; bitPosition++ ) {
+          exeModel.mix(dummyM); //update (train) model
+          dummyM.p();
+          shared.y = (c >> (7 - bitPosition)) & 1U;
           shared.update();
           updater.broadcastUpdate();
         }
@@ -114,7 +115,7 @@ public:
      * returns P(1) as a 12 bit number (0-4095).
      * @return the prediction
      */
-    int p() const { return pr; }
+    [[nodiscard]] int p() const { return pr; }
 
     /**
      * Trains the models with the actual bit (0 or 1).
@@ -129,10 +130,10 @@ public:
       // Broadcast to all current subscribers: y (and c0, c1, c4, etc) is known
       updater.broadcastUpdate();
 
-      const uint8_t bpos = shared.bitPosition;
+      const uint8_t bitPosition = shared.bitPosition;
       const uint8_t c0 = shared.c0;
-      const uint8_t chargrp = (bpos > 0) ? AsciiGroupC0[0][(1U << bpos) - 2 + (c0 & ((1U << bpos) - 1))] : 0;
-      stats.Text.chargrp = chargrp;
+      const uint8_t characterGroup = (bitPosition > 0) ? AsciiGroupC0[0][(1U << bitPosition) - 2 + (c0 & ((1U << bitPosition) - 1))] : 0;
+      stats.Text.chargrp = characterGroup;
 
       // predict
       pr = contextModel.p();
