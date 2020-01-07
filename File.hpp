@@ -14,39 +14,7 @@
 #define GOODSLASH '/'
 #endif
 
-/**
- * A class to represent a filename
- */
-class FileName : public String {
-public:
-    FileName(const char *s = "") : String(s) {};
-
-    [[nodiscard]] int lastSlashPos() const {
-      int pos = findLast('/');
-      if( pos < 0 )
-        pos = findLast('\\');
-      return pos; //has no path when -1
-    }
-
-    void keepFilename() {
-      const int pos = lastSlashPos();
-      stripStart(pos + 1); //don't keep last slash
-    }
-
-    void keepPath() {
-      const int pos = lastSlashPos();
-      stripEnd(strsize() - pos - 1); //keep last slash
-    }
-
-    void replaceSlashes() { //prepare path string for screen output
-      const uint64_t sSize = strsize();
-      for( uint64_t i = 0; i < sSize; i++ )
-        if((*this)[i] == BADSLASH )
-          (*this)[i] = GOODSLASH;
-      chk_consistency();
-    }
-};
-
+#include "FileName.hpp"
 
 //////////////////// IO functions and classes ///////////////////
 // These functions/classes are responsible for all the file
@@ -144,14 +112,18 @@ bool statPath(const char *path, struct STAT &status) {
 
 //////////////////// Folder operations ///////////////////////////
 
-//examines given "path" and returns:
-//0: on error
-//1: when exists and is a file
-//2: when exists and is a directory
-//3: when does not exist, but looks like a file       /abcd/efgh
-//4: when does not exist, but looks like a directory  /abcd/efgh/
+/**
+ * examines given "path" and returns:
+ * 0: on error
+ * 1: when exists and is a file
+ * 2: when exists and is a directory
+ * 3: when does not exist, but looks like a file       /abcd/efgh
+ * 4: when does not exist, but looks like a directory  /abcd/efgh/
+ * @param path
+ * @return
+ */
 static int examinePath(const char *path) {
-  struct STAT status;
+  struct STAT status{};
   const bool success = statPath(path, status) == 0;
   if( !success ) {
     if( errno == ENOENT ) { //no such file or directory
@@ -174,7 +146,7 @@ static int examinePath(const char *path) {
 }
 
 //creates a directory if it does not exist
-static int makedir(const char *dir) {
+static int makeDir(const char *dir) {
   if( examinePath(dir) == 2 ) //existing directory
     return 2; //2: directory already exists, no need to create
 #ifdef WINDOWS
@@ -202,7 +174,7 @@ static void makeDirectories(const char *filename) {
       char saveChar = path[i];
       path[i] = 0;
       const char *dirName = path.c_str();
-      const int created = makedir(dirName);
+      const int created = makeDir(dirName);
       if( created == 0 ) {
         printf("Unable to create directory %s", dirName);
         quit();
@@ -295,282 +267,9 @@ public:
     virtual bool eof() = 0;
 };
 
-// This class is responsible for files on disk
-// It simply passes function calls to stdio
-
-class FileDisk : public File {
-protected:
-    FILE *file;
-
-public:
-    FileDisk() { file = nullptr; }
-
-    ~FileDisk() override { close(); }
-
-    bool open(const char *filename, bool mustSucceed) override {
-      assert(file == nullptr);
-      file = openfile(filename, READ);
-      const bool success = (file != nullptr);
-      if( !success && mustSucceed ) {
-        printf("Unable to open file %s (%s)", filename, strerror(errno));
-        quit();
-      }
-      return success;
-    }
-
-    void create(const char *filename) override {
-      assert(file == nullptr);
-      makeDirectories(filename);
-      file = openfile(filename, WRITE);
-      if( !file ) {
-        printf("Unable to create file %s (%s)", filename, strerror(errno));
-        quit();
-      }
-    }
-
-    void createTmp() {
-      assert(file == nullptr);
-      file = makeTmpFile();
-      if( !file ) {
-        printf("Unable to create temporary file (%s)", strerror(errno));
-        quit();
-      }
-    }
-
-    void close() override {
-      if( file )
-        fclose(file);
-      file = nullptr;
-    }
-
-    int getchar() override { return fgetc(file); }
-
-    void putChar(uint8_t c) override { fputc(c, file); }
-
-    uint64_t blockRead(uint8_t *ptr, uint64_t count) override { return fread(ptr, 1, count, file); }
-
-    void blockWrite(uint8_t *ptr, uint64_t count) override { fwrite(ptr, 1, count, file); }
-
-    void setpos(uint64_t newPos) override { fseeko(file, newPos, SEEK_SET); }
-
-    void setEnd() override { fseeko(file, 0, SEEK_END); }
-
-    uint64_t curPos() override { return ftello(file); }
-
-    bool eof() override { return feof(file) != 0; }
-};
-
-/**
- * This class is responsible for temporary files in RAM or on disk
- * Initially it uses RAM for temporary file content.
- * In case of the content size in RAM grows too large, it is written to disk,
- * the RAM is freed and all subsequent file operations will use the file on disk.
- */
-class FileTmp : public File {
-private:
-    //file content in ram
-    Array<uint8_t> *contentInRam; //content of file
-    uint64_t filePos;
-    uint64_t fileSize;
-
-    void forgetContentInRam() {
-      if( contentInRam ) {
-        delete contentInRam;
-        contentInRam = nullptr;
-        filePos = 0;
-        fileSize = 0;
-      }
-    }
-
-    //file on disk
-    FileDisk *fileOnDisk;
-
-    void forgetFileOnDisk() {
-      if( fileOnDisk ) {
-        fileOnDisk->close();
-        delete fileOnDisk;
-        fileOnDisk = nullptr;
-      }
-    }
-    //switch: ram->disk
-#ifdef NDEBUG
-    static constexpr uint32_t MAX_RAM_FOR_TMP_CONTENT = 64 * 1024 * 1024; //64 MB (per file)
-#else
-    static constexpr uint32_t MAX_RAM_FOR_TMP_CONTENT = 64; // to trigger switching to disk earlier - for testing
-#endif
-
-    void ramToDisk() {
-      assert(fileOnDisk == nullptr);
-      fileOnDisk = new FileDisk();
-      fileOnDisk->createTmp();
-      if( fileSize > 0 )
-        fileOnDisk->blockWrite(&((*contentInRam)[0]), fileSize);
-      fileOnDisk->setpos(filePos);
-      forgetContentInRam();
-    }
-
-public:
-    FileTmp() {
-      contentInRam = new Array<uint8_t>(0);
-      filePos = 0;
-      fileSize = 0;
-      fileOnDisk = nullptr;
-    }
-
-    ~FileTmp() override { close(); }
-
-    bool open(const char *, bool) override {
-      assert(false);
-      return false;
-    } //this method is forbidden for temporary files
-    void create(const char *) override { assert(false); } //this method is forbidden for temporary files
-    void close() override {
-      forgetContentInRam();
-      forgetFileOnDisk();
-    }
-
-    int getchar() override {
-      if( contentInRam ) {
-        if( filePos >= fileSize )
-          return EOF;
-        else {
-          const uint8_t c = (*contentInRam)[filePos];
-          filePos++;
-          return c;
-        }
-      } else
-        return fileOnDisk->getchar();
-    }
-
-    void putChar(uint8_t c) override {
-      if( contentInRam ) {
-        if( filePos < MAX_RAM_FOR_TMP_CONTENT ) {
-          if( filePos == fileSize ) {
-            contentInRam->pushBack(c);
-            fileSize++;
-          } else
-            (*contentInRam)[filePos] = c;
-          filePos++;
-          return;
-        } else
-          ramToDisk();
-      }
-      fileOnDisk->putChar(c);
-    }
-
-    uint64_t blockRead(uint8_t *ptr, uint64_t count) override {
-      if( contentInRam ) {
-        const uint64_t available = fileSize - filePos;
-        if( available < count )
-          count = available;
-        if( count > 0 )
-          memcpy(ptr, &((*contentInRam)[filePos]), count);
-        filePos += count;
-        return count;
-      } else
-        return fileOnDisk->blockRead(ptr, count);
-    }
-
-    void blockWrite(uint8_t *ptr, uint64_t count) override {
-      if( contentInRam ) {
-        if( filePos + count <= MAX_RAM_FOR_TMP_CONTENT ) {
-          contentInRam->resize((filePos + count));
-          if( count > 0 )
-            memcpy(&((*contentInRam)[filePos]), ptr, count);
-          fileSize += count;
-          filePos += count;
-          return;
-        } else
-          ramToDisk();
-      }
-      fileOnDisk->blockWrite(ptr, count);
-    }
-
-    void setpos(uint64_t newPos) override {
-      if( contentInRam ) {
-        if( newPos > fileSize )
-          ramToDisk(); //panic: we don't support seeking past end of file (but stdio does) - let's switch to disk
-        else {
-          filePos = newPos;
-          return;
-        }
-      }
-      fileOnDisk->setpos(newPos);
-    }
-
-    void setEnd() override {
-      if( contentInRam )
-        filePos = fileSize;
-      else
-        fileOnDisk->setEnd();
-    }
-
-    uint64_t curPos() override {
-      if( contentInRam )
-        return filePos;
-      else
-        return fileOnDisk->curPos();
-    }
-
-    bool eof() override {
-      if( contentInRam )
-        return filePos >= fileSize;
-      else
-        return fileOnDisk->eof();
-    }
-};
-
-// Helper class: open a file from the executable's folder
-
-static char myPathError[] = "Can't determine my path.";
-
-class OpenFromMyFolder {
-private:
-public:
-    //this static method will open the executable itself for reading
-    static void myself(FileDisk *f) {
-#ifdef WINDOWS
-      int i;
-      Array<wchar_t> myFileName(MAX_PATH);
-      if ((i = GetModuleFileNameW(nullptr, &myFileName[0], MAX_PATH)) && i < MAX_PATH && i != 0) {
-        f->open(Utf8Str(&myFileName[0]).utf8_str, true);
-      } else
-        quit(myPathError);
-#else
-      // TODO: this doesn't work on mac OS
-      Array<char> myFileName(PATH_MAX + 1);
-      if( readlink("/proc/self/exe", &myFileName[0], PATH_MAX) != -1 )
-        f->open(&myFileName[0], true);
-      else
-        quit(myPathError);
-#endif
-    }
-
-    //this static method will open a file from the executable's folder
-    //only ASCII file names are supported
-    static void anotherFile(FileDisk *f, const char *filename) {
-      const uint64_t fLength = strlen(filename) + 1;
-#ifdef WINDOWS
-      int i;
-      Array<char> myFileName(MAX_PATH + fLength);
-      if ((i = GetModuleFileName(nullptr, &myFileName[0], MAX_PATH)) && i < MAX_PATH && i != 0) {
-        char *endofpath = strrchr(&myFileName[0], '\\');
-#endif
-#ifdef UNIX
-      // TODO: this doesn't work on mac OS
-      char myFileName[PATH_MAX + fLength];
-      if( readlink("/proc/self/exe", myFileName, PATH_MAX) != -1 ) {
-        char *endOfPath = strrchr(&myFileName[0], '/');
-#endif
-        if( endOfPath == nullptr )
-          quit(myPathError);
-        endOfPath++;
-        strcpy(endOfPath, filename); //append filename to my path
-        f->open(&myFileName[0], true);
-      } else
-        quit(myPathError);
-    }
-};
+#include "FileDisk.hpp"
+#include "FileTmp.hpp"
+#include "OpenFromMyFolder.hpp"
 
 // Verify that the specified file exists and is readable, determine file size
 static uint64_t getFileSize(const char *filename) {
