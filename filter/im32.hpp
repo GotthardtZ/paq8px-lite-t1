@@ -2,7 +2,7 @@
 #define PAQ8PX_IM32_HPP
 
 #include <cstdint>
-#include "../File.hpp"
+#include "../file/File.hpp"
 #include "../Encoder.hpp"
 #include "Filter.hpp"
 

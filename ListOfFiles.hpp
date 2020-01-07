@@ -1,6 +1,8 @@
 #ifndef PAQ8PX_LISTOFFILES_HPP
 #define PAQ8PX_LISTOFFILES_HPP
 
+#include "file/FileName.hpp"
+
 class ListOfFiles {
 private:
     typedef enum {

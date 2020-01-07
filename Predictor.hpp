@@ -1,6 +1,8 @@
 #ifndef PAQ8PX_PREDICTOR_HPP
 #define PAQ8PX_PREDICTOR_HPP
 
+#include "file/FileDisk.hpp"
+
 /**
  * A Predictor estimates the probability that the next bit of uncompressed data is 1.
  */
@@ -16,8 +18,8 @@ class Predictor {
       NormalModel &normalModel = models.normalModel();
       WordModel &wordModel = models.wordModel();
       DummyMixer mDummy(&shared, NormalModel::MIXERINPUTS + WordModel::MIXERINPUTS, NormalModel::MIXERCONTEXTS + WordModel::MIXERCONTEXTS,
-                         NormalModel::MIXERCONTEXTSETS + WordModel::MIXERCONTEXTSETS);
-      stats.blockType=TEXT;
+                        NormalModel::MIXERCONTEXTSETS + WordModel::MIXERCONTEXTSETS);
+      stats.blockType = TEXT;
       assert(shared.buf.getpos() == 0 && stats.blpos == 0);
       FileDisk f;
       printf("Pre-training models with text...");

@@ -1,6 +1,9 @@
 #ifndef PAQ8PX_FILETMP_HPP
 #define PAQ8PX_FILETMP_HPP
 
+#include "FileDisk.hpp"
+#include "File.hpp"
+
 /**
  * This class is responsible for temporary files in RAM or on disk
  * Initially it uses RAM for temporary file content.

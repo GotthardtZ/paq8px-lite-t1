@@ -6,9 +6,11 @@
 #include <cstring>
 #include "../UTF8.hpp"
 #include "../Encoder.hpp"
-#include "../File.hpp"
+#include "../file/File.hpp"
 #include "../utils.hpp"
 #include "../Array.hpp"
+#include "../file/FileDisk.hpp"
+#include "../file/FileTmp.hpp"
 
 /////////////////////////// Filters /////////////////////////////////
 //

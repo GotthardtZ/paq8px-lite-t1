@@ -1,6 +1,9 @@
 #ifndef PAQ8PX_WORDEMBEDDINGDICTIONARY_HPP
 #define PAQ8PX_WORDEMBEDDINGDICTIONARY_HPP
 
+#include "../file/FileDisk.hpp"
+#include "../file/OpenFromMyFolder.hpp"
+
 class WordEmbeddingDictionary {
 private:
     static constexpr int hashSize = 81929;

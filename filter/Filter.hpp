@@ -1,7 +1,7 @@
 #ifndef PAQ8PX_FILTER_HPP
 #define PAQ8PX_FILTER_HPP
 
-#include "../File.hpp"
+#include "../file/File.hpp"
 #include <cstdint>
 
 class Filter {

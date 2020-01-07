@@ -2,15 +2,23 @@
 #define PAQ8PX_OPENFROMMYFOLDER_HPP
 
 #include <mach-o/dyld.h>
+#include "FileDisk.hpp"
 
-// Helper class: open a file from the executable's folder
+namespace ofmf {
+    static char myPathError[] = "Can't determine my path.";
+}
 
-static char myPathError[] = "Can't determine my path.";
-
+/**
+ * Helper class: open a file from the executable's folder
+ */
 class OpenFromMyFolder {
 private:
 public:
-    //this static method will open the executable itself for reading
+
+    /**
+     * This static method will open the executable itself for reading
+     * @param f
+     */
     static void myself(FileDisk *f) {
 #ifdef WINDOWS
       int i;
@@ -27,7 +35,7 @@ public:
       if( _NSGetExecutablePath(myFileName, &size) == 0 ) {
         f->open(&myFileName[0], true);
       } else {
-        quit(myPathError);
+        quit(ofmf::myPathError);
       }
 #ifdef UNIX
 #ifndef __APPLE__
@@ -68,13 +76,13 @@ public:
 #endif
 #endif
         if( endOfPath == nullptr ) {
-          quit(myPathError);
+          quit(ofmf::myPathError);
         }
         endOfPath++;
         strcpy(endOfPath, filename); //append filename to my path
         f->open(&myFileName[0], true);
       } else {
-        quit(myPathError);
+        quit(ofmf::myPathError);
       }
     }
 

@@ -1,6 +1,9 @@
 #ifndef PAQ8PX_FILEDISK_HPP
 #define PAQ8PX_FILEDISK_HPP
 
+#include "File.hpp"
+#include "fileUtils.hpp"
+
 /**
  * This class is responsible for files on disk.
  * It simply passes function calls to stdio
@@ -16,7 +19,7 @@ public:
 
     bool open(const char *filename, bool mustSucceed) override {
       assert(file == nullptr);
-      file = openfile(filename, READ);
+      file = openFile(filename, READ);
       const bool success = (file != nullptr);
       if( !success && mustSucceed ) {
         printf("Unable to open file %s (%s)", filename, strerror(errno));
@@ -28,7 +31,7 @@ public:
     void create(const char *filename) override {
       assert(file == nullptr);
       makeDirectories(filename);
-      file = openfile(filename, WRITE);
+      file = openFile(filename, WRITE);
       if( !file ) {
         printf("Unable to create file %s (%s)", filename, strerror(errno));
         quit();
