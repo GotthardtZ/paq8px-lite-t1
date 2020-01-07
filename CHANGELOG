@@ -919,7 +919,7 @@ paq8px_v129_fix1
 - Fixed "error: use of deleted function" in gcc in Array class (v114-129) reported by Mauro
 - Sanity check in makedir function
 - Changed "rb+" to "rb" in FileDisk.open() to enable compressing read-only files
-- Assert failed in FileTmp.blockwrite() during zlib decompression when count was 0 and asserts were on (it caused no problems otherwise in release mode); fixed in both blockread() and blockwrite()
+- Assert failed in FileTmp.blockWrite() during zlib decompression when count was 0 and asserts were on (it caused no problems otherwise in release mode); fixed in both blockRead() and blockwrite()
 - Assert failed in FileTmp.setpos() when IMAGE8 bmp detection calculated a "detd" value larger than the actual block. Fixed in setpos(); will try to isolate it to let it fix in detect() as well.
 - Minor fixes in doc and/or code (Buf, IntBuf, Mixer, ContextMap, matchModel, ContextModel)
 - im24bitModel: reverted undesired Visual Studio autoformatting
@@ -1015,8 +1015,8 @@ paq8px_v137
 - Changed some [] arrays to Array<> in order to detect out of bound operations
 - Now you can disable/enable compilation of certain models/transformations (ZLIB, TEXTMODEL, WORDMODEL, WAVMODEL)
 - The "String" class is extended with new functions to support the new command line interface
-- A new "FileName" class to represent a filename/filepath.
-- Introduced some file/folder helper functions (examinepath(), getfilesize(), appendtofile(), isoutputredirected() - see source)
+- A new "FileName" class to represent a fileName/filePath.
+- Introduced some file/folder helper functions (examinePath(), getFileSize(), appendToFile(), isOutputRedirected() - see source)
 - Dispatcher for SSE2/AVX2 neural network functions
 - Remark: needed to switch jpegmodel from function to class for the new CPU-dispatched Mixer.
 - Improvements - for users
@@ -1024,7 +1024,7 @@ paq8px_v137
   - Archives are now comparable - based solely on their content regardless of the input filename and path
   - Input filename and its path is not stored in the archive anymore.
   - Wildcard support and folder compression is removed for the sake of a list-based file enumeration.
-  - If you wish to compress more files, you'll have to gather the filenames (with optional relative paths) in a text file.
+  - If you wish to compress more files, you'll have to gather the fileNames (with optional relative paths) in a text file.
   - When compressing multiple files you may now save extra information about those files (date, permissions,
     file attributes, even your own remarks). But you have to gather it yourself. See the help screen for more info.
   - All "Windows drag and drop" support is removed:
@@ -1044,7 +1044,7 @@ paq8px_v137
 
 paq8px_v137_fix1 
 2017.02.15
-- Fixed: missing space on helpscreen ("filewhere")
+- Fixed: missing space on help screen ("filewhere")
 - Fixed: problem in multiple file mode when parsing the listfile (code for tab was incorrect) 
 
 
@@ -1089,7 +1089,7 @@ pap8px_v141fix2
 2018.04.18
 - Restored clang (linux) compatibility (changed gcc pragmas to function attributes for the dot product and train functions)
 - Fixed compiler warnings
-- Fixed a bug in decode_gif() (1st part of a while condition was always true)
+- Fixed a bug in decodeGif() (1st part of a while condition was always true)
 - Fixed a bug in main() (value of 'options' was never EOF)
 - JpegModel reserved memory always (even if this model was not used). Fixed.
 - Until now we didn't know the overhead (the size of the added "diff" information) of zlib recompression. Now we know. It is printed on screen along with the segmentation information.
@@ -1223,13 +1223,13 @@ paq8px_v156
 - Small compression improvement: normalmodel to the front
   - moved normalmodel in front of the special models improving compression of images and files containing mixed content
 - Minor fixes: in wordModel
-  - pC (previous character) was not converted to lovercase before use.
-  - added blocktype==TEXT_EOL condition where blocktype==TEXT was used.
+  - pC (previous character) was not converted to lowercase before use.
+  - added blockType==TEXT_EOL condition where blockType==TEXT was used.
 - Fixed: multiple file mode
   - since v137 compression could degrade significantly due to a bug around block type/size detection
   - it did not affect compression in single file mode
 - Cleanup: the global "f4" context was updated in the Predictor and was used both by wordModel and sparseModel. Moved all code to wordModel where it ought to be.
-- Cleanup: "normal model" is now a real model (not enbedded in ContextModel)
+- Cleanup: "normal model" is now a real model (not embedded in ContextModel)
 - Miscellaneous cleanup in code/comments
 
 
@@ -1519,7 +1519,7 @@ Paq8px_v180
 2019.07.05
 - Minor code changes with unchanged functionality according to VS2019 suggestions with C++11 guidelines in mind
 - Minor fixes in probabilistic increment in StateMap
-- Introduced probabilistic increment in StateMaps (IndirectMap, ContextMap2, Image4bitModel, Image1bitModel, JpegModel, DMCModel)
+- Introduced probabilistic increment in stateMaps (IndirectMap, ContextMap2, Image4bitModel, Image1bitModel, JpegModel, DMCModel)
 - Improvements in ContextMap, ContextMap2
 - Introduced state group in StateMap (used by ContextMap2)
 - More global scope (now ExeModel-related) cleanup 
@@ -1600,7 +1600,7 @@ paq8px_v183:
   - the pos mod 256 context (that is beneficial for mozilla) is moved to RecordModel
 - Enhancements in NormalModel:
   - the RunContextMap class (used solely by NormalModel) is now gone
-  - the single order 1 conext is replaced by two: a slow and a fast adapting order 1 context
+  - the single order 1 context is replaced by two: a slow and a fast adapting order 1 context
   - the order 0 context is separated from the hashed contexts: less mixer inputs (1 instead of 7), and collision-free
   - hashed contexts were: 0-6, 8, 14; now: 1-7, 9, 14 (same in number, but generally longer)
 - Updated memory usage information displayed on help screen

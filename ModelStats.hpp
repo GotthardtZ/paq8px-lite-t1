@@ -45,7 +45,7 @@ struct ModelStats {
 
     //TextModel
     struct {
-        uint8_t chargrp; //used by RecordModel, TextModel - Quantized partial byte as ASCII group
+        uint8_t characterGroup; //used by RecordModel, TextModel - Quantized partial byte as ASCII group
         uint8_t firstLetter; //used by SSE stage
         uint8_t mask; //used by SSE stage
     } Text {};

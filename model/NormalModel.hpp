@@ -22,15 +22,15 @@ private:
     const Shared *const shared;
     ModelStats *stats;
     ContextMap2 cm;
-    StateMap sm_order0_slow;
-    StateMap sm_order1_slow;
-    StateMap sm_order1_fast;
+    StateMap smOrder0Slow;
+    StateMap smOrder1Slow;
+    StateMap smOrder1Fast;
     uint64_t cxt[15] {}; // context hashes
 public:
     NormalModel(const Shared *const sh, ModelStats *st, const uint64_t cmsize) : shared(sh), stats(st),
-            cm(sh, cmsize, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY), sm_order0_slow(sh, 1, 255, 1023, StateMap::GENERIC),
-            sm_order1_slow(sh, 1, 255 * 256, 1023, StateMap::GENERIC),
-            sm_order1_fast(sh, 1, 255 * 256, 64, StateMap::GENERIC) // 64->16 is also ok
+            cm(sh, cmsize, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY), smOrder0Slow(sh, 1, 255, 1023, StateMap::GENERIC),
+            smOrder1Slow(sh, 1, 255 * 256, 1023, StateMap::GENERIC),
+            smOrder1Fast(sh, 1, 255 * 256, 64, StateMap::GENERIC) // 64->16 is also ok
     {
       assert(isPowerOf2(cmsize));
     }
@@ -61,19 +61,19 @@ public:
       cm.mix(m);
 
       INJECT_SHARED_c0
-      m.add((stretch(sm_order0_slow.p1(c0 - 1))) >> 2); //order 0
+      m.add((stretch(smOrder0Slow.p1(c0 - 1))) >> 2); //order 0
       INJECT_SHARED_c1
-      m.add((stretch(sm_order1_fast.p1((c0 - 1) << 8 | c1))) >> 2); //order 1
-      m.add((stretch(sm_order1_slow.p1((c0 - 1) << 8 | c1))) >> 2); //order 1
+      m.add((stretch(smOrder1Fast.p1((c0 - 1) << 8 | c1))) >> 2); //order 1
+      m.add((stretch(smOrder1Slow.p1((c0 - 1) << 8 | c1))) >> 2); //order 1
 
       const int order = max(0, cm.order - (nCM - 7)); //0-7
       assert(0 <= order && order <= 7);
-      m.set(order << 3 | bpos, 64);
+      m.set(order << 3U | bpos, 64);
       stats->order = order;
     }
 
     /**
-     * setting more mixer contexts after skipping the special blocktypes
+     * setting more mixer contexts after skipping the special blockTypes
      * @param m
      */
     void mixPost(Mixer &m) {

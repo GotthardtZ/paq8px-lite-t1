@@ -3,7 +3,7 @@
 
 // EOL transform
 
-void encode_eol(File *in, File *out, uint64_t len) {
+void encodeEol(File *in, File *out, uint64_t len) {
   uint8_t b = 0, pB = 0;
   for( int i = 0; i < (int) len; i++ ) {
     b = in->getchar();
@@ -17,7 +17,7 @@ void encode_eol(File *in, File *out, uint64_t len) {
     out->putChar(b);
 }
 
-uint64_t decode_eol(Encoder &en, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
+uint64_t decodeEol(Encoder &en, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
   uint8_t b;
   uint64_t count = 0;
   for( int i = 0; i < (int) size; i++, count++ ) {
@@ -40,7 +40,7 @@ uint64_t decode_eol(Encoder &en, uint64_t size, File *out, FMode mode, uint64_t 
         break;
       }
     }
-    if( mode == FDECOMPRESS && !(i & 0xFFF))
+    if( mode == FDECOMPRESS && !(i & 0xFFFU))
       en.printStatus();
   }
   return count;

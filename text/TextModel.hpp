@@ -126,7 +126,7 @@ public:
       }
       cm.mix(m);
 
-      const uint8_t characterGroup = stats->Text.chargrp;
+      const uint8_t characterGroup = stats->Text.characterGroup;
       INJECT_SHARED_c1
       INJECT_SHARED_c0
       m.set(finalize64(hash((Lang.id != Language::Unknown) ? 1 + stemmers[Lang.id - 1]->isVowel(c1) : 0, Info.masks[1] & 0xFF, c0), 11),

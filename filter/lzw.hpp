@@ -1,6 +1,8 @@
 #ifndef PAQ8PX_LZW_HPP
 #define PAQ8PX_LZW_HPP
 
+#include "Filter.hpp"
+
 struct LZWentry {
     short prefix;
     short suffix;
@@ -67,7 +69,60 @@ public:
     }
 };
 
-int encodeLzw(File *in, File *out, uint64_t size, int &hdrsize) {
+class LZWFilter : Filter {
+    void encode(File *in, File *out, uint64_t size, int info, int &headerSize) override {
+      LZWDictionary dic;
+      int parent = -1, code = 0, buffer = 0, bitsPerCode = 9, bitsUsed = 0;
+      bool done = false;
+      while( !done ) {
+        buffer = in->getchar();
+        if( buffer < 0 ) {
+          return 0;
+        }
+        for( int j = 0; j < 8; j++ ) {
+          code += code + ((buffer >> (7 - j)) & 1), bitsUsed++;
+          if( bitsUsed >= bitsPerCode ) {
+            if( code == LZW_EOF_CODE ) {
+              done = true;
+              break;
+            } else if( code == LZW_RESET_CODE ) {
+              dic.reset();
+              parent = -1;
+              bitsPerCode = 9;
+            } else {
+              if( code < dic.index ) {
+                if( parent != -1 )
+                  dic.addEntry(parent, dic.dumpEntry(out, code));
+                else
+                  out->putChar(code);
+              } else if( code == dic.index ) {
+                int a = dic.dumpEntry(out, parent);
+                out->putChar(a);
+                dic.addEntry(parent, a);
+              } else
+                return 0;
+              parent = code;
+            }
+            bitsUsed = 0;
+            code = 0;
+            if((1U << bitsPerCode) == dic.index + 1 && dic.index < 4096 )
+              bitsPerCode++;
+          }
+        }
+      }
+      return 1;
+    }
+
+    uint64_t decode(File *in, File *out, FMode fMode, uint64_t size, uint64_t &diffFound) override {
+      return 0;
+    }
+
+    void setEncoder(Encoder &en) override {
+
+    }
+
+};
+int encodeLzw(File *in, File *out, uint64_t size, int &headerSize) {
   LZWDictionary dic;
   int parent = -1, code = 0, buffer = 0, bitsPerCode = 9, bitsUsed = 0;
   bool done = false;
@@ -77,7 +132,7 @@ int encodeLzw(File *in, File *out, uint64_t size, int &hdrsize) {
       return 0;
     }
     for( int j = 0; j < 8; j++ ) {
-      code += code + ((buffer >> (7 - j)) & 1), bitsUsed++;
+      code += code + ((buffer >> (7 - j)) & 1U), bitsUsed++;
       if( bitsUsed >= bitsPerCode ) {
         if( code == LZW_EOF_CODE ) {
           done = true;

@@ -220,7 +220,7 @@ private:
               mask2 |= c1; //0, SPACE, NEW_LINE, /\+=%$ etc.
           }
 
-          //const uint8_t chararacterGroup = stats->Text.chargrp;
+          //const uint8_t characterGroup = stats->Text.characterGroup;
           uint8_t g = c1;
           if( g >= 128 ) {
             //utf8 code points (weak context)

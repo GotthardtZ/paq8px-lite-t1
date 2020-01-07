@@ -26,13 +26,13 @@
       ; \
   }
 
-int encodeGif(File *in, File *out, uint64_t len, int &hdrsize) {
+int encodeGif(File *in, File *out, uint64_t len, int &headerSize) {
   int codeSize = in->getchar(), diffPos = 0, clearPos = 0, bsize = 0, code, offset = 0;
   uint64_t beginIn = in->curPos(), beginOut = out->curPos();
   Array <uint8_t> output(4096);
-  hdrsize = 6;
-  out->putChar(hdrsize >> 8U);
-  out->putChar(hdrsize & 255U);
+  headerSize = 6;
+  out->putChar(headerSize >> 8U);
+  out->putChar(headerSize & 255U);
   out->putChar(bsize);
   out->putChar(clearPos >> 8U);
   out->putChar(clearPos & 255U);
@@ -54,7 +54,7 @@ int encodeGif(File *in, File *out, uint64_t len, int &hdrsize) {
           buffer >>= bits;
           shift -= bits;
           if( !bsize && code != (1 << codeSize)) {
-            hdrsize += 4;
+            headerSize += 4;
             out->put32(0);
           }
           if( !bsize )
@@ -97,7 +97,7 @@ int encodeGif(File *in, File *out, uint64_t len, int &hdrsize) {
                 dict[maxcode] = key;
                 table[(index < 0) ? -index - 1 : offset] = maxcode;
                 if( phase == 0 && index > 0 ) {
-                  hdrsize += 4;
+                  headerSize += 4;
                   j = diffPos - size - (code == maxcode);
                   out->put32(j);
                   diffPos = size + (code == maxcode);
@@ -114,8 +114,8 @@ int encodeGif(File *in, File *out, uint64_t len, int &hdrsize) {
   }
   diffPos = (int) out->curPos();
   out->setpos(beginOut);
-  out->putChar(hdrsize >> 8);
-  out->putChar(hdrsize & 255);
+  out->putChar(headerSize >> 8);
+  out->putChar(headerSize & 255);
   out->putChar(255 - bsize);
   out->putChar((clearPos >> 8) & 255);
   out->putChar(clearPos & 255);
@@ -123,7 +123,7 @@ int encodeGif(File *in, File *out, uint64_t len, int &hdrsize) {
   return in->curPos() - beginIn == len - 1;
 }
 
-#define gif_write_block(count) \
+#define GIF_WRITE_BLOCK(count) \
   { \
     output[0] = (count); \
     if (mode == FDECOMPRESS) \
@@ -138,7 +138,7 @@ int encodeGif(File *in, File *out, uint64_t len, int &hdrsize) {
     blockSize = 0; \
   }
 
-#define gif_write_code(c) \
+#define GIF_WRITE_CODE(c) \
   { \
     buffer += (c) << shift; \
     shift += bits; \
@@ -146,43 +146,43 @@ int encodeGif(File *in, File *out, uint64_t len, int &hdrsize) {
       output[++blockSize] = buffer & 255; \
       buffer >>= 8; \
       shift -= 8; \
-      if (blockSize == bsize) gif_write_block(bsize); \
+      if (blockSize == bsize) GIF_WRITE_BLOCK(bsize); \
     } \
   }
 
-int decode_gif(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
-  int diffcount = in->getchar(), curdiff = 0;
-  Array<int> diffpos(4096);
-  diffcount = ((diffcount << 8) + in->getchar() - 6) / 4;
+int decodeGif(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
+  int diffCount = in->getchar(), curDiff = 0;
+  Array<int> diffPos(4096);
+  diffCount = ((diffCount << 8) + in->getchar() - 6) / 4;
   int bsize = 255 - in->getchar();
-  int clearpos = in->getchar();
-  clearpos = (clearpos << 8) + in->getchar();
-  clearpos = (69631 - clearpos) & 0xffff;
+  int clearPos = in->getchar();
+  clearPos = (clearPos << 8) + in->getchar();
+  clearPos = (69631 - clearPos) & 0xffff;
   int codesize = in->getchar(), bits = codesize + 1, shift = 0, buffer = 0, blockSize = 0;
-  if( diffcount > 4096 || clearpos <= (1 << codesize) + 2 )
+  if( diffCount > 4096 || clearPos <= (1U << codesize) + 2 )
     return 1;
-  int maxcode = (1 << codesize) + 1, input, code, offset = 0;
+  int maxcode = (1U << codesize) + 1, input, code, offset = 0;
   Array<int> dict(4096);
   Array<int> table(LZW_TABLE_SIZE);
   LZW_RESET
-  for( int i = 0; i < diffcount; i++ ) {
-    diffpos[i] = in->getchar();
-    diffpos[i] = (diffpos[i] << 8) + in->getchar();
-    diffpos[i] = (diffpos[i] << 8) + in->getchar();
-    diffpos[i] = (diffpos[i] << 8) + in->getchar();
+  for( int i = 0; i < diffCount; i++ ) {
+    diffPos[i] = in->getchar();
+    diffPos[i] = (diffPos[i] << 8) + in->getchar();
+    diffPos[i] = (diffPos[i] << 8) + in->getchar();
+    diffPos[i] = (diffPos[i] << 8) + in->getchar();
     if( i > 0 )
-      diffpos[i] += diffpos[i - 1];
+      diffPos[i] += diffPos[i - 1];
   }
   Array <uint8_t> output(256);
-  size -= 6 + diffcount * 4;
+  size -= 6 + diffCount * 4;
   int last = in->getchar(), total = (int) size + 1, outsize = 1;
   if( mode == FDECOMPRESS )
     out->putChar(codesize);
   else if( mode == FCOMPARE )
     if( codesize != out->getchar() && !diffFound )
       diffFound = 1;
-  if( diffcount == 0 || diffpos[0] != 0 ) gif_write_code(1 << codesize) else
-    curdiff++;
+  if( diffCount == 0 || diffPos[0] != 0 ) GIF_WRITE_CODE(1 << codesize) else
+    curDiff++;
   while( size != 0 && (input = in->getchar()) != EOF ) {
     size--;
     int key = (last << 8) + input, index = (code = -1);
@@ -190,12 +190,12 @@ int decode_gif(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFou
       index = input;
     else LZW_FIND(key)
     code = index;
-    if( curdiff < diffcount && total - (int) size > diffpos[curdiff] )
-      curdiff++, code = -1;
+    if( curDiff < diffCount && total - (int) size > diffPos[curDiff] )
+      curDiff++, code = -1;
     if( code < 0 ) {
-      gif_write_code(last)
-      if( maxcode == clearpos ) {
-        gif_write_code(1 << codesize)
+      GIF_WRITE_CODE(last)
+      if( maxcode == clearPos ) {
+        GIF_WRITE_CODE(1 << codesize)
         bits = codesize + 1, maxcode = (1 << codesize) + 1;
         LZW_RESET
       } else {
@@ -211,13 +211,13 @@ int decode_gif(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFou
     }
     last = code;
   }
-  gif_write_code(last)
-  gif_write_code((1 << codesize) + 1)
+  GIF_WRITE_CODE(last)
+  GIF_WRITE_CODE((1U << codesize) + 1)
   if( shift > 0 ) {
-    output[++blockSize] = buffer & 255;
-    if( blockSize == bsize ) gif_write_block(bsize)
+    output[++blockSize] = buffer & 255U;
+    if( blockSize == bsize ) GIF_WRITE_BLOCK(bsize)
   }
-  if( blockSize > 0 ) gif_write_block(blockSize)
+  if( blockSize > 0 ) GIF_WRITE_BLOCK(blockSize)
   if( mode == FDECOMPRESS )
     out->putChar(0);
   else if( mode == FCOMPARE )

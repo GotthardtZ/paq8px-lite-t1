@@ -445,7 +445,7 @@ public:
                   color[mcusize] = i;
                   int tq = buf[images[idx].sof + 3 * j + 12]; // quantization table index (0..3)
                   JASSERT(tq >= 0 && tq < 4)
-                  images[idx].qmap[mcusize] = tq; // quantizazion table mapping
+                  images[idx].qmap[mcusize] = tq; // quantization table mapping
                   --hv;
                   ++mcusize;
                 }

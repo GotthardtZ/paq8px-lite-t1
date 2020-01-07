@@ -4,6 +4,8 @@
 #include <cstdint>
 #include "../File.hpp"
 #include "../Encoder.hpp"
+#include "Filter.hpp"
+
 
 // 32-bit image
 void encodeIm32(File *in, File *out, uint64_t len, int width) {
@@ -28,9 +30,9 @@ void encodeIm32(File *in, File *out, uint64_t len, int width) {
 
 uint64_t decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMode mode, uint64_t &diffFound) {
   int r, g, b, a, p;
-  bool rgb = (width & (1 << 31)) > 0;
+  bool rgb = (width & (1U << 31U)) > 0;
   if( rgb )
-    width ^= (1 << 31);
+    width ^= (1U << 31U);
   for( int i = 0; i < (int) (size / width); i++ ) {
     p = i * width;
     for( int j = 0; j < width / 4; j++ ) {

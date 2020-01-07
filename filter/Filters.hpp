@@ -113,66 +113,7 @@ bool isGrayscalePalette(File *in, int n = 256, int isRGBA = 0) {
   return (res >> 8) > 0;
 }
 
-
-#define TEXT_MIN_SIZE 1500 // size of minimum allowed text block (in bytes)
-#define TEXT_MAX_MISSES 2 // threshold: max allowed number of invalid UTF8 sequences seen recently before reporting "fail"
-#define TEXT_ADAPT_RATE 256 // smaller (like 32) = illegal sequences are allowed to come more often, larger (like 1024) = more rigorous detection
-
-struct TextParserStateInfo {
-    Array<uint64_t> _start;
-    Array<uint64_t> _end; // position of last char with a valid UTF8 state: marks the end of the detected TEXT block
-    Array<uint32_t> _EOLType; // 0: none or CR-only;   1: CRLF-only (applicable to EOL transform);   2: mixed or LF-only
-    uint32_t invalidCount; // adaptive count of invalid UTF8 sequences seen recently
-    uint32_t UTF8State; // state of utf8 parser; 0: valid;  12: invalid;  any other value: yet uncertain (more bytes must be read)
-    TextParserStateInfo() : _start(0), _end(0), _EOLType(0) {}
-
-    void reset(uint64_t startpos) {
-      _start.resize(1);
-      _end.resize(1);
-      _start[0] = startpos;
-      _end[0] = startpos - 1;
-      _EOLType.resize(1);
-      _EOLType[0] = 0;
-      invalidCount = 0;
-      UTF8State = 0;
-    }
-
-    uint64_t start() { return _start[_start.size() - 1]; }
-
-    uint64_t end() { return _end[_end.size() - 1]; }
-
-    void setend(uint64_t end) { _end[_end.size() - 1] = end; }
-
-    uint32_t EOLType() { return _EOLType[_EOLType.size() - 1]; }
-
-    void setEOLType(uint32_t EOLType) { _EOLType[_EOLType.size() - 1] = EOLType; }
-
-    uint64_t validlength() { return end() - start() + 1; }
-
-    void next(uint64_t startpos) {
-      _start.pushBack(startpos);
-      _end.pushBack(startpos - 1);
-      _EOLType.pushBack(0);
-      invalidCount = 0;
-      UTF8State = 0;
-    }
-
-    void removefirst() {
-      if( _start.size() == 1 )
-        reset(0);
-      else {
-        for( int i = 0; i < (int) _start.size() - 1; i++ ) {
-          _start[i] = _start[i + 1];
-          _end[i] = _end[i + 1];
-          _EOLType[i] = _EOLType[i + 1];
-        }
-        _start.popBack();
-        _end.popBack();
-        _EOLType.popBack();
-      }
-    }
-} textparser;
-
+#include "TextParserStateInfo.hpp"
 
 // Detect blocks
 BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
@@ -222,7 +163,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
     return DEFAULT;
   }
 
-  textparser.reset(0);
+  textParser.reset(0);
   for( int i = 0; i < n; ++i ) {
     int c = in->getchar();
     if( c == EOF)
@@ -274,8 +215,8 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
     int zh = parseZlibHeader(((int) zbuf[(zbufpos - 32) & 0xFF]) * 256 + (int) zbuf[(zbufpos - 32 + 1) & 0xFF]);
     bool valid = (i >= 31 && zh != -1);
     if( !valid && options & OPTION_BRUTE && i >= 255 ) {
-      uint8_t BTYPE = (zbuf[zbufpos] & 7) >> 1;
-      if((valid = (BTYPE == 1 || BTYPE == 2))) {
+      uint8_t bType = (zbuf[zbufpos] & 7) >> 1;
+      if((valid = (bType == 1 || bType == 2))) {
         int maximum = 0, used = 0, offset = zbufpos;
         for( int i = 0; i < 4; i++, offset += 64 ) {
           for( int j = 0; j < 64; j++ ) {
@@ -764,7 +705,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
           pgmdatasize = pgmw * 4 * pgmh;
         }
       } else { // pixel data
-        if( textparser.start() == uint32_t(i) || // for any sign of non-text data in pixel area
+        if( textParser.start() == uint32_t(i) || // for any sign of non-text data in pixel area
             (pgm - 2 == 0 && n - pgmdatasize == i)) // or the image is the whole file/block -> FINISH (success)
         {
           if( pgmw && pgmh && !pgmc && pgmn == 4 )
@@ -1052,27 +993,27 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
     // Detect text
     // This is different from the above detection routines: it's a negative detection (it detects a failure)
     uint32_t t = utf8StateTable[c];
-    textparser.UTF8State = utf8StateTable[256 + textparser.UTF8State + t];
-    if( textparser.UTF8State == UTF8_ACCEPT ) { // proper end of a valid utf8 sequence
+    textParser.UTF8State = utf8StateTable[256 + textParser.UTF8State + t];
+    if( textParser.UTF8State == UTF8_ACCEPT ) { // proper end of a valid utf8 sequence
       if( c == NEW_LINE ) {
         if(((buf0 >> 8) & 0xff) != CARRIAGE_RETURN )
-          textparser.setEOLType(2); // mixed or LF-only
-        else if( textparser.EOLType() == 0 )
-          textparser.setEOLType(1); // CRLF-only
+          textParser.setEolType(2); // mixed or LF-only
+        else if( textParser.eolType() == 0 )
+          textParser.setEolType(1); // CRLF-only
       }
-      textparser.invalidCount = textparser.invalidCount * (TEXT_ADAPT_RATE - 1) / TEXT_ADAPT_RATE;
-      if( textparser.invalidCount == 0 )
-        textparser.setend(i); // a possible end of block position
-    } else if( textparser.UTF8State == UTF8_REJECT ) { // illegal state
-      textparser.invalidCount = textparser.invalidCount * (TEXT_ADAPT_RATE - 1) / TEXT_ADAPT_RATE + TEXT_ADAPT_RATE;
-      textparser.UTF8State = UTF8_ACCEPT; // reset state
-      if( textparser.validlength() < TEXT_MIN_SIZE ) {
-        textparser.reset(i + 1); // it's not text (or not long enough) - start over
-      } else if( textparser.invalidCount >= TEXT_MAX_MISSES * TEXT_ADAPT_RATE ) {
-        if( textparser.validlength() < TEXT_MIN_SIZE )
-          textparser.reset(i + 1); // it's not text (or not long enough) - start over
+      textParser.invalidCount = textParser.invalidCount * (TEXT_ADAPT_RATE - 1) / TEXT_ADAPT_RATE;
+      if( textParser.invalidCount == 0 )
+        textParser.setEnd(i); // a possible end of block position
+    } else if( textParser.UTF8State == UTF8_REJECT ) { // illegal state
+      textParser.invalidCount = textParser.invalidCount * (TEXT_ADAPT_RATE - 1) / TEXT_ADAPT_RATE + TEXT_ADAPT_RATE;
+      textParser.UTF8State = UTF8_ACCEPT; // reset state
+      if( textParser.validLength() < TEXT_MIN_SIZE ) {
+        textParser.reset(i + 1); // it's not text (or not long enough) - start over
+      } else if( textParser.invalidCount >= TEXT_MAX_MISSES * TEXT_ADAPT_RATE ) {
+        if( textParser.validLength() < TEXT_MIN_SIZE )
+          textParser.reset(i + 1); // it's not text (or not long enough) - start over
         else // Commit text block validation
-          textparser.next(i + 1);
+          textParser.next(i + 1);
       }
     }
   }
@@ -1119,7 +1060,7 @@ uint64_t decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int in
   else if( type == EXE )
     return decodeExe(en, len, out, mode, diffFound);
   else if( type == TEXT_EOL )
-    return decode_eol(en, len, out, mode, diffFound);
+    return decodeEol(en, len, out, mode, diffFound);
   else if( type == CD )
     return decodeCd(tmp, len, out, mode, diffFound);
 #ifdef USE_ZLIB
@@ -1129,10 +1070,11 @@ uint64_t decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int in
   else if( type == BASE64 )
     return decodeBase64(tmp, out, mode, diffFound);
   else if( type == GIF )
-    return decode_gif(tmp, len, out, mode, diffFound);
-  else if( type == RLE )
-    return decodeRle(tmp, len, out, mode, diffFound);
-  else if( type == LZW )
+    return decodeGif(tmp, len, out, mode, diffFound);
+  else if( type == RLE ) {
+    auto r = new RleFilter();
+    return r->decode(tmp, out, mode, len, diffFound);
+  } else if( type == LZW )
     return decodeLzw(tmp, len, out, mode, diffFound);
   else
     assert(false);
@@ -1149,7 +1091,7 @@ uint64_t encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int info,
   else if( type == EXE )
     encodeExe(in, tmp, len, info);
   else if( type == TEXT_EOL )
-    encode_eol(in, tmp, len);
+    encodeEol(in, tmp, len);
   else if( type == CD )
     encodeCd(in, tmp, len, info);
 #ifdef USE_ZLIB
@@ -1160,8 +1102,10 @@ uint64_t encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int info,
     encodeBase64(in, tmp, len);
   else if( type == GIF )
     return encodeGif(in, tmp, len, hdrsize) ? 0 : 1;
-  else if( type == RLE )
-    encodeRle(in, tmp, len, info, hdrsize);
+  else if( type == RLE ) {
+    auto r = new RleFilter();
+    r->encode(in, tmp, len, info, hdrsize);
+  }
   else if( type == LZW )
     return encodeLzw(in, tmp, len, hdrsize) ? 0 : 1;
   else
@@ -1197,19 +1141,19 @@ transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int in
         en.encodeBlockSize(tmpsize);
         BlockType type2 = (BlockType) ((info >> 24) & 0xFF);
         if( type2 != DEFAULT ) {
-          String blstr_sub0;
-          blstr_sub0 += blstr.c_str();
-          blstr_sub0 += "->";
-          String blstr_sub1;
-          blstr_sub1 += blstr.c_str();
-          blstr_sub1 += "-->";
-          String blstr_sub2;
-          blstr_sub2 += blstr.c_str();
-          blstr_sub2 += "-->";
-          printf(" %-11s | ->  exploded     |%10d bytes [%d - %d]\n", blstr_sub0.c_str(), int(tmpsize), 0, int(tmpsize - 1));
-          printf(" %-11s | --> added header |%10d bytes [%d - %d]\n", blstr_sub1.c_str(), hdrsize, 0, hdrsize - 1);
+          String blstrSub0;
+          blstrSub0 += blstr.c_str();
+          blstrSub0 += "->";
+          String blstrSub1;
+          blstrSub1 += blstr.c_str();
+          blstrSub1 += "-->";
+          String blstrSub2;
+          blstrSub2 += blstr.c_str();
+          blstrSub2 += "-->";
+          printf(" %-11s | ->  exploded     |%10d bytes [%d - %d]\n", blstrSub0.c_str(), int(tmpsize), 0, int(tmpsize - 1));
+          printf(" %-11s | --> added header |%10d bytes [%d - %d]\n", blstrSub1.c_str(), hdrsize, 0, hdrsize - 1);
           directEncodeBlock(HDR, &tmp, hdrsize, en);
-          printf(" %-11s | --> data         |%10d bytes [%d - %d]\n", blstr_sub2.c_str(), int(tmpsize - hdrsize), hdrsize,
+          printf(" %-11s | --> data         |%10d bytes [%d - %d]\n", blstrSub2.c_str(), int(tmpsize - hdrsize), hdrsize,
                  int(tmpsize - 1));
           transformEncodeBlock(type2, &tmp, tmpsize - hdrsize, en, info & 0xffffff, blstr, recursionLevel, p1, p2, hdrsize);
         } else {
@@ -1258,21 +1202,21 @@ void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, String &
     }
 
     // override (any) next block detection by a preceding text block
-    textStart = begin + textparser._start[0];
-    textEnd = begin + textparser._end[0];
+    textStart = begin + textParser._start[0];
+    textEnd = begin + textParser._end[0];
     if( textEnd > nextblockStart - 1 )
       textEnd = nextblockStart - 1;
     if( type == DEFAULT && textStart < textEnd ) { // only DEFAULT blocks may be overridden
       if( textStart == begin && textEnd == nextblockStart - 1 ) { // whole first block is text
-        type = (textparser._EOLType[0] == 1) ? TEXT_EOL : TEXT; // DEFAULT -> TEXT
+        type = (textParser._EOLType[0] == 1) ? TEXT_EOL : TEXT; // DEFAULT -> TEXT
       } else if( textEnd - textStart + 1 >= TEXT_MIN_SIZE ) { // we have one (or more) large enough text portion that splits DEFAULT
         if( textStart != begin ) { // text is not the first block
           nextblockStart = textStart; // first block is still DEFAULT
           nextblockTypeBak = nextblockType;
-          nextblockType = (textparser._EOLType[0] == 1) ? TEXT_EOL : TEXT; //next block is text
-          textparser.removefirst();
+          nextblockType = (textParser._EOLType[0] == 1) ? TEXT_EOL : TEXT; //next block is text
+          textParser.removeFirst();
         } else {
-          type = (textparser._EOLType[0] == 1) ? TEXT_EOL : TEXT; // first block is text
+          type = (textParser._EOLType[0] == 1) ? TEXT_EOL : TEXT; // first block is text
           nextblockType = DEFAULT; // next block is DEFAULT
           nextblockStart = textEnd + 1;
         }

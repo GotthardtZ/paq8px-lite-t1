@@ -58,7 +58,7 @@ private:
     static constexpr int nSM = 6;
     static constexpr int nSSM = 4;
     static constexpr int nIM = 3;
-    static constexpr int nIndCtxs = 5;
+    static constexpr int nIndContexts = 5;
 
 public:
     static constexpr int MIXERINPUTS =
@@ -75,11 +75,11 @@ private:
     StationaryMap maps[nSM];
     SmallStationaryContextMap sMap[nSSM];
     IndirectMap iMap[nIM];
-    IndirectContext<uint16_t> iCtx[nIndCtxs];
-    Array<uint32_t> cPos1 {256}, cpos2 {256}, cpos3 {256}, cpos4 {256};
+    IndirectContext<uint16_t> iCtx[nIndContexts];
+    Array<uint32_t> cPos1 {256}, cPos2 {256}, cPos3 {256}, cPos4 {256};
     Array<uint32_t> wpos1 {256 * 256}; // buf(1..2) -> last position
-    uint32_t rlen[3] = {2, 0, 0}; // run length and 2 candidates
-    uint32_t rcount[2] = {0, 0}; // candidate counts
+    uint32_t runLength[3] = {2, 0, 0}; // run length and 2 candidates
+    uint32_t rCount[2] = {0, 0}; // candidate counts
     uint8_t padding = 0; // detected padding byte
     uint8_t N = 0, NN = 0, NNN = 0, NNNN = 0, WxNW = 0;
     uint32_t prevTransition = 0, nTransition = 0; // position of the last padding transition
@@ -115,9 +115,9 @@ public:
         INJECT_SHARED_buf
         INJECT_SHARED_pos
         int w = c4 & 0xffff, c = w & 255, d = w >> 8;
-        if((stats->Wav) > 2 && (stats->Wav) != rlen[0] ) {
-          rlen[0] = stats->Wav;
-          rcount[0] = rcount[1] = 0;
+        if((stats->Wav) > 2 && (stats->Wav) != runLength[0] ) {
+          runLength[0] = stats->Wav;
+          rCount[0] = rCount[1] = 0;
         } else {
           // detect dBASE tables
           if( blpos == 0 || (dbase.version > 0 && blpos >= dbase.end))
@@ -135,56 +135,56 @@ public:
               dbase.start = blpos - 32 + dbase.headerLength;
               dbase.end = dbase.start + dbase.nRecords * dbase.recordLength;
               if( dbase.version == 3 ) {
-                rlen[0] = 32;
-                rcount[0] = rcount[1] = 0;
+                runLength[0] = 32;
+                rCount[0] = rCount[1] = 0;
               }
             }
           } else if( dbase.version > 0 && blpos == dbase.start ) {
-            rlen[0] = dbase.recordLength;
-            rcount[0] = rcount[1] = 0;
+            runLength[0] = dbase.recordLength;
+            rCount[0] = rCount[1] = 0;
           }
 
           uint32_t r = pos - cPos1[c];
-          if( r > 1 && r == cPos1[c] - cpos2[c] && r == cpos2[c] - cpos3[c] && (r > 32 || r == cpos3[c] - cpos4[c]) &&
+          if( r > 1 && r == cPos1[c] - cPos2[c] && r == cPos2[c] - cPos3[c] && (r > 32 || r == cPos3[c] - cPos4[c]) &&
               (r > 10 || ((c == buf(r * 5 + 1)) && c == buf(r * 6 + 1)))) {
-            if( r == rlen[1] )
-              ++rcount[0];
-            else if( r == rlen[2] )
-              ++rcount[1];
-            else if( rcount[0] > rcount[1] )
-              rlen[2] = r, rcount[1] = 1;
+            if( r == runLength[1] )
+              ++rCount[0];
+            else if( r == runLength[2] )
+              ++rCount[1];
+            else if( rCount[0] > rCount[1] )
+              runLength[2] = r, rCount[1] = 1;
             else
-              rlen[1] = r, rcount[0] = 1;
+              runLength[1] = r, rCount[0] = 1;
           }
 
           // check candidate lengths
           for( int i = 0; i < 2; i++ ) {
-            if((int) rcount[i] > max(0, 12 - (int) ilog2(rlen[i + 1]))) {
-              if( rlen[0] != rlen[i + 1] ) {
-                if( mayBeImg24B && rlen[i + 1] == 3 ) {
-                  rcount[0] >>= 1U;
-                  rcount[1] >>= 1U;
+            if((int) rCount[i] > max(0, 12 - (int) ilog2(runLength[i + 1]))) {
+              if( runLength[0] != runLength[i + 1] ) {
+                if( mayBeImg24B && runLength[i + 1] == 3 ) {
+                  rCount[0] >>= 1U;
+                  rCount[1] >>= 1U;
                   continue;
-                } else if((rlen[i + 1] > rlen[0]) && (rlen[i + 1] % rlen[0] == 0)) {
+                } else if((runLength[i + 1] > runLength[0]) && (runLength[i + 1] % runLength[0] == 0)) {
                   // maybe we found a multiple of the real record size..?
                   // in that case, it is probably an immediate multiple (2x).
                   // that is probably more likely the bigger the length, so
                   // check for small lengths too
-                  if((rlen[0] > 32) && (rlen[i + 1] == rlen[0] * 2)) {
-                    rcount[0] >>= 1U;
-                    rcount[1] >>= 1U;
+                  if((runLength[0] > 32) && (runLength[i + 1] == runLength[0] * 2)) {
+                    rCount[0] >>= 1U;
+                    rCount[1] >>= 1U;
                     continue;
                   }
                 }
-                rlen[0] = rlen[i + 1];
-                //printf("\nrecordModel: detected rlen: %d\n",rlen[0]); // for debugging
-                rcount[i] = 0;
-                mayBeImg24B = (rlen[0] > 30 && (rlen[0] % 3) == 0);
+                runLength[0] = runLength[i + 1];
+                //printf("\nrecordModel: detected runLength: %d\n",runLength[0]); // for debugging
+                rCount[i] = 0;
+                mayBeImg24B = (runLength[0] > 30 && (runLength[0] % 3) == 0);
                 nTransition = 0;
               } else
                 // we found the same length again, that's positive reinforcement that
                 // this really is the correct record size, so give it a little boost
-                rcount[i] >>= 2U;
+                rCount[i] >>= 2U;
 
               // if the other candidate record length is orders of
               // magnitude larger, it will probably never have enough time
@@ -192,21 +192,21 @@ public:
               // this length is not a multiple of the other, than it might
               // really be worthwhile to investigate it, so we won't set its
               // counter to 0
-              if( rlen[i + 1] << 4 > rlen[1 + (i ^ 1U)] )
-                rcount[i ^ 1U] = 0;
+              if( runLength[i + 1] << 4 > runLength[1 + (i ^ 1U)] )
+                rCount[i ^ 1U] = 0;
             }
           }
         }
 
-        assert(rlen[0] >= 2);
-        col = pos % rlen[0];
-        x = min(0x1F, col / max(1, rlen[0] / 32));
-        N = buf(rlen[0]), NN = buf(rlen[0] * 2), NNN = buf(rlen[0] * 3), NNNN = buf(rlen[0] * 4);
-        for( int i = 0; i < nIndCtxs - 1; iCtx[i] += c, i++ );
+        assert(runLength[0] >= 2);
+        col = pos % runLength[0];
+        x = min(0x1F, col / max(1, runLength[0] / 32));
+        N = buf(runLength[0]), NN = buf(runLength[0] * 2), NNN = buf(runLength[0] * 3), NNNN = buf(runLength[0] * 4);
+        for( int i = 0; i < nIndContexts - 1; iCtx[i] += c, i++ );
         iCtx[0] = (c << 8) | N;
-        iCtx[1] = (buf(rlen[0] - 1) << 8) | N;
-        iCtx[2] = (c << 8) | buf(rlen[0] - 1);
-        iCtx[3] = finalize64(hash(c, N, buf(rlen[0] + 1)), 20);
+        iCtx[1] = (buf(runLength[0] - 1) << 8) | N;
+        iCtx[2] = (c << 8) | buf(runLength[0] - 1);
+        iCtx[3] = finalize64(hash(c, N, buf(runLength[0] + 1)), 20);
 
         /*
         Consider record structures that include fixed-length strings.
@@ -230,7 +230,7 @@ public:
         if( !col )
           nTransition = 0;
         if((((c4 >> 8) == SPACE * 0x010101) && (c != SPACE)) ||
-           (!(c4 >> 8) && c && ((padding != SPACE) || (pos - prevTransition > rlen[0])))) {
+           (!(c4 >> 8) && c && ((padding != SPACE) || (pos - prevTransition > runLength[0])))) {
           prevTransition = pos;
           nTransition += (nTransition < 31);
           padding = (uint8_t) d;
@@ -239,31 +239,31 @@ public:
         uint64_t i = 0;
 
         // Set 2-3 dimensional contexts
-        // assuming rlen[0]<1024; col<4096
+        // assuming runLength[0]<1024; col<4096
         cm.set(hash(++i, c << 8 | (min(255, pos - cPos1[c]) >> 2)));
         cm.set(hash(++i, w << 9 | llog(pos - wpos1[w]) >> 2));
-        cm.set(hash(++i, rlen[0] | N << 10 | NN << 18));
+        cm.set(hash(++i, runLength[0] | N << 10 | NN << 18));
 
-        cn.set(hash(++i, w | rlen[0] << 16));
-        cn.set(hash(++i, d | rlen[0] << 8));
-        cn.set(hash(++i, c | rlen[0] << 8));
+        cn.set(hash(++i, w | runLength[0] << 16));
+        cn.set(hash(++i, d | runLength[0] << 8));
+        cn.set(hash(++i, c | runLength[0] << 8));
 
         co.set(hash(++i, c << 8 | min(255, pos - cPos1[c])));
         co.set(hash(++i, c << 17 | d << 9 | llog(pos - wpos1[w]) >> 2));
         co.set(hash(++i, c << 8 | N));
 
-        cp.set(hash(++i, rlen[0] | N << 10 | col << 18));
-        cp.set(hash(++i, rlen[0] | c << 10 | col << 18));
-        cp.set(hash(++i, col | rlen[0] << 12));
+        cp.set(hash(++i, runLength[0] | N << 10 | col << 18));
+        cp.set(hash(++i, runLength[0] | c << 10 | col << 18));
+        cp.set(hash(++i, col | runLength[0] << 12));
 
-        if( rlen[0] > 8 ) {
-          cp.set(hash(++i, min(min(0xFF, rlen[0]), pos - prevTransition), min(0x3FF, col), (w & 0xF0F0) | (w == ((padding << 8) | padding)),
+        if( runLength[0] > 8 ) {
+          cp.set(hash(++i, min(min(0xFF, runLength[0]), pos - prevTransition), min(0x3FF, col), (w & 0xF0F0) | (w == ((padding << 8) | padding)),
                       nTransition));
-          cp.set(hash(++i, w, (buf(rlen[0] + 1) == padding && N == padding), col / max(1, rlen[0] / 32)));
+          cp.set(hash(++i, w, (buf(runLength[0] + 1) == padding && N == padding), col / max(1, runLength[0] / 32)));
         } else
           cp.set(0), cp.set(0);
 
-        cp.set(hash(++i, N | ((NN & 0xF0) << 4) | ((NNN & 0xE0) << 7) | ((NNNN & 0xE0) << 10) | ((col / max(1, rlen[0] / 16)) << 18)));
+        cp.set(hash(++i, N | ((NN & 0xF0) << 4) | ((NNN & 0xE0) << 7) | ((NNNN & 0xE0) << 10) | ((col / max(1, runLength[0] / 16)) << 18)));
         cp.set(hash(++i, (N & 0xF8) | ((NN & 0xF8) << 8) | (col << 16)));
         cp.set(hash(++i, N, NN));
 
@@ -275,7 +275,7 @@ public:
         cp.set(hash(++i, iCtx[3]()));
         cp.set(hash(++i, iCtx[1]() & 0xFF, iCtx[3]() & 0xFF));
 
-        cp.set(hash(++i, N, (WxNW = c ^ buf(rlen[0] + 1))));
+        cp.set(hash(++i, N, (WxNW = c ^ buf(runLength[0] + 1))));
         cp.set(hash(++i, (stats->Match.length3 != 0) << 8 | stats->Match.expectedByte, uint8_t(iCtx[1]()), N, WxNW));
 
         int k = 0x300;
@@ -284,7 +284,7 @@ public:
           maps[0].setDirect(clip(((uint8_t) (c4 >> 16)) + c - (c4 >> 24)) | k);
         } else
           maps[0].setDirect(clip(c * 2 - d) | k);
-        maps[1].setDirect(clip(c + N - buf(rlen[0] + 1)) | k);
+        maps[1].setDirect(clip(c + N - buf(runLength[0] + 1)) | k);
         maps[2].setDirect(clip(N + NN - NNN));
         maps[3].setDirect(clip(N * 2 - NN));
         maps[4].setDirect(clip(N * 3 - NN * 3 + NNN));
@@ -295,24 +295,24 @@ public:
         sMap[3].set(pos & 255); // mozilla
 
         // update last context positions
-        cpos4[c] = cpos3[c];
-        cpos3[c] = cpos2[c];
-        cpos2[c] = cPos1[c];
+        cPos4[c] = cPos3[c];
+        cPos3[c] = cPos2[c];
+        cPos2[c] = cPos1[c];
         cPos1[c] = pos;
         wpos1[w] = pos;
 
-        mxCtx = (rlen[0] > 128) ? (min(0x7F, col / max(1, rlen[0] / 128))) : col;
+        mxCtx = (runLength[0] > 128) ? (min(0x7F, col / max(1, runLength[0] / 128))) : col;
       }
       INJECT_SHARED_c0
       uint8_t B = c0 << (8 - bpos);
       uint32_t ctx = (N ^ B) | (bpos << 8);
       INJECT_SHARED_y
-      iCtx[nIndCtxs - 1] += y;
-      iCtx[nIndCtxs - 1] = ctx;
+      iCtx[nIndContexts - 1] += y;
+      iCtx[nIndContexts - 1] = ctx;
       maps[5].setDirect(ctx);
 
       sMap[0].set(ctx);
-      sMap[1].set(iCtx[nIndCtxs - 1]());
+      sMap[1].set(iCtx[nIndContexts - 1]());
       sMap[2].set((ctx << 8) | WxNW);
 
       cm.mix(m);
@@ -326,11 +326,11 @@ public:
       for( int i = 0; i < nSSM; i++ )
         sMap[i].mix(m);
 
-      m.set((rlen[0] > 2) * ((bpos << 7) | mxCtx), 1024);
+      m.set((runLength[0] > 2) * ((bpos << 7) | mxCtx), 1024);
       m.set(((N ^ B) >> 4) | (x << 4), 512);
-      m.set(((stats->Text.chargrp) << 5) | x, 11 * 32);
+      m.set(((stats->Text.characterGroup) << 5) | x, 11 * 32);
 
-      stats->Wav = min(0xFFFF, rlen[0]);
+      stats->Wav = min(0xFFFF, runLength[0]);
     }
 };
 
