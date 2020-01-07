@@ -20,7 +20,7 @@ private:
     const Shared *const shared;
     Array<uint16_t> data;
     const uint32_t mask, stride, bTotal;
-    uint32_t context, bCount, B;
+    uint32_t context, bCount, b;
     uint16_t *cp;
     const int rate;
     int scale;
@@ -36,7 +36,7 @@ public:
 
     void set(uint32_t ctx) {
       context = (ctx & mask) * stride;
-      bCount = B = 0;
+      bCount = b = 0;
     }
 
     void reset() {
@@ -48,19 +48,19 @@ public:
     void update() override {
       INJECT_SHARED_y
       *cp += ((y << 16U) - (*cp) + (1 << (rate - 1))) >> rate;
-      B += (y && B > 0);
+      b += (y && b > 0);
     }
 
     void setScale(const int Scale) { scale = Scale; }
 
     void mix(Mixer &m) {
       updater.subscribe(this);
-      cp = &data[context + B];
+      cp = &data[context + b];
       const int prediction = (*cp) >> 4U;
       m.add((stretch(prediction) * scale) >> 8);
       m.add(((prediction - 2048) * scale) >> 9);
       bCount++;
-      B += B + 1;
+      b += b + 1;
       assert(bCount <= bTotal);
     }
 };

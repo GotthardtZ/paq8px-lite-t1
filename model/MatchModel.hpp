@@ -2,7 +2,7 @@
 #define PAQ8PX_MATCHMODEL_HPP
 
 #include "../Shared.hpp"
-#include "ModelStats.hpp"
+#include "../ModelStats.hpp"
 #include "../ContextMap2.hpp"
 #include "../StationaryMap.hpp"
 #include "../SmallStationaryContextMap.hpp"
@@ -15,7 +15,7 @@
  */
 class MatchModel {
 private:
-    static constexpr int NumHashes = 3;
+    static constexpr int numHashes = 3;
     static constexpr int nCM = 2;
     static constexpr int nST = 3;
     static constexpr int nSSM = 2;
@@ -41,7 +41,7 @@ private:
     SmallStationaryContextMap SCM;
     StationaryMap maps[nSM];
     IndirectContext<uint8_t> iCtx;
-    uint32_t hashes[NumHashes] {0};
+    uint32_t hashes[numHashes] {0};
     uint32_t ctx[nST] {0};
     uint32_t length = 0; // rebased length of match (length=1 represents the smallest accepted match length), or 0 if no match
     uint32_t index = 0; // points to next byte of match in buf, 0 when there is no match
@@ -53,17 +53,14 @@ private:
     const int hashBits;
 
 public:
-    MatchModel(const Shared *const sh, ModelStats *st, const uint64_t Size) : shared(sh), stats(st), table(Size / sizeof(uint32_t)),
-            stateMaps {//StateMap:  s, n, lim,
-                    {sh, 1, 56 * 256,          1023, StateMap::GENERIC},
-                    {sh, 1, 8 * 256 * 256 + 1, 1023, StateMap::GENERIC},
-                    {sh, 1, 256 * 256,         1023, StateMap::GENERIC}}, cm(sh, MEM / 32, nCM, 74, CM_USE_RUN_STATS),
-            SCM {sh, 6, 1, 6, 64}, /* SmallStationaryContextMap: BitsOfContext, InputBits, Rate, Scale */
-            maps {/* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
-                    {sh, 23, 1, 64, 1023},
-                    {sh, 15, 1, 64, 1023}}, iCtx {15, 1}, // IndirectContext<uint8_t>: BitsPerContext, InputBits
-            mask(uint32_t(Size / sizeof(uint32_t) - 1)), hashBits(ilog2(mask + 1)) {
-      assert(isPowerOf2(Size));
+    MatchModel(const Shared *const sh, ModelStats *st, const uint64_t size) : shared(sh), stats(st), table(size / sizeof(uint32_t)),
+            stateMaps {{sh, 1, 56 * 256,          1023, StateMap::Generic},
+                       {sh, 1, 8 * 256 * 256 + 1, 1023, StateMap::Generic},
+                       {sh, 1, 256 * 256,         1023, StateMap::Generic}}, cm(sh, MEM / 32, nCM, 74, CM_USE_RUN_STATS),
+            SCM {sh, 6, 1, 6, 64}, maps {{sh, 23, 1, 64, 1023},
+                                         {sh, 15, 1, 64, 1023}}, iCtx {15, 1}, mask(uint32_t(size / sizeof(uint32_t) - 1)),
+            hashBits(ilog2(mask + 1)) {
+      assert(isPowerOf2(size));
     }
 
     void update() {
@@ -88,7 +85,7 @@ public:
       //bytewise contexts
       if( bpos == 0 ) {
         // update hashes
-        for( uint32_t i = 0, minLen = MinLen + (NumHashes - 1) * StepSize; i < NumHashes; i++, minLen -= StepSize ) {
+        for( uint32_t i = 0, minLen = MinLen + (numHashes - 1) * StepSize; i < numHashes; i++, minLen -= StepSize ) {
           uint64_t hash = 0;
           for( uint32_t j = minLen; j > 0; j-- )
             hash = combine64(hash, buf(j));
@@ -118,8 +115,8 @@ public:
 
         // find a new match, starting with the highest order hash and falling back to lower ones
         if( length == 0 ) {
-          uint32_t minLen = MinLen + (NumHashes - 1) * StepSize, bestLen = 0, bestIndex = 0;
-          for( uint32_t i = 0; i < NumHashes && length < minLen; i++, minLen -= StepSize ) {
+          uint32_t minLen = MinLen + (numHashes - 1) * StepSize, bestLen = 0, bestIndex = 0;
+          for( uint32_t i = 0; i < numHashes && length < minLen; i++, minLen -= StepSize ) {
             index = table[hashes[i]];
             if( index > 0 ) {
               length = 0;
@@ -140,7 +137,7 @@ public:
         }
         // update position information in hashtable
         INJECT_SHARED_pos
-        for( uint32_t i = 0; i < NumHashes; i++ )
+        for( uint32_t i = 0; i < numHashes; i++ )
           table[hashes[i]] = pos;
         stats->Match.expectedByte = expectedByte = (length != 0 ? buf[index] : 0);
       }

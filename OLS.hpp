@@ -1,8 +1,8 @@
 #ifndef PAQ8PX_OLS_HPP
 #define PAQ8PX_OLS_HPP
 
-#include <cstdint>
 #include "Mixer.hpp"
+#include <cstdint>
 
 template<typename F, typename T, const bool hasZeroMean = true>
 class OLS {
@@ -15,14 +15,17 @@ private:
     F *x, *w, *b;
     F **mCovariance, **mCholesky;
 
-    int factor() {
+    auto factor() -> int {
       // copy the matrix
-      for( int i = 0; i < n; i++ )
-        for( int j = 0; j < n; j++ )
+      for( int i = 0; i < n; i++ ) {
+        for( int j = 0; j < n; j++ ) {
           mCholesky[i][j] = mCovariance[i][j];
+        }
+      }
 
-      for( int i = 0; i < n; i++ )
+      for( int i = 0; i < n; i++ ) {
         mCholesky[i][i] += nu;
+      }
       for( int i = 0; i < n; i++ ) {
         for( int j = 0; j < i; j++ ) {
           F sum = mCholesky[i][j];
@@ -31,8 +34,9 @@ private:
           mCholesky[i][j] = sum / mCholesky[j][j];
         }
         F sum = mCholesky[i][i];
-        for( int k = 0; k < i; k++ )
+        for( int k = 0; k < i; k++ ) {
           sum -= (mCholesky[i][k] * mCholesky[i][k]);
+        }
         if( sum > ftol )
           mCholesky[i][i] = sqrt(sum);
         else

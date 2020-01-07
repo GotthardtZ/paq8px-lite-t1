@@ -44,12 +44,12 @@ public:
 };
 
 int ContextModel::p() {
-  uint32_t &blpos = stats->blpos;
+  uint32_t &blockPosition = stats->blpos;
   // Parse block type and block size
   INJECT_SHARED_bpos
   if( bpos == 0 ) {
     --blockSize;
-    blpos++;
+    blockPosition++;
     INJECT_SHARED_c1
     if( blockSize == -1 ) {
       nextBlockType = (BlockType) c1; //got blockType but don't switch (we don't have all the info yet)
@@ -64,7 +64,7 @@ int ContextModel::p() {
             blockSize = bytesRead;
             if( hasRecursion(nextBlockType))
               blockSize = 0;
-            blpos = 0;
+            blockPosition = 0;
           } else
             blockSize = -1;
         }
@@ -72,11 +72,11 @@ int ContextModel::p() {
         blockSize = bytesRead;
         INJECT_SHARED_c4
         blockInfo = c4;
-        blpos = 0;
+        blockPosition = 0;
       }
     }
 
-    if( blpos == 0 )
+    if( blockPosition == 0 )
       blockType = nextBlockType; //got all the info - switch to next blockType
     if( blockSize == 0 )
       blockType = DEFAULT;
@@ -106,49 +106,49 @@ int ContextModel::p() {
       return image4BitModel.mix(*m), m->p();
     }
     case IMAGE8: {
-      Image8bitModel &image8BitModel = models.image8BitModel();
+      Image8BitModel &image8BitModel = models.image8BitModel();
       image8BitModel.setParam(blockInfo, 0, 0);
       m->setScaleFactor(2048, 128);
       return image8BitModel.mix(*m), m->p();
     }
     case IMAGE8GRAY: {
-      Image8bitModel &image8BitModel = models.image8BitModel();
+      Image8BitModel &image8BitModel = models.image8BitModel();
       image8BitModel.setParam(blockInfo, 1, 0);
       m->setScaleFactor(2048, 128);
       return image8BitModel.mix(*m), m->p();
     }
     case IMAGE24: {
-      Image24bitModel &image24BitModel = models.image24BitModel();
+      Image24BitModel &image24BitModel = models.image24BitModel();
       image24BitModel.setParam(blockInfo, 0, 0);
       m->setScaleFactor(1024, 128);
       return image24BitModel.mix(*m), m->p();
     }
     case IMAGE32: {
-      Image24bitModel &image24BitModel = models.image24BitModel();
+      Image24BitModel &image24BitModel = models.image24BitModel();
       image24BitModel.setParam(blockInfo, 1, 0);
       m->setScaleFactor(2048, 128);
       return image24BitModel.mix(*m), m->p();
     }
     case PNG8: {
-      Image8bitModel &image8BitModel = models.image8BitModel();
+      Image8BitModel &image8BitModel = models.image8BitModel();
       image8BitModel.setParam(blockInfo, 0, 1);
       m->setScaleFactor(2048, 128);
       return image8BitModel.mix(*m), m->p();
     }
     case PNG8GRAY: {
-      Image8bitModel &image8BitModel = models.image8BitModel();
+      Image8BitModel &image8BitModel = models.image8BitModel();
       image8BitModel.setParam(blockInfo, 1, 1);
       m->setScaleFactor(2048, 128);
       return image8BitModel.mix(*m), m->p();
     }
     case PNG24: {
-      Image24bitModel &image24BitModel = models.image24BitModel();
+      Image24BitModel &image24BitModel = models.image24BitModel();
       image24BitModel.setParam(blockInfo, 0, 1);
       m->setScaleFactor(1024, 128);
       return image24BitModel.mix(*m), m->p();
     }
     case PNG32: {
-      Image24bitModel &image24BitModel = models.image24BitModel();
+      Image24BitModel &image24BitModel = models.image24BitModel();
       image24BitModel.setParam(blockInfo, 1, 1);
       m->setScaleFactor(2048, 128);
       return image24BitModel.mix(*m), m->p();

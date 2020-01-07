@@ -4,7 +4,7 @@
 /**
  * Model for 8-bit image data
  */
-class Image8bitModel {
+class Image8BitModel {
 private:
     static constexpr int nSM0 = 2;
     static constexpr int nSM1 = 55;
@@ -26,7 +26,7 @@ public:
     SmallStationaryContextMap pltMap[nPltMaps];
     IndirectMap sceneMap[5];
     IndirectContext<uint8_t> iCtx[nPltMaps];
-    Buf buffer {0x100000}; // internal rotating buffer for (PNG unfiltered) pixel data
+    RingBuffer<uint8_t> buffer {0x100000}; // internal rotating buffer for (PNG unfiltered) pixel data
     Array<short> jumps {0x8000};
     //pixel neighborhood
     uint8_t WWWWWW = 0, WWWWW = 0, WWWW = 0, WWW = 0, WW = 0, W = 0;
@@ -43,7 +43,7 @@ public:
     int framePos = 0, prevFramePos = 0, frameWidth = 0, prevFrameWidth = 0;
     bool filterOn = false;
     int columns[2] = {1, 1}, column[2] {};
-    uint8_t MapCtxs[nSM1] = {0}, pOLS[nOLS] = {0};
+    uint8_t mapCtxs[nSM1] = {0}, pOLS[nOLS] = {0};
     static constexpr double lambda[nOLS] = {0.996, 0.87, 0.93, 0.8, 0.9};
     static constexpr int num[nOLS] = {32, 12, 15, 10, 14};
     OLS<double, uint8_t> ols[nOLS] = {{num[0], 1, lambda[0]},
@@ -52,17 +52,17 @@ public:
                                       {num[3], 1, lambda[3]},
                                       {num[4], 1, lambda[4]}};
     OLS<double, uint8_t> sceneOls {13, 1, 0.994};
-    const uint8_t *ols_ctx1[32] = {&WWWWWW, &WWWWW, &WWWW, &WWW, &WW, &W, &NWWWW, &NWWW, &NWW, &NW, &N, &NE, &NEE, &NEEE, &NEEEE, &NNWWW,
-                                   &NNWW, &NNW, &NN, &NNE, &NNEE, &NNEEE, &NNNWW, &NNNW, &NNN, &NNNE, &NNNEE, &NNNNW, &NNNN, &NNNNE, &NNNNN,
-                                   &NNNNNN};
-    const uint8_t *ols_ctx2[12] = {&WWW, &WW, &W, &NWW, &NW, &N, &NE, &NEE, &NNW, &NN, &NNE, &NNN};
-    const uint8_t *ols_ctx3[15] = {&N, &NE, &NEE, &NEEE, &NEEEE, &NN, &NNE, &NNEE, &NNEEE, &NNN, &NNNE, &NNNEE, &NNNN, &NNNNE, &NNNNN};
-    const uint8_t *ols_ctx4[10] = {&N, &NE, &NEE, &NEEE, &NN, &NNE, &NNEE, &NNN, &NNNE, &NNNN};
-    const uint8_t *ols_ctx5[14] = {&WWWW, &WWW, &WW, &W, &NWWW, &NWW, &NW, &N, &NNWW, &NNW, &NN, &NNNW, &NNN, &NNNN};
-    const uint8_t **ols_ctxs[nOLS] = {&ols_ctx1[0], &ols_ctx2[0], &ols_ctx3[0], &ols_ctx4[0], &ols_ctx5[0]};
+    const uint8_t *olsCtx1[32] = {&WWWWWW, &WWWWW, &WWWW, &WWW, &WW, &W, &NWWWW, &NWWW, &NWW, &NW, &N, &NE, &NEE, &NEEE, &NEEEE, &NNWWW,
+                                  &NNWW, &NNW, &NN, &NNE, &NNEE, &NNEEE, &NNNWW, &NNNW, &NNN, &NNNE, &NNNEE, &NNNNW, &NNNN, &NNNNE, &NNNNN,
+                                  &NNNNNN};
+    const uint8_t *olsCtx2[12] = {&WWW, &WW, &W, &NWW, &NW, &N, &NE, &NEE, &NNW, &NN, &NNE, &NNN};
+    const uint8_t *olsCtx3[15] = {&N, &NE, &NEE, &NEEE, &NEEEE, &NN, &NNE, &NNEE, &NNEEE, &NNN, &NNNE, &NNNEE, &NNNN, &NNNNE, &NNNNN};
+    const uint8_t *olsCtx4[10] = {&N, &NE, &NEE, &NEEE, &NN, &NNE, &NNEE, &NNN, &NNNE, &NNNN};
+    const uint8_t *olsCtx5[14] = {&WWWW, &WWW, &WW, &W, &NWWW, &NWW, &NW, &N, &NNWW, &NNW, &NN, &NNNW, &NNN, &NNNN};
+    const uint8_t **olsCtxs[nOLS] = {&olsCtx1[0], &olsCtx2[0], &olsCtx3[0], &olsCtx4[0], &olsCtx5[0]};
 
 public:
-    Image8bitModel(const Shared *const sh, ModelStats *st, const uint64_t size) : shared(sh), stats(st),
+    Image8BitModel(const Shared *const sh, ModelStats *st, const uint64_t size) : shared(sh), stats(st),
             cm(sh, size, nCM, 64, CM_USE_RUN_STATS), map {/* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
                     /*nSM0: 0- 1*/ {sh, 0,  8, 64, 1023},
                                    {sh, 15, 1, 64, 1023},
@@ -366,66 +366,66 @@ public:
             ctx = min(0x1F, (x - isPNG) / min(0x20, columns[0]));
             res = W;
           } else { // gray
-            MapCtxs[j++] = clamp4(W + N - NW, W, NW, N, NE);
-            MapCtxs[j++] = clip(W + N - NW);
-            MapCtxs[j++] = clamp4(W + NE - N, W, NW, N, NE);
-            MapCtxs[j++] = clip(W + NE - N);
-            MapCtxs[j++] = clamp4(N + NW - NNW, W, NW, N, NE);
-            MapCtxs[j++] = clip(N + NW - NNW);
-            MapCtxs[j++] = clamp4(N + NE - NNE, W, N, NE, NEE);
-            MapCtxs[j++] = clip(N + NE - NNE);
-            MapCtxs[j++] = (W + NEE) / 2;
-            MapCtxs[j++] = clip(N * 3 - NN * 3 + NNN);
-            MapCtxs[j++] = clip(W * 3 - WW * 3 + WWW);
-            MapCtxs[j++] = (W + clip(NE * 3 - NNE * 3 + buffer(w * 3 - 1))) / 2;
-            MapCtxs[j++] = (W + clip(NEE * 3 - buffer(w * 2 - 3) * 3 + buffer(w * 3 - 4))) / 2;
-            MapCtxs[j++] = clip(NN + buffer(w * 4) - buffer(w * 6));
-            MapCtxs[j++] = clip(WW + buffer(4) - buffer(6));
-            MapCtxs[j++] = clip((buffer(w * 5) - 6 * buffer(w * 4) + 15 * NNN - 20 * NN + 15 * N + clamp4(W * 2 - NWW, W, NW, N, NN)) / 6);
-            MapCtxs[j++] = clip(
+            mapCtxs[j++] = clamp4(W + N - NW, W, NW, N, NE);
+            mapCtxs[j++] = clip(W + N - NW);
+            mapCtxs[j++] = clamp4(W + NE - N, W, NW, N, NE);
+            mapCtxs[j++] = clip(W + NE - N);
+            mapCtxs[j++] = clamp4(N + NW - NNW, W, NW, N, NE);
+            mapCtxs[j++] = clip(N + NW - NNW);
+            mapCtxs[j++] = clamp4(N + NE - NNE, W, N, NE, NEE);
+            mapCtxs[j++] = clip(N + NE - NNE);
+            mapCtxs[j++] = (W + NEE) / 2;
+            mapCtxs[j++] = clip(N * 3 - NN * 3 + NNN);
+            mapCtxs[j++] = clip(W * 3 - WW * 3 + WWW);
+            mapCtxs[j++] = (W + clip(NE * 3 - NNE * 3 + buffer(w * 3 - 1))) / 2;
+            mapCtxs[j++] = (W + clip(NEE * 3 - buffer(w * 2 - 3) * 3 + buffer(w * 3 - 4))) / 2;
+            mapCtxs[j++] = clip(NN + buffer(w * 4) - buffer(w * 6));
+            mapCtxs[j++] = clip(WW + buffer(4) - buffer(6));
+            mapCtxs[j++] = clip((buffer(w * 5) - 6 * buffer(w * 4) + 15 * NNN - 20 * NN + 15 * N + clamp4(W * 2 - NWW, W, NW, N, NN)) / 6);
+            mapCtxs[j++] = clip(
                     (-3 * WW + 8 * W + clamp4(NEE * 3 - NNEE * 3 + buffer(w * 3 - 2), NE, NEE, buffer(w - 3), buffer(w - 4))) / 6);
-            MapCtxs[j++] = clip(NN + NW - buffer(w * 3 + 1));
-            MapCtxs[j++] = clip(NN + NE - buffer(w * 3 - 1));
-            MapCtxs[j++] = clip((W * 2 + NW) - (WW + 2 * NWW) + buffer(w + 3));
-            MapCtxs[j++] = clip(((NW + NWW) / 2) * 3 - buffer(w * 2 + 3) * 3 + (buffer(w * 3 + 4) + buffer(w * 3 + 5)) / 2);
-            MapCtxs[j++] = clip(NEE + NE - buffer(w * 2 - 3));
-            MapCtxs[j++] = clip(NWW + WW - buffer(w + 4));
-            MapCtxs[j++] = clip(((W + NW) * 3 - NWW * 6 + buffer(w + 3) + buffer(w * 2 + 3)) / 2);
-            MapCtxs[j++] = clip((NE * 2 + NNE) - (NNEE + buffer(w * 3 - 2) * 2) + buffer(w * 4 - 3));
-            MapCtxs[j++] = buffer(w * 6);
-            MapCtxs[j++] = (buffer(w - 4) + buffer(w - 6)) / 2;
-            MapCtxs[j++] = (buffer(4) + buffer(6)) / 2;
-            MapCtxs[j++] = (W + N + buffer(w - 5) + buffer(w - 7)) / 4;
-            MapCtxs[j++] = clip(buffer(w - 3) + W - NEE);
-            MapCtxs[j++] = clip(4 * NNN - 3 * buffer(w * 4));
-            MapCtxs[j++] = clip(N + NN - NNN);
-            MapCtxs[j++] = clip(W + WW - WWW);
-            MapCtxs[j++] = clip(W + NEE - NE);
-            MapCtxs[j++] = clip(WW + NEE - N);
-            MapCtxs[j++] = (clip(W * 2 - NW) + clip(W * 2 - NWW) + N + NE) / 4;
-            MapCtxs[j++] = clamp4(N * 2 - NN, W, N, NE, NEE);
-            MapCtxs[j++] = (N + NNN) / 2;
-            MapCtxs[j++] = clip(NN + W - NNW);
-            MapCtxs[j++] = clip(NWW + N - NNWW);
-            MapCtxs[j++] = clip((4 * WWW - 15 * WW + 20 * W + clip(NEE * 2 - NNEE)) / 10);
-            MapCtxs[j++] = clip((buffer(w * 3 - 3) - 4 * NNEE + 6 * NE + clip(W * 3 - NW * 3 + NNW)) / 4);
-            MapCtxs[j++] = clip((N * 2 + NE) - (NN + 2 * NNE) + buffer(w * 3 - 1));
-            MapCtxs[j++] = clip((NW * 2 + NNW) - (NNWW + buffer(w * 3 + 2) * 2) + buffer(w * 4 + 3));
-            MapCtxs[j++] = clip(NNWW + W - buffer(w * 2 + 3));
-            MapCtxs[j++] = clip(
+            mapCtxs[j++] = clip(NN + NW - buffer(w * 3 + 1));
+            mapCtxs[j++] = clip(NN + NE - buffer(w * 3 - 1));
+            mapCtxs[j++] = clip((W * 2 + NW) - (WW + 2 * NWW) + buffer(w + 3));
+            mapCtxs[j++] = clip(((NW + NWW) / 2) * 3 - buffer(w * 2 + 3) * 3 + (buffer(w * 3 + 4) + buffer(w * 3 + 5)) / 2);
+            mapCtxs[j++] = clip(NEE + NE - buffer(w * 2 - 3));
+            mapCtxs[j++] = clip(NWW + WW - buffer(w + 4));
+            mapCtxs[j++] = clip(((W + NW) * 3 - NWW * 6 + buffer(w + 3) + buffer(w * 2 + 3)) / 2);
+            mapCtxs[j++] = clip((NE * 2 + NNE) - (NNEE + buffer(w * 3 - 2) * 2) + buffer(w * 4 - 3));
+            mapCtxs[j++] = buffer(w * 6);
+            mapCtxs[j++] = (buffer(w - 4) + buffer(w - 6)) / 2;
+            mapCtxs[j++] = (buffer(4) + buffer(6)) / 2;
+            mapCtxs[j++] = (W + N + buffer(w - 5) + buffer(w - 7)) / 4;
+            mapCtxs[j++] = clip(buffer(w - 3) + W - NEE);
+            mapCtxs[j++] = clip(4 * NNN - 3 * buffer(w * 4));
+            mapCtxs[j++] = clip(N + NN - NNN);
+            mapCtxs[j++] = clip(W + WW - WWW);
+            mapCtxs[j++] = clip(W + NEE - NE);
+            mapCtxs[j++] = clip(WW + NEE - N);
+            mapCtxs[j++] = (clip(W * 2 - NW) + clip(W * 2 - NWW) + N + NE) / 4;
+            mapCtxs[j++] = clamp4(N * 2 - NN, W, N, NE, NEE);
+            mapCtxs[j++] = (N + NNN) / 2;
+            mapCtxs[j++] = clip(NN + W - NNW);
+            mapCtxs[j++] = clip(NWW + N - NNWW);
+            mapCtxs[j++] = clip((4 * WWW - 15 * WW + 20 * W + clip(NEE * 2 - NNEE)) / 10);
+            mapCtxs[j++] = clip((buffer(w * 3 - 3) - 4 * NNEE + 6 * NE + clip(W * 3 - NW * 3 + NNW)) / 4);
+            mapCtxs[j++] = clip((N * 2 + NE) - (NN + 2 * NNE) + buffer(w * 3 - 1));
+            mapCtxs[j++] = clip((NW * 2 + NNW) - (NNWW + buffer(w * 3 + 2) * 2) + buffer(w * 4 + 3));
+            mapCtxs[j++] = clip(NNWW + W - buffer(w * 2 + 3));
+            mapCtxs[j++] = clip(
                     (-buffer(w * 4) + 5 * NNN - 10 * NN + 10 * N + clip(W * 4 - NWW * 6 + buffer(w * 2 + 3) * 4 - buffer(w * 3 + 4))) / 5);
-            MapCtxs[j++] = clip(NEE + clip(buffer(w - 3) * 2 - buffer(w * 2 - 4)) - buffer(w - 4));
-            MapCtxs[j++] = clip(NW + W - NWW);
-            MapCtxs[j++] = clip((N * 2 + NW) - (NN + 2 * NNW) + buffer(w * 3 + 1));
-            MapCtxs[j++] = clip(NN + clip(NEE * 2 - buffer(w * 2 - 3)) - NNE);
-            MapCtxs[j++] = clip((-buffer(4) + 5 * WWW - 10 * WW + 10 * W + clip(NE * 2 - NNE)) / 5);
-            MapCtxs[j++] = clip((-buffer(5) + 4 * buffer(4) - 5 * WWW + 5 * W + clip(NE * 2 - NNE)) / 4);
-            MapCtxs[j++] = clip((WWW - 4 * WW + 6 * W + clip(NE * 3 - NNE * 3 + buffer(w * 3 - 1))) / 4);
-            MapCtxs[j++] = clip((-NNEE + 3 * NE + clip(W * 4 - NW * 6 + NNW * 4 - buffer(w * 3 + 1))) / 3);
-            MapCtxs[j++] = ((W + N) * 3 - NW * 2) / 4;
+            mapCtxs[j++] = clip(NEE + clip(buffer(w - 3) * 2 - buffer(w * 2 - 4)) - buffer(w - 4));
+            mapCtxs[j++] = clip(NW + W - NWW);
+            mapCtxs[j++] = clip((N * 2 + NW) - (NN + 2 * NNW) + buffer(w * 3 + 1));
+            mapCtxs[j++] = clip(NN + clip(NEE * 2 - buffer(w * 2 - 3)) - NNE);
+            mapCtxs[j++] = clip((-buffer(4) + 5 * WWW - 10 * WW + 10 * W + clip(NE * 2 - NNE)) / 5);
+            mapCtxs[j++] = clip((-buffer(5) + 4 * buffer(4) - 5 * WWW + 5 * W + clip(NE * 2 - NNE)) / 4);
+            mapCtxs[j++] = clip((WWW - 4 * WW + 6 * W + clip(NE * 3 - NNE * 3 + buffer(w * 3 - 1))) / 4);
+            mapCtxs[j++] = clip((-NNEE + 3 * NE + clip(W * 4 - NW * 6 + NNW * 4 - buffer(w * 3 + 1))) / 3);
+            mapCtxs[j++] = ((W + N) * 3 - NW * 2) / 4;
             for( j = 0; j < nOLS; j++ ) {
               ols[j].update(W);
-              pOLS[j] = clip(int(floor(ols[j].predict(ols_ctxs[j]))));
+              pOLS[j] = clip(int(floor(ols[j].predict(olsCtxs[j]))));
             }
 
             cm.set(0);
@@ -475,23 +475,23 @@ public:
         }
       }
       INJECT_SHARED_c0
-      uint8_t B = (c0 << (8 - bpos));
+      uint8_t b = (c0 << (8 - bpos));
       if( x || !isPNG ) {
         if( gray ) {
           int i = 0;
           map[i++].setDirect(0);
           map[i++].setDirect(
-                  (((uint8_t) (clip(W + N - NW) - px - B)) * 8 + bpos) | (logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) << 11));
+                  (((uint8_t) (clip(W + N - NW) - px - b)) * 8 + bpos) | (logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) << 11));
 
           for( int j = 0; j < nSM1; i++, j++ )
-            map[i].setDirect((MapCtxs[j] - px - B) * 8 + bpos);
+            map[i].setDirect((mapCtxs[j] - px - b) * 8 + bpos);
 
           for( int j = 0; i < nSM; i++, j++ )
-            map[i].setDirect((pOLS[j] - px - B) * 8 + bpos);
+            map[i].setDirect((pOLS[j] - px - b) * 8 + bpos);
         }
         sceneMap[2].setDirect(finalize64(hash(x, line), 19) * 8 + bpos);
-        sceneMap[3].setDirect((prvFrmPx - B) * 8 + bpos);
-        sceneMap[4].setDirect((prvFrmPrediction - B) * 8 + bpos);
+        sceneMap[3].setDirect((prvFrmPx - b) * 8 + bpos);
+        sceneMap[4].setDirect((prvFrmPrediction - b) * 8 + bpos);
       }
 
       // predict next bit

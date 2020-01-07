@@ -99,13 +99,13 @@ public:
       return instance;
     }
 
-    Image24bitModel &image24BitModel() {
-      static Image24bitModel instance {shared, stats, MEM * 4};
+    Image24BitModel &image24BitModel() {
+      static Image24BitModel instance {shared, stats, MEM * 4};
       return instance;
     }
 
-    Image8bitModel &image8BitModel() {
-      static Image8bitModel instance {shared, stats, MEM * 4};
+    Image8BitModel &image8BitModel() {
+      static Image8BitModel instance {shared, stats, MEM * 4};
       return instance;
     }
 

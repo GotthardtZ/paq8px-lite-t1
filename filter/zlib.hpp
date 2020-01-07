@@ -65,7 +65,7 @@ int zlibInflateInit(z_streamp strm, int zh) {
     return inflateInit(strm);
 }
 
-MTFList MTF(81);
+MTFList mtf(81);
 
 int encodeZlib(File *in, File *out, uint64_t len, int &headerSize) {
   const int block = 1U << 16U, limit = 128;
@@ -140,7 +140,7 @@ int encodeZlib(File *in, File *out, uint64_t len, int &headerSize) {
       nTrials = 0;
 
       // Recompress/deflate block with all possible parameters
-      for( int j = MTF.getFirst(); j >= 0; j = MTF.getNext()) {
+      for( int j = mtf.getFirst(); j >= 0; j = mtf.getNext()) {
         if( diffCount[j] == limit )
           continue;
         nTrials++;
@@ -190,7 +190,7 @@ int encodeZlib(File *in, File *out, uint64_t len, int &headerSize) {
   inflateEnd(&mainStrm);
   if( minCount == limit )
     return false;
-  MTF.moveToFront(index);
+  mtf.moveToFront(index);
 
   // Step 3 - write parameters, differences and precompressed (inflated) data
   out->putChar(diffCount[index]);

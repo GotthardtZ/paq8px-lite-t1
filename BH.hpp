@@ -2,10 +2,10 @@
 #define PAQ8PX_BH_HPP
 
 /**
- * A BH maps a 32 bit hash to an array of B bytes (checksum and B-2 values)
+ * A BH maps a 32 bit hash to an array of b bytes (checksum and b-2 values)
  * The index must be a multiplicative hash.
  *
- * If a collision is detected, up to M nearby locations in the same
+ * If a collision is detected, up to m nearby locations in the same
  * cache line are tested and the first matching checksum or
  * empty element is returned.
  *
@@ -25,9 +25,9 @@ class BH {
 
 public:
     /**
-     * BH bh(n); creates n element table with B bytes each. n must be a power of 2.
+     * BH bh(n); creates n element table with b bytes each. n must be a power of 2.
      * The first byte of each element is reserved for a checksum to detect collisions.
-     * The remaining B-1 bytes are values, prioritized by the first value. This byte is 0 to mark an unused element.
+     * The remaining b-1 bytes are values, prioritized by the first value. This byte is 0 to mark an unused element.
      * @param n number of elements in the table
      */
     explicit BH(uint64_t n) : t(n * B), mask(uint32_t(n - 1)), hashBits(ilog2(mask + 1)) {
@@ -37,7 +37,7 @@ public:
     /**
      * bh[ctx] returns a pointer to the ctx'th element, such that
      * bh[ctx][0] is a checksum of ctx, bh[ctx][1] is the priority, and
-     * bh[ctx][2..B-1] are other values (0-255).
+     * bh[ctx][2..b-1] are other values (0-255).
      * @tparam B number of bytes
      * @param ctx index
      * @return pointer to the ctx'th element

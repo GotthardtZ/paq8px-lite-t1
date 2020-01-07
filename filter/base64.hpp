@@ -1,10 +1,32 @@
 #ifndef PAQ8PX_BASE64_HPP
 #define PAQ8PX_BASE64_HPP
 
-static constexpr char table1[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+namespace base64 {
+    constexpr bool isdigit(int c) noexcept {
+      return c >= '0' && c <= '9';
+    }
+
+    constexpr bool islower(int c) noexcept {
+      return c >= 'a' && c <= 'z';
+    }
+
+    constexpr bool isupper(int c) noexcept {
+      return c >= 'A' && c <= 'Z';
+    }
+
+    constexpr bool isalpha(int c) noexcept {
+      return islower(c) || isupper(c);
+    }
+
+    constexpr bool isalnum(int c) noexcept {
+      return isalpha(c) || isdigit(c);
+    }
+
+    static constexpr char table1[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+}
 
 bool isBase64(unsigned char c) {
-  return (isalnum(c) || (c == '+') || (c == '/') || (c == 10) || (c == 13));
+  return (base64::isalnum(c) || (c == '+') || (c == '/') || (c == 10) || (c == 13));
 }
 
 uint64_t decodeBase64(File *in, File *out, FMode mode, uint64_t &diffFound) {
@@ -16,12 +38,12 @@ uint64_t decodeBase64(File *in, File *out, FMode mode, uint64_t &diffFound) {
   int tlf = 0;
   lineSize = in->getchar();
   outLen = in->getchar();
-  outLen += (in->getchar() << 8);
-  outLen += (in->getchar() << 16);
+  outLen += (in->getchar() << 8U);
+  outLen += (in->getchar() << 16U);
   tlf = (in->getchar());
-  outLen += ((tlf & 63) << 24);
-  Array<uint8_t> ptr((outLen >> 2) * 4 + 10);
-  tlf = (tlf & 192);
+  outLen += ((tlf & 63U) << 24U);
+  Array<uint8_t> ptr((outLen >> 2U) * 4 + 10);
+  tlf = (tlf & 192U);
   if( tlf == 128 )
     tlf = 10; // LF: 10
   else if( tlf == 64 )
@@ -42,10 +64,10 @@ uint64_t decodeBase64(File *in, File *out, FMode mode, uint64_t &diffFound) {
     if( len ) {
       uint8_t in0, in1, in2;
       in0 = inn[0], in1 = inn[1], in2 = inn[2];
-      ptr[fle++] = (table1[in0 >> 2]);
-      ptr[fle++] = (table1[((in0 & 0x03) << 4) | ((in1 & 0xf0) >> 4)]);
-      ptr[fle++] = ((len > 1 ? table1[((in1 & 0x0f) << 2) | ((in2 & 0xc0) >> 6)] : '='));
-      ptr[fle++] = ((len > 2 ? table1[in2 & 0x3f] : '='));
+      ptr[fle++] = (base64::table1[in0 >> 2]);
+      ptr[fle++] = (base64::table1[((in0 & 0x03) << 4) | ((in1 & 0xf0) >> 4)]);
+      ptr[fle++] = ((len > 1 ? base64::table1[((in1 & 0x0f) << 2) | ((in2 & 0xc0) >> 6)] : '='));
+      ptr[fle++] = ((len > 2 ? base64::table1[in2 & 0x3f] : '='));
       blocksOut++;
     }
     if( blocksOut >= (lineSize / 4) && lineSize != 0 ) { //no lf if lineSize==0
@@ -72,9 +94,9 @@ uint64_t decodeBase64(File *in, File *out, FMode mode, uint64_t &diffFound) {
 }
 
 inline char valueB(char c) {
-  const char *p = strchr(table1, c);
+  const char *p = strchr(base64::table1, c);
   if( p )
-    return (char) (p - table1);
+    return (char) (p - base64::table1);
   return 0;
 }
 
@@ -103,8 +125,8 @@ void encodeBase64(File *in, File *out, uint64_t len64) {
     if( i == 4 ) {
       for( j = 0; j < 4; j++ )
         src[j] = valueB(src[j]);
-      src[0] = (src[0] << 2) + ((src[1] & 0x30) >> 4);
-      src[1] = ((src[1] & 0xf) << 4) + ((src[2] & 0x3c) >> 2);
+      src[0] = (src[0] << 2) + ((src[1] & 0x30U) >> 4);
+      src[1] = ((src[1] & 0xf) << 4) + ((src[2] & 0x3CU) >> 2);
       src[2] = ((src[2] & 0x3) << 6) + src[3];
 
       ptr[olen++] = src[0];

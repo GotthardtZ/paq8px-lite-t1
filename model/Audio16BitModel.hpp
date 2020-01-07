@@ -19,7 +19,7 @@ public:
     static constexpr int MIXERCONTEXTSETS = 5;
 
 private:
-    SmallStationaryContextMap sMap1b[nSSM][nCtx];
+    SmallStationaryContextMap sMap1B[nSSM][nCtx];
     OLS<double, short> ols[nOLS][2] {{{128, 24, 0.9975}, {128, 24, 0.9975}},
                                      {{90,  30, 0.997},  {90,  30, 0.997}},
                                      {{90,  31, 0.996},  {90,  31, 0.996}},
@@ -37,7 +37,7 @@ private:
     short sample = 0;
 
 public:
-    Audio16BitModel(const Shared *const sh, ModelStats *st) : AudioModel(sh, st), sMap1b {
+    Audio16BitModel(const Shared *const sh, ModelStats *st) : AudioModel(sh, st), sMap1B {
             /*nOLS: 0-3*/ {{sh, 17, 1, 7, 128}, {sh, 17, 1, 10, 128}, {sh, 17, 1, 6, 86}, {sh, 17, 1, 6, 128}},
                           {{sh, 17, 1, 7, 128}, {sh, 17, 1, 10, 128}, {sh, 17, 1, 6, 86}, {sh, 17, 1, 6, 128}},
                           {{sh, 17, 1, 7, 128}, {sh, 17, 1, 10, 128}, {sh, 17, 1, 6, 86}, {sh, 17, 1, 6, 128}},
@@ -65,7 +65,7 @@ public:
         stereo = (info & 1U);
         lsb = (info < 4);
         mask = 0;
-        stats->Wav = (stereo + 1) * 2;
+        stats->wav = (stereo + 1) * 2;
         wMode = info;
         for( int i = 0; i < nLMS; i++ )
           lms[i][0].reset(), lms[i][1].reset();
@@ -152,23 +152,23 @@ public:
         stats->Audio = 0x80 | (mxCtx = ilog2(min(0x1F, bitCount(mask))) * 4 + ch * 2 + lsb);
       }
 
-      const auto B = short(
+      const auto b = short(
               (wMode < 4) ? (lsb) ? uint8_t(c0 << (8 - bpos)) : (c0 << (16 - bpos)) | c1 : (lsb) ? (c1 << 8U) | uint8_t(c0 << (8 - bpos)) :
                                                                                            c0 << (16 - bpos));
 
       for( int i = 0; i < nSSM; i++ ) {
-        const uint32_t ctx0 = uint16_t(prd[i][ch][0] - B);
-        const uint32_t ctx1 = uint16_t(prd[i][ch][1] - B);
+        const uint32_t ctx0 = uint16_t(prd[i][ch][0] - b);
+        const uint32_t ctx1 = uint16_t(prd[i][ch][1] - b);
 
         const int shift = (!lsb);
-        sMap1b[i][0].set((lsb << 16) | (bpos << 13) | (ctx0 >> (3 << shift)));
-        sMap1b[i][1].set((lsb << 16) | (bpos << 13) | (ctx0 >> ((!lsb) + (3 << shift))));
-        sMap1b[i][2].set((lsb << 16) | (bpos << 13) | (ctx0 >> ((!lsb) * 2 + (3 << shift))));
-        sMap1b[i][3].set((lsb << 16) | (bpos << 13) | (ctx1 >> ((!lsb) + (3 << shift))));
-        sMap1b[i][0].mix(m);
-        sMap1b[i][1].mix(m);
-        sMap1b[i][2].mix(m);
-        sMap1b[i][3].mix(m);
+        sMap1B[i][0].set((lsb << 16) | (bpos << 13) | (ctx0 >> (3 << shift)));
+        sMap1B[i][1].set((lsb << 16) | (bpos << 13) | (ctx0 >> ((!lsb) + (3 << shift))));
+        sMap1B[i][2].set((lsb << 16) | (bpos << 13) | (ctx0 >> ((!lsb) * 2 + (3 << shift))));
+        sMap1B[i][3].set((lsb << 16) | (bpos << 13) | (ctx1 >> ((!lsb) + (3 << shift))));
+        sMap1B[i][0].mix(m);
+        sMap1B[i][1].mix(m);
+        sMap1B[i][2].mix(m);
+        sMap1B[i][3].mix(m);
       }
 
       m.set((errLog << 9U) | (lsb << 8U) | c0, 8192);

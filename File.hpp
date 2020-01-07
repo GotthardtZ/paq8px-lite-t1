@@ -227,7 +227,7 @@ static void makeDirectories(const char *filename) {
 // in the root directory causing access denied error when User Account Control (UAC) is on.
 // To avoid this issue with tmpFile() we simply use fopen() instead.
 // We create the temporary file in the directory where the executable is launched from.
-// Luckily the MS c runtime library provides two (MS specific) fopen() flags: "T"emporary and "D"elete.
+// Luckily the MS c runtime library provides two (MS specific) fopen() flags: "T"emporary and "d"elete.
 
 FILE *makeTmpFile() {
 #if defined(WINDOWS)

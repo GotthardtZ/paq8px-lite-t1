@@ -6,7 +6,7 @@
 // A ContextMap maps contexts to bit histories and makes predictions
 // to a Mixer.  Methods common to all classes:
 //
-// ContextMap cm(M, c); creates using about M bytes of memory (a power
+// ContextMap cm(m, c); creates using about m bytes of memory (a power
 //   of 2) for c contexts.
 // cm.set(cx);  sets the next context to cx, called up to c times
 //   cx is an arbitrary 32 bit value that identifies the context.
@@ -22,7 +22,7 @@
 // The different types are as follows:
 //
 
-// - SmallStationaryContextMap.  0 <= cx*256 < M.
+// - SmallStationaryContextMap.  0 <= cx*256 < m.
 //     The state is a 16-bit probability that is adjusted after each
 //     prediction.  c=1.
 // - ContextMap.  For large contexts, c >= 1.  context must be hashed.
@@ -121,7 +121,7 @@ private:
 public:
     // Construct using m bytes of memory for c contexts
     ContextMap(const Shared *const sh, uint64_t m, const int c) : shared(sh), c(c), t(m >> 6), cp(c), cp0(c), cxt(c), chk(c), runP(c),
-            sm(sh, c, 256, 1023, StateMap::BIT_HISTORY), cn(0), mask(uint32_t(t.size() - 1)), hashBits(ilog2(mask + 1)), validFlags(0) {
+            sm(sh, c, 256, 1023, StateMap::BitHistory), cn(0), mask(uint32_t(t.size() - 1)), hashBits(ilog2(mask + 1)), validFlags(0) {
       assert(m >= 64 && isPowerOf2(m));
       assert(sizeof(E) == 64);
       assert(c <= (int) sizeof(validFlags) * 8); // validFlags is 64 bits - it can't support more than 64 contexts

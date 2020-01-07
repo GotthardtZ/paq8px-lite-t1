@@ -77,7 +77,7 @@ class LZWFilter : Filter {
       while( !done ) {
         buffer = in->getchar();
         if( buffer < 0 ) {
-          return 0;
+          return;// 0;
         }
         for( int j = 0; j < 8; j++ ) {
           code += code + ((buffer >> (7 - j)) & 1), bitsUsed++;
@@ -100,7 +100,7 @@ class LZWFilter : Filter {
                 out->putChar(a);
                 dic.addEntry(parent, a);
               } else
-                return 0;
+                return;// 0;
               parent = code;
             }
             bitsUsed = 0;
@@ -110,7 +110,7 @@ class LZWFilter : Filter {
           }
         }
       }
-      return 1;
+      return;// 1;
     }
 
     uint64_t decode(File *in, File *out, FMode fMode, uint64_t size, uint64_t &diffFound) override {

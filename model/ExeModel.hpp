@@ -10,7 +10,7 @@
  *
  * Attempts to parse the input stream as x86/x64 instructions, and quantizes them into 32-bit representations that are then
  * used as context to predict the next bits, and also extracts possible sparse contexts at several previous positions that
- * are relevant to parsing (prefixes, opcode, Mod and R/M fields of the ModRM byte, Scale field of the SIB byte)
+ * are relevant to parsing (prefixes, opcode, Mod and R/m fields of the ModRM byte, Scale field of the SIB byte)
  */
 class ExeModel {
     // formats
@@ -40,7 +40,7 @@ class ExeModel {
     };
 
     // 1 byte opcodes
-    static constexpr uint8_t Table1[256] = {
+    static constexpr uint8_t table1[256] = {
             // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
             fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fNM | fBI, fNM | fDI, fNM | fNI, fNM | fNI, fMR | fNI, fMR | fNI, fMR | fNI,
             fMR | fNI, fNM | fBI, fNM | fDI, fNM | fNI, fNM | fNI, // 0
@@ -80,7 +80,7 @@ class ExeModel {
     };
 
     // 2 byte opcodes
-    static constexpr uint8_t Table2[256] = {
+    static constexpr uint8_t table2[256] = {
             // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
             fERR, fERR, fERR, fERR, fERR, fERR, fNM | fNI, fERR, fNM | fNI, fNM | fNI, fERR, fERR, fERR, fERR, fERR, fERR, // 0
             fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fERR, fERR, fERR, fERR, fERR,
@@ -119,7 +119,7 @@ class ExeModel {
     };
 
     // 3 byte opcodes 0F38XX
-    static constexpr uint8_t Table3_38[256] = {
+    static constexpr uint8_t table3_38[256] = {
             // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
             fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI,
             fMR | fNI, fERR, fERR, fERR, fERR, // 0
@@ -144,7 +144,7 @@ class ExeModel {
     };
 
     // 3 byte opcodes 0F3AXX
-    static constexpr uint8_t Table3_3A[256] = {
+    static constexpr uint8_t table3_3A[256] = {
             // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
             fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, fMR | fBI, fMR | fBI, fMR | fBI, fMR | fBI, fMR | fBI, fMR | fBI, fMR | fBI,
             fMR | fBI, // 0
@@ -166,7 +166,7 @@ class ExeModel {
     };
 
     // escape opcodes using ModRM byte to get more variants
-    static constexpr uint8_t TableX[32] = {
+    static constexpr uint8_t tableX[32] = {
             // 0       1       2       3       4       5       6       7
             fMR | fBI, fERR, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, // escapes for 0xf6
             fMR | fDI, fERR, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, // escapes for 0xf7
@@ -174,9 +174,9 @@ class ExeModel {
             fMR | fNI, fMR | fNI, fMR | fNI, fERR, fMR | fNI, fERR, fMR | fNI, fERR, // escapes for 0xff
     };
 
-    static constexpr uint8_t InvalidX64Ops[19] = {0x06, 0x07, 0x16, 0x17, 0x1E, 0x1F, 0x27, 0x2F, 0x37, 0x3F, 0x60, 0x61, 0x62, 0x82, 0x9A,
+    static constexpr uint8_t invalidX64Ops[19] = {0x06, 0x07, 0x16, 0x17, 0x1E, 0x1F, 0x27, 0x2F, 0x37, 0x3F, 0x60, 0x61, 0x62, 0x82, 0x9A,
                                                   0xD4, 0xD5, 0xD6, 0xEA,};
-    static constexpr uint8_t X64Prefixes[8] = {0x26, 0x2E, 0x36, 0x3E, 0x9B, 0xF0, 0xF2, 0xF3,};
+    static constexpr uint8_t x64Prefixes[8] = {0x26, 0x2E, 0x36, 0x3E, 0x9B, 0xF0, 0xF2, 0xF3,};
 
     enum InstructionCategory {
         OP_INVALID = 0,
@@ -213,7 +213,7 @@ class ExeModel {
         OP_SSE_DATAMOV = 31,
     };
 
-    static constexpr uint8_t TypeOp1[256] = {OP_GEN_ARITH_BINARY, OP_GEN_ARITH_BINARY, OP_GEN_ARITH_BINARY, OP_GEN_ARITH_BINARY, //03
+    static constexpr uint8_t typeOp1[256] = {OP_GEN_ARITH_BINARY, OP_GEN_ARITH_BINARY, OP_GEN_ARITH_BINARY, OP_GEN_ARITH_BINARY, //03
                                              OP_GEN_ARITH_BINARY, OP_GEN_ARITH_BINARY, OP_GEN_STACK, OP_GEN_STACK, //07
                                              OP_GEN_LOGICAL, OP_GEN_LOGICAL, OP_GEN_LOGICAL, OP_GEN_LOGICAL, //0B
                                              OP_GEN_LOGICAL, OP_GEN_LOGICAL, OP_GEN_STACK, OP_PREFIX, //0F
@@ -279,7 +279,7 @@ class ExeModel {
                                              OP_GEN_FLAG_CONTROL, OP_GEN_FLAG_CONTROL, OP_GEN_ARITH_BINARY, OP_GEN_BRANCH, //FF
     };
 
-    static constexpr uint8_t TypeOp2[256] = {OP_SYSTEM, OP_SYSTEM, OP_SYSTEM, OP_SYSTEM, //03
+    static constexpr uint8_t typeOp2[256] = {OP_SYSTEM, OP_SYSTEM, OP_SYSTEM, OP_SYSTEM, //03
                                              OP_INVALID, OP_SYSTEM, OP_SYSTEM, OP_SYSTEM, //07
                                              OP_SYSTEM, OP_SYSTEM, OP_INVALID, OP_GEN_CONTROL, //0B
                                              OP_INVALID, OP_GEN_CONTROL, OP_INVALID, OP_INVALID, //0F
@@ -345,7 +345,7 @@ class ExeModel {
                                              OP_MMX, OP_MMX, OP_MMX, OP_INVALID, //FF
     };
 
-    static constexpr uint8_t TypeOp3_38[256] = {OP_SSE, OP_SSE, OP_SSE, OP_SSE, //03
+    static constexpr uint8_t typeOp3_38[256] = {OP_SSE, OP_SSE, OP_SSE, OP_SSE, //03
                                                 OP_SSE, OP_SSE, OP_SSE, OP_SSE, //07
                                                 OP_SSE, OP_SSE, OP_SSE, OP_SSE, //0B
                                                 OP_INVALID, OP_INVALID, OP_INVALID, OP_INVALID, //0F
@@ -411,7 +411,7 @@ class ExeModel {
                                                 OP_INVALID, OP_INVALID, OP_INVALID, OP_INVALID, //FF
     };
 
-    static constexpr uint8_t TypeOp3_3A[256] = {OP_INVALID, OP_INVALID, OP_INVALID, OP_INVALID, //03
+    static constexpr uint8_t typeOp3_3A[256] = {OP_INVALID, OP_INVALID, OP_INVALID, OP_INVALID, //03
                                                 OP_INVALID, OP_INVALID, OP_INVALID, OP_INVALID, //07
                                                 OP_SSE, OP_SSE, OP_SSE, OP_SSE, //0B
                                                 OP_SSE, OP_SSE, OP_SSE, OP_SSE, //0F
@@ -477,7 +477,7 @@ class ExeModel {
                                                 OP_INVALID, OP_INVALID, OP_INVALID, OP_INVALID, //FF
     };
 
-    static constexpr uint8_t TypeOpX[32] = {
+    static constexpr uint8_t typeOpX[32] = {
             // escapes for F6
             OP_GEN_LOGICAL, OP_GEN_LOGICAL, OP_GEN_LOGICAL, OP_GEN_ARITH_BINARY, OP_GEN_ARITH_BINARY, OP_GEN_ARITH_BINARY,
             OP_GEN_ARITH_BINARY, OP_GEN_ARITH_BINARY,
@@ -557,11 +557,11 @@ class ExeModel {
     static constexpr uint32_t hasModRm = 0x40U << (8 + codeShift); // 0x00020000
     static constexpr uint32_t ModRMShift = 7 + 8 + codeShift; // 18
     static constexpr uint32_t SIBScaleShift = ModRMShift + 8 - 6; // 20
-    static constexpr uint32_t RegDWordDisplacement = 1U << (8 + SIBScaleShift); // 0x10000000
-    static constexpr uint32_t AddressMode = 2U << (8 + SIBScaleShift); // 0x20000000
-    static constexpr uint32_t TypeShift = 2U + 8 + SIBScaleShift; // 30
-    static constexpr uint32_t CategoryShift = 5U;
-    static constexpr uint32_t CategoryMask = ((1U << CategoryShift) - 1); //0x1F (31)
+    static constexpr uint32_t regDWordDisplacement = 1U << (8 + SIBScaleShift); // 0x10000000
+    static constexpr uint32_t addressMode = 2U << (8 + SIBScaleShift); // 0x20000000
+    static constexpr uint32_t typeShift = 2U + 8 + SIBScaleShift; // 30
+    static constexpr uint32_t categoryShift = 5U;
+    static constexpr uint32_t categoryMask = ((1U << categoryShift) - 1); //0x1F (31)
     static constexpr uint8_t ModRM_mod = 0xC0;
     static constexpr uint8_t ModRM_reg = 0x38;
     static constexpr uint8_t ModRM_rm = 0x07;
@@ -596,7 +596,7 @@ private:
 
     static inline bool isInvalidX64Op(const uint8_t op) {
       for( int i = 0; i < 19; i++ ) {
-        if( op == InvalidX64Ops[i] )
+        if( op == invalidX64Ops[i] )
           return true;
       }
       return false;
@@ -604,7 +604,7 @@ private:
 
     static inline bool isValidX64Prefix(const uint8_t prefix) {
       for( int i = 0; i < 8; i++ ) {
-        if( prefix == X64Prefixes[i] )
+        if( prefix == x64Prefixes[i] )
           return true;
       }
       return ((prefix >= 0x40 && prefix <= 0x4F) || (prefix >= 0x64 && prefix <= 0x67));
@@ -612,19 +612,19 @@ private:
 
     static void processMode(Instruction &op, ExeState &state) {
       if((op.flags & fMODE) == fAM ) {
-        op.data |= AddressMode;
+        op.data |= addressMode;
         op.bytesRead = 0;
         switch( op.flags & fTYPE ) {
           case fDR:
-            op.data |= (2 << TypeShift);
+            op.data |= (2 << typeShift);
           case fDA:
-            op.data |= (1 << TypeShift);
+            op.data |= (1 << typeShift);
           case fAD: {
             state = Read32;
             break;
           }
           case fBR: {
-            op.data |= (2 << TypeShift);
+            op.data |= (2 << typeShift);
             state = Read8;
           }
         }
@@ -635,7 +635,7 @@ private:
             break;
           case fWI: {
             state = Read16;
-            op.data |= (1 << TypeShift);
+            op.data |= (1 << typeShift);
             op.bytesRead = 0;
             break;
           }
@@ -644,10 +644,10 @@ private:
             op.imm8 = ((op.REX & REX_w) > 0 && (op.code & 0xF8U) == 0xB8U);
             if( !op.o16 || op.imm8 ) {
               state = Read32;
-              op.data |= (2 << TypeShift);
+              op.data |= (2 << typeShift);
             } else {
               state = Read16;
-              op.data |= (3 << TypeShift);
+              op.data |= (3 << typeShift);
             }
             op.bytesRead = 0;
             break;
@@ -688,8 +688,8 @@ private:
     }
 
     static void readFlags(Instruction &op, ExeState &state) {
-      op.flags = Table1[op.code];
-      op.category = TypeOp1[op.code];
+      op.flags = table1[op.code];
+      op.category = typeOp1[op.code];
       checkFlags(op, state);
     }
 
@@ -714,7 +714,7 @@ private:
     }
 
     static inline uint32_t opNCategory(uint32_t &mask, const uint32_t n) {
-      return ((mask >> (CategoryShift * (n - 1))) & CategoryMask);
+      return ((mask >> (categoryShift * (n - 1))) & categoryMask);
     }
 
     inline int pref(const int i) {
@@ -791,7 +791,7 @@ void ExeModel::update() {
         if( !op.decoding ) {
           totalOps += (op.data != 0) - (cache.Index && cache.Op[cache.Index & (CacheSize - 1)] != 0);
           opMask = (opMask << 1) | (state != Error);
-          opCategoryMask = (opCategoryMask << CategoryShift) | (op.category);
+          opCategoryMask = (opCategoryMask << categoryShift) | (op.category);
           op.size = 0;
 
           cache.Op[cache.Index & (CacheSize - 1)] = op.data;
@@ -801,9 +801,9 @@ void ExeModel::update() {
             op.data = op.code << codeShift;
           else {
             op.data = op.prefix;
-            op.category = TypeOp1[op.code];
+            op.category = typeOp1[op.code];
             op.decoding = true;
-            brkCtx = hash(0, op.prefix, opCategoryMask & CategoryMask);
+            brkCtx = hash(0, op.prefix, opCategoryMask & categoryMask);
             break;
           }
         } else {
@@ -814,8 +814,8 @@ void ExeModel::update() {
             op.decoding = false;
           } else {
             op.data = op.prefix;
-            op.category = TypeOp1[op.code];
-            brkCtx = hash(1, op.prefix, opCategoryMask & CategoryMask);
+            op.category = typeOp1[op.code];
+            brkCtx = hash(1, op.prefix, opCategoryMask & categoryMask);
             break;
           }
         }
@@ -827,7 +827,7 @@ void ExeModel::update() {
         state = Pref_MultiByte_Op;
       else
         readFlags(op, state);
-      brkCtx = hash(2, state, op.code, (opCategoryMask & CategoryMask), opN(cache, 1) & ((ModRM_mod | ModRM_reg | ModRM_rm) << ModRMShift));
+      brkCtx = hash(2, state, op.code, (opCategoryMask & categoryMask), opN(cache, 1) & ((ModRM_mod | ModRM_reg | ModRM_rm) << ModRMShift));
       break;
     }
     case Pref_Op_Size: {
@@ -847,8 +847,8 @@ void ExeModel::update() {
         state = Read_OP3_3A;
       else {
         applyCodeAndSetFlag(op);
-        op.flags = Table2[op.code];
-        op.category = TypeOp2[op.code];
+        op.flags = table2[op.code];
+        op.category = typeOp2[op.code];
         checkFlags(op, state);
       }
       brkCtx = hash(4, state);
@@ -867,8 +867,8 @@ void ExeModel::update() {
       if( op.flags == fMEXTRA ) {
         op.data |= hasExtraFlags;
         int i = ((op.ModRM >> 3) & 0x07) | ((op.code & 0x01) << 3) | ((op.code & 0x08) << 1);
-        op.flags = TableX[i];
-        op.category = TypeOpX[i];
+        op.flags = tableX[i];
+        op.category = typeOpX[i];
         if( op.flags == fERR ) {
           memset(&op, 0, sizeof(Instruction));
           state = Error;
@@ -895,11 +895,11 @@ void ExeModel::update() {
       op.code = c1;
       applyCodeAndSetFlag(op, prefix38 << (state - Read_OP3_38));
       if( state == Read_OP3_38 ) {
-        op.flags = Table3_38[op.code];
-        op.category = TypeOp3_38[op.code];
+        op.flags = table3_38[op.code];
+        op.category = typeOp3_38[op.code];
       } else {
-        op.flags = Table3_3A[op.code];
-        op.category = TypeOp3_3A[op.code];
+        op.flags = table3_3A[op.code];
+        op.category = typeOp3_3A[op.code];
       }
       checkFlags(op, state);
       brkCtx = hash(10, state);
@@ -938,7 +938,7 @@ void ExeModel::update() {
       break;
     }
     case Read32_ModRM: {
-      op.data |= RegDWordDisplacement;
+      op.data |= regDWordDisplacement;
       if( ++op.bytesRead == 4 ) {
         op.bytesRead = 0;
         processMode(op, state);
@@ -968,7 +968,7 @@ void ExeModel::update() {
     cm.set(brkCtx);
 
     mask = prefixMask | (0xF8 << codeShift) | multiByteOpcode | prefix38 | prefix3A;
-    cm.set(hash(++i, opN(cache, 1) & (mask | RegDWordDisplacement | AddressMode), state + 16 * op.bytesRead, op.data & mask, op.REX,
+    cm.set(hash(++i, opN(cache, 1) & (mask | regDWordDisplacement | addressMode), state + 16 * op.bytesRead, op.data & mask, op.REX,
                 op.category));
 
     mask = 0x04 | (0xFE << codeShift) | multiByteOpcode | prefix38 | prefix3A | ((ModRM_mod | ModRM_reg) << ModRMShift);
@@ -1028,7 +1028,7 @@ void ExeModel::mix(Mixer &m) {
   m.set((brkCtx & 0x1FF) | ((s & 0x20) << 4), 1024);
   m.set(finalize64(hash(op.code, state, opN(cache, 1) & codeMask), 13), 8192);
   m.set(finalize64(hash(state, bpos, op.code, op.bytesRead), 13), 8192);
-  m.set(finalize64(hash(state, (bpos << 2) | (c0 & 3), opCategoryMask & CategoryMask,
+  m.set(finalize64(hash(state, (bpos << 2) | (c0 & 3), opCategoryMask & categoryMask,
                         ((op.category == OP_GEN_BRANCH) << 2) | (((op.flags & fMODE) == fAM) << 1) | (op.bytesRead > 0)), 13), 8192);
 }
 

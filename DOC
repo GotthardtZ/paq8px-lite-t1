@@ -194,7 +194,7 @@ modeled with both a run map and a nonstationary map unless indicated.
   - Convert to grayscale and 2 chroma colorspace.
   - Sometimes downsample the chroma images 2:1 or 4:1 in X and/or Y.
   - Divide each of the 3 images into 8x8 blocks.
-  - Convert using 2-D discrete cosine transform (DCT) to 64 12-bit signed
+  - Convert using 2-d discrete cosine transform (DCT) to 64 12-bit signed
     coefficients.
   - Quantize the coefficients by integer division (lossy).
   - Split the image into horizontal slices coded independently, separated
@@ -204,11 +204,11 @@ modeled with both a run map and a nonstationary map unless indicated.
     order to scan the whole image left to right starting at the top.
   - Subtract the previous DC component from the current in each color.
   - Code the coefficients using RS codes, where R is a run of R zeros (0-15)
-    and S indicates 0-11 bits of a signed value to follow.  (There is a
+    and s indicates 0-11 bits of a signed value to follow.  (There is a
     special RS code (EOB) to indicate the rest of the 64 coefficients are 0).
-  - Huffman code the RS symbol, followed by S literal bits.
+  - Huffman code the RS symbol, followed by s literal bits.
   The most useful contexts are the current partially coded Huffman code
-  (including S following bits) combined with the coefficient position
+  (including s following bits) combined with the coefficient position
   (0-63), color (0-2), and last few RS codes.
 
 - Match.  When a context match of 400 bytes or longer is detected,
@@ -217,7 +217,7 @@ modeled with both a run map and a nonstationary map unless indicated.
 
 - Exe.  When a x86 file (.exe, .obj, .dll) is detected, sparse contexts
   with gaps of 1-12 selecting only the prefix, opcode, and the bits
-  of the modR/M byte that are relevant to parsing are selected.
+  of the modR/m byte that are relevant to parsing are selected.
   This model is turned off otherwise.
 
 - Indirect.  The history of the last 1-3 bytes in the context of the

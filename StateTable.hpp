@@ -5,7 +5,7 @@
 #include "Random.hpp"
 
 ///////////////////////// state table ////////////////////////
-// TODO: Update this documentation
+// TODO: update this documentation
 
 // state table:
 //   nex(state, 0) = next state if bit y is 0, 0 <= state < 256

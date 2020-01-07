@@ -6,24 +6,24 @@
  */
 class Image1BitModel {
 private:
-    static constexpr int S = 11;
+    static constexpr int s = 11;
     const Shared *const shared;
     Random rnd;
     int w = 0;
     uint32_t r0 = 0, r1 = 0, r2 = 0, r3 = 0; // last 4 rows, bit 8 is over current pixel
     Array<uint8_t> t {0x23000}; // model: cxt -> state
-    int cxt[S] {}; // contexts
+    int cxt[s] {}; // contexts
     StateMap sm;
 
 public:
-    static constexpr int MIXERINPUTS = S;
+    static constexpr int MIXERINPUTS = s;
     Image1BitModel(const Shared *sh);
     void setParam(int info0);
     void mix(Mixer &m);
 };
 
 Image1BitModel::Image1BitModel(const Shared *const sh) : shared(sh),
-        sm {sh, S, 256, 1023, StateMap::BIT_HISTORY} // StateMap: s, n, limit, init
+        sm {sh, s, 256, 1023, StateMap::BitHistory} // StateMap: s, n, limit, init
 {}
 
 void Image1BitModel::setParam(int info0) {
@@ -33,7 +33,7 @@ void Image1BitModel::setParam(int info0) {
 void Image1BitModel::mix(Mixer &m) {
   // update the model
   INJECT_SHARED_y
-  for( int i = 0; i < S; ++i )
+  for( int i = 0; i < s; ++i )
     StateTable::update(&t[cxt[i]], y, rnd);
 
   INJECT_SHARED_bpos
@@ -57,7 +57,7 @@ void Image1BitModel::mix(Mixer &m) {
 
   // predict
   sm.subscribe();
-  for( int i = 0; i < S; ++i ) {
+  for( int i = 0; i < s; ++i ) {
     const uint8_t s = t[cxt[i]];
     m.add(stretch(sm.p2(i, s)));
   }

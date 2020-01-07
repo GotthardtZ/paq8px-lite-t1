@@ -4,7 +4,7 @@
 //TODO: update this documentation
 /**
 context map for large contexts.
-maps to a bit history state, a 3 MRU byte history, and 1 byte RunStats.
+maps to a bit history state, a 3 mostRecentlyUsed byte history, and 1 byte RunStats.
 
 Bit and byte histories are stored in a hash table with 64 byte buckets.
 The buckets are indexed by a context ending after 0, 2 or 5 bits of the
@@ -35,27 +35,27 @@ private:
     const uint32_t c; // max number of contexts
     class Bucket { // hash bucket, 64 bytes
         uint16_t checksums[7]; // byte context checksums
-        uint8_t MRU; // last 2 accesses (0-6) in low, high nibble
+        uint8_t mostRecentlyUsed; // last 2 accesses (0-6) in low, high nibble
     public:
         uint8_t bitState[7][7]; // byte context, 3-bit context -> bit history state
         // bitState[][0] = 1st bit, bitState[][1,2] = 2nd bit, bitState[][3..6] = 3rd bit
         // bitState[][0] is also a replacement priority, 0 = empty
         inline uint8_t *find(uint16_t checksum) { // find or create hash element matching checksum.
           // If not found, insert or replace lowest priority (skipping 2 most recent).
-          if( checksums[MRU & 15] == checksum )
-            return &bitState[MRU & 15][0];
+          if( checksums[mostRecentlyUsed & 15] == checksum )
+            return &bitState[mostRecentlyUsed & 15][0];
           int worst = 0xFFFF, idx = 0;
           for( int i = 0; i < 7; ++i ) {
             if( checksums[i] == checksum ) {
-              MRU = MRU << 4 | i;
+              mostRecentlyUsed = mostRecentlyUsed << 4 | i;
               return &bitState[i][0];
             }
-            if( bitState[i][0] < worst && (MRU & 15) != i && MRU >> 4 != i ) {
+            if( bitState[i][0] < worst && (mostRecentlyUsed & 15) != i && mostRecentlyUsed >> 4 != i ) {
               worst = bitState[i][0];
               idx = i;
             }
           }
-          MRU = 0xF0U | idx;
+          mostRecentlyUsed = 0xF0U | idx;
           checksums[idx] = checksum;
           return (uint8_t *) memset(&bitState[idx][0], 0, 7);
         }
@@ -68,7 +68,7 @@ private:
     Array<uint8_t *> byteHistory; // c pointers to run stats plus byte history, 4 bytes, [RunStats,1..3]
     Array<uint32_t> contexts; // c whole byte context hashes
     Array<uint16_t> checksums; // c whole byte context checksums
-    StateMap runMap, stateMap, bhmap8b, bhmap12b;
+    StateMap runMap, stateMap, bhMap8B, bhMap12B;
     uint32_t index; // next context to set by set()
     const uint32_t mask;
     const int hashBits;
@@ -81,13 +81,13 @@ public:
     // Construct using size bytes of memory for count contexts
     ContextMap2(const Shared *const sh, const uint64_t size, const uint32_t count, const int scale, const uint32_t uw) : shared(sh),
             c(count), table(size >> 6U), bitState(count), bitState0(count), byteHistory(count), contexts(count), checksums(count),
-            runMap(sh, count, (1U << 12U), 127, StateMap::RUN),
+            runMap(sh, count, (1U << 12U), 127, StateMap::Run),
             /* StateMap : s, n, lim, init */ // 63-255
-            stateMap(sh, count, (1U << 8U), 511, StateMap::BIT_HISTORY),
+            stateMap(sh, count, (1U << 8U), 511, StateMap::BitHistory),
             /* StateMap : s, n, lim, init */ // 511-1023
-            bhmap8b(sh, count, (1U << 8U), 511, StateMap::GENERIC),
+            bhMap8B(sh, count, (1U << 8U), 511, StateMap::Generic),
             /* StateMap : s, n, lim, init */ // 511-1023
-            bhmap12b(sh, count, (1U << 12U), 511, StateMap::GENERIC),
+            bhMap12B(sh, count, (1U << 12U), 511, StateMap::Generic),
             /* StateMap : s, n, lim, init */ // 255-1023
             index(0), mask(uint32_t(table.size() - 1)), hashBits(ilog2(mask + 1)), validFlags(0), scale(scale), useWhat(uw) {
       assert(size >= 64 && isPowerOf2(size));
@@ -110,14 +110,14 @@ public:
         // update pending bit histories for bits 2-7
         // in case of a collision updating (mixing) is slightly better (but slightly slower) then resetting, so we update
         const int c = base[4] + 256;
-        uint8_t *p1a = table[(ctx0 + (c >> 6U)) & mask].find(chk0);
-        StateTable::update(p1a, ((c >> 5U) & 1), rnd);
-        StateTable::update(p1a + 1 + ((c >> 5) & 1), ((c >> 4) & 1), rnd);
-        StateTable::update(p1a + 3 + ((c >> 4U) & 3), ((c >> 3) & 1), rnd);
-        uint8_t *p1b = table[(ctx0 + (c >> 3)) & mask].find(chk0);
-        StateTable::update(p1b, (c >> 2) & 1, rnd);
-        StateTable::update(p1b + 1 + ((c >> 2) & 1), (c >> 1) & 1, rnd);
-        StateTable::update(p1b + 3 + ((c >> 1) & 3), c & 1, rnd);
+        uint8_t *p1A = table[(ctx0 + (c >> 6U)) & mask].find(chk0);
+        StateTable::update(p1A, ((c >> 5U) & 1), rnd);
+        StateTable::update(p1A + 1 + ((c >> 5) & 1), ((c >> 4) & 1), rnd);
+        StateTable::update(p1A + 3 + ((c >> 4U) & 3), ((c >> 3) & 1), rnd);
+        uint8_t *p1B = table[(ctx0 + (c >> 3)) & mask].find(chk0);
+        StateTable::update(p1B, (c >> 2) & 1, rnd);
+        StateTable::update(p1B + 1 + ((c >> 2) & 1), (c >> 1) & 1, rnd);
+        StateTable::update(p1B + 3 + ((c >> 1) & 3), c & 1, rnd);
         base[3] = 1; // runCount: flag for having completed storing all the 8 bits of the first byte
       } else {
         const uint8_t byteState = base[0];
@@ -206,8 +206,8 @@ public:
         runMap.subscribe();
       }
       if( useWhat & CM_USE_BYTE_HISTORY ) {
-        bhmap8b.subscribe();
-        bhmap12b.subscribe();
+        bhMap8B.subscribe();
+        bhMap12B.subscribe();
       }
       INJECT_SHARED_bpos
       INJECT_SHARED_c0
@@ -283,9 +283,9 @@ public:
             //else new context (bhState=0)
 
             const uint8_t stateGroup = StateTable::group(state); //0..31
-            m.add(stretch(bhmap8b.p2(i, bitIsUncertain << 7 | (bhState << 3) | bpos))
+            m.add(stretch(bhMap8B.p2(i, bitIsUncertain << 7 | (bhState << 3) | bpos))
                           >> 2); // using bitIsUncertain is generally beneficial except for some 8bpp image (noticeable loss)
-            m.add(stretch(bhmap12b.p2(i, stateGroup << 7 | (bhState << 3) | bpos)) >> 2);
+            m.add(stretch(bhMap12B.p2(i, stateGroup << 7 | (bhState << 3) | bpos)) >> 2);
           }
         } else { //skipped context
           if( useWhat & CM_USE_RUN_STATS ) {
@@ -293,9 +293,9 @@ public:
             m.add(0);
           }
           if( useWhat & CM_USE_BYTE_HISTORY ) {
-            bhmap8b.skip(i);
+            bhMap8B.skip(i);
             m.add(0);
-            bhmap12b.skip(i);
+            bhMap12B.skip(i);
             m.add(0);
           }
           stateMap.skip(i);

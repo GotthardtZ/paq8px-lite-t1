@@ -132,7 +132,7 @@ public:
 
       const uint8_t bitPosition = shared.bitPosition;
       const uint8_t c0 = shared.c0;
-      const uint8_t characterGroup = (bitPosition > 0) ? AsciiGroupC0[0][(1U << bitPosition) - 2 + (c0 & ((1U << bitPosition) - 1))] : 0;
+      const uint8_t characterGroup = (bitPosition > 0) ? asciiGroupC0[0][(1U << bitPosition) - 2 + (c0 & ((1U << bitPosition) - 1))] : 0;
       stats.Text.characterGroup = characterGroup;
 
       // predict

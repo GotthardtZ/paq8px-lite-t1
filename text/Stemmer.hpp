@@ -3,7 +3,7 @@
 
 class Stemmer {
 protected:
-    uint32_t getRegion(const Word *w, const uint32_t from) {
+    constexpr uint32_t getRegion(const Word *w, const uint32_t from) {
       bool hasVowel = false;
       for( int i = w->start + from; i <= w->end; i++ ) {
         if( isVowel(w->letters[i])) {
@@ -15,11 +15,11 @@ protected:
       return w->start + w->length();
     }
 
-    static bool suffixInRn(const Word *w, const uint32_t rn, const char *suffix) {
+    constexpr static bool suffixInRn(const Word *w, const uint32_t rn, const char *suffix) {
       return (w->start != w->end && rn <= w->length() - strlen(suffix));
     }
 
-    static inline bool charInArray(const char c, const char a[], const int len) {
+    constexpr static inline bool charInArray(const char c, const char a[], const int len) {
       if( a == nullptr )
         return false;
       int i = 0;

@@ -5,9 +5,9 @@
 #include <cassert>
 #include "Cache.hpp"
 
-static constexpr uint8_t AsciiGroupC0[2][254] = {{0, 10, 0, 1, 10, 10, 0, 4, 2, 3, 10, 10, 10, 10, 0, 0, 5, 4, 2, 2, 3, 3, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 5, 5, 9, 4, 2, 2, 2, 2, 3, 3, 3, 3, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 0, 0, 0, 0, 5, 8, 8, 5, 9, 9, 6, 5, 2, 2, 2, 2, 2, 2, 2, 8, 3, 3, 3, 3, 3, 3, 3, 8, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 8, 8, 8, 8, 8, 5, 5, 9, 9, 9, 9, 9, 7, 8, 5, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 8, 8, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 8, 8, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10},
+static constexpr uint8_t asciiGroupC0[2][254] = {{0, 10, 0, 1, 10, 10, 0, 4, 2, 3, 10, 10, 10, 10, 0, 0, 5, 4, 2, 2, 3, 3, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 5, 5, 9, 4, 2, 2, 2, 2, 3, 3, 3, 3, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 0, 0, 0, 0, 5, 8, 8, 5, 9, 9, 6, 5, 2, 2, 2, 2, 2, 2, 2, 8, 3, 3, 3, 3, 3, 3, 3, 8, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 8, 8, 8, 8, 8, 5, 5, 9, 9, 9, 9, 9, 7, 8, 5, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 8, 8, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 8, 8, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10},
                                                  {0, 6,  0, 1, 6,  6,  4, 5, 1, 1, 6,  6,  6,  6,  4, 0, 3, 2, 1, 1, 1, 1, 6,  6,  6,  6,  6,  6,  6,  6,  0, 4, 0, 0, 3, 3, 2, 5, 1, 1, 1, 1, 1, 1, 1, 1, 6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  0, 0, 4, 4, 0, 0, 0, 0, 3, 3, 3, 3, 2, 2, 5, 5, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 1, 1, 1, 1, 1, 3, 6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  0, 0, 0, 0, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6}};
-static constexpr uint8_t AsciiGroup[128] = {0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 5, 5, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
+static constexpr uint8_t asciiGroup[128] = {0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 5, 5, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
                                             6, 7, 8, 17, 17, 9, 17, 10, 11, 12, 17, 17, 13, 14, 15, 16, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 18,
                                             19, 20, 23, 21, 22, 23, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
                                             2, 2, 24, 27, 25, 27, 26, 27, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
@@ -86,14 +86,14 @@ private:
         uint8_t prevPunctuation; // most recent punctuation character seen
         Word topicDescriptor; // last word before ':'
     } Info;
-    uint64_t ParseCtx; // state of parser + relevant features used as a context (hash)
+    uint64_t parseCtx; // state of parser + relevant features used as a context (hash)
     void setContexts();
 
 public:
     TextModel(const Shared *const sh, ModelStats *st, const uint64_t size) : shared(sh), stats(st),
             cm(sh, size, nCM2, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY), stemmers(Language::Count - 1), languages(Language::Count - 1),
             dictionaries(Language::Count - 1), wordPos(0x10000), State(Parse::Unknown), pState(State),
-            Lang {{0}, {0}, Language::Unknown, Language::Unknown}, Info {}, ParseCtx(0) {
+            Lang {{0}, {0}, Language::Unknown, Language::Unknown}, Info {}, parseCtx(0) {
       stemmers[Language::English - 1] = new EnglishStemmer();
       stemmers[Language::French - 1] = new FrenchStemmer();
       stemmers[Language::German - 1] = new GermanStemmer();
@@ -116,12 +116,12 @@ public:
       }
     }
 
-    void Update();
+    void update();
 
     void mix(Mixer &m) {
       INJECT_SHARED_bpos
       if( bpos == 0 ) {
-        Update();
+        update();
         setContexts();
       }
       cm.mix(m);
@@ -152,7 +152,7 @@ public:
     }
 };
 
-void TextModel::Update() {
+void TextModel::update() {
   Info.lastUpper = min(0xFF, Info.lastUpper + 1), Info.maskUpper <<= 1;
   Info.lastLetter = min(0x1F, Info.lastLetter + 1);
   Info.lastDigit = min(0xFF, Info.lastDigit + 1);
@@ -169,7 +169,7 @@ void TextModel::Update() {
   pState = State;
 
   INJECT_SHARED_buf
-  uint8_t c = buf(1), lc = tolower(c), g = (c < 0x80) ? AsciiGroup[c] : 31;
+  uint8_t c = buf(1), lc = tolower(c), g = (c < 0x80) ? asciiGroup[c] : 31;
   if( g > 4 || g != (Info.masks[4] & 0x1F))
     Info.masks[4] <<= 5, Info.masks[4] |= g;
   INJECT_SHARED_pos
@@ -180,7 +180,7 @@ void TextModel::Update() {
   }
   uint8_t pC = buf(2);
   State = Parse::Unknown;
-  ParseCtx = hash(State, pWord->Hash[0], c, (ilog2(Info.lastNewLine) + 1) * (Info.lastNewLine * 3 > Info.prevNewLine),
+  parseCtx = hash(State, pWord->Hash[0], c, (ilog2(Info.lastNewLine) + 1) * (Info.lastNewLine * 3 > Info.prevNewLine),
                   Info.masks[1] & 0xFC);
 
   if((c >= 'a' && c <= 'z') || c == APOSTROPHE || c == '-' || c > 0x7F ) {
@@ -215,14 +215,14 @@ void TextModel::Update() {
         else if( Info.quoteLength > 0 && Info.lastPunctuation == 1 ) {
           Info.quoteLength = 0;
           State = Parse::AfterQuote;
-          ParseCtx = hash(State, pC);
+          parseCtx = hash(State, pC);
         }
       }
     }
     (*cWord) += c;
     cWord->calculateWordHash();
     State = Parse::ReadingWord;
-    ParseCtx = hash(State, cWord->Hash[0]);
+    parseCtx = hash(State, cWord->Hash[0]);
   } else {
     if( cWord->length() > 0 ) {
       if( Lang.id != Language::Unknown )
@@ -329,7 +329,7 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
       case '.': {
         if( Lang.id != Language::Unknown && Info.lastUpper == Info.wordLength[1] && languages[Lang.id - 1]->isAbbreviation(pWord)) {
           State = Parse::WasAbbreviation;
-          ParseCtx = hash(State, pWord->Hash[0]);
+          parseCtx = hash(State, pWord->Hash[0]);
           break;
         }
       }
@@ -351,7 +351,7 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
         if( c == ',' ) {
           Info.commas++;
           State = Parse::AfterComma;
-          ParseCtx = hash(State, ilog2(Info.quoteLength + 1), ilog2(Info.lastNewLine),
+          parseCtx = hash(State, ilog2(Info.quoteLength + 1), ilog2(Info.lastNewLine),
                           Info.lastUpper < Info.lastLetter + Info.wordLength[1]);
         } else if( c == ':' )
           memcpy(&Info.topicDescriptor, pWord, sizeof(Word));
@@ -370,7 +370,7 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
         if( Info.prevNewLine == 1 || (Info.prevNewLine == 2 && pC == CARRIAGE_RETURN))
           cParagraph = &paragraphs.next();
         else if((Info.lastLetter == 2 && pC == '+') || (Info.lastLetter == 3 && pC == CARRIAGE_RETURN && buf(3) == '+')) {
-          ParseCtx = hash(Parse::ReadingWord, pWord->Hash[0]);
+          parseCtx = hash(Parse::ReadingWord, pWord->Hash[0]);
           State = Parse::PossibleHyphenation;
         }
       }
@@ -381,7 +381,7 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
         Info.masks[1] += 3, Info.masks[3] += 5;
         if( c == SPACE && pState == Parse::WasAbbreviation ) {
           State = Parse::AfterAbbreviation;
-          ParseCtx = hash(State, pWord->Hash[0]);
+          parseCtx = hash(State, pWord->Hash[0]);
         }
         break;
       }
@@ -440,7 +440,7 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
         else {
           Info.quoteLength = 0;
           State = Parse::AfterQuote;
-          ParseCtx = hash(State, 0x100 | pC);
+          parseCtx = hash(State, 0x100 | pC);
         }
         break;
       }
@@ -466,11 +466,11 @@ if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
       Info.numHashes[0] = combine64(Info.numHashes[0], c);
       Info.expectedDigit = -1;
       if( Info.numLength[0] < Info.numLength[1] && (pState == Parse::ExpectDigit || ((Info.numDiff & 3) == 0 && Info.numLength[0] <= 1))) {
-        uint64_t ExpectedNum = Info.numbers[1] + (Info.numMask & 3) - 2, PlaceDivisor = 1;
-        for( int i = 0; i < Info.numLength[1] - Info.numLength[0]; i++, PlaceDivisor *= 10 );
-        if( ExpectedNum / PlaceDivisor == Info.numbers[0] ) {
-          PlaceDivisor /= 10;
-          Info.expectedDigit = (ExpectedNum / PlaceDivisor) % 10;
+        uint64_t expectedNum = Info.numbers[1] + (Info.numMask & 3) - 2, placeDivisor = 1;
+        for( int i = 0; i < Info.numLength[1] - Info.numLength[0]; i++, placeDivisor *= 10 );
+        if( expectedNum / placeDivisor == Info.numbers[0] ) {
+          placeDivisor /= 10;
+          Info.expectedDigit = (expectedNum / placeDivisor) % 10;
           State = Parse::ExpectDigit;
         }
       } else {
@@ -517,7 +517,7 @@ void TextModel::setContexts() {
   const uint64_t pWordHash0 = pWord->Hash[0];
   const uint64_t pWordHash1 = pWord->Hash[1];
 
-  cm.set(ParseCtx);
+  cm.set(parseCtx);
   uint64_t i = State * 64;
   cm.set(hash(++i, cWordHash0, pWordHash0,
               (Info.lastUpper < Info.wordLength[0]) | ((Info.lastDigit < Info.wordLength[0] + Info.wordGap) << 1)));

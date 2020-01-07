@@ -28,9 +28,9 @@ private:
     uint64_t cxt[15] {}; // context hashes
 public:
     NormalModel(const Shared *const sh, ModelStats *st, const uint64_t cmsize) : shared(sh), stats(st),
-            cm(sh, cmsize, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY), smOrder0Slow(sh, 1, 255, 1023, StateMap::GENERIC),
-            smOrder1Slow(sh, 1, 255 * 256, 1023, StateMap::GENERIC),
-            smOrder1Fast(sh, 1, 255 * 256, 64, StateMap::GENERIC) // 64->16 is also ok
+            cm(sh, cmsize, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY), smOrder0Slow(sh, 1, 255, 1023, StateMap::Generic),
+            smOrder1Slow(sh, 1, 255 * 256, 1023, StateMap::Generic),
+            smOrder1Fast(sh, 1, 255 * 256, 64, StateMap::Generic) // 64->16 is also ok
     {
       assert(isPowerOf2(cmsize));
     }
@@ -40,7 +40,7 @@ public:
     }
 
     /**
-     * Update order 1..14 context hashes.
+     * update order 1..14 context hashes.
      * Note: order 0 context does not need an update so its hash never changes.
      */
     void updateHashes() {
@@ -78,7 +78,7 @@ public:
      */
     void mixPost(Mixer &m) {
       INJECT_SHARED_c4
-      uint32_t c2 = (c4 >> 8) & 0xff, c3 = (c4 >> 16) & 0xff, c;
+      uint32_t c2 = (c4 >> 8U) & 0xff, c3 = (c4 >> 16U) & 0xff, c;
 
       INJECT_SHARED_c0
       INJECT_SHARED_c1

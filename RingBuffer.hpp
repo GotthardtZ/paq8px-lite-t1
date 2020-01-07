@@ -86,5 +86,4 @@ public:
     }
 };
 
-typedef RingBuffer<uint8_t> Buf;
 #endif //PAQ8PX_RINGBUFFER_HPP

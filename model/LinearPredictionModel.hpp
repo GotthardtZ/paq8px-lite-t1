@@ -49,9 +49,9 @@ public:
         prd[i] = clip(W * 3 - WW * 3 + WWW);
       }
       INJECT_SHARED_c0
-      const uint8_t B = c0 << (8 - bpos);
+      const uint8_t b = c0 << (8 - bpos);
       for( int i = 0; i < nSSM; i++ ) {
-        sMap[i].set((prd[i] - B) * 8 + bpos);
+        sMap[i].set((prd[i] - b) * 8 + bpos);
         sMap[i].mix(m);
       }
     }

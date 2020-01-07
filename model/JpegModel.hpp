@@ -39,7 +39,7 @@ void dump(const char* msg, int p) {
     /*  printf("JPEG error at %d, line %d: %s\n", pos, __LINE__, #x); */ \
     if (idx > 0) \
       FINISH(false) else images[idx].jpeg = 0; \
-    return images[idx].next_jpeg; \
+    return images[idx].nextJpeg; \
   }
 
 struct HUF {
@@ -52,13 +52,13 @@ struct HUF {
 struct JPEGImage {
     uint32_t offset, // offset of SOI marker
             jpeg, // 1 if JPEG is header detected, 2 if image data
-            next_jpeg, // updated with jpeg on next byte boundary
+            nextJpeg, // updated with jpeg on next byte boundary
             app, // Bytes remaining to skip in this marker
             sof, sos, data, // pointers to buf
-            htsize; // number of pointers in ht
+            htSize; // number of pointers in ht
     int ht[8]; // pointers to Huffman table headers
-    uint8_t qtab[256]; // table
-    int qmap[10]; // block -> table number
+    uint8_t qTable[256]; // table
+    int qMap[10]; // block -> table number
 };
 
 class JpegModel {
@@ -107,7 +107,7 @@ private:
     int dc = 0; // DC value of the current block
     int width = 0; // Image width in MCU
     int row = 0, column = 0; // in MCU (column 0 to width-1)
-    Buf cbuf {0x20000}; // Rotating buffer of coefficients, coded as:
+    RingBuffer<uint8_t> coefficientBuffer {0x20000}; // Rotating buffer of coefficients, coded as:
     // DC: level shifted absolute value, low 4 bits discarded, i.e.
     //   [-1023...1024] -> [0...255].
     // AC: as an RS code: a run of R (0-15) zeros followed by an s (0-15)
@@ -115,22 +115,22 @@ private:
     //   However if R=0, then the format is ssss11xx where ssss is s,
     //   xx is the first 2 extra bits, and the last 2 bits are 1 (since
     //   this never occurs in a valid RS code).
-    int cpos = 0; // position in cbuf
+    int cpos = 0; // position in coefficientBuffer
     int rs1 = 0; // last RS code
     int rstpos = 0, rstlen = 0; // reset position
     int ssum = 0, ssum1 = 0, ssum2 = 0, ssum3 = 0;
     // sum of s in RS codes in block and sum of s in first component
 
     RingBuffer<int> cbuf2 {0x20000};
-    Array<int> adv_pred {4}, sumu {8}, sumv {8}, run_pred {6};
-    int prev_coef = 0, prev_coef2 = 0, prev_coef_rs = 0;
+    Array<int> advPred {4}, sumu {8}, sumv {8}, runPred {6};
+    int prevCoef = 0, prevCoef2 = 0, prevCoefRs = 0;
     Array<int> ls {10}; // block -> distance to previous block
-    Array<int> blockW {10}, blockN {10}, SamplingFactors {4};
+    Array<int> blockW {10}, blockN {10}, samplingFactors {4};
     Array<int> lcp {7}, zpos {64};
 
     //for parsing Quantization tables
     int dqt_state = -1;
-    uint32_t dqt_end = 0, qnum = 0;
+    uint32_t dqtEnd = 0, qnum = 0;
 
     // context model
     BH<9> t; // context hash -> bit history
@@ -147,7 +147,7 @@ private:
 public:
     JpegModel(const Shared *const sh, const uint64_t size) : shared(sh), t(size),
             MJPEGMap(sh, 21, 3, 128, 127), /* BitsOfContext, InputBits, Scale, Limit */
-            sm(sh, N, 256, 1023, StateMap::BIT_HISTORY), apm1(sh, 0x8000, 24), apm2(sh, 0x20000, 24) {
+            sm(sh, N, 256, 1023, StateMap::BitHistory), apm1(sh, 0x8000, 24), apm2(sh, 0x20000, 24) {
       m1 = MixerFactory::createMixer(sh, N + 1, 2050, 3);
       m1->setScaleFactor(1024, 128);
     }
@@ -212,9 +212,9 @@ public:
 
       // Be sure to quit on a byte boundary
       if( bpos == 0 )
-        images[idx].next_jpeg = images[idx].jpeg > 1;
+        images[idx].nextJpeg = images[idx].jpeg > 1;
       if( bpos != 0 && !images[idx].jpeg )
-        return images[idx].next_jpeg;
+        return images[idx].nextJpeg;
       if( bpos == 0 && images[idx].app > 0 ) {
         --images[idx].app;
         if( idx < MaxEmbeddedLevel && buf(4) == FF && buf(3) == SOI && buf(2) == FF &&
@@ -222,7 +222,7 @@ public:
           memset(&images[++idx], 0, sizeof(JPEGImage));
       }
       if( images[idx].app > 0 )
-        return images[idx].next_jpeg;
+        return images[idx].nextJpeg;
       if( bpos == 0 ) {
         // Parse.  Baseline DCT-Huffman JPEG syntax is:
         // SOI APPx... misc... SOF0 DHT... SOS data EOI
@@ -264,7 +264,7 @@ public:
             ((buf(1) & 0xFE) == 0xC0 || buf(1) == 0xC4 || (buf(1) >= 0xDB && buf(1) <= 0xFE))) {
           images[idx].jpeg = 1;
           images[idx].offset = pos - 4;
-          images[idx].sos = images[idx].sof = images[idx].htsize = images[idx].data = 0, images[idx].app = (buf(1) >> 4 == 0xE) * 2;
+          images[idx].sos = images[idx].sof = images[idx].htSize = images[idx].data = 0, images[idx].app = (buf(1) >> 4 == 0xE) * 2;
           mcusize = huffcode = huffbits = huffsize = mcupos = cpos = 0, rs = -1;
           memset(&huf[0], 0, sizeof(huf));
           memset(&pred[0], 0, pred.size() * sizeof(int));
@@ -279,7 +279,7 @@ public:
         }
         lastPos = pos;
         if( !images[idx].jpeg )
-          return images[idx].next_jpeg;
+          return images[idx].nextJpeg;
 
         // Detect APPx, COM or other markers, so we can skip them
         if( !images[idx].data && !images[idx].app && buf(4) == FF &&
@@ -295,16 +295,16 @@ public:
           if( len == 6 + 2 * buf(1) && buf(1) && buf(1) <= 4 ) // buf(1) is Ns
             images[idx].sos = pos - 5, images[idx].data = images[idx].sos + len + 2, images[idx].jpeg = 2;
         }
-        if( buf(4) == FF && buf(3) == DHT && images[idx].htsize < 8 )
-          images[idx].ht[images[idx].htsize++] = pos - 4;
+        if( buf(4) == FF && buf(3) == DHT && images[idx].htSize < 8 )
+          images[idx].ht[images[idx].htSize++] = pos - 4;
         if( buf(4) == FF && (buf(3) & 0xFE) == SOF0 )
           images[idx].sof = pos - 4;
 
         // Parse quantization tables
         if( buf(4) == FF && buf(3) == DQT )
-          dqt_end = pos + buf(2) * 256 + buf(1) - 1, dqt_state = 0;
+          dqtEnd = pos + buf(2) * 256 + buf(1) - 1, dqt_state = 0;
         else if( dqt_state >= 0 ) {
-          if( pos >= dqt_end )
+          if( pos >= dqtEnd )
             dqt_state = -1;
           else {
             if( dqt_state % 65 == 0 )
@@ -312,7 +312,7 @@ public:
             else {
               JASSERT(buf(1) > 0)
               JASSERT(qnum >= 0 && qnum < 4)
-              images[idx].qtab[qnum * 64 + ((dqt_state % 65) - 1)] = buf(1) - 1;
+              images[idx].qTable[qnum * 64 + ((dqt_state % 65) - 1)] = buf(1) - 1;
             }
             dqt_state++;
           }
@@ -331,7 +331,7 @@ public:
         // Build Huffman tables
         // huf[Tc][Th][m] = min, max+1 codes of length m, pointer to byte values
         if( pos == images[idx].data && bpos == 1 ) {
-          for( uint32_t i = 0; i < images[idx].htsize; ++i ) {
+          for( uint32_t i = 0; i < images[idx].htSize; ++i ) {
             uint32_t p = images[idx].ht[i] + 4; // pointer to current table after length field
             uint32_t end = p + buf[p - 2] * 256 + buf[p - 1] - 2; // end of Huffman table
             uint32_t count = 0; // sanity check
@@ -363,7 +363,7 @@ public:
           huffcode = huffbits = huffsize = 0, rs = -1;
 
           // load default tables
-          if( !images[idx].htsize ) {
+          if( !images[idx].htSize ) {
             for( int tc = 0; tc < 2; tc++ ) {
               for( int th = 0; th < 2; th++ ) {
                 HUF *h = &huf[tc * 64 + th * 16];
@@ -416,13 +416,13 @@ public:
                 }
               }
             }
-            images[idx].htsize = 4;
+            images[idx].htSize = 4;
           }
 
           // Build Huffman table selection table (indexed by mcupos).
           // Get image width.
           if( !images[idx].sof && images[idx].sos )
-            return images[idx].next_jpeg;
+            return images[idx].nextJpeg;
           int ns = buf[images[idx].sos + 4];
           int nf = buf[images[idx].sof + 9];
           JASSERT(ns <= 4 && nf <= 4)
@@ -432,7 +432,7 @@ public:
             for( int j = 0; j < nf; ++j ) {
               if( buf[images[idx].sos + 2 * i + 5] == buf[images[idx].sof + 3 * j + 10] ) { // Cs == c ?
                 int hv = buf[images[idx].sof + 3 * j + 11]; // packed dimensions H x V
-                SamplingFactors[j] = hv;
+                samplingFactors[j] = hv;
                 if( hv >> 4 > hmax )
                   hmax = hv >> 4;
                 hv = (hv & 15) * (hv >> 4); // number of blocks in component c
@@ -445,7 +445,7 @@ public:
                   color[mcusize] = i;
                   int tq = buf[images[idx].sof + 3 * j + 12]; // quantization table index (0..3)
                   JASSERT(tq >= 0 && tq < 4)
-                  images[idx].qmap[mcusize] = tq; // quantization table mapping
+                  images[idx].qMap[mcusize] = tq; // quantization table mapping
                   --hv;
                   ++mcusize;
                 }
@@ -473,7 +473,7 @@ public:
           int x = 0, y = 0;
           for( j = 0; j < (mcusize >> 6); j++ ) {
             int i = color[j];
-            int w = SamplingFactors[i] >> 4, h = SamplingFactors[i] & 0xf;
+            int w = samplingFactors[i] >> 4, h = samplingFactors[i] & 0xf;
             blockW[j] = x == 0 ? mcusize - 64 * (w - 1) : 64;
             blockN[j] = y == 0 ? mcusize * width - 64 * w * (h - 1) : w * 64;
             x++;
@@ -526,7 +526,7 @@ public:
                   JASSERT(mcupos >= 0 && mcupos <= mcusize && mcupos <= 640)
                   while( cpos & 63 ) {
                     cbuf2.set(cpos, 0);
-                    cbuf.set(cpos, (!rs) ? 0 : (63 - (cpos & 63)) << 4);
+                    coefficientBuffer.set(cpos, (!rs) ? 0 : (63 - (cpos & 63)) << 4);
                     cpos++;
                     rs++;
                   }
@@ -542,27 +542,27 @@ public:
                     ex -= (1U << s) - 1;
                   for( int i = r; i >= 1; --i ) {
                     cbuf2.set(cpos, 0);
-                    cbuf.set(cpos, (i << 4U) | s);
+                    coefficientBuffer.set(cpos, (i << 4U) | s);
                     cpos++;
                   }
                   cbuf2.set(cpos, ex);
-                  cbuf.set(cpos, (s << 4U) | (huffcode << 2 >> s & 3) | 12);
+                  coefficientBuffer.set(cpos, (s << 4U) | (huffcode << 2U >> s & 3U) | 12);
                   cpos++;
                   ssum += s;
                 }
               } else { // DC: rs = 0S, s<12
                 JASSERT(rs < 12)
                 ++mcupos;
-                ex = huffcode & ((1 << rs) - 1);
+                ex = huffcode & ((1U << rs) - 1);
                 if( rs != 0 && (ex >> (rs - 1)) == 0 )
-                  ex -= (1 << rs) - 1;
-                JASSERT(mcupos >= 0 && mcupos >> 6 < 10)
-                const int comp = color[mcupos >> 6];
+                  ex -= (1U << rs) - 1;
+                JASSERT(mcupos >= 0 && mcupos >> 6U < 10)
+                const int comp = color[mcupos >> 6U];
                 JASSERT(comp >= 0 && comp < 4)
                 dc = pred[comp] += ex;
                 JASSERT((cpos & 63) == 0)
                 cbuf2.set(cpos, dc);
-                cbuf.set(cpos, (dc + 1023) >> 3);
+                coefficientBuffer.set(cpos, (dc + 1023) >> 3);
                 cpos++;
                 if((mcupos >> 6) == 0 ) {
                   ssum1 = 0;
@@ -584,7 +584,7 @@ public:
 
               // UPDATE_ADV_PRED !!!!
               {
-                const int acomp = mcupos >> 6, q = 64 * images[idx].qmap[acomp];
+                const int acomp = mcupos >> 6, q = 64 * images[idx].qMap[acomp];
                 const int zz = mcupos & 63, cpos_dc = cpos - zz;
                 const bool norst = rstpos != column + row * width;
                 if( zz == 0 ) {
@@ -599,32 +599,32 @@ public:
                   // necessarily in this MCU
                   int offsetDcN = cpos_dc - blockN[acomp];
                   for( int i = 0; i < 64; ++i ) {
-                    sumu[zzu[i]] += (zzv[i] & 1 ? -1 : 1) * (zzv[i] ? 16 * (16 + zzv[i]) : 185) * (images[idx].qtab[q + i] + 1) *
+                    sumu[zzu[i]] += (zzv[i] & 1 ? -1 : 1) * (zzv[i] ? 16 * (16 + zzv[i]) : 185) * (images[idx].qTable[q + i] + 1) *
                                     cbuf2[offsetDcN + i];
-                    sumv[zzv[i]] += (zzu[i] & 1 ? -1 : 1) * (zzu[i] ? 16 * (16 + zzu[i]) : 185) * (images[idx].qtab[q + i] + 1) *
+                    sumv[zzv[i]] += (zzu[i] & 1 ? -1 : 1) * (zzu[i] ? 16 * (16 + zzu[i]) : 185) * (images[idx].qTable[q + i] + 1) *
                                     cbuf2[offsetDcW + i];
                   }
                 } else {
-                  sumu[zzu[zz - 1]] -= (zzv[zz - 1] ? 16 * (16 + zzv[zz - 1]) : 185) * (images[idx].qtab[q + zz - 1] + 1) * cbuf2[cpos - 1];
-                  sumv[zzv[zz - 1]] -= (zzu[zz - 1] ? 16 * (16 + zzu[zz - 1]) : 185) * (images[idx].qtab[q + zz - 1] + 1) * cbuf2[cpos - 1];
+                  sumu[zzu[zz - 1]] -= (zzv[zz - 1] ? 16 * (16 + zzv[zz - 1]) : 185) * (images[idx].qTable[q + zz - 1] + 1) * cbuf2[cpos - 1];
+                  sumv[zzv[zz - 1]] -= (zzu[zz - 1] ? 16 * (16 + zzu[zz - 1]) : 185) * (images[idx].qTable[q + zz - 1] + 1) * cbuf2[cpos - 1];
                 }
 
                 for( int i = 0; i < 3; ++i ) {
-                  run_pred[i] = run_pred[i + 3] = 0;
+                  runPred[i] = runPred[i + 3] = 0;
                   for( int st = 0; st < 10 && zz + st < 64; ++st ) {
                     const int zz2 = zz + st;
                     int p = sumu[zzu[zz2]] * i + sumv[zzv[zz2]] * (2 - i);
-                    p /= (images[idx].qtab[q + zz2] + 1) * 185 * (16 + zzv[zz2]) * (16 + zzu[zz2]) / 128;
+                    p /= (images[idx].qTable[q + zz2] + 1) * 185 * (16 + zzv[zz2]) * (16 + zzu[zz2]) / 128;
                     if( zz2 == 0 && (norst || ls[acomp] == 64))
                       p -= cbuf2[cpos_dc - ls[acomp]];
                     p = (p < 0 ? -1 : +1) * ilog(abs(p) + 1);
                     if( st == 0 ) {
-                      adv_pred[i] = p;
-                    } else if( abs(p) > abs(adv_pred[i]) + 2 && abs(adv_pred[i]) < 210 ) {
-                      if( run_pred[i] == 0 )
-                        run_pred[i] = st * 2 + (p > 0);
-                      if( abs(p) > abs(adv_pred[i]) + 21 && run_pred[i + 3] == 0 )
-                        run_pred[i + 3] = st * 2 + (p > 0);
+                      advPred[i] = p;
+                    } else if( abs(p) > abs(advPred[i]) + 2 && abs(advPred[i]) < 210 ) {
+                      if( runPred[i] == 0 )
+                        runPred[i] = st * 2 + (p > 0);
+                      if( abs(p) > abs(advPred[i]) + 21 && runPred[i + 3] == 0 )
+                        runPred[i + 3] = st * 2 + (p > 0);
                     }
                   }
                 }
@@ -632,10 +632,10 @@ public:
                 for( int i = 0; i < 8; ++i )
                   ex += (zzu[zz] < i) * sumu[i] + (zzv[zz] < i) * sumv[i];
                 ex = (sumu[zzu[zz]] * (2 + zzu[zz]) + sumv[zzv[zz]] * (2 + zzv[zz]) - ex * 2) * 4 / (zzu[zz] + zzv[zz] + 16);
-                ex /= (images[idx].qtab[q + zz] + 1) * 185;
+                ex /= (images[idx].qTable[q + zz] + 1) * 185;
                 if( zz == 0 && (norst || ls[acomp] == 64))
                   ex -= cbuf2[cpos_dc - ls[acomp]];
-                adv_pred[3] = (ex < 0 ? -1 : +1) * ilog(abs(ex) + 1);
+                advPred[3] = (ex < 0 ? -1 : +1) * ilog(abs(ex) + 1);
 
                 for( int i = 0; i < 4; ++i ) {
                   const int a = (i & 1 ? zzv[zz] : zzu[zz]), b = (i & 2 ? 2 : 1);
@@ -643,26 +643,26 @@ public:
                     ex = 65535;
                   else {
                     const int zz2 = zpos[zzu[zz] + 8 * zzv[zz] - (i & 1 ? 8 : 1) * b];
-                    ex = (images[idx].qtab[q + zz2] + 1) * cbuf2[cpos_dc + zz2] / (images[idx].qtab[q + zz] + 1);
+                    ex = (images[idx].qTable[q + zz2] + 1) * cbuf2[cpos_dc + zz2] / (images[idx].qTable[q + zz] + 1);
                     ex = (ex < 0 ? -1 : +1) * (ilog(abs(ex) + 1) + (ex != 0 ? 17 : 0));
                   }
                   lcp[i] = ex;
                 }
                 if((zzu[zz] * zzv[zz]) != 0 ) {
                   const int zz2 = zpos[zzu[zz] + 8 * zzv[zz] - 9];
-                  ex = (images[idx].qtab[q + zz2] + 1) * cbuf2[cpos_dc + zz2] / (images[idx].qtab[q + zz] + 1);
+                  ex = (images[idx].qTable[q + zz2] + 1) * cbuf2[cpos_dc + zz2] / (images[idx].qTable[q + zz] + 1);
                   lcp[4] = (ex < 0 ? -1 : +1) * (ilog(abs(ex) + 1) + (ex != 0 ? 17 : 0));
 
-                  ex = (images[idx].qtab[q + zpos[8 * zzv[zz]]] + 1) * cbuf2[cpos_dc + zpos[8 * zzv[zz]]] / (images[idx].qtab[q + zz] + 1);
+                  ex = (images[idx].qTable[q + zpos[8 * zzv[zz]]] + 1) * cbuf2[cpos_dc + zpos[8 * zzv[zz]]] / (images[idx].qTable[q + zz] + 1);
                   lcp[5] = (ex < 0 ? -1 : +1) * (ilog(abs(ex) + 1) + (ex != 0 ? 17 : 0));
 
-                  ex = (images[idx].qtab[q + zpos[zzu[zz]]] + 1) * cbuf2[cpos_dc + zpos[zzu[zz]]] / (images[idx].qtab[q + zz] + 1);
+                  ex = (images[idx].qTable[q + zpos[zzu[zz]]] + 1) * cbuf2[cpos_dc + zpos[zzu[zz]]] / (images[idx].qTable[q + zz] + 1);
                   lcp[6] = (ex < 0 ? -1 : +1) * (ilog(abs(ex) + 1) + (ex != 0 ? 17 : 0));
                 } else
                   lcp[4] = lcp[5] = lcp[6] = 65535;
 
                 int prev1 = 0, prev2 = 0, cnt1 = 0, cnt2 = 0, r = 0, s = 0;
-                prev_coef_rs = cbuf[cpos - 64];
+                prevCoefRs = coefficientBuffer[cpos - 64];
                 for( int i = 0; i < acomp; i++ ) {
                   ex = 0;
                   ex += cbuf2[cpos - (acomp - i) * 64];
@@ -671,8 +671,8 @@ public:
                   if( color[i] == color[acomp] - 1 ) {
                     prev1 += ex;
                     cnt1++;
-                    r += cbuf[cpos - (acomp - i) * 64] >> 4;
-                    s += cbuf[cpos - (acomp - i) * 64] & 0xF;
+                    r += coefficientBuffer[cpos - (acomp - i) * 64] >> 4;
+                    s += coefficientBuffer[cpos - (acomp - i) * 64] & 0xF;
                   }
                   if( color[acomp] > 1 && color[i] == color[0] ) {
                     prev2 += ex;
@@ -680,16 +680,16 @@ public:
                   }
                 }
                 if( cnt1 > 0 )
-                  prev1 /= cnt1, r /= cnt1, s /= cnt1, prev_coef_rs = (r << 4) | s;
+                  prev1 /= cnt1, r /= cnt1, s /= cnt1, prevCoefRs = (r << 4) | s;
                 if( cnt2 > 0 )
                   prev2 /= cnt2;
-                prev_coef = (prev1 < 0 ? -1 : +1) * ilog(11 * abs(prev1) + 1) + (cnt1 << 20);
-                prev_coef2 = (prev2 < 0 ? -1 : +1) * ilog(11 * abs(prev2) + 1);
+                prevCoef = (prev1 < 0 ? -1 : +1) * ilog(11 * abs(prev1) + 1) + (cnt1 << 20);
+                prevCoef2 = (prev2 < 0 ? -1 : +1) * ilog(11 * abs(prev2) + 1);
 
                 if( column == 0 && blockW[acomp] > 64 * acomp )
-                  run_pred[1] = run_pred[2], run_pred[0] = 0, adv_pred[1] = adv_pred[2], adv_pred[0] = 0;
+                  runPred[1] = runPred[2], runPred[0] = 0, advPred[1] = advPred[2], advPred[0] = 0;
                 if( row == 0 && blockN[acomp] > 64 * acomp )
-                  run_pred[1] = run_pred[0], run_pred[2] = 0, adv_pred[1] = adv_pred[0], adv_pred[2] = 0;
+                  runPred[1] = runPred[0], runPred[2] = 0, advPred[1] = advPred[0], advPred[2] = 0;
               } // !!!!
             }
           }
@@ -698,7 +698,7 @@ public:
 
       // Estimate next bit probability
       if( !images[idx].jpeg || !images[idx].data )
-        return images[idx].next_jpeg;
+        return images[idx].nextJpeg;
       if( buf(1 + (bpos == 0)) == FF ) {
         m.add(128); //network bias
         m.set(0, 1 + 8);
@@ -733,40 +733,40 @@ public:
       if( hbcount == 0 ) {
         uint64_t n = hc * 32;
         int i = 0;
-        cxt[i++] = hash(++n, coef, adv_pred[2] / 12 + (run_pred[2] << 8), ssum2 >> 6, prev_coef / 72);
-        cxt[i++] = hash(++n, coef, adv_pred[0] / 12 + (run_pred[0] << 8), ssum2 >> 6, prev_coef / 72);
-        cxt[i++] = hash(++n, coef, adv_pred[1] / 11 + (run_pred[1] << 8), ssum2 >> 6);
-        cxt[i++] = hash(++n, rs1, adv_pred[2] / 7, run_pred[5] / 2, prev_coef / 10);
-        cxt[i++] = hash(++n, rs1, adv_pred[0] / 7, run_pred[3] / 2, prev_coef / 10);
-        cxt[i++] = hash(++n, rs1, adv_pred[1] / 11, run_pred[4]);
-        cxt[i++] = hash(++n, adv_pred[2] / 14, run_pred[2], adv_pred[0] / 14, run_pred[0]);
-        cxt[i++] = hash(++n, cbuf[cpos - blockN[mcupos >> 6]] >> 4, adv_pred[3] / 17, run_pred[1], run_pred[5]);
-        cxt[i++] = hash(++n, cbuf[cpos - blockW[mcupos >> 6]] >> 4, adv_pred[3] / 17, run_pred[1], run_pred[3]);
-        cxt[i++] = hash(++n, lcp[0] / 22, lcp[1] / 22, adv_pred[1] / 7, run_pred[1]);
+        cxt[i++] = hash(++n, coef, advPred[2] / 12 + (runPred[2] << 8), ssum2 >> 6, prevCoef / 72);
+        cxt[i++] = hash(++n, coef, advPred[0] / 12 + (runPred[0] << 8), ssum2 >> 6, prevCoef / 72);
+        cxt[i++] = hash(++n, coef, advPred[1] / 11 + (runPred[1] << 8), ssum2 >> 6);
+        cxt[i++] = hash(++n, rs1, advPred[2] / 7, runPred[5] / 2, prevCoef / 10);
+        cxt[i++] = hash(++n, rs1, advPred[0] / 7, runPred[3] / 2, prevCoef / 10);
+        cxt[i++] = hash(++n, rs1, advPred[1] / 11, runPred[4]);
+        cxt[i++] = hash(++n, advPred[2] / 14, runPred[2], advPred[0] / 14, runPred[0]);
+        cxt[i++] = hash(++n, coefficientBuffer[cpos - blockN[mcupos >> 6]] >> 4, advPred[3] / 17, runPred[1], runPred[5]);
+        cxt[i++] = hash(++n, coefficientBuffer[cpos - blockW[mcupos >> 6]] >> 4, advPred[3] / 17, runPred[1], runPred[3]);
+        cxt[i++] = hash(++n, lcp[0] / 22, lcp[1] / 22, advPred[1] / 7, runPred[1]);
         cxt[i++] = hash(++n, lcp[0] / 22, lcp[1] / 22, mcupos & 63, lcp[4] / 30);
-        cxt[i++] = hash(++n, zu / 2, lcp[0] / 13, lcp[2] / 30, prev_coef / 40 + ((prev_coef2 / 28) << 20));
-        cxt[i++] = hash(++n, zv / 2, lcp[1] / 13, lcp[3] / 30, prev_coef / 40 + ((prev_coef2 / 28) << 20));
-        cxt[i++] = hash(++n, rs1, prev_coef / 42, prev_coef2 / 34, lcp[0] / 60, lcp[2] / 14, lcp[1] / 60, lcp[3] / 14);
+        cxt[i++] = hash(++n, zu / 2, lcp[0] / 13, lcp[2] / 30, prevCoef / 40 + ((prevCoef2 / 28) << 20));
+        cxt[i++] = hash(++n, zv / 2, lcp[1] / 13, lcp[3] / 30, prevCoef / 40 + ((prevCoef2 / 28) << 20));
+        cxt[i++] = hash(++n, rs1, prevCoef / 42, prevCoef2 / 34, lcp[0] / 60, lcp[2] / 14, lcp[1] / 60, lcp[3] / 14);
         cxt[i++] = hash(++n, mcupos & 63, column >> 1);
         cxt[i++] = hash(++n, column >> 3, min(5 + 2 * (!comp), zu + zv), lcp[0] / 10, lcp[2] / 40, lcp[1] / 10, lcp[3] / 40);
         cxt[i++] = hash(++n, ssum >> 3, mcupos & 63);
-        cxt[i++] = hash(++n, rs1, mcupos & 63, run_pred[1]);
-        cxt[i++] = hash(++n, coef, ssum2 >> 5, adv_pred[3] / 30,
-                        (comp) ? hash(prev_coef / 22, prev_coef2 / 50) : ssum / ((mcupos & 0x3F) + 1));
-        cxt[i++] = hash(++n, lcp[0] / 40, lcp[1] / 40, adv_pred[1] / 28, (comp) ? prev_coef / 40 + ((prev_coef2 / 40) << 20) : lcp[4] / 22,
+        cxt[i++] = hash(++n, rs1, mcupos & 63, runPred[1]);
+        cxt[i++] = hash(++n, coef, ssum2 >> 5, advPred[3] / 30,
+                        (comp) ? hash(prevCoef / 22, prevCoef2 / 50) : ssum / ((mcupos & 0x3F) + 1));
+        cxt[i++] = hash(++n, lcp[0] / 40, lcp[1] / 40, advPred[1] / 28, (comp) ? prevCoef / 40 + ((prevCoef2 / 40) << 20) : lcp[4] / 22,
                         min(7, zu + zv), ssum / (2 * (zu + zv) + 1));
-        cxt[i++] = hash(++n, zv, cbuf[cpos - blockN[mcupos >> 6]], adv_pred[2] / 28, run_pred[2]);
-        cxt[i++] = hash(++n, zu, cbuf[cpos - blockW[mcupos >> 6]], adv_pred[0] / 28, run_pred[0]);
-        cxt[i++] = hash(++n, adv_pred[2] / 7, run_pred[2]);
-        cxt[i++] = hash(n, adv_pred[0] / 7, run_pred[0]);
-        cxt[i++] = hash(n, adv_pred[1] / 7, run_pred[1]);
-        cxt[i++] = hash(++n, zv, lcp[1] / 14, adv_pred[2] / 16, run_pred[5]);
-        cxt[i++] = hash(++n, zu, lcp[0] / 14, adv_pred[0] / 16, run_pred[3]);
-        cxt[i++] = hash(++n, lcp[0] / 14, lcp[1] / 14, adv_pred[3] / 16);
-        cxt[i++] = hash(++n, coef, prev_coef / 10, prev_coef2 / 20);
-        cxt[i++] = hash(++n, coef, ssum >> 2, prev_coef_rs);
-        cxt[i++] = hash(++n, coef, adv_pred[1] / 17, lcp[(zu < zv)] / 24, lcp[2] / 20, lcp[3] / 24);
-        cxt[i++] = hash(++n, coef, adv_pred[3] / 11, lcp[(zu < zv)] / 50, lcp[2 + 3 * (zu * zv > 1)] / 50, lcp[3 + 3 * (zu * zv > 1)] / 50);
+        cxt[i++] = hash(++n, zv, coefficientBuffer[cpos - blockN[mcupos >> 6]], advPred[2] / 28, runPred[2]);
+        cxt[i++] = hash(++n, zu, coefficientBuffer[cpos - blockW[mcupos >> 6]], advPred[0] / 28, runPred[0]);
+        cxt[i++] = hash(++n, advPred[2] / 7, runPred[2]);
+        cxt[i++] = hash(n, advPred[0] / 7, runPred[0]);
+        cxt[i++] = hash(n, advPred[1] / 7, runPred[1]);
+        cxt[i++] = hash(++n, zv, lcp[1] / 14, advPred[2] / 16, runPred[5]);
+        cxt[i++] = hash(++n, zu, lcp[0] / 14, advPred[0] / 16, runPred[3]);
+        cxt[i++] = hash(++n, lcp[0] / 14, lcp[1] / 14, advPred[3] / 16);
+        cxt[i++] = hash(++n, coef, prevCoef / 10, prevCoef2 / 20);
+        cxt[i++] = hash(++n, coef, ssum >> 2, prevCoefRs);
+        cxt[i++] = hash(++n, coef, advPred[1] / 17, lcp[(zu < zv)] / 24, lcp[2] / 20, lcp[3] / 24);
+        cxt[i++] = hash(++n, coef, advPred[3] / 11, lcp[(zu < zv)] / 50, lcp[2 + 3 * (zu * zv > 1)] / 50, lcp[3 + 3 * (zu * zv > 1)] / 50);
         assert(i == N);
       }
 
@@ -823,7 +823,7 @@ public:
       int pr = m1->p();
       m.add(stretch(pr) >> 1);
       m.add((pr >> 2) - 511);
-      pr = apm1.p(pr, (hc & 511) | (((adv_pred[1] / 16) & 63) << 9), 1023);
+      pr = apm1.p(pr, (hc & 511) | (((advPred[1] / 16) & 63) << 9), 1023);
       m.add(stretch(pr) >> 1);
       m.add((pr >> 2) - 511);
       pr = apm2.p(pr, (hc & 511) | (coef << 9), 1023);

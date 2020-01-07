@@ -50,7 +50,7 @@ struct dBASE {
 };
 
 /**
- * Model 2-D data with fixed record length. Also order 1-2 models that include the distance to the last match.
+ * Model 2-d data with fixed record length. Also order 1-2 models that include the distance to the last match.
  */
 class RecordModel {
 private:
@@ -115,8 +115,8 @@ public:
         INJECT_SHARED_buf
         INJECT_SHARED_pos
         int w = c4 & 0xffff, c = w & 255, d = w >> 8;
-        if((stats->Wav) > 2 && (stats->Wav) != runLength[0] ) {
-          runLength[0] = stats->Wav;
+        if((stats->wav) > 2 && (stats->wav) != runLength[0] ) {
+          runLength[0] = stats->wav;
           rCount[0] = rCount[1] = 0;
         } else {
           // detect dBASE tables
@@ -330,7 +330,7 @@ public:
       m.set(((N ^ B) >> 4) | (x << 4), 512);
       m.set(((stats->Text.characterGroup) << 5) | x, 11 * 32);
 
-      stats->Wav = min(0xFFFF, runLength[0]);
+      stats->wav = min(0xFFFF, runLength[0]);
     }
 };
 

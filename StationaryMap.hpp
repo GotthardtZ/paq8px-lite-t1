@@ -22,7 +22,7 @@ private:
     const Shared *const shared;
     Array<uint32_t> data;
     const uint32_t mask, maskBits, stride, bTotal;
-    uint32_t context, bCount, B;
+    uint32_t context, bCount, b;
     uint32_t *cp;
     int scale;
     const uint16_t limit;
@@ -41,12 +41,12 @@ public:
 
     void setDirect(uint32_t ctx) { // ctx must be a direct context (no hash)
       context = (ctx & mask) * stride;
-      bCount = B = 0;
+      bCount = b = 0;
     }
 
     void set(uint64_t ctx) { // ctx must be a hash
       context = (finalize64(ctx, maskBits) & mask) * stride;
-      bCount = B = 0;
+      bCount = b = 0;
     }
 
     void reset(const int rate) {
@@ -62,19 +62,19 @@ public:
       error = ((error / 8) * dt[count]) / 1024;
       prediction = min(0x3FFFFF, max(0, prediction + error));
       *cp = (prediction << 10U) | count;
-      B += (y && B > 0);
+      b += (y && b > 0);
     }
 
     void setScale(const int Scale) { scale = Scale; }
 
     void mix(Mixer &m) {
       updater.subscribe(this);
-      cp = &data[context + B];
+      cp = &data[context + b];
       int prediction = (*cp) >> 20U;
       m.add((stretch(prediction) * scale) >> 8);
       m.add(((prediction - 2048) * scale) >> 9);
       bCount++;
-      B += B + 1;
+      b += b + 1;
       assert(bCount <= bTotal);
     }
 };

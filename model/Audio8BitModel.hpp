@@ -19,7 +19,7 @@ public:
     static constexpr int MIXERCONTEXTSETS = 5;
 
 private:
-    SmallStationaryContextMap sMap1b[nSSM][nCtx];
+    SmallStationaryContextMap sMap1B[nSSM][nCtx];
     OLS<double, int8_t> ols[nOLS][2] {{{128, 24, 0.9975}, {128, 24, 0.9975}},
                                       {{90,  30, 0.9965}, {90,  30, 0.9965}},
                                       {{90,  31, 0.996},  {90,  31, 0.996}},
@@ -37,7 +37,7 @@ private:
 
 public:
     Audio8BitModel(const Shared *const sh, ModelStats *st) : AudioModel(sh, st),
-            sMap1b {/* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
+            sMap1B {/* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
                     /*nOLS: 0-3*/ {{sh, 11, 1, 6, 128}, {sh, 11, 1, 9, 128}, {sh, 11, 1, 7, 86}},
                                   {{sh, 11, 1, 6, 128}, {sh, 11, 1, 9, 128}, {sh, 11, 1, 7, 86}},
                                   {{sh, 11, 1, 6, 128}, {sh, 11, 1, 9, 128}, {sh, 11, 1, 7, 86}},
@@ -63,7 +63,7 @@ public:
         assert((info & 2) == 0);
         stereo = (info & 1U);
         mask = 0;
-        stats->Wav = stereo + 1;
+        stats->wav = stereo + 1;
         wMode = info;
         for( int i = 0; i < nLMS; i++ )
           lms[i][0].reset(), lms[i][1].reset();
@@ -145,15 +145,15 @@ public:
         for( i = 0; i < nSSM; i++ )
           prd[i][ch][1] = signedClip8(prd[i][ch][0] + residuals[i][pCh]);
       }
-      const int8_t B = c0 << (8U - bpos);
+      const int8_t b = c0 << (8U - bpos);
       for( int i = 0; i < nSSM; i++ ) {
-        const uint32_t ctx = (prd[i][ch][0] - B) * 8 + bpos;
-        sMap1b[i][0].set(ctx);
-        sMap1b[i][1].set(ctx);
-        sMap1b[i][2].set((prd[i][ch][1] - B) * 8 + bpos);
-        sMap1b[i][0].mix(m);
-        sMap1b[i][1].mix(m);
-        sMap1b[i][2].mix(m);
+        const uint32_t ctx = (prd[i][ch][0] - b) * 8 + bpos;
+        sMap1B[i][0].set(ctx);
+        sMap1B[i][1].set(ctx);
+        sMap1B[i][2].set((prd[i][ch][1] - b) * 8 + bpos);
+        sMap1B[i][0].mix(m);
+        sMap1B[i][1].mix(m);
+        sMap1B[i][2].mix(m);
       }
       m.set((errLog << 8U) | c0, 4096);
       m.set((uint8_t(mask) << 3U) | (ch << 2) | (bpos >> 1), 2048);

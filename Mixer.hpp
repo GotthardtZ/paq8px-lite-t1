@@ -105,10 +105,10 @@ typedef enum {
 class Mixer : protected IPredictor {
 protected:
     const Shared *const shared;
-    const uint32_t N, M, S; // max inputs, max contexts, max context sets
+    const uint32_t n, m, s; // max inputs, max contexts, max context sets
     int scaleFactor; // scale factor for dot product
     Array<short, 32> tx; // n inputs from add()
-    Array<short, 32> wx; // n*M weights
+    Array<short, 32> wx; // n*m weights
     Array<uint32_t> cxt; // s contexts
     Array<ErrorInfo> info; // stats for the adaptive learning rates
     Array<int> rates; // learning rates
@@ -118,7 +118,7 @@ protected:
     Array<int> pr; // last result (scaled 12 bits)
 public:
     /**
-     * Mixer m(n, M, s=1, w=0) combines models using M neural networks with
+     * Mixer m(n, m, s=1, w=0) combines models using m neural networks with
      * n inputs each, of which up to s may be selected.  If s > 1 then
      * the outputs of these neural networks are combined using another
      * neural network (with arguments s, 1, 1).  If s = 1 then the
@@ -128,9 +128,9 @@ public:
      * @param m
      * @param s
      */
-    Mixer(const Shared *const sh, const int n, const int m, const int s) : shared(sh), N(n), M(m), S(s), scaleFactor(0), tx(N), wx(N * M),
-            cxt(S), info(S), rates(S), pr(S) {
-      for( uint64_t i = 0; i < S; ++i ) {
+    Mixer(const Shared *const sh, const int n, const int m, const int s) : shared(sh), n(n), m(m), s(s), scaleFactor(0), tx(n), wx(n * m),
+            cxt(s), info(s), rates(s), pr(s) {
+      for( uint64_t i = 0; i < s; ++i ) {
         pr[i] = 2048; //initial p=0.5
         rates[i] = DEFAULT_LEARNING_RATE;
         info[i].reset();
@@ -156,7 +156,7 @@ public:
      */
 
     void add(const int x) {
-      assert(nx < N);
+      assert(nx < n);
       assert(x == short(x));
       tx[nx++] = (short) x;
     }
@@ -164,15 +164,15 @@ public:
     /**
      *  m.set(cx, range) selects cx as one of \range neural networks to
      *  use.  0 <= cx < range. Should be called up to s times such
-     *  that the total of the ranges is <= M.
+     *  that the total of the ranges is <= m.
      * @param cx
      * @param range
      * @param rate
      */
     void set(const uint32_t cx, const uint32_t range, const int rate = DEFAULT_LEARNING_RATE) {
-      assert(numContexts < S);
+      assert(numContexts < s);
       assert(cx < range);
-      assert(base + range <= M);
+      assert(base + range <= m);
       if( !(options & OPTION_ADAPTIVE))
         rates[numContexts] = rate;
       cxt[numContexts++] = base + cx;
@@ -217,8 +217,8 @@ private:
     SIMDMixer *mp; // points to a Mixer to combine results
 public:
     SIMDMixer(const Shared *sh, const int n, const int m, const int s) : Mixer(sh, ((n + (simdWidth() - 1)) & -(simdWidth())), m, s) {
-      assert(n > 0 && N > 0 && (N & (simdWidth() - 1)) == 0 && M > 0 && S >= 1);
-      mp = (S > 1) ? new SIMDMixer<simd>(sh, S, 1, 1) : nullptr;
+      assert(n > 0 && n > 0 && (n & (simdWidth() - 1)) == 0 && m > 0 && s >= 1);
+      mp = (s > 1) ? new SIMDMixer<simd>(sh, s, 1, 1) : nullptr;
     }
 
     ~SIMDMixer() override {
@@ -243,11 +243,11 @@ public:
         for( uint64_t i = 0; i < numContexts; ++i ) {
           const int err = target - pr[i];
           if( simd == SIMD_NONE )
-            trainSimdNone(&tx[0], &wx[cxt[i] * N], nx, err * rates[i]);
+            trainSimdNone(&tx[0], &wx[cxt[i] * n], nx, err * rates[i]);
           if( simd == SIMD_SSE2 )
-            trainSimdSse2(&tx[0], &wx[cxt[i] * N], nx, err * rates[i]);
+            trainSimdSse2(&tx[0], &wx[cxt[i] * n], nx, err * rates[i]);
           if( simd == SIMD_AVX2 )
-            trainSimdAvx2(&tx[0], &wx[cxt[i] * N], nx, err * rates[i]);
+            trainSimdAvx2(&tx[0], &wx[cxt[i] * n], nx, err * rates[i]);
           if( options & OPTION_ADAPTIVE ) {
             const uint32_t logErr = min(0xF, ilog2(abs(err)));
             info[i].sum -= square(info[i].data[1] >> 28U);
@@ -284,11 +284,11 @@ public:
         for( uint64_t i = 0; i < numContexts; ++i ) {
           int dp = 0;
           if( simd == SIMD_NONE )
-            dp = dotProductSimdNone(&tx[0], &wx[cxt[i] * N], nx);
+            dp = dotProductSimdNone(&tx[0], &wx[cxt[i] * n], nx);
           if( simd == SIMD_SSE2 )
-            dp = dotProductSimdSse2(&tx[0], &wx[cxt[i] * N], nx);
+            dp = dotProductSimdSse2(&tx[0], &wx[cxt[i] * n], nx);
           if( simd == SIMD_AVX2 )
-            dp = dotProductSimdAvx2(&tx[0], &wx[cxt[i] * N], nx);
+            dp = dotProductSimdAvx2(&tx[0], &wx[cxt[i] * n], nx);
           dp = (dp * scaleFactor) >> 16U;
           if( dp < -2047 )
             dp = -2047;
@@ -302,11 +302,11 @@ public:
       } else { // s=1 context
         int dp = 0;
         if( simd == SIMD_NONE )
-          dp = dotProductSimdNone(&tx[0], &wx[cxt[0] * N], nx);
+          dp = dotProductSimdNone(&tx[0], &wx[cxt[0] * n], nx);
         if( simd == SIMD_SSE2 )
-          dp = dotProductSimdSse2(&tx[0], &wx[cxt[0] * N], nx);
+          dp = dotProductSimdSse2(&tx[0], &wx[cxt[0] * n], nx);
         if( simd == SIMD_AVX2 )
-          dp = dotProductSimdAvx2(&tx[0], &wx[cxt[0] * N], nx);
+          dp = dotProductSimdAvx2(&tx[0], &wx[cxt[0] * n], nx);
         dp = (dp * scaleFactor) >> 16U;
         return pr[0] = squash(dp);
       }

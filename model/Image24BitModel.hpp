@@ -14,7 +14,7 @@ inline uint8_t paeth(uint8_t const W, uint8_t const N, uint8_t const NW) {
 /**
  * Model for filtered (PNG) or unfiltered 24/32-bit image data
  */
-class Image24bitModel {
+class Image24BitModel {
 private:
     static constexpr int nSM0 = 18;
     static constexpr int nSM1 = 76;
@@ -34,7 +34,7 @@ public:
     ContextMap2 cm;
     SmallStationaryContextMap SCMap[nSSM];
     StationaryMap map[nSM];
-    Buf buffer {0x100000}; // internal rotating buffer for (PNG unfiltered) pixel data
+    RingBuffer<uint8_t> buffer {0x100000}; // internal rotating buffer for (PNG unfiltered) pixel data
     //pixel neighborhood
     uint8_t WWWWWW = 0, WWWWW = 0, WWWW = 0, WWW = 0, WW = 0, W = 0;
     uint8_t NWWWW = 0, NWWW = 0, NWW = 0, NW = 0, N = 0, NE = 0, NEE = 0, NEEE = 0, NEEEE = 0;
@@ -75,7 +75,7 @@ public:
     const uint8_t **ols_ctxs[nOLS] = {&ols_ctx1[0], &ols_ctx2[0], &ols_ctx3[0], &ols_ctx4[0], &ols_ctx5[0], &ols_ctx6[0]};
 
 public:
-    Image24bitModel(const Shared *const sh, ModelStats *st, const uint64_t size) : shared(sh), stats(st),
+    Image24BitModel(const Shared *const sh, ModelStats *st, const uint64_t size) : shared(sh), stats(st),
             cm(sh, size, nCM, 64, CM_USE_RUN_STATS), SCMap {/* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
                     {sh, 11, 1, 9, 86},
                     {sh, 11, 1, 9, 86},
@@ -606,34 +606,34 @@ public:
       }
       if( x > 0 || !isPNG ) {
         INJECT_SHARED_c0
-        uint8_t B = (c0 << (8 - bpos));
+        uint8_t b = (c0 << (8 - bpos));
         int i = 4;
 
         map[++i].setDirect(
-                (((uint8_t) (clip(W + N - NW) - px - B)) * 8 + bpos) | (logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) << 11));
-        map[++i].setDirect((((uint8_t) (clip(N * 2 - NN) - px - B)) * 8 + bpos) | (logMeanDiffQt(W, clip(NW * 2 - NNW)) << 11));
-        map[++i].setDirect((((uint8_t) (clip(W * 2 - WW) - px - B)) * 8 + bpos) | (logMeanDiffQt(N, clip(NW * 2 - NWW)) << 11));
-        map[++i].setDirect((((uint8_t) (clip(W + N - NW) - px - B)) * 8 + bpos) | (logMeanDiffQt(p1, clip(Wp1 + Np1 - NWp1)) << 11));
-        map[++i].setDirect((((uint8_t) (clip(W + N - NW) - px - B)) * 8 + bpos) | (logMeanDiffQt(p2, clip(Wp2 + Np2 - NWp2)) << 11));
-        map[++i].set(hash(W - px - B, N - px - B) * 8 + bpos);
-        map[++i].set(hash(W - px - B, WW - px - B) * 8 + bpos);
-        map[++i].set(hash(N - px - B, NN - px - B) * 8 + bpos);
-        map[++i].set(hash(clip(N + NE - NNE) - px - B, clip(N + NW - NNW) - px - B) * 8 + bpos);
-        map[++i].setDirect((min(color, stride - 1) << 11) | (((uint8_t) (clip(N + p1 - Np1) - px - B)) * 8 + bpos));
-        map[++i].setDirect((min(color, stride - 1) << 11) | (((uint8_t) (clip(N + p2 - Np2) - px - B)) * 8 + bpos));
-        map[++i].setDirect((min(color, stride - 1) << 11) | (((uint8_t) (clip(W + p1 - Wp1) - px - B)) * 8 + bpos));
-        map[++i].setDirect((min(color, stride - 1) << 11) | (((uint8_t) (clip(W + p2 - Wp2) - px - B)) * 8 + bpos));
+                (((uint8_t) (clip(W + N - NW) - px - b)) * 8 + bpos) | (logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) << 11));
+        map[++i].setDirect((((uint8_t) (clip(N * 2 - NN) - px - b)) * 8 + bpos) | (logMeanDiffQt(W, clip(NW * 2 - NNW)) << 11));
+        map[++i].setDirect((((uint8_t) (clip(W * 2 - WW) - px - b)) * 8 + bpos) | (logMeanDiffQt(N, clip(NW * 2 - NWW)) << 11));
+        map[++i].setDirect((((uint8_t) (clip(W + N - NW) - px - b)) * 8 + bpos) | (logMeanDiffQt(p1, clip(Wp1 + Np1 - NWp1)) << 11));
+        map[++i].setDirect((((uint8_t) (clip(W + N - NW) - px - b)) * 8 + bpos) | (logMeanDiffQt(p2, clip(Wp2 + Np2 - NWp2)) << 11));
+        map[++i].set(hash(W - px - b, N - px - b) * 8 + bpos);
+        map[++i].set(hash(W - px - b, WW - px - b) * 8 + bpos);
+        map[++i].set(hash(N - px - b, NN - px - b) * 8 + bpos);
+        map[++i].set(hash(clip(N + NE - NNE) - px - b, clip(N + NW - NNW) - px - b) * 8 + bpos);
+        map[++i].setDirect((min(color, stride - 1) << 11) | (((uint8_t) (clip(N + p1 - Np1) - px - b)) * 8 + bpos));
+        map[++i].setDirect((min(color, stride - 1) << 11) | (((uint8_t) (clip(N + p2 - Np2) - px - b)) * 8 + bpos));
+        map[++i].setDirect((min(color, stride - 1) << 11) | (((uint8_t) (clip(W + p1 - Wp1) - px - b)) * 8 + bpos));
+        map[++i].setDirect((min(color, stride - 1) << 11) | (((uint8_t) (clip(W + p2 - Wp2) - px - b)) * 8 + bpos));
         ++i;
         assert(i == nSM0);
 
         for( int j = 0; j < nSM1; i++, j++ )
-          map[i].setDirect((mapContexts[j] - px - B) * 8 + bpos);
+          map[i].setDirect((mapContexts[j] - px - b) * 8 + bpos);
 
         for( int j = 0; i < nSM; i++, j++ )
-          map[i].setDirect((pOLS[j] - px - B) * 8 + bpos);
+          map[i].setDirect((pOLS[j] - px - b) * 8 + bpos);
 
         for( int i = 0; i < nSSM; i++ )
-          SCMap[i].set((scMapContexts[i] - px - B) * 8 + bpos);
+          SCMap[i].set((scMapContexts[i] - px - b) * 8 + bpos);
       }
     }
 

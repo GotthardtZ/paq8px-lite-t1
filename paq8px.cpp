@@ -214,7 +214,7 @@ static_assert(sizeof(int) == 4, "sizeof(int)");
 #include "filter/Filters.hpp"
 #include "ListOfFiles.hpp"
 
-typedef enum { doNone, doCompress, doExtract, doCompare, doList } WHATTODO;
+typedef enum { DoNone, DoCompress, DoExtract, DoCompare, DoList } WHATTODO;
 
 void printHelp() {
   printf("\n"
@@ -357,15 +357,15 @@ void printSimdInfo(int simdIset, int detectedSimdIset) {
 
 void printCommand(const WHATTODO &whattodo) {
   printf(" To do          = ");
-  if( whattodo == doNone )
+  if( whattodo == DoNone )
     printf("-");
-  if( whattodo == doCompress )
+  if( whattodo == DoCompress )
     printf("Compress");
-  if( whattodo == doExtract )
+  if( whattodo == DoExtract )
     printf("Extract");
-  if( whattodo == doCompare )
+  if( whattodo == DoCompare )
     printf("Compare");
-  if( whattodo == doList )
+  if( whattodo == DoList )
     printf("List");
   printf("\n");
 }
@@ -395,7 +395,7 @@ int main_utf8(int argc, char **argv) {
     }
 
     // Parse command line arguments
-    WHATTODO whattodo = doNone;
+    WHATTODO whattodo = DoNone;
     bool verbose = false;
     int c;
     int simdIset = -1; //simd instruction set to use
@@ -414,9 +414,9 @@ int main_utf8(int argc, char **argv) {
         if( argLen == 1 )
           quit("Empty command.");
         if( argv[i][1] >= '0' && argv[i][1] <= '9' ) {
-          if( whattodo != doNone )
+          if( whattodo != DoNone )
             quit("Only one command may be specified.");
-          whattodo = doCompress;
+          whattodo = DoCompress;
           level = argv[i][1] - '0';
           //process optional compression switches
           for( int j = 2; j < argLen; j++ ) {
@@ -443,17 +443,17 @@ int main_utf8(int argc, char **argv) {
             }
           }
         } else if( strcasecmp(argv[i], "-d") == 0 ) {
-          if( whattodo != doNone )
+          if( whattodo != DoNone )
             quit("Only one command may be specified.");
-          whattodo = doExtract;
+          whattodo = DoExtract;
         } else if( strcasecmp(argv[i], "-t") == 0 ) {
-          if( whattodo != doNone )
+          if( whattodo != DoNone )
             quit("Only one command may be specified.");
-          whattodo = doCompare;
+          whattodo = DoCompare;
         } else if( strcasecmp(argv[i], "-l") == 0 ) {
-          if( whattodo != doNone )
+          if( whattodo != DoNone )
             quit("Only one command may be specified.");
-          whattodo = doList;
+          whattodo = DoList;
         } else if( strcasecmp(argv[i], "-v") == 0 ) {
           verbose = true;
         } else if( strcasecmp(argv[i], "-log") == 0 ) {
@@ -532,22 +532,22 @@ int main_utf8(int argc, char **argv) {
 
     // Successfully parsed command line arguments
     // Let's check their validity
-    if( whattodo == doNone )
+    if( whattodo == DoNone )
       quit("A command switch is required: -0..-9 to compress, -d to decompress, -t to test, -l to list.");
     if( input.strsize() == 0 ) {
-      printf("\nAn %s is required %s.\n", whattodo == doCompress ? "input file or filelist" : "archive filename",
-             whattodo == doCompress ? "for compressing" : whattodo == doExtract ? "for decompressing" : whattodo == doCompare
-                                                                                                        ? "for testing" : whattodo == doList
+      printf("\nAn %s is required %s.\n", whattodo == DoCompress ? "input file or filelist" : "archive filename",
+             whattodo == DoCompress ? "for compressing" : whattodo == DoExtract ? "for decompressing" : whattodo == DoCompare
+                                                                                                        ? "for testing" : whattodo == DoList
                                                                                                                           ? "to list its contents"
                                                                                                                           : "");
       quit();
     }
-    if( whattodo == doList && output.strsize() != 0 )
+    if( whattodo == DoList && output.strsize() != 0 )
       quit("The list command needs only one file parameter.");
 
     // File list supplied?
     if( input.beginsWith("@")) {
-      if( whattodo == doCompress ) {
+      if( whattodo == DoCompress ) {
         options |= OPTION_MULTIPLE_FILE_MODE;
         input.stripStart(1);
       } else
@@ -558,7 +558,7 @@ int main_utf8(int argc, char **argv) {
 
     //Logfile supplied?
     if( logfile.strsize() != 0 ) {
-      if( whattodo != doCompress )
+      if( whattodo != DoCompress )
         quit("A log file may only be specified for compression.");
       pathtype = examinePath(logfile.c_str());
       if( pathtype == 2 || pathtype == 4 )
@@ -612,7 +612,7 @@ int main_utf8(int argc, char **argv) {
     }
 
     //determine archive name
-    if( whattodo == doCompress ) {
+    if( whattodo == DoCompress ) {
       archiveName += outputpath.c_str();
       if( output.strsize() == 0 ) { // If no archive name is provided, construct it from input (append PROGNAME extension to input filename)
         archiveName += input.c_str();
@@ -629,16 +629,16 @@ int main_utf8(int argc, char **argv) {
       printf(" Output folder  = %s\n", outputpath.strsize() == 0 ? "." : outputpath.c_str());
     }
 
-    Mode mode = whattodo == doCompress ? COMPRESS : DECOMPRESS;
+    Mode mode = whattodo == DoCompress ? COMPRESS : DECOMPRESS;
 
     ListOfFiles listoffiles;
 
     //set basePath for filelist
-    listoffiles.setBasePath(whattodo == doCompress ? inputpath.c_str() : outputpath.c_str());
+    listoffiles.setBasePath(whattodo == DoCompress ? inputpath.c_str() : outputpath.c_str());
 
     // Process file list (in multiple file mode)
     if( options & OPTION_MULTIPLE_FILE_MODE ) { //multiple file mode
-      assert(whattodo == doCompress);
+      assert(whattodo == DoCompress);
       // Read and parse filelist file
       FileDisk f;
       FileName fn(inputpath.c_str());
@@ -702,7 +702,7 @@ int main_utf8(int argc, char **argv) {
 
     // In single file mode with no output filename specified we must construct it from the supplied archive filename
     if((options & OPTION_MULTIPLE_FILE_MODE) == 0 ) { //single file mode
-      if((whattodo == doExtract || whattodo == doCompare) && output.strsize() == 0 ) {
+      if((whattodo == DoExtract || whattodo == DoCompare) && output.strsize() == 0 ) {
         output += input.c_str();
         const char *fileExtension = "." PROGNAME PROGVERSION;
         if( output.endsWith(fileExtension))
@@ -766,21 +766,21 @@ int main_utf8(int argc, char **argv) {
           quit(errmsgInvalidChar);
         listoffiles.addChar((char) c);
       }
-      if( whattodo == doList )
+      if( whattodo == DoList )
         printf("File list of %s archive:\n", archiveName.c_str());
 
       numberOfFiles = listoffiles.getCount();
 
       //write filenames to screen or listfile or verify (compare) contents
-      if( whattodo == doList )
+      if( whattodo == DoList )
         printf("%s\n", listoffiles.getString()->c_str());
-      else if( whattodo == doExtract ) {
+      else if( whattodo == DoExtract ) {
         FileDisk f;
         f.create(listFilename.c_str());
         String *s = listoffiles.getString();
         f.blockWrite((uint8_t *) (&(*s)[0]), s->strsize());
         f.close();
-      } else if( whattodo == doCompare ) {
+      } else if( whattodo == DoCompare ) {
         FileDisk f;
         f.open(listFilename.c_str(), true);
         String *s = listoffiles.getString();
@@ -793,7 +793,7 @@ int main_utf8(int argc, char **argv) {
       }
     }
 
-    if( whattodo == doList && (options & OPTION_MULTIPLE_FILE_MODE) == 0 )
+    if( whattodo == DoList && (options & OPTION_MULTIPLE_FILE_MODE) == 0 )
       quit("Can't list. Filenames are not stored in single file mode.\n");
 
     // Compress or decompress files
@@ -866,8 +866,8 @@ int main_utf8(int argc, char **argv) {
         printf("\n");
       }
     } else { //decompress
-      if( whattodo == doExtract || whattodo == doCompare ) {
-        FMode fMode = whattodo == doExtract ? FDECOMPRESS : FCOMPARE;
+      if( whattodo == DoExtract || whattodo == DoCompare ) {
+        FMode fMode = whattodo == DoExtract ? FDECOMPRESS : FCOMPARE;
         if((options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
           for( int i = 0; i < numberOfFiles; i++ ) {
             const char *fName = listoffiles.getfilename(i);
@@ -884,7 +884,7 @@ int main_utf8(int argc, char **argv) {
     }
 
     archive.close();
-    if( whattodo != doList )
+    if( whattodo != DoList )
       programChecker.print();
   }
     // we catch only the intentional exceptions from quit() to exit gracefully

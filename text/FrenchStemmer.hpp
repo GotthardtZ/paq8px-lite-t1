@@ -7,18 +7,18 @@
 class FrenchStemmer : public Stemmer {
 private:
     static constexpr int NUM_VOWELS = 17;
-    static constexpr char Vowels[NUM_VOWELS] = {'a', 'e', 'i', 'o', 'u', 'y', '\xE2', '\xE0', '\xEB', '\xE9', '\xEA', '\xE8', '\xEF',
+    static constexpr char vowels[NUM_VOWELS] = {'a', 'e', 'i', 'o', 'u', 'y', '\xE2', '\xE0', '\xEB', '\xE9', '\xEA', '\xE8', '\xEF',
                                                 '\xEE', '\xF4', '\xFB', '\xF9'};
     static constexpr int NUM_COMMON_WORDS = 10;
-    const char *CommonWords[NUM_COMMON_WORDS] = {"de", "la", "le", "et", "en", "un", "une", "du", "que", "pas"};
+    const char *commonWords[NUM_COMMON_WORDS] = {"de", "la", "le", "et", "en", "un", "une", "du", "que", "pas"};
     static constexpr int NUM_EXCEPTIONS = 3;
-    const char *(Exceptions[NUM_EXCEPTIONS])[2] = {{"monument", "monument"},
+    const char *(exceptions[NUM_EXCEPTIONS])[2] = {{"monument", "monument"},
                                                    {"yeux",     "oeil"},
                                                    {"travaux",  "travail"},};
-    static constexpr uint32_t TypesExceptions[NUM_EXCEPTIONS] = {French::Noun, French::Noun | French::Plural,
+    static constexpr uint32_t typesExceptions[NUM_EXCEPTIONS] = {French::Noun, French::Noun | French::Plural,
                                                                  French::Noun | French::Plural};
     static constexpr int NUM_SUFFIXES_STEP1 = 39;
-    const char *SuffixesStep1[NUM_SUFFIXES_STEP1] = {"ance", "iqUe", "isme", "able", "iste", "eux", "ances", "iqUes", "ismes", "ables",
+    const char *suffixesStep1[NUM_SUFFIXES_STEP1] = {"ance", "iqUe", "isme", "able", "iste", "eux", "ances", "iqUes", "ismes", "ables",
                                                      "istes", //11
                                                      "atrice", "ateur", "ation", "atrices", "ateurs", "ations", //6
                                                      "logie", "logies", //2
@@ -32,36 +32,36 @@ private:
                                                      "ment", "ments" //2
     };
     static constexpr int NUM_SUFFIXES_STEP2a = 35;
-    const char *SuffixesStep2a[NUM_SUFFIXES_STEP2a] = {"issaIent", "issantes", "iraIent", "issante", "issants", "issions", "irions",
+    const char *suffixesStep2A[NUM_SUFFIXES_STEP2a] = {"issaIent", "issantes", "iraIent", "issante", "issants", "issions", "irions",
                                                        "issais", "issait", "issant", "issent", "issiez", "issons", "irais", "irait",
                                                        "irent", "iriez", "irons", "iront", "isses", "issez", "\xEEmes", "\xEEtes", "irai",
                                                        "iras", "irez", "isse", "ies", "ira", "\xEEt", "ie", "ir", "is", "it", "i"};
     static constexpr int NUM_SUFFIXES_STEP2b = 38;
-    const char *SuffixesStep2b[NUM_SUFFIXES_STEP2b] = {"eraIent", "assions", "erions", "assent", "assiez", "\xE8rent", "erais", "erait",
+    const char *suffixesStep2B[NUM_SUFFIXES_STEP2b] = {"eraIent", "assions", "erions", "assent", "assiez", "\xE8rent", "erais", "erait",
                                                        "eriez", "erons", "eront", "aIent", "antes", "asses", "ions", "erai", "eras", "erez",
                                                        "\xE2mes", "\xE2tes", "ante", "ants", "asse", "\xE9"
                                                                                                      "es", "era", "iez", "ais", "ait",
                                                        "ant", "\xE9"
                                                               "e", "\xE9s", "er", "ez", "\xE2t", "ai", "as", "\xE9", "a"};
     static constexpr int NUM_SET_STEP4 = 6;
-    static constexpr char SetStep4[NUM_SET_STEP4] = {'a', 'i', 'o', 'u', '\xE8', 's'};
+    static constexpr char setStep4[NUM_SET_STEP4] = {'a', 'i', 'o', 'u', '\xE8', 's'};
     static constexpr int NUM_SUFFIXES_STEP4 = 7;
-    const char *SuffixesStep4[NUM_SUFFIXES_STEP4] = {"i\xE8re", "I\xE8re", "ion", "ier", "Ier", "e", "\xEB"};
+    const char *suffixesStep4[NUM_SUFFIXES_STEP4] = {"i\xE8re", "I\xE8re", "ion", "ier", "Ier", "e", "\xEB"};
     static constexpr int NUM_SUFFIXES_STEP5 = 5;
-    const char *SuffixesStep5[NUM_SUFFIXES_STEP5] = {"enn", "onn", "ett", "ell", "eill"};
+    const char *suffixesStep5[NUM_SUFFIXES_STEP5] = {"enn", "onn", "ett", "ell", "eill"};
 
     inline bool isConsonant(const char c) {
       return !isVowel(c);
     }
 
-    void ConvertUTF8(Word *W) {
-      for( int i = W->start; i < W->end; i++ ) {
-        uint8_t c = W->letters[i + 1] + ((W->letters[i + 1] < 0xA0) ? 0x60 : 0x40);
-        if( W->letters[i] == 0xC3 && (isVowel(c) || (W->letters[i + 1] & 0xDF) == 0x87)) {
-          W->letters[i] = c;
-          if( i + 1 < W->end )
-            memmove(&W->letters[i + 1], &W->letters[i + 2], W->end - i - 1);
-          W->end--;
+    void convertUtf8(Word *w) {
+      for( int i = w->start; i < w->end; i++ ) {
+        uint8_t c = w->letters[i + 1] + ((w->letters[i + 1] < 0xA0) ? 0x60 : 0x40);
+        if( w->letters[i] == 0xC3 && (isVowel(c) || (w->letters[i + 1] & 0xDF) == 0x87)) {
+          w->letters[i] = c;
+          if( i + 1 < w->end )
+            memmove(&w->letters[i + 1], &w->letters[i + 2], w->end - i - 1);
+          w->end--;
         }
       }
     }
@@ -102,24 +102,24 @@ private:
     bool step1(Word *w, const uint32_t rv, const uint32_t r1, const uint32_t r2, bool *forceStep2A) {
       int i = 0;
       for( ; i < 11; i++ ) {
-        if( w->endsWith(SuffixesStep1[i]) && suffixInRn(w, r2, SuffixesStep1[i])) {
-          w->end -= uint8_t(strlen(SuffixesStep1[i]));
+        if( w->endsWith(suffixesStep1[i]) && suffixInRn(w, r2, suffixesStep1[i])) {
+          w->end -= uint8_t(strlen(suffixesStep1[i]));
           if( i == 3 /*able*/)
             w->type |= French::Adjective;
           return true;
         }
       }
       for( ; i < 17; i++ ) {
-        if( w->endsWith(SuffixesStep1[i]) && suffixInRn(w, r2, SuffixesStep1[i])) {
-          w->end -= uint8_t(strlen(SuffixesStep1[i]));
+        if( w->endsWith(suffixesStep1[i]) && suffixInRn(w, r2, suffixesStep1[i])) {
+          w->end -= uint8_t(strlen(suffixesStep1[i]));
           if( w->endsWith("ic"))
             w->changeSuffix("c", "qU");
           return true;
         }
       }
       for( ; i < 25; i++ ) {
-        if( w->endsWith(SuffixesStep1[i]) && suffixInRn(w, r2, SuffixesStep1[i])) {
-          w->end -= uint8_t(strlen(SuffixesStep1[i])) - 1 - (i < 19) * 2;
+        if( w->endsWith(suffixesStep1[i]) && suffixInRn(w, r2, suffixesStep1[i])) {
+          w->end -= uint8_t(strlen(suffixesStep1[i])) - 1 - (i < 19) * 2;
           if( i > 22 ) {
             w->end += 2;
             w->letters[w->end] = 't';
@@ -128,14 +128,14 @@ private:
         }
       }
       for( ; i < 27; i++ ) {
-        if( w->endsWith(SuffixesStep1[i]) && suffixInRn(w, r1, SuffixesStep1[i]) && isConsonant((*w)((uint8_t) strlen(SuffixesStep1[i])))) {
-          w->end -= uint8_t(strlen(SuffixesStep1[i]));
+        if( w->endsWith(suffixesStep1[i]) && suffixInRn(w, r1, suffixesStep1[i]) && isConsonant((*w)((uint8_t) strlen(suffixesStep1[i])))) {
+          w->end -= uint8_t(strlen(suffixesStep1[i]));
           return true;
         }
       }
       for( ; i < 29; i++ ) {
-        if( w->endsWith(SuffixesStep1[i]) && suffixInRn(w, rv, SuffixesStep1[i])) {
-          w->end -= uint8_t(strlen(SuffixesStep1[i]));
+        if( w->endsWith(suffixesStep1[i]) && suffixInRn(w, rv, suffixesStep1[i])) {
+          w->end -= uint8_t(strlen(suffixesStep1[i]));
           if( w->endsWith("iv") && suffixInRn(w, r2, "iv")) {
             w->end -= 2;
             if( w->endsWith("at") && suffixInRn(w, r2, "at"))
@@ -155,8 +155,8 @@ private:
         }
       }
       for( ; i < 31; i++ ) {
-        if( w->endsWith(SuffixesStep1[i]) && suffixInRn(w, r2, SuffixesStep1[i])) {
-          w->end -= uint8_t(strlen(SuffixesStep1[i]));
+        if( w->endsWith(suffixesStep1[i]) && suffixInRn(w, r2, suffixesStep1[i])) {
+          w->end -= uint8_t(strlen(suffixesStep1[i]));
           if( w->endsWith("abil")) {
             if( suffixInRn(w, r2, "abil"))
               w->end -= 4;
@@ -173,8 +173,8 @@ private:
         }
       }
       for( ; i < 35; i++ ) {
-        if( w->endsWith(SuffixesStep1[i]) && suffixInRn(w, r2, SuffixesStep1[i])) {
-          w->end -= uint8_t(strlen(SuffixesStep1[i]));
+        if( w->endsWith(suffixesStep1[i]) && suffixInRn(w, r2, suffixesStep1[i])) {
+          w->end -= uint8_t(strlen(suffixesStep1[i]));
           if( w->endsWith("at") && suffixInRn(w, r2, "at")) {
             w->end -= 2;
             if( w->endsWith("ic")) {
@@ -188,19 +188,19 @@ private:
         }
       }
       for( ; i < 37; i++ ) {
-        if( w->endsWith(SuffixesStep1[i])) {
-          if( suffixInRn(w, r2, SuffixesStep1[i])) {
-            w->end -= uint8_t(strlen(SuffixesStep1[i]));
+        if( w->endsWith(suffixesStep1[i])) {
+          if( suffixInRn(w, r2, suffixesStep1[i])) {
+            w->end -= uint8_t(strlen(suffixesStep1[i]));
             return true;
-          } else if( suffixInRn(w, r1, SuffixesStep1[i])) {
-            w->changeSuffix(SuffixesStep1[i], "eux");
+          } else if( suffixInRn(w, r1, suffixesStep1[i])) {
+            w->changeSuffix(suffixesStep1[i], "eux");
             return true;
           }
         }
       }
       for( ; i < NUM_SUFFIXES_STEP1; i++ ) {
-        if( w->endsWith(SuffixesStep1[i]) && suffixInRn(w, rv + 1, SuffixesStep1[i]) && isVowel((*w)((uint8_t) strlen(SuffixesStep1[i])))) {
-          w->end -= uint8_t(strlen(SuffixesStep1[i]));
+        if( w->endsWith(suffixesStep1[i]) && suffixInRn(w, rv + 1, suffixesStep1[i]) && isVowel((*w)((uint8_t) strlen(suffixesStep1[i])))) {
+          w->end -= uint8_t(strlen(suffixesStep1[i]));
           (*forceStep2A) = true;
           return true;
         }
@@ -227,9 +227,9 @@ private:
 
     bool step2A(Word *w, const uint32_t rv) {
       for( int i = 0; i < NUM_SUFFIXES_STEP2a; i++ ) {
-        if( w->endsWith(SuffixesStep2a[i]) && suffixInRn(w, rv + 1, SuffixesStep2a[i]) &&
-            isConsonant((*w)((uint8_t) strlen(SuffixesStep2a[i])))) {
-          w->end -= uint8_t(strlen(SuffixesStep2a[i]));
+        if( w->endsWith(suffixesStep2A[i]) && suffixInRn(w, rv + 1, suffixesStep2A[i]) &&
+            isConsonant((*w)((uint8_t) strlen(suffixesStep2A[i])))) {
+          w->end -= uint8_t(strlen(suffixesStep2A[i]));
           if( i == 31 /*ir*/)
             w->type |= French::Verb;
           return true;
@@ -240,18 +240,18 @@ private:
 
     bool step2B(Word *w, const uint32_t rv, const uint32_t r2) {
       for( int i = 0; i < NUM_SUFFIXES_STEP2b; i++ ) {
-        if( w->endsWith(SuffixesStep2b[i]) && suffixInRn(w, rv, SuffixesStep2b[i])) {
-          switch( SuffixesStep2b[i][0] ) {
+        if( w->endsWith(suffixesStep2B[i]) && suffixInRn(w, rv, suffixesStep2B[i])) {
+          switch( suffixesStep2B[i][0] ) {
             case 'a':
             case '\xE2': {
-              w->end -= uint8_t(strlen(SuffixesStep2b[i]));
+              w->end -= uint8_t(strlen(suffixesStep2B[i]));
               if( w->endsWith("e") && suffixInRn(w, rv, "e"))
                 w->end--;
               return true;
             }
             default: {
-              if( i != 14 || suffixInRn(w, r2, SuffixesStep2b[i])) {
-                w->end -= uint8_t(strlen(SuffixesStep2b[i]));
+              if( i != 14 || suffixInRn(w, r2, suffixesStep2B[i])) {
+                w->end -= uint8_t(strlen(suffixesStep2B[i]));
                 return true;
               }
             }
@@ -271,16 +271,16 @@ private:
 
     bool step4(Word *w, const uint32_t rv, const uint32_t r2) {
       bool res = false;
-      if( w->length() >= 2 && w->letters[w->end] == 's' && !charInArray((*w)(1), SetStep4, NUM_SET_STEP4)) {
+      if( w->length() >= 2 && w->letters[w->end] == 's' && !charInArray((*w)(1), setStep4, NUM_SET_STEP4)) {
         w->end--;
         res = true;
       }
       for( int i = 0; i < NUM_SUFFIXES_STEP4; i++ ) {
-        if( w->endsWith(SuffixesStep4[i]) && suffixInRn(w, rv, SuffixesStep4[i])) {
+        if( w->endsWith(suffixesStep4[i]) && suffixInRn(w, rv, suffixesStep4[i])) {
           switch( i ) {
             case 2: { //ion
               char prec = (*w)(3);
-              if( suffixInRn(w, r2, SuffixesStep4[i]) && suffixInRn(w, rv + 1, SuffixesStep4[i]) && (prec == 's' || prec == 't')) {
+              if( suffixInRn(w, r2, suffixesStep4[i]) && suffixInRn(w, rv + 1, suffixesStep4[i]) && (prec == 's' || prec == 't')) {
                 w->end -= 3;
                 return true;
               }
@@ -298,7 +298,7 @@ private:
               break;
             }
             default: {
-              w->changeSuffix(SuffixesStep4[i], "i");
+              w->changeSuffix(suffixesStep4[i], "i");
               return true;
             }
           }
@@ -309,7 +309,7 @@ private:
 
     bool step5(Word *w) {
       for( int i = 0; i < NUM_SUFFIXES_STEP5; i++ ) {
-        if( w->endsWith(SuffixesStep5[i])) {
+        if( w->endsWith(suffixesStep5[i])) {
           w->end--;
           return true;
         }
@@ -332,22 +332,22 @@ private:
 
 public:
     inline bool isVowel(const char c) final {
-      return charInArray(c, Vowels, NUM_VOWELS);
+      return charInArray(c, vowels, NUM_VOWELS);
     }
 
     bool stem(Word *w) override {
-      ConvertUTF8(w);
+      convertUtf8(w);
       if( w->length() < 2 ) {
         w->calculateStemHash();
         return false;
       }
       for( int i = 0; i < NUM_EXCEPTIONS; i++ ) {
-        if((*w) == Exceptions[i][0] ) {
-          size_t len = strlen(Exceptions[i][1]);
-          memcpy(&w->letters[w->start], Exceptions[i][1], len);
+        if((*w) == exceptions[i][0] ) {
+          size_t len = strlen(exceptions[i][1]);
+          memcpy(&w->letters[w->start], exceptions[i][1], len);
           w->end = w->start + uint8_t(len - 1);
           w->calculateStemHash();
-          w->type |= TypesExceptions[i];
+          w->type |= typesExceptions[i];
           w->language = Language::French;
           return true;
         }
@@ -371,7 +371,7 @@ public:
       for( int i = w->start; i <= w->end; i++ )
         w->letters[i] = tolower(w->letters[i]);
       if( !res )
-        res = w->matchesAny(CommonWords, NUM_COMMON_WORDS);
+        res = w->matchesAny(commonWords, NUM_COMMON_WORDS);
       w->calculateStemHash();
       if( res )
         w->language = Language::French;

@@ -1,54 +1,8 @@
 #ifndef PAQ8PX_STATEMAP_HPP
 #define PAQ8PX_STATEMAP_HPP
 
-/**
- * This class provides a static (common) 1024-element lookup table for integer division
- * Initialization will run multiple times, but the table is created only once
- */
-class DivisionTable {
-public:
-    static int *getDT() {
-      static int dt[1024]; // i -> 16K/(i+i+3)
-      for( int i = 0; i < 1024; ++i )
-        dt[i] = 16384 / (i + i + 3);
-      return dt;
-    }
-};
-
-/**
- * This is the base class for StateMap and APM.
- * Purpose: common members are here
- */
-class AdaptiveMap : protected IPredictor {
-protected:
-    const Shared *const shared;
-    Array<uint32_t> t; // cxt -> prediction in high 22 bits, count in low 10 bits
-    int limit;
-    int *dt; // Pointer to division table
-    AdaptiveMap(const Shared *const sh, const int n, const int lim) : shared(sh), t(n), limit(lim) {
-      dt = DivisionTable::getDT();
-    }
-
-    ~AdaptiveMap() override = default;
-
-    void update(uint32_t *const p) {
-      uint32_t p0 = p[0];
-      const int n = p0 & 1023U; //count
-      const int pr = p0 >> 10U; //prediction (22-bit fractional part)
-      if( n < limit )
-        ++p0;
-      else
-        p0 = (p0 & 0xfffffc00U) | limit;
-      INJECT_SHARED_y
-      const int target = y << 22U; //(22-bit fractional part)
-      const int delta = ((target - pr) >> 3U) * dt[n]; //the larger the count (n) the less it should adapt pr+=(target-pr)/(n+1.5)
-      p0 += delta & 0xfffffc00U;
-      p[0] = p0;
-    }
-
-public:
-    void setLimit(const int lim) { limit = lim; };
-};
+#include "DivisionTable.hpp"
+#include "AdaptiveMap.hpp"
 
 /**
  * A StateMap maps a context to a probability.
@@ -61,7 +15,7 @@ protected:
     Array<uint32_t> cxt; // context index of last prediction per context set
 public:
     enum MAPTYPE {
-        GENERIC, BIT_HISTORY, RUN
+        Generic, BitHistory, Run
     };
 
     /**
@@ -76,7 +30,7 @@ public:
             N(n), numContexts(0), cxt(s) {
       assert(S > 0 && N > 0);
       assert(limit > 0 && limit < 1024);
-      if( mapType == BIT_HISTORY ) { // when the context is a bit history byte, we have a-priory for p
+      if( mapType == BitHistory ) { // when the context is a bit history byte, we have a-priory for p
         assert((N & 255) == 0);
         for( uint32_t cx = 0; cx < N; ++cx ) {
           auto state = uint8_t(cx & 255U);
@@ -85,7 +39,7 @@ public:
           for( uint32_t s = 0; s < S; ++s )
             t[s * N + cx] = ((n1 << 20U) / (n0 + n1)) << 12U;
         }
-      } else if( mapType == RUN ) { // when the context is a run count: we have a-priory for p
+      } else if( mapType == Run ) { // when the context is a run count: we have a-priory for p
         for( uint32_t cx = 0; cx < N; ++cx ) {
           const int predictedBit = (cx) & 1U;
           const int uncertainty = (cx >> 1U) & 1U;
@@ -134,7 +88,7 @@ public:
     //call p2() for each context when there is more context sets
     //and call subscribe() once
     /**
-     * TODO: Update this documentation
+     * TODO: update this documentation
      * sm.p(y, cx, limit) converts state cx (0..n-1) to a probability (0..4095).
      * that the next y=1, updating the previous prediction with y (0..1).
      * limit (1..1023, default 1023) is the maximum count for computing a
@@ -177,64 +131,6 @@ public:
     }
 };
 
-
-/**
- * An APM maps a probability and a context to a new probability.
- */
-class APM : public AdaptiveMap {
-private:
-    const int N; // Number of contexts
-    const int steps;
-    int cxt; // context index of last prediction
-public:
-    /**
-     * APM a(n,STEPS) creates with n contexts using 4*STEPS*n bytes memory.
-     * @param sh
-     * @param n
-     * @param s
-     */
-    APM(const Shared *const sh, const int n, const int s) : AdaptiveMap(sh, n * s, 1023), N(n * s), steps(s), cxt(0) {
-      assert(s > 4); // number of steps - must be a positive integer bigger than 4
-      for( int i = 0; i < N; ++i ) {
-        int p = ((i % steps * 2 + 1) * 4096) / (steps * 2) - 2048;
-        t[i] = (uint32_t(squash(p)) << 20) + 6; //initial count: 6
-      }
-    }
-
-    /**
-     * a.update() updates probability map. y=(0..1) is the last bit
-     */
-    void update() override {
-      assert(cxt >= 0 && cxt < N);
-      AdaptiveMap::update(&t[cxt]);
-    }
-
-    /**
-     * a.p(pr, cx, limit) returns a new probability (0..4095) like with StateMap.
-     * cx=(0..n-1) is the context.
-     * pr=(0..4095) is considered part of the context.
-     * The output is computed by interpolating pr into STEPS ranges nonlinearly
-     * with smaller ranges near the ends.  The initial output is pr.
-     * limit=(0..1023): set a lower limit (like 255) for faster adaptation.
-     * @param pr
-     * @param cx
-     * @param lim
-     * @return
-     */
-    int p(int pr, int cx, const int lim) {
-      updater.subscribe(this);
-      assert(pr >= 0 && pr < 4096);
-      assert(cx >= 0 && cx < N / steps);
-      assert(limit > 0 && limit < 1024);
-      AdaptiveMap::setLimit(lim);
-      pr = (stretch(pr) + 2048) * (steps - 1);
-      int wt = pr & 0xfff; // interpolation weight (0..4095)
-      cx = cx * steps + (pr >> 12);
-      assert(cx >= 0 && cx < N - 1);
-      cxt = cx + (wt >> 11);
-      pr = ((t[cx] >> 13) * (4096 - wt) + (t[cx + 1] >> 13) * wt) >> 19;
-      return pr;
-    }
-};
+#include "APM.hpp"
 
 #endif //PAQ8PX_STATEMAP_HPP

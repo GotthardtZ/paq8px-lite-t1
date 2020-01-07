@@ -30,7 +30,7 @@ struct ModelStats {
     } Image {};
 
     //AudioModel
-    uint32_t Wav {}; //used by recordModel
+    uint32_t wav {}; //used by recordModel
     uint8_t Audio {};
 
     //JpegModel

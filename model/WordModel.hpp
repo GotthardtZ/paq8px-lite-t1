@@ -292,12 +292,12 @@ private:
           if( col == 1 )
             firstChar = groups & 0xff;
           INJECT_SHARED_buf
-          const uint8_t c_above = buf[nl2 + col];
-          const uint8_t pC_above = buf[nl2 + col - 1];
+          const uint8_t cAbove = buf[nl2 + col];
+          const uint8_t pCAbove = buf[nl2 + col - 1];
 
           const auto isNewLineStart = col == 0 && nl2 > 0;
-          const auto isPrevCharMatchAbove = c1 == pC_above && col != 0 && nl2 != 0;
-          const uint32_t aboveCtx = c_above << 1U | uint32_t(isPrevCharMatchAbove);
+          const auto isPrevCharMatchAbove = c1 == pCAbove && col != 0 && nl2 != 0;
+          const uint32_t aboveCtx = cAbove << 1U | uint32_t(isPrevCharMatchAbove);
           if( isNewLineStart )
             lineMatch = 0; //first char not yet known = nothing to match
           else if( lineMatch >= 0 && isPrevCharMatchAbove )
@@ -307,7 +307,7 @@ private:
 
           // context: matches with the previous line
           if( lineMatch >= 0 )
-            cm.set(hash(++i, c_above, lineMatch));
+            cm.set(hash(++i, cAbove, lineMatch));
           else {
             cm.skip();
             i++;

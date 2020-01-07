@@ -9,28 +9,28 @@
 class EnglishStemmer : public Stemmer {
 private:
     static constexpr int NUM_VOWELS = 6;
-    static constexpr char Vowels[NUM_VOWELS] = {'a', 'e', 'i', 'o', 'u', 'y'};
+    static constexpr char vowels[NUM_VOWELS] = {'a', 'e', 'i', 'o', 'u', 'y'};
     static constexpr int NUM_DOUBLES = 9;
-    static constexpr char Doubles[NUM_DOUBLES] = {'b', 'd', 'f', 'g', 'm', 'n', 'p', 'r', 't'};
+    static constexpr char doubles[NUM_DOUBLES] = {'b', 'd', 'f', 'g', 'm', 'n', 'p', 'r', 't'};
     static constexpr int NUM_LI_ENDINGS = 10;
-    static constexpr char LiEndings[NUM_LI_ENDINGS] = {'c', 'd', 'e', 'g', 'h', 'k', 'm', 'n', 'r', 't'};
+    static constexpr char liEndings[NUM_LI_ENDINGS] = {'c', 'd', 'e', 'g', 'h', 'k', 'm', 'n', 'r', 't'};
     static constexpr int NUM_NON_SHORT_CONSONANTS = 3;
-    static constexpr char NonShortConsonants[NUM_NON_SHORT_CONSONANTS] = {'w', 'x', 'Y'};
+    static constexpr char nonShortConsonants[NUM_NON_SHORT_CONSONANTS] = {'w', 'x', 'Y'};
     static constexpr int NUM_MALE_WORDS = 9;
-    const char *MaleWords[NUM_MALE_WORDS] = {"he", "him", "his", "himself", "man", "men", "boy", "husband", "actor"};
+    const char *maleWords[NUM_MALE_WORDS] = {"he", "him", "his", "himself", "man", "men", "boy", "husband", "actor"};
     static constexpr int NUM_FEMALE_WORDS = 8;
-    const char *FemaleWords[NUM_FEMALE_WORDS] = {"she", "her", "herself", "woman", "women", "girl", "wife", "actress"};
+    const char *femaleWords[NUM_FEMALE_WORDS] = {"she", "her", "herself", "woman", "women", "girl", "wife", "actress"};
     static constexpr int NUM_COMMON_WORDS = 12;
-    const char *CommonWords[NUM_COMMON_WORDS] = {"the", "be", "to", "of", "and", "in", "that", "you", "have", "with", "from", "but"};
+    const char *commonWords[NUM_COMMON_WORDS] = {"the", "be", "to", "of", "and", "in", "that", "you", "have", "with", "from", "but"};
     static constexpr int NUM_SUFFIXES_STEP0 = 3;
-    const char *SuffixesStep0[NUM_SUFFIXES_STEP0] = {"'s'", "'s", "'"};
+    const char *suffixesStep0[NUM_SUFFIXES_STEP0] = {"'s'", "'s", "'"};
     static constexpr int NUM_SUFFIXES_STEP1b = 6;
-    const char *SuffixesStep1b[NUM_SUFFIXES_STEP1b] = {"eedly", "eed", "ed", "edly", "ing", "ingly"};
+    const char *suffixesStep1B[NUM_SUFFIXES_STEP1b] = {"eedly", "eed", "ed", "edly", "ing", "ingly"};
     static constexpr uint32_t TypesStep1b[NUM_SUFFIXES_STEP1b] = {English::AdverbOfManner, 0, English::PastTense,
                                                                   English::AdverbOfManner | English::PastTense, English::PresentParticiple,
                                                                   English::AdverbOfManner | English::PresentParticiple};
     static constexpr int NUM_SUFFIXES_STEP2 = 22;
-    const char *(SuffixesStep2[NUM_SUFFIXES_STEP2])[2] = {{"ization", "ize"},
+    const char *(suffixesStep2[NUM_SUFFIXES_STEP2])[2] = {{"ization", "ize"},
                                                           {"ational", "ate"},
                                                           {"ousness", "ous"},
                                                           {"iveness", "ive"},
@@ -52,14 +52,14 @@ private:
                                                           {"ator",    "ate"},
                                                           {"alli",    "al"},
                                                           {"bli",     "ble"}};
-    const uint32_t TypesStep2[NUM_SUFFIXES_STEP2] = {English::SuffixION, English::SuffixION | English::SuffixAL, English::SuffixNESS,
+    const uint32_t typesStep2[NUM_SUFFIXES_STEP2] = {English::SuffixION, English::SuffixION | English::SuffixAL, English::SuffixNESS,
                                                      English::SuffixNESS, English::SuffixNESS, English::SuffixION | English::SuffixAL,
                                                      English::AdverbOfManner, English::AdverbOfManner | English::SuffixITY,
                                                      English::AdverbOfManner, English::SuffixION, 0, English::SuffixITY,
                                                      English::AdverbOfManner, English::AdverbOfManner, English::SuffixITY, 0, 0,
                                                      English::AdverbOfManner, 0, 0, English::AdverbOfManner, English::AdverbOfManner};
     static constexpr int NUM_SUFFIXES_STEP3 = 8;
-    const char *(SuffixesStep3[NUM_SUFFIXES_STEP3])[2] = {{"ational", "ate"},
+    const char *(suffixesStep3[NUM_SUFFIXES_STEP3])[2] = {{"ational", "ate"},
                                                           {"tional",  "tion"},
                                                           {"alize",   "al"},
                                                           {"icate",   "ic"},
@@ -67,21 +67,21 @@ private:
                                                           {"ical",    "ic"},
                                                           {"ful",     ""},
                                                           {"ness",    ""}};
-    static constexpr uint32_t TypesStep3[NUM_SUFFIXES_STEP3] = {English::SuffixION | English::SuffixAL,
+    static constexpr uint32_t typesStep3[NUM_SUFFIXES_STEP3] = {English::SuffixION | English::SuffixAL,
                                                                 English::SuffixION | English::SuffixAL, 0, 0, English::SuffixITY,
                                                                 English::SuffixAL, English::AdjectiveFull, English::SuffixNESS};
     static constexpr int NUM_SUFFIXES_STEP4 = 20;
-    const char *SuffixesStep4[NUM_SUFFIXES_STEP4] = {"al", "ance", "ence", "er", "ic", "able", "ible", "ant", "ement", "ment", "ent", "ou",
+    const char *suffixesStep4[NUM_SUFFIXES_STEP4] = {"al", "ance", "ence", "er", "ic", "able", "ible", "ant", "ement", "ment", "ent", "ou",
                                                      "ism", "ate", "iti", "ous", "ive", "ize", "sion", "tion"};
-    static constexpr uint32_t TypesStep4[NUM_SUFFIXES_STEP4] = {English::SuffixAL, English::SuffixNCE, English::SuffixNCE, 0,
+    static constexpr uint32_t typesStep4[NUM_SUFFIXES_STEP4] = {English::SuffixAL, English::SuffixNCE, English::SuffixNCE, 0,
                                                                 English::SuffixIC, English::SuffixCapable, English::SuffixCapable,
                                                                 English::SuffixNT, 0, 0, English::SuffixNT, 0, 0, 0, English::SuffixITY,
                                                                 English::SuffixOUS, English::SuffixIVE, 0, English::SuffixION,
                                                                 English::SuffixION};
     static constexpr int NUM_EXCEPTION_REGION1 = 3;
-    const char *ExceptionsRegion1[NUM_EXCEPTION_REGION1] = {"gener", "arsen", "commun"};
+    const char *exceptionsRegion1[NUM_EXCEPTION_REGION1] = {"gener", "arsen", "commun"};
     static constexpr int NUM_EXCEPTIONS1 = 19;
-    const char *(Exceptions1[NUM_EXCEPTIONS1])[2] = {{"skis",   "ski"},
+    const char *(exceptions1[NUM_EXCEPTIONS1])[2] = {{"skis",   "ski"},
                                                      {"skies",  "sky"},
                                                      {"dying",  "die"},
                                                      {"lying",  "lie"},
@@ -100,7 +100,7 @@ private:
                                                      {"bias",   "bias"},
                                                      {"andes",  "andes"},
                                                      {"texas",  "texas"}};
-    static constexpr uint32_t TypesExceptions1[NUM_EXCEPTIONS1] = {English::Noun | English::Plural,
+    static constexpr uint32_t typesExceptions1[NUM_EXCEPTIONS1] = {English::Noun | English::Plural,
                                                                    English::Noun | English::Plural | English::Verb,
                                                                    English::PresentParticiple, English::PresentParticiple,
                                                                    English::PresentParticiple, English::AdverbOfManner,
@@ -109,30 +109,30 @@ private:
                                                                    English::Noun, English::Noun, 0, English::Noun, English::Noun,
                                                                    English::Noun, English::Noun | English::Plural, English::Noun};
     static constexpr int NUM_EXCEPTIONS2 = 8;
-    const char *Exceptions2[NUM_EXCEPTIONS2] = {"inning", "outing", "canning", "herring", "earring", "proceed", "exceed", "succeed"};
-    static constexpr uint32_t TypesExceptions2[NUM_EXCEPTIONS2] = {English::Noun, English::Noun, English::Noun, English::Noun,
+    const char *exceptions2[NUM_EXCEPTIONS2] = {"inning", "outing", "canning", "herring", "earring", "proceed", "exceed", "succeed"};
+    static constexpr uint32_t typesExceptions2[NUM_EXCEPTIONS2] = {English::Noun, English::Noun, English::Noun, English::Noun,
                                                                    English::Noun, English::Verb, English::Verb, English::Verb};
 
-    inline bool isConsonant(const char c) {
+    constexpr inline bool isConsonant(const char c) {
       return !isVowel(c);
     }
 
     static inline bool isShortConsonant(const char c) {
-      return !charInArray(c, NonShortConsonants, NUM_NON_SHORT_CONSONANTS);
+      return !charInArray(c, nonShortConsonants, NUM_NON_SHORT_CONSONANTS);
     }
 
     static inline bool isDouble(const char c) {
-      return charInArray(c, Doubles, NUM_DOUBLES);
+      return charInArray(c, doubles, NUM_DOUBLES);
     }
 
     static inline bool isLiEnding(const char c) {
-      return charInArray(c, LiEndings, NUM_LI_ENDINGS);
+      return charInArray(c, liEndings, NUM_LI_ENDINGS);
     }
 
     uint32_t getRegion1(const Word *w) {
       for( int i = 0; i < NUM_EXCEPTION_REGION1; i++ ) {
-        if( w->startsWith(ExceptionsRegion1[i]))
-          return uint32_t(strlen(ExceptionsRegion1[i]));
+        if( w->startsWith(exceptionsRegion1[i]))
+          return uint32_t(strlen(exceptionsRegion1[i]));
       }
       return getRegion(w, 0);
     }
@@ -279,8 +279,8 @@ private:
     //Examples: Children's toys / Vice presidents' duties
     bool step0(Word *w) {
       for( int i = 0; i < NUM_SUFFIXES_STEP0; i++ ) {
-        if( w->endsWith(SuffixesStep0[i])) {
-          w->end -= uint8_t(strlen(SuffixesStep0[i]));
+        if( w->endsWith(suffixesStep0[i])) {
+          w->end -= uint8_t(strlen(suffixesStep0[i]));
           w->type |= English::Plural;
           return true;
         }
@@ -361,17 +361,17 @@ private:
      */
     bool step1B(Word *w, const uint32_t r1) {
       for( int i = 0; i < NUM_SUFFIXES_STEP1b; i++ ) {
-        if( w->endsWith(SuffixesStep1b[i])) {
+        if( w->endsWith(suffixesStep1B[i])) {
           switch( i ) {
             case 0:
             case 1: {
-              if( suffixInRn(w, r1, SuffixesStep1b[i]))
+              if( suffixInRn(w, r1, suffixesStep1B[i]))
                 w->end -= 1 + i * 2;
               break;
             }
             default: {
               uint8_t j = w->end;
-              w->end -= uint8_t(strlen(SuffixesStep1b[i]));
+              w->end -= uint8_t(strlen(suffixesStep1B[i]));
               if( hasVowels(w)) {
                 if( w->endsWith("at") || w->endsWith("bl") || w->endsWith("iz") || isShortWord(w))
                   (*w) += 'e';
@@ -410,8 +410,8 @@ private:
                         break;
                       }
                       case 'g': {
-                        static constexpr char Allowed[7] = {'a', 'd', 'e', 'i', 'l', 'r', 'u'};
-                        if( charInArray((*w)(1), Allowed, 7) || ((*w)(1) == 'n' &&
+                        static constexpr char allowed[7] = {'a', 'd', 'e', 'i', 'l', 'r', 'u'};
+                        if( charInArray((*w)(1), allowed, 7) || ((*w)(1) == 'n' &&
                                                                  ((*w)(2) == 'e' || ((*w)(2) == 'u' && (*w)(3) != 'b' && (*w)(3) != 'd') ||
                                                                   ((*w)(2) == 'a' &&
                                                                    ((*w)(3) == 'r' || ((*w)(3) == 'h' && (*w)(4) == 'c'))) ||
@@ -491,9 +491,9 @@ private:
 
     bool step2(Word *w, const uint32_t r1) {
       for( int i = 0; i < NUM_SUFFIXES_STEP2; i++ ) {
-        if( w->endsWith(SuffixesStep2[i][0]) && suffixInRn(w, r1, SuffixesStep2[i][0])) {
-          w->changeSuffix(SuffixesStep2[i][0], SuffixesStep2[i][1]);
-          w->type |= TypesStep2[i];
+        if( w->endsWith(suffixesStep2[i][0]) && suffixInRn(w, r1, suffixesStep2[i][0])) {
+          w->changeSuffix(suffixesStep2[i][0], suffixesStep2[i][1]);
+          w->type |= typesStep2[i];
           return true;
         }
       }
@@ -554,9 +554,9 @@ private:
     bool step3(Word *w, const uint32_t r1, const uint32_t r2) {
       bool res = false;
       for( int i = 0; i < NUM_SUFFIXES_STEP3; i++ ) {
-        if( w->endsWith(SuffixesStep3[i][0]) && suffixInRn(w, r1, SuffixesStep3[i][0])) {
-          w->changeSuffix(SuffixesStep3[i][0], SuffixesStep3[i][1]);
-          w->type |= TypesStep3[i];
+        if( w->endsWith(suffixesStep3[i][0]) && suffixInRn(w, r1, suffixesStep3[i][0])) {
+          w->changeSuffix(suffixesStep3[i][0], suffixesStep3[i][1]);
+          w->type |= typesStep3[i];
           res = true;
           break;
         }
@@ -578,11 +578,11 @@ private:
     bool step4(Word *w, const uint32_t r2) {
       bool res = false;
       for( int i = 0; i < NUM_SUFFIXES_STEP4; i++ ) {
-        if( w->endsWith(SuffixesStep4[i]) && suffixInRn(w, r2, SuffixesStep4[i])) {
-          w->end -= uint8_t(strlen(SuffixesStep4[i]) - (i >
+        if( w->endsWith(suffixesStep4[i]) && suffixInRn(w, r2, suffixesStep4[i])) {
+          w->end -= uint8_t(strlen(suffixesStep4[i]) - (i >
                                                         17) /*sion, tion*/); // remove: al   ance   ence   er   ic   able   ible   ant   ement   ment   ent   ism   ate   iti   ous   ive   ize ; ion -> delete if preceded by s or t
-          if( !(i == 10 /* ent */ && (*w)(0) == 'm')) //exception: no TypesStep4 should be assigned for 'agreement'
-            w->type |= TypesStep4[i];
+          if( !(i == 10 /* ent */ && (*w)(0) == 'm')) //exception: no typesStep4 should be assigned for 'agreement'
+            w->type |= typesStep4[i];
           if( i == 0 && w->endsWith("nti")) {
             w->end--; // ntial -> nt
             res = true; // process ant+ial, ent+ial
@@ -614,7 +614,7 @@ private:
 
 public:
     inline bool isVowel(const char c) final {
-      return charInArray(c, Vowels, NUM_VOWELS);
+      return charInArray(c, vowels, NUM_VOWELS);
     }
 
     bool stem(Word *w) override {
@@ -627,14 +627,14 @@ public:
       res |= processPrefixes(w);
       res |= processSuperlatives(w);
       for( int i = 0; i < NUM_EXCEPTIONS1; i++ ) {
-        if((*w) == Exceptions1[i][0] ) {
+        if((*w) == exceptions1[i][0] ) {
           if( i < 11 ) {
-            size_t len = strlen(Exceptions1[i][1]);
-            memcpy(&w->letters[w->start], Exceptions1[i][1], len);
+            size_t len = strlen(exceptions1[i][1]);
+            memcpy(&w->letters[w->start], exceptions1[i][1], len);
             w->end = w->start + uint8_t(len - 1);
           }
           w->calculateStemHash();
-          w->type |= TypesExceptions1[i];
+          w->type |= typesExceptions1[i];
           w->language = Language::English;
           //w->print(); //for debugging
           return (i < 11);
@@ -647,9 +647,9 @@ public:
       res |= step0(w);
       res |= step1A(w);
       for( int i = 0; i < NUM_EXCEPTIONS2; i++ ) {
-        if((*w) == Exceptions2[i] ) {
+        if((*w) == exceptions2[i] ) {
           w->calculateStemHash();
-          w->type |= TypesExceptions2[i];
+          w->type |= typesExceptions2[i];
           w->language = Language::English;
           //w->print(); //for debugging
           return res;
@@ -667,13 +667,13 @@ public:
           w->letters[i] = 'y';
       }
       if( !w->type || w->type == English::Plural ) {
-        if( w->matchesAny(MaleWords, NUM_MALE_WORDS))
+        if( w->matchesAny(maleWords, NUM_MALE_WORDS))
           res = true, w->type |= English::Male;
-        else if( w->matchesAny(FemaleWords, NUM_FEMALE_WORDS))
+        else if( w->matchesAny(femaleWords, NUM_FEMALE_WORDS))
           res = true, w->type |= English::Female;
       }
       if( !res )
-        res = w->matchesAny(CommonWords, NUM_COMMON_WORDS);
+        res = w->matchesAny(commonWords, NUM_COMMON_WORDS);
       w->calculateStemHash();
       if( res )
         w->language = Language::English;

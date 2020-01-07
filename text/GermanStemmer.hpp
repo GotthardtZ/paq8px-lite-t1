@@ -9,17 +9,17 @@
 class GermanStemmer : public Stemmer {
 private:
     static constexpr int NUM_VOWELS = 9;
-    static constexpr char Vowels[NUM_VOWELS] = {'a', 'e', 'i', 'o', 'u', 'y', '\xE4', '\xF6', '\xFC'};
+    static constexpr char vowels[NUM_VOWELS] = {'a', 'e', 'i', 'o', 'u', 'y', '\xE4', '\xF6', '\xFC'};
     static constexpr int NUM_COMMON_WORDS = 10;
-    const char *CommonWords[NUM_COMMON_WORDS] = {"der", "die", "das", "und", "sie", "ich", "mit", "sich", "auf", "nicht"};
+    const char *commonWords[NUM_COMMON_WORDS] = {"der", "die", "das", "und", "sie", "ich", "mit", "sich", "auf", "nicht"};
     static constexpr int NUM_ENDINGS = 10;
-    static constexpr char Endings[NUM_ENDINGS] = {'b', 'd', 'f', 'g', 'h', 'k', 'l', 'm', 'n', 't'}; //plus 'r' for words ending in 's'
+    static constexpr char endings[NUM_ENDINGS] = {'b', 'd', 'f', 'g', 'h', 'k', 'l', 'm', 'n', 't'}; //plus 'r' for words ending in 's'
     static constexpr int NUM_SUFFIXES_STEP1 = 6;
-    const char *SuffixesStep1[NUM_SUFFIXES_STEP1] = {"em", "ern", "er", "e", "en", "es"};
+    const char *suffixesStep1[NUM_SUFFIXES_STEP1] = {"em", "ern", "er", "e", "en", "es"};
     static constexpr int NUM_SUFFIXES_STEP2 = 3;
-    const char *SuffixesStep2[NUM_SUFFIXES_STEP2] = {"en", "er", "est"};
+    const char *suffixesStep2[NUM_SUFFIXES_STEP2] = {"en", "er", "est"};
     static constexpr int NUM_SUFFIXES_STEP3 = 7;
-    const char *SuffixesStep3[NUM_SUFFIXES_STEP3] = {"end", "ung", "ik", "ig", "isch", "lich", "heit"};
+    const char *suffixesStep3[NUM_SUFFIXES_STEP3] = {"end", "ung", "ik", "ig", "isch", "lich", "heit"};
 
     void convertUtf8(Word *w) {
       for( int i = w->start; i < w->end; i++ ) {
@@ -55,20 +55,20 @@ private:
     }
 
     static inline bool isValidEnding(const char c, const bool includeR = false) {
-      return charInArray(c, Endings, NUM_ENDINGS) || (includeR && c == 'r');
+      return charInArray(c, endings, NUM_ENDINGS) || (includeR && c == 'r');
     }
 
     bool step1(Word *w, const uint32_t r1) {
       int i = 0;
       for( ; i < 3; i++ ) {
-        if( w->endsWith(SuffixesStep1[i]) && suffixInRn(w, r1, SuffixesStep1[i])) {
-          w->end -= uint8_t(strlen(SuffixesStep1[i]));
+        if( w->endsWith(suffixesStep1[i]) && suffixInRn(w, r1, suffixesStep1[i])) {
+          w->end -= uint8_t(strlen(suffixesStep1[i]));
           return true;
         }
       }
       for( ; i < NUM_SUFFIXES_STEP1; i++ ) {
-        if( w->endsWith(SuffixesStep1[i]) && suffixInRn(w, r1, SuffixesStep1[i])) {
-          w->end -= uint8_t(strlen(SuffixesStep1[i]));
+        if( w->endsWith(suffixesStep1[i]) && suffixInRn(w, r1, suffixesStep1[i])) {
+          w->end -= uint8_t(strlen(suffixesStep1[i]));
           w->end -= uint8_t(w->endsWith("niss"));
           return true;
         }
@@ -82,8 +82,8 @@ private:
 
     bool step2(Word *w, const uint32_t r1) {
       for( int i = 0; i < NUM_SUFFIXES_STEP2; i++ ) {
-        if( w->endsWith(SuffixesStep2[i]) && suffixInRn(w, r1, SuffixesStep2[i])) {
-          w->end -= uint8_t(strlen(SuffixesStep2[i]));
+        if( w->endsWith(suffixesStep2[i]) && suffixInRn(w, r1, suffixesStep2[i])) {
+          w->end -= uint8_t(strlen(suffixesStep2[i]));
           return true;
         }
       }
@@ -97,8 +97,8 @@ private:
     bool step3(Word *w, const uint32_t r1, const uint32_t r2) {
       int i = 0;
       for( ; i < 2; i++ ) {
-        if( w->endsWith(SuffixesStep3[i]) && suffixInRn(w, r2, SuffixesStep3[i])) {
-          w->end -= uint8_t(strlen(SuffixesStep3[i]));
+        if( w->endsWith(suffixesStep3[i]) && suffixInRn(w, r2, suffixesStep3[i])) {
+          w->end -= uint8_t(strlen(suffixesStep3[i]));
           if( w->endsWith("ig") && (*w)(2) != 'e' && suffixInRn(w, r2, "ig"))
             w->end -= 2;
           if( i )
@@ -107,16 +107,16 @@ private:
         }
       }
       for( ; i < 5; i++ ) {
-        if( w->endsWith(SuffixesStep3[i]) && suffixInRn(w, r2, SuffixesStep3[i]) && (*w)((uint8_t) strlen(SuffixesStep3[i])) != 'e' ) {
-          w->end -= uint8_t(strlen(SuffixesStep3[i]));
+        if( w->endsWith(suffixesStep3[i]) && suffixInRn(w, r2, suffixesStep3[i]) && (*w)((uint8_t) strlen(suffixesStep3[i])) != 'e' ) {
+          w->end -= uint8_t(strlen(suffixesStep3[i]));
           if( i > 2 )
             w->type |= German::Adjective;
           return true;
         }
       }
       for( ; i < NUM_SUFFIXES_STEP3; i++ ) {
-        if( w->endsWith(SuffixesStep3[i]) && suffixInRn(w, r2, SuffixesStep3[i])) {
-          w->end -= uint8_t(strlen(SuffixesStep3[i]));
+        if( w->endsWith(suffixesStep3[i]) && suffixInRn(w, r2, suffixesStep3[i])) {
+          w->end -= uint8_t(strlen(suffixesStep3[i]));
           if((w->endsWith("er") || w->endsWith("en")) && suffixInRn(w, r1, "e?"))
             w->end -= 2;
           if( i > 5 )
@@ -138,7 +138,7 @@ private:
 
 public:
     inline bool isVowel(const char c) final {
-      return charInArray(c, Vowels, NUM_VOWELS);
+      return charInArray(c, vowels, NUM_VOWELS);
     }
 
     bool stem(Word *w) override {
@@ -170,7 +170,7 @@ public:
         }
       }
       if( !res )
-        res = w->matchesAny(CommonWords, NUM_COMMON_WORDS);
+        res = w->matchesAny(commonWords, NUM_COMMON_WORDS);
       w->calculateStemHash();
       if( res )
         w->language = Language::German;

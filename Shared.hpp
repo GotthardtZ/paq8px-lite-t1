@@ -5,7 +5,7 @@
 #include "RingBuffer.hpp"
 
 // helper #defines to access shared variables
-#define INJECT_SHARED_buf const Buf &buf = shared->buf;
+#define INJECT_SHARED_buf const RingBuffer<uint8_t> &buf = shared->buf;
 #define INJECT_SHARED_pos const uint32_t pos = shared->buf.getpos();
 #define INJECT_SHARED_y const uint8_t y = shared->y;
 #define INJECT_SHARED_c0 const uint8_t c0 = shared->c0;
@@ -19,7 +19,7 @@
  * Global context available to all models.
  */
 struct Shared {
-    Buf buf; // Rotating input queue set by Predictor
+    RingBuffer<uint8_t> buf; // Rotating input queue set by Predictor
     uint8_t y = 0; // Last bit, 0 or 1
     uint8_t c0 = 1; // Last 0-7 bits of the partial byte with a leading 1 bit (1-255)
     uint8_t c1 = 0; // Last whole byte, also c4&0xff or buf(1)

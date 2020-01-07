@@ -13,13 +13,13 @@ private:
     F *weights, *eg, *buffer;
     F rates[2];
     F rho, complement, eps, prediction;
-    int S, D;
+    int s, d;
 
 public:
-    LMS(const int S, const int D, const F lRate, const F rRate, const F rho = (F) 0.95, const F eps = (F) 1e-3) : rates {lRate, rRate},
-            rho(rho), complement(1.0f - rho), eps(eps), prediction(0.0f), S(S), D(D) {
-      assert(S > 0 && D > 0);
-      weights = new F[S + D], eg = new F[S + D], buffer = new F[S + D];
+    LMS(const int s, const int d, const F lRate, const F rRate, const F rho = (F) 0.95, const F eps = (F) 1e-3) : rates {lRate, rRate},
+            rho(rho), complement(1.0f - rho), eps(eps), prediction(0.0f), s(s), d(d) {
+      assert(s > 0 && d > 0);
+      weights = new F[s + d], eg = new F[s + d], buffer = new F[s + d];
       reset();
     }
 
@@ -28,10 +28,10 @@ public:
     }
 
     F predict(const T sample) {
-      memmove(&buffer[S + 1], &buffer[S], (D - 1) * sizeof(F));
-      buffer[S] = sample;
+      memmove(&buffer[s + 1], &buffer[s], (d - 1) * sizeof(F));
+      buffer[s] = sample;
       prediction = 0.;
-      for( int i = 0; i < S + D; i++ )
+      for( int i = 0; i < s + d; i++ )
         prediction += weights[i] * buffer[i];
       return prediction;
     }
@@ -39,22 +39,22 @@ public:
     void update(const T sample) {
       const F error = sample - prediction;
       int i = 0;
-      for( ; i < S; i++ ) {
+      for( ; i < s; i++ ) {
         const F gradient = error * buffer[i];
         eg[i] = rho * eg[i] + complement * (gradient * gradient);
         weights[i] += (rates[0] * gradient * rsqrt(eg[i] + eps));
       }
-      for( ; i < S + D; i++ ) {
+      for( ; i < s + d; i++ ) {
         const F gradient = error * buffer[i];
         eg[i] = rho * eg[i] + complement * (gradient * gradient);
         weights[i] += (rates[1] * gradient * rsqrt(eg[i] + eps));
       }
-      memmove(&buffer[1], &buffer[0], (S - 1) * sizeof(F));
+      memmove(&buffer[1], &buffer[0], (s - 1) * sizeof(F));
       buffer[0] = sample;
     }
 
     void reset() {
-      for( int i = 0; i < S + D; i++ )
+      for( int i = 0; i < s + d; i++ )
         weights[i] = eg[i] = buffer[i] = 0.;
     }
 };
