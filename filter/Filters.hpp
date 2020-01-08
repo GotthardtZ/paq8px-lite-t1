@@ -124,33 +124,33 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
   uint64_t start = in->curPos();
 
   // For EXE detection
-  Array<int> abspos(256), // CALL/JMP abs. addr. low byte -> last offset
-          relpos(256); // CALL/JMP relative addr. low byte -> last offset
+  Array<int> absPos(256), // CALL/JMP abs. addr. low byte -> last offset
+          relPos(256); // CALL/JMP relative addr. low byte -> last offset
   int e8e9count = 0; // number of consecutive CALL/JMPs
   int e8e9pos = 0; // offset of first CALL or JMP instruction
   int e8e9last = 0; // offset of most recent CALL or JMP
 
   int soi = 0, sof = 0, sos = 0, app = 0; // For JPEG detection - position where found
 #ifdef USE_AUDIOMODEL
-  int wavi = 0, wavsize = 0, wavch = 0, wavbps = 0, wavm = 0, wavtype = 0, wavlen = 0, wavlist = 0; // For WAVE detection
+  int wavi = 0, wavSize = 0, wavch = 0, wavbps = 0, wavm = 0, wavType = 0, wavLen = 0, wavlist = 0; // For WAVE detection
   int aiff = 0, aiffm = 0, aiffs = 0; // For AIFF detection
-  int s3mi = 0, s3mno = 0, s3mni = 0; // For S3M detection
+  int s3mi = 0, s3Mno = 0, s3Mni = 0; // For S3M detection
 #endif //  USE_AUDIOMODEL
   uint32_t bmpi = 0, dibi = 0, imgbpp = 0, bmpx = 0, bmpy = 0, bmpof = 0, bmps = 0, nColors = 0; // For BMP detection
   int rgbi = 0, rgbx = 0, rgby = 0; // For RGB detection
   int tga = 0, tgax = 0, tgay = 0, tgaz = 0, tgat = 0, tgaid = 0, tgamap = 0; // For TGA detection
   // ascii images are currently not supported
-  int pgm = 0, pgmcomment = 0, pgmw = 0, pgmh = 0, pgmPtr = 0, pgmc = 0, pgmn = 0, pamatr = 0, pamd = 0, pgmdata = 0, pgmdatasize = 0; // For PBM, PGM, PPM, PAM detection
+  int pgm = 0, pgmComment = 0, pgmw = 0, pgmh = 0, pgmPtr = 0, pgmc = 0, pgmn = 0, pamatr = 0, pamd = 0, pgmdata = 0, pgmDataSize = 0; // For PBM, PGM, PPM, PAM detection
   char pgmBuf[32];
   int cdi = 0, cda = 0, cdm = 0; // For CD sectors detection
   uint32_t cdf = 0;
-  unsigned char zbuf[256 + 32] = {0}, zin[1U << 16] = {0}, zout[1 << 16] = {0}; // For ZLIB stream detection
-  int zbufpos = 0, zzippos = -1, histogram[256] = {0};
-  int pdfim = 0, pdfimw = 0, pdfimh = 0, pdfimb = 0, pdfgray = 0, pdfimp = 0;
+  unsigned char zBuf[256 + 32] = {0}, zin[1U << 16] = {0}, zout[1 << 16] = {0}; // For ZLIB stream detection
+  int zBufPos = 0, zZipPos = -1, histogram[256] = {0};
+  int pdfIm = 0, pdfImW = 0, pdfImH = 0, pdfImB = 0, pdfGray = 0, pdfimp = 0;
   int b64S = 0, b64I = 0, b64Line = 0, b64Nl = 0; // For base64 detection
   int gif = 0, gifa = 0, gifi = 0, gifw = 0, gifc = 0, gifb = 0, gifplt = 0; // For GIF detection
-  static int gifgray = 0;
-  int png = 0, pngw = 0, pngh = 0, pngbps = 0, pngtype = 0, pnggray = 0, lastchunk = 0, nextchunk = 0; // For PNG detection
+  static int gifGray = 0;
+  int png = 0, pngw = 0, pngh = 0, pngbps = 0, pngType = 0, pnggray = 0, lastChunk = 0, nextChunk = 0; // For PNG detection
   // For image detection
   static int deth = 0, detd = 0; // detected header/data size in bytes
   static BlockType dett; // detected block type
@@ -176,27 +176,27 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
 
     // detect PNG images
     if( !png && buf3 == 0x89504E47 /*%PNG*/ && buf2 == 0x0D0A1A0A && buf1 == 0x0000000D && buf0 == 0x49484452 )
-      png = i, pngtype = -1, lastchunk = buf3;
+      png = i, pngType = -1, lastChunk = buf3;
     if( png ) {
       const int p = i - png;
       if( p == 12 ) {
         pngw = buf2;
         pngh = buf1;
         pngbps = buf0 >> 24;
-        pngtype = (uint8_t) (buf0 >> 16);
+        pngType = (uint8_t) (buf0 >> 16);
         pnggray = 0;
         png *= ((buf0 & 0xFFFF) == 0 && pngw && pngh && pngbps == 8 &&
-                (!pngtype || pngtype == 2 || pngtype == 3 || pngtype == 4 || pngtype == 6));
-      } else if( p > 12 && pngtype < 0 )
+                (!pngType || pngType == 2 || pngType == 3 || pngType == 4 || pngType == 6));
+      } else if( p > 12 && pngType < 0 )
         png = 0;
       else if( p == 17 ) {
         png *= ((buf1 & 0xFF) == 0);
-        nextchunk = (png) ? i + 8 : 0;
-      } else if( p > 17 && i == nextchunk ) {
-        nextchunk += buf1 + 4 /*CRC*/ + 8 /*Chunk length+id*/;
-        lastchunk = buf0;
-        png *= (lastchunk != 0x49454E44 /*IEND*/);
-        if( lastchunk == 0x504C5445 /*PLTE*/) {
+        nextChunk = (png) ? i + 8 : 0;
+      } else if( p > 17 && i == nextChunk ) {
+        nextChunk += buf1 + 4 /*CRC*/ + 8 /*Chunk length+id*/;
+        lastChunk = buf0;
+        png *= (lastChunk != 0x49454E44 /*IEND*/);
+        if( lastChunk == 0x504C5445 /*PLTE*/) {
           png *= (buf1 % 3 == 0);
           pnggray = (png && isGrayscalePalette(in, buf1 / 3));
         }
@@ -207,21 +207,21 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
 #ifdef USE_ZLIB
     histogram[c]++;
     if( i >= 256 )
-      histogram[zbuf[zbufpos]]--;
-    zbuf[zbufpos] = c;
-    if( zbufpos < 32 )
-      zbuf[zbufpos + 256] = c;
-    zbufpos = (zbufpos + 1) & 0xFF;
+      histogram[zBuf[zBufPos]]--;
+    zBuf[zBufPos] = c;
+    if( zBufPos < 32 )
+      zBuf[zBufPos + 256] = c;
+    zBufPos = (zBufPos + 1) & 0xFF;
 
-    int zh = parseZlibHeader(((int) zbuf[(zbufpos - 32) & 0xFF]) * 256 + (int) zbuf[(zbufpos - 32 + 1) & 0xFF]);
+    int zh = parseZlibHeader(((int) zBuf[(zBufPos - 32) & 0xFF]) * 256 + (int) zBuf[(zBufPos - 32 + 1) & 0xFF]);
     bool valid = (i >= 31 && zh != -1);
     if( !valid && options & OPTION_BRUTE && i >= 255 ) {
-      uint8_t bType = (zbuf[zbufpos] & 7) >> 1;
+      uint8_t bType = (zBuf[zBufPos] & 7) >> 1;
       if((valid = (bType == 1 || bType == 2))) {
-        int maximum = 0, used = 0, offset = zbufpos;
+        int maximum = 0, used = 0, offset = zBufPos;
         for( int i = 0; i < 4; i++, offset += 64 ) {
           for( int j = 0; j < 64; j++ ) {
-            int freq = histogram[zbuf[(offset + j) & 0xFF]];
+            int freq = histogram[zBuf[(offset + j) & 0xFF]];
             used += (freq > 0);
             maximum += (freq > maximum);
           }
@@ -232,8 +232,8 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
         }
       }
     }
-    if( valid || zzippos == i ) {
-      int streamLength = 0, ret = 0, brute = (zh == -1 && zzippos != i);
+    if( valid || zZipPos == i ) {
+      int streamLength = 0, ret = 0, brute = (zh == -1 && zZipPos != i);
 
       // Quick check possible stream by decompressing first 32 bytes
       z_stream strm;
@@ -243,7 +243,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
       strm.next_in = Z_NULL;
       strm.avail_in = 0;
       if( zlibInflateInit(&strm, zh) == Z_OK ) {
-        strm.next_in = &zbuf[(zbufpos - (brute ? 0 : 32)) & 0xFF];
+        strm.next_in = &zBuf[(zBufPos - (brute ? 0 : 32)) & 0xFF];
         strm.avail_in = 32;
         strm.next_out = zout;
         strm.avail_out = 1 << 16;
@@ -284,60 +284,60 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
       }
       if( streamLength > (brute << 7)) {
         info = 0;
-        if( pdfimw > 0 && pdfimw < 0x1000000 && pdfimh > 0 ) {
-          if( pdfimb == 8 && (int) strm.total_out == pdfimw * pdfimh )
-            info = ((pdfgray ? IMAGE8GRAY : IMAGE8) << 24) | pdfimw;
-          if( pdfimb == 8 && (int) strm.total_out == pdfimw * pdfimh * 3 )
-            info = (IMAGE24 << 24) | pdfimw * 3;
-          if( pdfimb == 4 && (int) strm.total_out == ((pdfimw + 1) / 2) * pdfimh )
-            info = (IMAGE4 << 24) | ((pdfimw + 1) / 2);
-          if( pdfimb == 1 && (int) strm.total_out == ((pdfimw + 7) / 8) * pdfimh )
-            info = (IMAGE1 << 24) | ((pdfimw + 7) / 8);
-          pdfgray = 0;
-        } else if( png && pngw < 0x1000000 && lastchunk == 0x49444154 /*IDAT*/) {
-          if( pngbps == 8 && pngtype == 2 && (int) strm.total_out == (pngw * 3 + 1) * pngh )
+        if( pdfImW > 0 && pdfImW < 0x1000000 && pdfImH > 0 ) {
+          if( pdfImB == 8 && (int) strm.total_out == pdfImW * pdfImH )
+            info = ((pdfGray ? IMAGE8GRAY : IMAGE8) << 24) | pdfImW;
+          if( pdfImB == 8 && (int) strm.total_out == pdfImW * pdfImH * 3 )
+            info = (IMAGE24 << 24) | pdfImW * 3;
+          if( pdfImB == 4 && (int) strm.total_out == ((pdfImW + 1) / 2) * pdfImH )
+            info = (IMAGE4 << 24) | ((pdfImW + 1) / 2);
+          if( pdfImB == 1 && (int) strm.total_out == ((pdfImW + 7) / 8) * pdfImH )
+            info = (IMAGE1 << 24) | ((pdfImW + 7) / 8);
+          pdfGray = 0;
+        } else if( png && pngw < 0x1000000 && lastChunk == 0x49444154 /*IDAT*/) {
+          if( pngbps == 8 && pngType == 2 && (int) strm.total_out == (pngw * 3 + 1) * pngh )
             info = (PNG24 << 24) | (pngw * 3), png = 0;
-          else if( pngbps == 8 && pngtype == 6 && (int) strm.total_out == (pngw * 4 + 1) * pngh )
+          else if( pngbps == 8 && pngType == 6 && (int) strm.total_out == (pngw * 4 + 1) * pngh )
             info = (PNG32 << 24) | (pngw * 4), png = 0;
-          else if( pngbps == 8 && (!pngtype || pngtype == 3) && (int) strm.total_out == (pngw + 1) * pngh )
-            info = (((!pngtype || pnggray) ? PNG8GRAY : PNG8) << 24) | (pngw), png = 0;
+          else if( pngbps == 8 && (!pngType || pngType == 3) && (int) strm.total_out == (pngw + 1) * pngh )
+            info = (((!pngType || pnggray) ? PNG8GRAY : PNG8) << 24) | (pngw), png = 0;
         }
         in->setpos(start + i - (brute ? 255 : 31));
         detd = streamLength;
         return ZLIB;
       }
     }
-    if( zh == -1 && zbuf[(zbufpos - 32) & 0xFF] == 'P' && zbuf[(zbufpos - 32 + 1) & 0xFF] == 'K' &&
-        zbuf[(zbufpos - 32 + 2) & 0xFF] == '\x3' && zbuf[(zbufpos - 32 + 3) & 0xFF] == '\x4' && zbuf[(zbufpos - 32 + 8) & 0xFF] == '\x8' &&
-        zbuf[(zbufpos - 32 + 9) & 0xFF] == '\0' ) {
-      int nlen = (int) zbuf[(zbufpos - 32 + 26) & 0xFF] + ((int) zbuf[(zbufpos - 32 + 27) & 0xFF]) * 256 +
-                 (int) zbuf[(zbufpos - 32 + 28) & 0xFF] + ((int) zbuf[(zbufpos - 32 + 29) & 0xFF]) * 256;
+    if( zh == -1 && zBuf[(zBufPos - 32) & 0xFF] == 'P' && zBuf[(zBufPos - 32 + 1) & 0xFF] == 'K' &&
+        zBuf[(zBufPos - 32 + 2) & 0xFF] == '\x3' && zBuf[(zBufPos - 32 + 3) & 0xFF] == '\x4' && zBuf[(zBufPos - 32 + 8) & 0xFF] == '\x8' &&
+        zBuf[(zBufPos - 32 + 9) & 0xFF] == '\0' ) {
+      int nlen = (int) zBuf[(zBufPos - 32 + 26) & 0xFF] + ((int) zBuf[(zBufPos - 32 + 27) & 0xFF]) * 256 +
+                 (int) zBuf[(zBufPos - 32 + 28) & 0xFF] + ((int) zBuf[(zBufPos - 32 + 29) & 0xFF]) * 256;
       if( nlen < 256 && i + 30 + nlen < n )
-        zzippos = i + 30 + nlen;
+        zZipPos = i + 30 + nlen;
     }
 #endif //USE_ZLIB
 
     if( i - pdfimp > 1024 )
-      pdfim = pdfimw = pdfimh = pdfimb = pdfgray = 0; // fail
-    if( pdfim > 1 && !(isspace(c) || isdigit(c)))
-      pdfim = 1;
-    if( pdfim == 2 && isdigit(c))
-      pdfimw = pdfimw * 10 + (c - '0');
-    if( pdfim == 3 && isdigit(c))
-      pdfimh = pdfimh * 10 + (c - '0');
-    if( pdfim == 4 && isdigit(c))
-      pdfimb = pdfimb * 10 + (c - '0');
+      pdfIm = pdfImW = pdfImH = pdfImB = pdfGray = 0; // fail
+    if( pdfIm > 1 && !(isspace(c) || isdigit(c)))
+      pdfIm = 1;
+    if( pdfIm == 2 && isdigit(c))
+      pdfImW = pdfImW * 10 + (c - '0');
+    if( pdfIm == 3 && isdigit(c))
+      pdfImH = pdfImH * 10 + (c - '0');
+    if( pdfIm == 4 && isdigit(c))
+      pdfImB = pdfImB * 10 + (c - '0');
     if((buf0 & 0xffff) == 0x3c3c )
-      pdfimp = i, pdfim = 1; // <<
-    if( pdfim && (buf1 & 0xffff) == 0x2f57 && buf0 == 0x69647468 )
-      pdfim = 2, pdfimw = 0; // /Width
-    if( pdfim && (buf1 & 0xffffff) == 0x2f4865 && buf0 == 0x69676874 )
-      pdfim = 3, pdfimh = 0; // /Height
-    if( pdfim && buf3 == 0x42697473 && buf2 == 0x50657243 && buf1 == 0x6f6d706f && buf0 == 0x6e656e74 &&
-        zbuf[(zbufpos - 32 + 15) & 0xFF] == '/' )
-      pdfim = 4, pdfimb = 0; // /BitsPerComponent
-    if( pdfim && (buf2 & 0xFFFFFF) == 0x2F4465 && buf1 == 0x76696365 && buf0 == 0x47726179 )
-      pdfgray = 1; // /DeviceGray
+      pdfimp = i, pdfIm = 1; // <<
+    if( pdfIm && (buf1 & 0xffff) == 0x2f57 && buf0 == 0x69647468 )
+      pdfIm = 2, pdfImW = 0; // /Width
+    if( pdfIm && (buf1 & 0xffffff) == 0x2f4865 && buf0 == 0x69676874 )
+      pdfIm = 3, pdfImH = 0; // /Height
+    if( pdfIm && buf3 == 0x42697473 && buf2 == 0x50657243 && buf1 == 0x6f6d706f && buf0 == 0x6e656e74 &&
+        zBuf[(zBufPos - 32 + 15) & 0xFF] == '/' )
+      pdfIm = 4, pdfImB = 0; // /BitsPerComponent
+    if( pdfIm && (buf2 & 0xFFFFFF) == 0x2F4465 && buf1 == 0x76696365 && buf0 == 0x47726179 )
+      pdfGray = 1; // /DeviceGray
 
     // CD sectors detection (mode 1 and mode 2 form 1+2 - 2352 bytes)
     if( buf1 == 0x00ffffff && buf0 == 0xffffffff && !cdi )
@@ -400,29 +400,29 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
 #ifdef USE_AUDIOMODEL
     // Detect .wav file header
     if( buf0 == 0x52494646 )
-      wavi = i, wavm = wavlen = 0; //"RIFF"
+      wavi = i, wavm = wavLen = 0; //"RIFF"
     if( wavi ) {
       int p = i - wavi;
       if( p == 4 )
-        wavsize = bswap(buf0); //fileSize
+        wavSize = bswap(buf0); //fileSize
       else if( p == 8 ) {
-        wavtype = (buf0 == 0x57415645 /*WAVE*/) ? 1 : (buf0 == 0x7366626B /*sfbk*/) ? 2 : 0;
-        if( !wavtype )
+        wavType = (buf0 == 0x57415645 /*WAVE*/) ? 1 : (buf0 == 0x7366626B /*sfbk*/) ? 2 : 0;
+        if( !wavType )
           wavi = 0;
-      } else if( wavtype ) {
-        if( wavtype == 1 ) {
-          if( p == 16 + wavlen && (buf1 != 0x666d7420 /*"fmt "*/ || ((wavm = bswap(buf0) - 16) & 0xFFFFFFFD) != 0))
-            wavlen = ((bswap(buf0) + 1) & (-2)) + 8, wavi *= (buf1 == 0x666d7420 /*"fmt "*/ && (wavm & 0xFFFFFFFD) != 0);
-          else if( p == 22 + wavlen )
+      } else if( wavType ) {
+        if( wavType == 1 ) {
+          if( p == 16 + wavLen && (buf1 != 0x666d7420 /*"fmt "*/ || ((wavm = bswap(buf0) - 16) & 0xFFFFFFFD) != 0))
+            wavLen = ((bswap(buf0) + 1) & (-2)) + 8, wavi *= (buf1 == 0x666d7420 /*"fmt "*/ && (wavm & 0xFFFFFFFD) != 0);
+          else if( p == 22 + wavLen )
             wavch = bswap(buf0) & 0xffff; // number of channels: 1 or 2
-          else if( p == 34 + wavlen )
+          else if( p == 34 + wavLen )
             wavbps = bswap(buf0) & 0xffff; // bits per smaple: 8 or 16
-          else if( p == 40 + wavlen + wavm && buf1 != 0x64617461 /*"data"*/)
+          else if( p == 40 + wavLen + wavm && buf1 != 0x64617461 /*"data"*/)
             wavm += ((bswap(buf0) + 1) & (-2)) + 8, wavi = (wavm > 0xfffff ? 0 : wavi);
-          else if( p == 40 + wavlen + wavm ) {
+          else if( p == 40 + wavLen + wavm ) {
             int wavd = bswap(buf0); // size of data section
-            wavlen = 0;
-            if((wavch == 1 || wavch == 2) && (wavbps == 8 || wavbps == 16) && wavd > 0 && wavsize >= wavd + 36 &&
+            wavLen = 0;
+            if((wavch == 1 || wavch == 2) && (wavbps == 8 || wavbps == 16) && wavd > 0 && wavSize >= wavd + 36 &&
                wavd % ((wavbps / 8) * wavch) == 0 )
               AUD_DET((wavbps == 8) ? AUDIO : AUDIO_LE, wavi - 3, 44 + wavm, wavd, wavch + wavbps / 4 - 3);
             wavi = 0;
@@ -431,7 +431,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
           if((p == 16 && buf1 != 0x4C495354 /*LIST*/) || (p == 20 && buf0 != 0x494E464F /*INFO*/))
             wavi = 0;
           else if( p > 20 && buf1 == 0x4C495354 /*LIST*/ && (wavi *= (buf0 != 0))) {
-            wavlen = bswap(buf0);
+            wavLen = bswap(buf0);
             wavlist = i;
           } else if( wavlist ) {
             p = i - wavlist;
@@ -439,7 +439,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
               wavi = 0;
             else if( p == 12 ) {
               int wavd = bswap(buf0);
-              if( wavd && (wavd + 12) == wavlen )
+              if( wavd && (wavd + 12) == wavLen )
                 AUD_DET(AUDIO_LE, wavi - 3, (12 + wavlist - (wavi - 3) + 1) & ~1, wavd, 1 + 16 / 4 - 3 /*mono, 16-bit*/);
               wavi = 0;
             }
@@ -493,19 +493,19 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
 
     // Detect .s3m file header
     if( buf0 == 0x1a100000 )
-      s3mi = i, s3mno = s3mni = 0; //0x1A: signature byte, 0x10: song type, 0x0000: reserved
+      s3mi = i, s3Mno = s3Mni = 0; //0x1A: signature byte, 0x10: song type, 0x0000: reserved
     if( s3mi ) {
       const int p = i - s3mi;
       if( p == 4 ) {
-        s3mno = bswap(buf0) & 0xffff; //Number of entries in the order table, should be even
-        s3mni = (bswap(buf0) >> 16); //Number of instruments in the song
+        s3Mno = bswap(buf0) & 0xffff; //Number of entries in the order table, should be even
+        s3Mni = (bswap(buf0) >> 16); //Number of instruments in the song
       } else if( p == 16 && (((buf1 >> 16) & 0xff) != 0x13 || buf0 != 0x5343524d /*SCRM*/))
         s3mi = 0;
       else if( p == 16 ) {
         const uint64_t savedpos = in->curPos();
         int b[31], samStart = (1 << 16), samEnd = 0, ok = 1;
-        for( int j = 0; j < s3mni; j++ ) {
-          in->setpos(start + s3mi - 31 + 0x60 + s3mno + j * 2);
+        for( int j = 0; j < s3Mni; j++ ) {
+          in->setpos(start + s3mi - 31 + 0x60 + s3Mno + j * 2);
           int i1 = in->getchar();
           i1 += in->getchar() * 256;
           in->setpos(start + s3mi - 31 + i1 * 16);
@@ -631,13 +631,13 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
     if((buf0 & 0xfff0ff) == 0x50300a ) { //"Px" + line feed, where "x" shall be a number
       pgmn = (buf0 & 0xf00) >> 8; // extract "x"
       if((pgmn >= 4 && pgmn <= 6) || pgmn == 7 )
-        pgm = i, pgmPtr = pgmw = pgmh = pgmc = pgmcomment = pamatr = pamd = pgmdata = pgmdatasize = 0; // "P4" (pbm), "P5" (pgm), "P6" (ppm), "P7" (pam)
+        pgm = i, pgmPtr = pgmw = pgmh = pgmc = pgmComment = pamatr = pamd = pgmdata = pgmDataSize = 0; // "P4" (pbm), "P5" (pgm), "P6" (ppm), "P7" (pam)
     }
     if( pgm ) {
       if( pgmdata == 0 ) { // parse header
         if( i - pgm == 1 && c == 0x23 )
-          pgmcomment = 1; // # (pgm comment)
-        if( !pgmcomment && pgmPtr ) {
+          pgmComment = 1; // # (pgm comment)
+        if( !pgmComment && pgmPtr ) {
           int s = 0;
           if( pgmn == 7 ) {
             if((buf1 & 0xdfdf) == 0x5749 && (buf0 & 0xdfdfdfff) == 0x44544820 )
@@ -683,31 +683,31 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
               pgmPtr = 0;
           }
         }
-        if( !pgmcomment )
+        if( !pgmComment )
           pgmBuf[pgmPtr++] = c;
         if( pgmPtr >= 32 )
           pgm = 0;
-        if( pgmcomment && c == 0x0a )
-          pgmcomment = 0;
+        if( pgmComment && c == 0x0a )
+          pgmComment = 0;
         if( pgmw && pgmh && !pgmc && pgmn == 4 ) {
           pgmdata = i;
-          pgmdatasize = (pgmw + 7) / 8 * pgmh;
+          pgmDataSize = (pgmw + 7) / 8 * pgmh;
         }
         if( pgmw && pgmh && pgmc && (pgmn == 5 || (pgmn == 7 && pamd == 1 && pamatr == 6))) {
           pgmdata = i;
-          pgmdatasize = pgmw * pgmh;
+          pgmDataSize = pgmw * pgmh;
         }
         if( pgmw && pgmh && pgmc && (pgmn == 6 || (pgmn == 7 && pamd == 3 && pamatr == 6))) {
           pgmdata = i;
-          pgmdatasize = pgmw * 3 * pgmh;
+          pgmDataSize = pgmw * 3 * pgmh;
         }
         if( pgmw && pgmh && pgmc && (pgmn == 7 && pamd == 4 && pamatr == 6)) {
           pgmdata = i;
-          pgmdatasize = pgmw * 4 * pgmh;
+          pgmDataSize = pgmw * 4 * pgmh;
         }
       } else { // pixel data
         if( textParser.start() == uint32_t(i) || // for any sign of non-text data in pixel area
-            (pgm - 2 == 0 && n - pgmdatasize == i)) // or the image is the whole file/block -> FINISH (success)
+            (pgm - 2 == 0 && n - pgmDataSize == i)) // or the image is the whole file/block -> FINISH (success)
         {
           if( pgmw && pgmh && !pgmc && pgmn == 4 )
             IMG_DET(IMAGE1, pgm - 2, pgmdata - pgm + 3, (pgmw + 7) / 8, pgmh);
@@ -717,7 +717,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
             IMG_DET(IMAGE24, pgm - 2, pgmdata - pgm + 3, pgmw * 3, pgmh);
           if( pgmw && pgmh && pgmc && (pgmn == 7 && pamd == 4 && pamatr == 6))
             IMG_DET(IMAGE32, pgm - 2, pgmdata - pgm + 3, pgmw * 4, pgmh);
-        } else if((--pgmdatasize) == 0 )
+        } else if((--pgmDataSize) == 0 )
           pgm = 0; // all data was probably text in pixel area: fail
       }
     }
@@ -881,7 +881,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
       if( c == 0x2c || c == 0x21 )
         gif = 2, gifi = 2;
       else
-        gifgray = 0;
+        gifGray = 0;
     }
     if( !gif && (buf1 & 0xffff) == 0x4749 && (buf0 == 0x46383961 || buf0 == 0x46383761))
       gif = 1, gifi = i + 5;
@@ -889,7 +889,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
       if( gif == 1 && i == gifi )
         gif = 2, gifi = i + 5 + (gifplt = (c & 128) ? (3 * (2 << (c & 7))) : 0);
       if( gif == 2 && gifplt && i == gifi - gifplt - 3 )
-        gifgray = isGrayscalePalette(in, gifplt / 3), gifplt = 0;
+        gifGray = isGrayscalePalette(in, gifplt / 3), gifplt = 0;
       if( gif == 2 && i == gifi ) {
         if((buf0 & 0xff0000) == 0x210000 )
           gif = 5, gifi = i;
@@ -903,7 +903,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
       if( gif == 3 && i == gifi + 7 )
         gif = 4, gifc = gifb = 0, gifa = gifi = i + 2 + (gifplt = ((c & 128) ? (3 * (2 << (c & 7))) : 0));
       if( gif == 4 && gifplt )
-        gifgray = isGrayscalePalette(in, gifplt / 3), gifplt = 0;
+        gifGray = isGrayscalePalette(in, gifplt / 3), gifplt = 0;
       if( gif == 4 && i == gifi ) {
         if( c > 0 && gifb && gifc != gifb )
           gifw = 0;
@@ -912,7 +912,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
         else if( !gifw )
           gif = 2, gifi = i + 3;
         else
-          return in->setpos(start + gifa - 1), detd = i - gifa + 2, info = ((gifgray ? IMAGE8GRAY : IMAGE8) << 24) | gifw, dett = GIF;
+          return in->setpos(start + gifa - 1), detd = i - gifa + 2, info = ((gifGray ? IMAGE8GRAY : IMAGE8) << 24) | gifw, dett = GIF;
       }
       if( gif == 5 && i == gifi ) {
         if( c > 0 )
@@ -931,19 +931,19 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
     if(((buf1 & 0xfe) == 0xe8 || (buf1 & 0xfff0) == 0x0f80) && ((buf0 + 1) & 0xfe) == 0 ) {
       int r = buf0 >> 24; // relative address low 8 bits
       int a = ((buf0 >> 24) + i) & 0xff; // absolute address low 8 bits
-      int rdist = i - relpos[r];
-      int adist = i - abspos[a];
-      if( adist < rdist && adist < 0x800 && abspos[a] > 5 ) {
+      int rdist = i - relPos[r];
+      int adist = i - absPos[a];
+      if( adist < rdist && adist < 0x800 && absPos[a] > 5 ) {
         e8e9last = i;
         ++e8e9count;
-        if( e8e9pos == 0 || e8e9pos > abspos[a] )
-          e8e9pos = abspos[a];
+        if( e8e9pos == 0 || e8e9pos > absPos[a] )
+          e8e9pos = absPos[a];
       } else
         e8e9count = 0;
       if( type == DEFAULT && e8e9count >= 4 && e8e9pos > 5 )
         return in->setpos(start + e8e9pos - 5), EXE;
-      abspos[a] = i;
-      relpos[r] = i;
+      absPos[a] = i;
+      relPos[r] = i;
     }
     if( i - e8e9last > 0x4000 ) {
       //TODO: Large file support

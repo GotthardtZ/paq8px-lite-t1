@@ -19,7 +19,7 @@ public:
     };
 
     /**
-     * creates a StateMap with \n contexts using 4*n bytes memory.
+     * Creates a StateMap with \n contexts using 4*n bytes memory.
      * @param sh
      * @param s
      * @param n number of contexts
@@ -75,20 +75,22 @@ public:
       }
     }
 
-    //call p1() when there is only 1 context set
-    //no need to call subscribe()
+    /**
+     * Call p1() when there is only 1 context set.
+     * No need to call subscribe().
+     * @param cx
+     * @return
+     */
     int p1(const uint32_t cx) {
       updater.subscribe(this);
       assert(cx >= 0 && cx < N);
       cxt[0] = cx;
       numContexts++;
-      return t[cx] >> 20;
+      return t[cx] >> 20U;
     }
 
-    //call p2() for each context when there is more context sets
-    //and call subscribe() once
     /**
-     * TODO: update this documentation
+     * call p2() for each context when there is more context sets and call subscribe() once.
      * sm.p(y, cx, limit) converts state cx (0..n-1) to a probability (0..4095).
      * that the next y=1, updating the previous prediction with y (0..1).
      * limit (1..1023, default 1023) is the maximum count for computing a

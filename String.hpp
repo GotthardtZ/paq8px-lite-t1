@@ -25,7 +25,7 @@ protected:
 #define chk_consistency() ((void) 0)
 #else
     void chk_consistency() const {
-      for(U32 i=0;i<size()-1;i++)
+      for(uint32_t i=0;i<size()-1;i++)
         if((*this)[i]==0)quit("Internal error - string consistency check failed (1).");
       if(((*this)[size()-1])!=0)quit("Internal error - string consistency check failed (2).");
     }

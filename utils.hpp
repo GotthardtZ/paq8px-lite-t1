@@ -213,22 +213,4 @@ uint8_t options = 0;
 #define QUOTE 0x22
 #define APOSTROPHE 0x27
 
-#ifndef NDEBUG
-#if defined(UNIX)
-#include <execinfo.h>
-#define BACKTRACE() {\
-      void* callstack[128]; \
-      int frames = backtrace(callstack, 128); \
-      char** strs = backtrace_symbols(callstack, frames); \
-      for(int i = 0; i < frames; ++i) { \
-        printf("%s\n", strs[i]); \
-      } \
-      free(strs); \
-    }
-#else
-// TODO: How to implement this on Windows?
-#define BACKTRACE() {}
-#endif
-#endif
-
 #endif //PAQ8PX_UTILS_HPP

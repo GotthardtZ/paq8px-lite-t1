@@ -1,6 +1,8 @@
 #ifndef PAQ8PX_DMCFOREST_HPP
 #define PAQ8PX_DMCFOREST_HPP
 
+#include "../Shared.hpp"
+
 /**
  * This class solves two problems of the DMC model
  * 1) The DMC model is a memory hungry algorithm. In theory it works best when it can clone

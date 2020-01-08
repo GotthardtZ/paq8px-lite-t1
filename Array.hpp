@@ -91,7 +91,7 @@ public:
 
 template<class T, const int Align>
 void Array<T, Align>::create(uint64_t requestedSize) {
-  assert(ispowerof2(Align));
+  assert(isPowerOf2(Align));
   usedSize = reservedSize = requestedSize;
   if( requestedSize == 0 ) {
     data = nullptr;

@@ -107,11 +107,11 @@ public:
               ols[0][ch].add(x1(i));
 
           int k1 = 90, k2 = k1 - 12 * stereo;
-          for( int j = (i = 1); j <= k1; j++, i += 1 << ((j > 16) + (j > 32) + (j > 64)))
+          for( int j = (i = 1); j <= k1; j++, i += 1U << ((j > 16) + (j > 32) + (j > 64)))
             ols[1][ch].add(x1(i));
-          for( int j = (i = 1); j <= k2; j++, i += 1 << ((j > 5) + (j > 10) + (j > 17) + (j > 26) + (j > 37)))
+          for( int j = (i = 1); j <= k2; j++, i += 1U << ((j > 5) + (j > 10) + (j > 17) + (j > 26) + (j > 37)))
             ols[2][ch].add(x1(i));
-          for( int j = (i = 1); j <= k2; j++, i += 1 << ((j > 3) + (j > 7) + (j > 14) + (j > 20) + (j > 33) + (j > 49)))
+          for( int j = (i = 1); j <= k2; j++, i += 1U << ((j > 3) + (j > 7) + (j > 14) + (j > 20) + (j > 33) + (j > 49)))
             ols[3][ch].add(x1(i));
           for( int j = (i = 1); j <= k2; j++, i += 1 + (j > 4) + (j > 8))
             ols[4][ch].add(x1(i));

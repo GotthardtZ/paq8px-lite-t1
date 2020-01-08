@@ -4,27 +4,24 @@
 #include <cstdint>
 #include "Random.hpp"
 
-///////////////////////// state table ////////////////////////
-// TODO: update this documentation
-
-// state table:
-//   nex(state, 0) = next state if bit y is 0, 0 <= state < 256
-//   nex(state, 1) = next state if bit y is 1
-//   nex(state, 2) = number of zeros in bit history represented by state
-//   nex(state, 3) = number of ones represented
-//
-// States represent a bit history within some context.
-// state 0 is the starting state (no bits seen).
-// States 1-30 represent all possible sequences of 1-4 bits.
-// States 31-252 represent a pair of counts, (n0,n1), the number
-//   of 0 and 1 bits respectively.  If n0+n1 < 16 then there are
-//   two states for each pair, depending on if a 0 or 1 was the last
-//   bit seen.
-// If n0 and n1 are too large, then there is no state to represent this
-// pair, so another state with about the same ratio of n0/n1 is substituted.
-// Also, when a bit is observed and the count of the opposite bit is large,
-// then part of this count is discarded to favor newer data over old.
-
+/**
+ * state table:
+ *   nex(state, 0) = next state if bit y is 0, 0 <= state < 256
+ *   nex(state, 1) = next state if bit y is 1
+ *   nex(state, 2) = number of zeros in bit history represented by state
+ *   nex(state, 3) = number of ones represented
+ *
+ * States represent a bit history within some context.
+ * state 0 is the starting state (no bits seen).
+ * States 1-30 represent all possible sequences of 1-4 bits.
+ * States 31-252 represent a pair of counts, (n0,n1), the number
+ *   of 0 and 1 bits respectively.  If n0+n1 < 16 then there are
+ *   two states for each pair, depending on if a 0 or 1 was the last bit seen.
+ * If n0 and n1 are too large, then there is no state to represent this
+ * pair, so another state with about the same ratio of n0/n1 is substituted.
+ * Also, when a bit is observed and the count of the opposite bit is large,
+ * then part of this count is discarded to favor newer data over old.
+ */
 class StateTable {
     static constexpr uint8_t stateTable[256][4] = {{1,   2,   0,  0},
                                                    {3,   5,   1,  0},
@@ -314,10 +311,16 @@ public:
       return stateTable[state][y];
     }
 
-    // Probabilistic increment (approximate counting)
-    // For states 205..208, 209..212, ... 249..252 a group of 4 states is not represented by
-    // the counts indicated in the state table. An exponential scale is used instead.
-    // The highest group (249..252) represents the top of this scale, where we can not increment anymore.
+    /**
+     * Probabilistic increment (approximate counting)
+     * For states 205..208, 209..212, ... 249..252 a group of 4 states is not represented by
+     * the counts indicated in the state table. An exponential scale is used instead.
+     * The highest group (249..252) represents the top of this scale, where we can not increment anymore.
+     * @param oldState
+     * @param y
+     * @param rnd
+     * @return
+     */
     static uint8_t next(uint8_t const oldState, const int y, Random &rnd) {
       uint8_t newState = stateTable[oldState][y];
       if( newState >= 205 ) { // for all groups of four states higher than idx 205

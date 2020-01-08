@@ -1,12 +1,6 @@
 #ifndef PAQ8PX_JPEGMODEL_HPP
 #define PAQ8PX_JPEGMODEL_HPP
 
-// TODO: update this documentation
-// Model JPEG. Return 1 if a JPEG file is detected or else 0.
-// Only the baseline and 8 bit extended Huffman coded DCT modes are
-// supported.  The model partially decodes the JPEG image to provide
-// context for the Huffman coded symbols.
-
 // Print a JPEG segment at buf[p...] for debugging
 /*
 void dump(const char* msg, int p) {
@@ -61,6 +55,12 @@ struct JPEGImage {
     int qMap[10]; // block -> table number
 };
 
+/**
+ * Model JPEG. Return 1 if a JPEG file is detected or else 0.
+ * Only the baseline and 8 bit extended Huffman coded DCT modes are
+ * supported.  The model partially decodes the JPEG image to provide
+ * context for the Huffman coded symbols.
+ */
 class JpegModel {
 private:
     static constexpr int N = 32; // number of contexts
@@ -76,15 +76,15 @@ private:
     enum {
         SOF0 = 0xc0, SOF1, SOF2, SOF3, DHT, RST0 = 0xd0, SOI = 0xd8, EOI, SOS, DQT, DNL, DRI, APP0 = 0xe0, COM = 0xfe, FF
     }; // Second byte of 2 byte codes
-    static const int MaxEmbeddedLevel = 3;
-    JPEGImage images[MaxEmbeddedLevel] {};
+    static const int maxEmbeddedLevel = 3;
+    JPEGImage images[maxEmbeddedLevel] {};
     int idx = -1;
     uint32_t lastPos = 0;
 
     // Huffman decode state
     uint32_t huffcode = 0; // Current Huffman code including extra bits
-    int huffbits = 0; // Number of valid bits in huffcode
-    int huffsize = 0; // Number of bits without extra bits
+    int huffBits = 0; // Number of valid bits in huffcode
+    int huffSize = 0; // Number of bits without extra bits
     int rs = -1; // Decoded huffcode without extra bits.  It represents
     // 2 packed 4-bit numbers, r=run of zeros, s=number of extra bits for
     // first nonzero code.  huffcode is complete when rs >= 0.
@@ -135,7 +135,7 @@ private:
     // context model
     BH<9> t; // context hash -> bit history
     // As a cache optimization, the context does not include the last 1-2
-    // bits of huffcode if the length (huffbits) is not a multiple of 3.
+    // bits of huffcode if the length (huffBits) is not a multiple of 3.
     // The 7 mapped values are for context+{"", 0, 00, 01, 1, 10, 11}.
     Array<uint64_t> cxt {N}; // context hashes
     Array<uint8_t *> cp {N}; // context pointers
@@ -217,7 +217,7 @@ public:
         return images[idx].nextJpeg;
       if( bpos == 0 && images[idx].app > 0 ) {
         --images[idx].app;
-        if( idx < MaxEmbeddedLevel && buf(4) == FF && buf(3) == SOI && buf(2) == FF &&
+        if( idx < maxEmbeddedLevel && buf(4) == FF && buf(3) == SOI && buf(2) == FF &&
             ((buf(1) & 0xFE) == 0xC0 || buf(1) == 0xC4 || (buf(1) >= 0xDB && buf(1) <= 0xFE)))
           memset(&images[++idx], 0, sizeof(JPEGImage));
       }
@@ -265,7 +265,7 @@ public:
           images[idx].jpeg = 1;
           images[idx].offset = pos - 4;
           images[idx].sos = images[idx].sof = images[idx].htSize = images[idx].data = 0, images[idx].app = (buf(1) >> 4 == 0xE) * 2;
-          mcusize = huffcode = huffbits = huffsize = mcupos = cpos = 0, rs = -1;
+          mcusize = huffcode = huffBits = huffSize = mcupos = cpos = 0, rs = -1;
           memset(&huf[0], 0, sizeof(huf));
           memset(&pred[0], 0, pred.size() * sizeof(int));
           rstpos = rstlen = 0;
@@ -320,7 +320,7 @@ public:
 
         // Restart
         if( buf(2) == FF && (buf(1) & 0xf8) == RST0 ) {
-          huffcode = huffbits = huffsize = mcupos = 0, rs = -1;
+          huffcode = huffBits = huffSize = mcupos = 0, rs = -1;
           memset(&pred[0], 0, pred.size() * sizeof(int));
           rstlen = column + row * width - rstpos;
           rstpos = column + row * width;
@@ -360,7 +360,7 @@ public:
             }
             JASSERT(p == end)
           }
-          huffcode = huffbits = huffsize = 0, rs = -1;
+          huffcode = huffBits = huffSize = 0, rs = -1;
 
           // load default tables
           if( !images[idx].htSize ) {
@@ -493,31 +493,31 @@ public:
       // Decode Huffman
       {
         if( mcusize && buf(1 + (bpos == 0)) != FF ) { // skip stuffed byte
-          JASSERT(huffbits <= 32)
+          JASSERT(huffBits <= 32)
           INJECT_SHARED_y
           huffcode += huffcode + y;
-          ++huffbits;
+          ++huffBits;
           if( rs < 0 ) {
-            JASSERT(huffbits >= 1 && huffbits <= 16)
+            JASSERT(huffBits >= 1 && huffBits <= 16)
             const int ac = (mcupos & 63) > 0;
             JASSERT(mcupos >= 0 && (mcupos >> 6) < 10)
             JASSERT(ac == 0 || ac == 1)
             const int sel = hufsel[ac][mcupos >> 6];
             JASSERT(sel >= 0 && sel < 4)
-            const int i = huffbits - 1;
+            const int i = huffBits - 1;
             JASSERT(i >= 0 && i < 16)
             const HUF *h = &huf[ac * 64 + sel * 16]; // [ac][sel];
-            JASSERT(h[i].min <= h[i].max && h[i].val < 2048 && huffbits > 0)
+            JASSERT(h[i].min <= h[i].max && h[i].val < 2048 && huffBits > 0)
             if( huffcode < h[i].max ) {
               JASSERT(huffcode >= h[i].min)
               int k = h[i].val + huffcode - h[i].min;
               JASSERT(k >= 0 && k < 2048)
               rs = hbuf[k];
-              huffsize = huffbits;
+              huffSize = huffBits;
             }
           }
           if( rs >= 0 ) {
-            if( huffsize + (rs & 15) == huffbits ) { // done decoding
+            if( huffSize + (rs & 15) == huffBits ) { // done decoding
               rs1 = rs;
               int ex = 0; // decoded extra bits
               if( mcupos & 63 ) { // AC
@@ -580,7 +580,7 @@ public:
                 if( ++column == width )
                   column = 0, ++row;
               }
-              huffcode = huffsize = huffbits = 0, rs = -1;
+              huffcode = huffSize = huffBits = 0, rs = -1;
 
               // UPDATE_ADV_PRED !!!!
               {
@@ -605,8 +605,10 @@ public:
                                     cbuf2[offsetDcW + i];
                   }
                 } else {
-                  sumu[zzu[zz - 1]] -= (zzv[zz - 1] ? 16 * (16 + zzv[zz - 1]) : 185) * (images[idx].qTable[q + zz - 1] + 1) * cbuf2[cpos - 1];
-                  sumv[zzv[zz - 1]] -= (zzu[zz - 1] ? 16 * (16 + zzu[zz - 1]) : 185) * (images[idx].qTable[q + zz - 1] + 1) * cbuf2[cpos - 1];
+                  sumu[zzu[zz - 1]] -=
+                          (zzv[zz - 1] ? 16 * (16 + zzv[zz - 1]) : 185) * (images[idx].qTable[q + zz - 1] + 1) * cbuf2[cpos - 1];
+                  sumv[zzv[zz - 1]] -=
+                          (zzu[zz - 1] ? 16 * (16 + zzu[zz - 1]) : 185) * (images[idx].qTable[q + zz - 1] + 1) * cbuf2[cpos - 1];
                 }
 
                 for( int i = 0; i < 3; ++i ) {
@@ -653,7 +655,8 @@ public:
                   ex = (images[idx].qTable[q + zz2] + 1) * cbuf2[cpos_dc + zz2] / (images[idx].qTable[q + zz] + 1);
                   lcp[4] = (ex < 0 ? -1 : +1) * (ilog(abs(ex) + 1) + (ex != 0 ? 17 : 0));
 
-                  ex = (images[idx].qTable[q + zpos[8 * zzv[zz]]] + 1) * cbuf2[cpos_dc + zpos[8 * zzv[zz]]] / (images[idx].qTable[q + zz] + 1);
+                  ex = (images[idx].qTable[q + zpos[8 * zzv[zz]]] + 1) * cbuf2[cpos_dc + zpos[8 * zzv[zz]]] /
+                       (images[idx].qTable[q + zz] + 1);
                   lcp[5] = (ex < 0 ? -1 : +1) * (ilog(abs(ex) + 1) + (ex != 0 ? 17 : 0));
 
                   ex = (images[idx].qTable[q + zpos[zzu[zz]]] + 1) * cbuf2[cpos_dc + zpos[zzu[zz]]] / (images[idx].qTable[q + zz] + 1);
@@ -680,10 +683,10 @@ public:
                   }
                 }
                 if( cnt1 > 0 )
-                  prev1 /= cnt1, r /= cnt1, s /= cnt1, prevCoefRs = (r << 4) | s;
+                  prev1 /= cnt1, r /= cnt1, s /= cnt1, prevCoefRs = (r << 4U) | s;
                 if( cnt2 > 0 )
                   prev2 /= cnt2;
-                prevCoef = (prev1 < 0 ? -1 : +1) * ilog(11 * abs(prev1) + 1) + (cnt1 << 20);
+                prevCoef = (prev1 < 0 ? -1 : +1) * ilog(11 * abs(prev1) + 1) + (cnt1 << 20U);
                 prevCoef2 = (prev2 < 0 ? -1 : +1) * ilog(11 * abs(prev2) + 1);
 
                 if( column == 0 && blockW[acomp] > 64 * acomp )
@@ -706,7 +709,7 @@ public:
         m.set(buf(1), 1024);
         return true;
       }
-      if( rstlen > 0 && rstlen == column + row * width - rstpos && mcupos == 0 && (int) huffcode == (1 << huffbits) - 1 ) {
+      if( rstlen > 0 && rstlen == column + row * width - rstpos && mcupos == 0 && (int) huffcode == (1 << huffBits) - 1 ) {
         m.add(2047); //network bias
         m.set(0, 1 + 8);
         m.set(0, 1 + 1024);
@@ -722,14 +725,14 @@ public:
       }
 
       // update context
-      const int comp = color[mcupos >> 6];
-      const int coef = (mcupos & 63) | comp << 6;
-      const int hc = (huffcode * 4 + ((mcupos & 63) == 0) * 2 + (comp == 0)) | 1 << (huffbits + 2);
-      const bool firstcol = column == 0 && blockW[mcupos >> 6] > mcupos;
-      if( ++hbcount > 2 || huffbits == 0 )
+      const int comp = color[mcupos >> 6U];
+      const int coef = (mcupos & 63) | comp << 6U;
+      const int hc = (huffcode * 4 + ((mcupos & 63U) == 0) * 2 + (comp == 0)) | 1 << (huffBits + 2);
+      const bool firstCol = column == 0 && blockW[mcupos >> 6] > mcupos;
+      if( ++hbcount > 2 || huffBits == 0 )
         hbcount = 0;
       JASSERT(coef >= 0 && coef < 256)
-      const int zu = zzu[mcupos & 63], zv = zzv[mcupos & 63];
+      const int zu = zzu[mcupos & 63U], zv = zzv[mcupos & 63U];
       if( hbcount == 0 ) {
         uint64_t n = hc * 32;
         int i = 0;
@@ -817,8 +820,8 @@ public:
       if( !hbcount )
         MJPEGMap.set(hash(mcupos, column, row, hc >> 2));
       MJPEGMap.mix(*m1);
-      m1->set(firstcol, 2);
-      m1->set(coef | (min(3, huffbits) << 8), 1024);
+      m1->set(firstCol, 2);
+      m1->set(coef | (min(3, huffBits) << 8), 1024);
       m1->set(((hc & 0x1FE) << 1) | min(3, ilog2(zu + zv)), 1024);
       int pr = m1->p();
       m.add(stretch(pr) >> 1);
@@ -830,9 +833,9 @@ public:
       m.add(stretch(pr) >> 1);
       m.add((pr >> 2) - 511);
 
-      m.set(1 + ((zu + zv < 5) | ((huffbits > 8) << 1) | (firstcol << 2)), 1 + 8);
+      m.set(1 + ((zu + zv < 5) | ((huffBits > 8) << 1) | (firstCol << 2)), 1 + 8);
       m.set(1 + ((hc & 0xFF) | (min(3, (zu + zv) / 3)) << 8), 1 + 1024);
-      m.set(coef | (min(3, huffbits / 2) << 8), 1024);
+      m.set(coef | (min(3, huffBits / 2) << 8), 1024);
 
       return true;
     }

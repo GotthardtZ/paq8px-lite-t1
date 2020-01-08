@@ -78,7 +78,14 @@ private:
 
 public:
     int order = 0; // is set after mix()
-    // Construct using size bytes of memory for count contexts
+    /**
+     * Construct using size bytes of memory for count contexts.
+     * @param sh
+     * @param size
+     * @param count
+     * @param scale
+     * @param uw
+     */
     ContextMap2(const Shared *const sh, const uint64_t size, const uint32_t count, const int scale, const uint32_t uw) : shared(sh),
             c(count), table(size >> 6U), bitState(count), bitState0(count), byteHistory(count), contexts(count), checksums(count),
             runMap(sh, count, (1U << 12U), 127, StateMap::Run),
@@ -99,7 +106,11 @@ public:
       }
     }
 
-    inline void set(const uint64_t ctx) { // set next whole byte context to ctx
+    /**
+     * Set next whole byte context to ctx.
+     * @param ctx
+     */
+    inline void set(const uint64_t ctx) {
       assert(index >= 0 && index < c);
       const uint32_t ctx0 = contexts[index] = finalize64(ctx, hashBits);
       const uint16_t chk0 = checksums[index] = (uint16_t) checksum64(ctx, hashBits, 16);
@@ -275,17 +286,17 @@ public:
 
             int bhState = 0; // 4 bit
             if( complete3 )
-              bhState = 8 | (bhBits); //we have seen 3 bytes (at least)
+              bhState = 8U | (bhBits); //we have seen 3 bytes (at least)
             else if( complete2 )
-              bhState = 4 | (bhBits & 3); //we have seen 2 bytes
+              bhState = 4U | (bhBits & 3U); //we have seen 2 bytes
             else if( complete1 )
-              bhState = 2 | (bhBits & 1); //we have seen 1 byte only
+              bhState = 2U | (bhBits & 1U); //we have seen 1 byte only
             //else new context (bhState=0)
 
             const uint8_t stateGroup = StateTable::group(state); //0..31
-            m.add(stretch(bhMap8B.p2(i, bitIsUncertain << 7 | (bhState << 3) | bpos))
+            m.add(stretch(bhMap8B.p2(i, bitIsUncertain << 7U | (bhState << 3U) | bpos))
                           >> 2); // using bitIsUncertain is generally beneficial except for some 8bpp image (noticeable loss)
-            m.add(stretch(bhMap12B.p2(i, stateGroup << 7 | (bhState << 3) | bpos)) >> 2);
+            m.add(stretch(bhMap12B.p2(i, stateGroup << 7U | (bhState << 3U) | bpos)) >> 2U);
           }
         } else { //skipped context
           if( useWhat & CM_USE_RUN_STATS ) {

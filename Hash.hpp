@@ -88,6 +88,25 @@ uint64_t checksum64(const uint64_t hash, const int hashBits, const int checksumB
 // value hashing
 //
 // - Hash 1-13 64-bit (usually small) integers
+//
+
+
+//template<int size, int idx = size, class dummy = void>
+//struct MM{
+//    static constexpr unsigned int hash(const char * str, unsigned int prev_crc = 0xFFFFFFFF)
+//    {
+//      return MM<size, idx+1>::crc32(str, (prev_crc >> 8) ^ crc_table[(prev_crc ^ str[idx]) & 0xFF] );
+//    }
+//};
+//
+//// This is the stop-recursion function
+//template<int size, class dummy>
+//struct MM<size, 0, dummy>{
+//    static constexpr unsigned int hash(const uint64_t x0)
+//    {
+//      return (x0 + 1) * PHI64;
+//    }
+//};
 
 static ALWAYS_INLINE
 uint64_t hash(const uint64_t x0) {

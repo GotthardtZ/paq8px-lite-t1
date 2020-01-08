@@ -34,7 +34,7 @@ public:
     }
 
     inline void moveToFront(const int i) {
-      assert(uint32_t(i) < Previous.size());
+      assert(uint32_t(i) < previous.size());
       if((Index = i) == root )
         return;
       const int p = previous[Index], n = next[Index];

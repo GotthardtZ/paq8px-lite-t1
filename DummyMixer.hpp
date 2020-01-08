@@ -1,5 +1,6 @@
 #ifndef PAQ8PX_DUMMYMIXER_HPP
 #define PAQ8PX_DUMMYMIXER_HPP
+
 /**
  * for training NormalModel, WordModel and ExeModel
  */

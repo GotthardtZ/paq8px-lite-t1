@@ -3,6 +3,7 @@
 
 #include "../RingBuffer.hpp"
 #include <cstdint>
+#include "../Shared.hpp"
 
 /**
  * Model for x86/x64 code.

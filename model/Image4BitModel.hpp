@@ -1,6 +1,9 @@
 #ifndef PAQ8PX_IMAGE4BITMODEL_HPP
 #define PAQ8PX_IMAGE4BITMODEL_HPP
 
+#include "../Shared.hpp"
+#include "../RingBuffer.hpp"
+
 /**
  * Model for 4-bit image data
  */

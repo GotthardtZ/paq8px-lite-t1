@@ -71,7 +71,6 @@
 #include "utils.hpp"
 
 // Platform-independent includes
-#include <sys/stat.h> //stat(), mkdir()
 #include <cmath>     //floor(), sqrt()
 #include <stdexcept>  //std::exception
 
@@ -147,7 +146,6 @@ static_assert(sizeof(int) == 4, "sizeof(int)");
 #include "StateTable.hpp"
 #include "Squash.hpp"
 #include "Stretch.hpp"
-#include "IPredictor.hpp"
 #include "UpdateBroadcaster.hpp"
 #include "Mixer.hpp"
 #include "APM1.hpp"
@@ -212,8 +210,7 @@ static_assert(sizeof(int) == 4, "sizeof(int)");
 #include "Predictor.hpp"
 #include "Encoder.hpp"
 #include "filter/Filters.hpp"
-#include "ListOfFiles.hpp"
-#include "file/FileDisk.hpp"
+#include "file/ListOfFiles.hpp"
 #include "file/fileUtils2.hpp"
 #include "file/FileName.hpp"
 

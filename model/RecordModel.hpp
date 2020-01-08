@@ -1,6 +1,10 @@
 #ifndef PAQ8PX_RECORDMODEL_HPP
 #define PAQ8PX_RECORDMODEL_HPP
 
+#include "../Shared.hpp"
+#include "../RingBuffer.hpp"
+
+
 inline uint8_t clip(int const px) {
   if( px > 255 )
     return 255;

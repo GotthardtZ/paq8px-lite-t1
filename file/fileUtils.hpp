@@ -92,12 +92,6 @@ FILE *openFile(const char *filename, const int mode) {
   return file;
 }
 
-#ifdef WINDOWS
-#define STAT _stat
-#else
-#define STAT stat
-#endif
-
 /**
  * Wrapper function (Linux vs Windows) to examine a path
  * @param path

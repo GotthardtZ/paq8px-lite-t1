@@ -25,7 +25,7 @@ public:
  * @param x
  * @return
  */
-inline int llog(uint32_t x) {
+constexpr inline int llog(uint32_t x) {
   if( x >= 0x1000000 )
     return 256 + ilog(uint16_t(x >> 16U));
   else if( x >= 0x10000 )
@@ -34,7 +34,7 @@ inline int llog(uint32_t x) {
     return ilog(uint16_t(x));
 }
 
-inline uint32_t bitCount(uint32_t v) {
+constexpr inline uint32_t bitCount(uint32_t v) {
   v -= ((v >> 1U) & 0x55555555U);
   v = ((v >> 2U) & 0x33333333U) + (v & 0x33333333U);
   v = ((v >> 4U) + v) & 0x0f0f0f0fU;

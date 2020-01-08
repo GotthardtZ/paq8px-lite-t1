@@ -1,7 +1,10 @@
 #ifndef PAQ8PX_LISTOFFILES_HPP
 #define PAQ8PX_LISTOFFILES_HPP
 
-#include "file/FileName.hpp"
+#include "FileName.hpp"
+#include "../Array.hpp"
+#include "fileUtils.hpp"
+#include <cassert>
 
 class ListOfFiles {
 private:

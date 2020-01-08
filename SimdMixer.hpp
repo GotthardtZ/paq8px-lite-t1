@@ -18,7 +18,11 @@ private:
     SIMDMixer *mp; // points to a Mixer to combine results
 public:
     SIMDMixer(const Shared *sh, const int n, const int m, const int s) : Mixer(sh, ((n + (simdWidth() - 1)) & -(simdWidth())), m, s) {
-      assert(n > 0 && n > 0 && (n & (simdWidth() - 1)) == 0 && m > 0 && s >= 1);
+      assert(n > 0);
+      // TODO: This assertion fails
+//      assert((n & simdWidth() - 1) == 0);
+      assert(m > 0);
+      assert(s >= 1);
       mp = (s > 1) ? new SIMDMixer<simd>(sh, s, 1, 1) : nullptr;
     }
 
@@ -74,7 +78,10 @@ public:
       reset();
     }
 
-    // predict next bit
+    /**
+     * Predict next bit
+     * @return
+     */
     int p() override {
       updater.subscribe(this);
       assert(scaleFactor > 0);

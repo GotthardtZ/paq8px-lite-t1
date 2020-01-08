@@ -1,6 +1,9 @@
 #ifndef PAQ8PX_IMAGE1BITMODEL_HPP
 #define PAQ8PX_IMAGE1BITMODEL_HPP
 
+#include "../Shared.hpp"
+#include "../RingBuffer.hpp"
+
 /**
  * Model for 1-bit image data
  */

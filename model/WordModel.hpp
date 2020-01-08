@@ -3,6 +3,9 @@
 
 #ifdef USE_TEXTMODEL
 
+#include "../Shared.hpp"
+#include "../RingBuffer.hpp"
+
 /**
  * Model words, expressions, numbers, paragraphs/lines, etc.
  * simple processing of pdf text
@@ -493,7 +496,7 @@ private:
             cm.skip();
             i++;
           }
-          assert(int(i) == 2048 * is_textblock + nCM2);
+          assert(int(i) == 2048 * isTextBlock + nCM2);
         }
     };
 
