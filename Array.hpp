@@ -11,14 +11,15 @@
 #ifdef NDEBUG
 #define CHECK_INDEX(index, upper_bound)((void) 0)
 #else
-static void CHECK_INDEX(uint64_t index, uint64_t upper_bound)
-{
-  if (index>=upper_bound) {
-    fprintf(stderr, "%" PRIu64 " out of upper bound %" PRIu64 "\n", index, upper_bound);
+
+static void CHECK_INDEX(uint64_t index, uint64_t upperBound) {
+  if( index >= upperBound ) {
+    fprintf(stderr, "%" PRIu64 " out of upper bound %" PRIu64 "\n", index, upperBound);
     BACKTRACE();
     quit();
   }
 }
+
 #endif
 
 /**
@@ -34,10 +35,11 @@ static void CHECK_INDEX(uint64_t index, uint64_t upper_bound)
 template<class T, const int Align = 16>
 class Array {
 private:
-    uint64_t usedSize;
-    uint64_t reservedSize;
-    char *ptr; // Address of allocated memory (may not be aligned)
+    uint64_t usedSize {};
+    uint64_t reservedSize {};
+    char *ptr {}; // Address of allocated memory (may not be aligned)
     T *data;   // Aligned base address of the elements, (ptr <= T)
+    ProgramChecker *programChecker = ProgramChecker::getInstance();
     void create(uint64_t requestedSize);
 
     [[nodiscard]] inline uint64_t padding() const { return Align - 1; }
@@ -106,7 +108,7 @@ void Array<T, Align>::create(uint64_t requestedSize) {
   data = (T *) (((uintptr_t) ptr + pad) & ~(uintptr_t) pad);
   assert(ptr <= (char *) data && (char *) data <= ptr + Align);
   assert(((uintptr_t) data & (Align - 1)) == 0); //aligned as expected?
-  programChecker.alloc(bytesToAllocate);
+  programChecker->alloc(bytesToAllocate);
 }
 
 template<class T, const int Align>
@@ -118,7 +120,7 @@ void Array<T, Align>::resize(uint64_t newSize) {
   char *oldPtr = ptr;
   T *oldData = data;
   const uint64_t oldSize = usedSize;
-  programChecker.free(allocatedBytes());
+  programChecker->free(allocatedBytes());
   create(newSize);
   if( oldSize > 0 ) {
     assert(oldPtr != nullptr && oldData != nullptr);
@@ -142,7 +144,7 @@ void Array<T, Align>::pushBack(const T &x) {
 
 template<class T, const int Align>
 Array<T, Align>::~Array() {
-  programChecker.free(allocatedBytes());
+  programChecker->free(allocatedBytes());
   free(ptr);
   usedSize = reservedSize = 0;
   data = nullptr;

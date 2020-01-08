@@ -1,6 +1,40 @@
 #ifndef PAQ8PX_UTILS_HPP
 #define PAQ8PX_UTILS_HPP
 
+//////////////////////// Target OS/Compiler ////////////////////////////////
+
+#if defined(_WIN32) || defined(_MSC_VER)
+#ifndef WINDOWS
+#define WINDOWS  //to compile for Windows
+#endif
+#endif
+
+#if defined(unix) || defined(__unix__) || defined(__unix) || defined(__APPLE__)
+#ifndef UNIX
+#define UNIX //to compile for Unix, Linux, Solaris, MacOS / Darwin, etc)
+#endif
+#endif
+
+#if !defined(WINDOWS) && !defined(UNIX)
+#error Unknown target system
+#endif
+
+// Floating point operations need IEEE compliance
+// Do not use compiler optimization options such as the following:
+// gcc : -ffast-math (and -Ofast, -funsafe-math-optimizations, -fno-rounding-math)
+// vc++: /fp:fast
+#if defined(__FAST_MATH__) || defined(_M_FP_FAST) // gcc vc++
+#error Avoid using aggressive floating-point compiler optimization flags
+#endif
+
+#if defined(_MSC_VER)
+#define ALWAYS_INLINE  __forceinline
+#elif defined(__GNUC__)
+#define ALWAYS_INLINE inline __attribute__((always_inline))
+#else
+#define ALWAYS_INLINE inline
+#endif
+
 #include <cstdint>
 #include <algorithm>
 #include <cstdio>
@@ -80,7 +114,7 @@ constexpr bool isPowerOf2(T x) {
 class IntentionalException : public std::exception {};
 
 // Error handler: print message if any, and exit
-void quit(const char *const message = nullptr) {
+static void quit(const char *const message = nullptr) {
   if( message )
     printf("\n%s", message);
   printf("\n");
@@ -130,7 +164,6 @@ typedef enum {
     LZW
 } BlockType;
 
-
 inline bool hasRecursion(BlockType ft) {
   return ft == CD || ft == ZLIB || ft == BASE64 || ft == GIF || ft == RLE || ft == LZW || ft == FILECONTAINER;
 }
@@ -147,10 +180,7 @@ inline bool hasTransform(BlockType ft) {
 
 inline bool isPNG(BlockType ft) { return ft == PNG8 || ft == PNG8GRAY || ft == PNG24 || ft == PNG32; }
 
-uint32_t level = 0; //this value will be overwritten at the beginning of compression/decompression
 #define MEM (uint64_t(65536) << level)
-
-uint8_t options = 0;
 #define OPTION_MULTIPLE_FILE_MODE 1U
 #define OPTION_BRUTE 2U
 #define OPTION_TRAINEXE 4U

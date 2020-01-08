@@ -1,6 +1,8 @@
 #ifndef PAQ8PX_STRING_HPP
 #define PAQ8PX_STRING_HPP
 
+#include "Array.hpp"
+
 /**
  * A specialized string class
  * size() includes NUL terminator.

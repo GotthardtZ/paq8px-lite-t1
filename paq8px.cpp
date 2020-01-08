@@ -34,40 +34,6 @@
 //  Automatic definitions are below = for compiling no need to change anything below this line
 //
 
-//////////////////////// Target OS/Compiler ////////////////////////////////
-
-#if defined(_WIN32) || defined(_MSC_VER)
-#ifndef WINDOWS
-#define WINDOWS  //to compile for Windows
-#endif
-#endif
-
-#if defined(unix) || defined(__unix__) || defined(__unix) || defined(__APPLE__)
-#ifndef UNIX
-#define UNIX //to compile for Unix, Linux, Solaris, MacOS / Darwin, etc)
-#endif
-#endif
-
-#if !defined(WINDOWS) && !defined(UNIX)
-#error Unknown target system
-#endif
-
-// Floating point operations need IEEE compliance
-// Do not use compiler optimization options such as the following:
-// gcc : -ffast-math (and -Ofast, -funsafe-math-optimizations, -fno-rounding-math)
-// vc++: /fp:fast
-#if defined(__FAST_MATH__) || defined(_M_FP_FAST) // gcc vc++
-#error Avoid using aggressive floating-point compiler optimization flags
-#endif
-
-#if defined(_MSC_VER)
-#define ALWAYS_INLINE  __forceinline
-#elif defined(__GNUC__)
-#define ALWAYS_INLINE inline __attribute__((always_inline))
-#else
-#define ALWAYS_INLINE inline
-#endif
-
 #include "utils.hpp"
 
 // Platform-independent includes
@@ -133,9 +99,10 @@ static_assert(sizeof(uint64_t) == 8, "sizeof(uint64_t)");
 static_assert(sizeof(short) == 2, "sizeof(short)");
 static_assert(sizeof(int) == 4, "sizeof(int)");
 
+uint32_t level = 0; //this value will be overwritten at the beginning of compression/decompression
+uint8_t options = 0;
 
 #include "ProgramChecker.hpp"
-#include "Array.hpp"
 #include "String.hpp"
 #include "file/File.hpp"
 #include "Random.hpp"
@@ -215,6 +182,7 @@ static_assert(sizeof(int) == 4, "sizeof(int)");
 #include "file/FileName.hpp"
 
 typedef enum { DoNone, DoCompress, DoExtract, DoCompare, DoList } WHATTODO;
+ProgramChecker *programChecker = ProgramChecker::getInstance();
 
 void printHelp() {
   printf("\n"
@@ -858,7 +826,7 @@ int main_utf8(int argc, char **argv) {
         results += "\t";
         results += en.size();
         results += "\t";
-        results += uint64_t(programChecker.getRuntime() * 1000.0);
+        results += uint64_t(programChecker->getRuntime() * 1000.0);
         results += "\t";
         results += "\n";
         appendToFile(logfile.c_str(), results.c_str());
@@ -885,7 +853,7 @@ int main_utf8(int argc, char **argv) {
 
     archive.close();
     if( whattodo != DoList )
-      programChecker.print();
+      programChecker->print();
   }
     // we catch only the intentional exceptions from quit() to exit gracefully
     // any other exception should result in a crash and must be investigated
