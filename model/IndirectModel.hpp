@@ -1,6 +1,7 @@
 #ifndef PAQ8PX_INDIRECTMODEL_HPP
 #define PAQ8PX_INDIRECTMODEL_HPP
 
+#include <cctype>
 #include "../Shared.hpp"
 #include "../RingBuffer.hpp"
 

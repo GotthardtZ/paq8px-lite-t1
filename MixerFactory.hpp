@@ -1,6 +1,10 @@
 #ifndef PAQ8PX_MIXERFACTORY_HPP
 #define PAQ8PX_MIXERFACTORY_HPP
 
+#include "utils.hpp"
+#include "Mixer.hpp"
+#include "SimdMixer.hpp"
+
 class MixerFactory {
 public:
     static void setSimd(SIMD simd) {

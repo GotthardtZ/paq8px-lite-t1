@@ -684,7 +684,7 @@ int main_utf8(int argc, char **argv) {
 
     // Set globals according to requested compression level
     assert(level >= 0 && level <= 9);
-    Encoder en(mode, &archive);
+    Encoder en(mode, &archive, level);
     uint64_t contentSize = 0;
     uint64_t totalSize = 0;
 

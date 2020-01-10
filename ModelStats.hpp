@@ -1,6 +1,8 @@
 #ifndef PAQ8PX_MODELSTATS_HPP
 #define PAQ8PX_MODELSTATS_HPP
 
+#include "utils.hpp"
+
 /**
  * Information shared by models
  * Order: in appearance -> models may use information from models that appears above them

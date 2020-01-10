@@ -82,7 +82,7 @@ static constexpr int APPEND = 2;
  * @param mode
  * @return
  */
-FILE *openFile(const char *filename, const int mode) {
+static FILE *openFile(const char *filename, const int mode) {
   FILE *file;
 #ifdef WINDOWS
   file = _wfopen(WcharStr(filename).wchar_str, mode == READ ? L"rb" : mode == WRITE ? L"wb+" : L"a");
@@ -98,7 +98,7 @@ FILE *openFile(const char *filename, const int mode) {
  * @param status
  * @return
  */
-bool statPath(const char *path, struct STAT &status) {
+static bool statPath(const char *path, struct STAT &status) {
 #ifdef WINDOWS
   return _wstat(WcharStr(path).wchar_str, &status);
 #else
@@ -184,27 +184,6 @@ static void makeDirectories(const char *filename) {
       path[i] = saveChar;
     }
   }
-}
-
-/**
- * Helper function: create a temporary file
- *
- * On Windows when using tmpFile() the temporary file may be created
- * in the root directory causing access denied error when User Account Control (UAC) is on.
- * To avoid this issue with tmpFile() we simply use fopen() instead.
- * We create the temporary file in the directory where the executable is launched from.
- * Luckily the MS c runtime library provides two (MS specific) fopen() flags: "T"emporary and "d"elete.
- * @return
- */
-FILE *makeTmpFile() {
-#if defined(WINDOWS)
-  char szTempFileName[MAX_PATH];
-  const UINT uRetVal = GetTempFileName(TEXT("."), TEXT("tmp"), 0, szTempFileName);
-  if (uRetVal == 0) return nullptr;
-  return fopen(szTempFileName, "w+bTD");
-#else
-  return tmpfile();
-#endif
 }
 
 #endif //PAQ8PX_FILEUTILS_HPP

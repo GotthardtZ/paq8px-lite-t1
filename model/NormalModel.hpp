@@ -1,6 +1,9 @@
 #ifndef PAQ8PX_NORMALMODEL_HPP
 #define PAQ8PX_NORMALMODEL_HPP
 
+#include "../ContextMap2.hpp"
+#include "../ModelStats.hpp"
+
 /**
  * Model for order 0-14 contexts
  * Contexts are hashes of previous 0..14 bytes.

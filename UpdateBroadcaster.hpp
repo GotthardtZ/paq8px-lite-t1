@@ -9,25 +9,17 @@
  * the next bit is known by calling the update() method of each predictor.
  */
 class UpdateBroadcaster {
+public:
+    static UpdateBroadcaster *getInstance();
+    void subscribe(IPredictor *subscriber);
+    void broadcastUpdate();
 private:
+    UpdateBroadcaster() : n(0) {};  // Private so that it can  not be called
+    UpdateBroadcaster(UpdateBroadcaster const &) {};             // copy constructor is private
+    UpdateBroadcaster &operator=(UpdateBroadcaster const &) {};  // assignment operator is private
+    static UpdateBroadcaster *mPInstance;
     int n; /**< number of subscribed predictors, (number of items in "subscribers" array)*/
     IPredictor *subscribers[1024];
-public:
-    UpdateBroadcaster() : n(0) {}
-
-    void subscribe(IPredictor *subscriber) {
-      subscribers[n] = subscriber;
-      n++;
-      assert(n < 1024);
-    }
-
-    void broadcastUpdate() {
-      for( int i = 0; i < n; i++ ) {
-        IPredictor *subscriber = subscribers[i];
-        subscriber->update();
-      }
-      n = 0;
-    }
-} updater;
+};
 
 #endif //PAQ8PX_UPDATEBROADCASTER_HPP

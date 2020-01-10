@@ -1,6 +1,9 @@
 #ifndef PAQ8PX_SIMDMIXER_HPP
 #define PAQ8PX_SIMDMIXER_HPP
 
+#include "UpdateBroadcaster.hpp"
+#include "Squash.hpp"
+
 template<SIMD simd>
 class SIMDMixer : public Mixer {
 private:
@@ -16,6 +19,7 @@ private:
     }
 
     SIMDMixer *mp; // points to a Mixer to combine results
+    UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 public:
     SIMDMixer(const Shared *sh, const int n, const int m, const int s) : Mixer(sh, ((n + (simdWidth() - 1)) & -(simdWidth())), m, s) {
       assert(n > 0);
@@ -53,27 +57,28 @@ public:
             trainSimdSse2(&tx[0], &wx[cxt[i] * n], nx, err * rates[i]);
           if( simd == SIMD_AVX2 )
             trainSimdAvx2(&tx[0], &wx[cxt[i] * n], nx, err * rates[i]);
-          if( options & OPTION_ADAPTIVE ) {
-            const uint32_t logErr = min(0xF, ilog2(abs(err)));
-            info[i].sum -= square(info[i].data[1] >> 28U);
-            info[i].data[1] <<= 4U;
-            info[i].data[1] |= info[i].data[0] >> 28U;
-            info[i].data[0] <<= 4U;
-            info[i].data[0] |= logErr;
-            info[i].sum += square(logErr);
-            info[i].collected += info[i].collected < 4096;
-            info[i].mask <<= 1U;
-            info[i].mask |= (logErr <= ((info[i].data[0] >> 4U) & 0xFU));
-            const uint32_t count = bitCount(info[i].mask);
-            if( info[i].collected >= 64 && (info[i].sum > 1500 + uint32_t(rates[i]) * 64 || count < 9 || (info[i].mask & 0xFFU) == 0)) {
-              rates[i] = DEFAULT_LEARNING_RATE;
-              memset(&info[i], 0, sizeof(ErrorInfo));
-            } else if( info[i].collected == 4096 && info[i].sum >= 56 && info[i].sum <= 144 && count > 28 - uint32_t(rates[i]) &&
-                       ((info[i].mask & 0xFFU) == 0xFFU)) {
-              rates[i] -= rates[i] > 2;
-              info[i].reset();
-            }
-          }
+          // TODO: re-enable this
+//          if( options & OPTION_ADAPTIVE ) {
+//            const uint32_t logErr = min(0xF, ilog2(abs(err)));
+//            info[i].sum -= square(info[i].data[1] >> 28U);
+//            info[i].data[1] <<= 4U;
+//            info[i].data[1] |= info[i].data[0] >> 28U;
+//            info[i].data[0] <<= 4U;
+//            info[i].data[0] |= logErr;
+//            info[i].sum += square(logErr);
+//            info[i].collected += info[i].collected < 4096;
+//            info[i].mask <<= 1U;
+//            info[i].mask |= (logErr <= ((info[i].data[0] >> 4U) & 0xFU));
+//            const uint32_t count = bitCount(info[i].mask);
+//            if( info[i].collected >= 64 && (info[i].sum > 1500 + uint32_t(rates[i]) * 64 || count < 9 || (info[i].mask & 0xFFU) == 0)) {
+//              rates[i] = DEFAULT_LEARNING_RATE;
+//              memset(&info[i], 0, sizeof(ErrorInfo));
+//            } else if( info[i].collected == 4096 && info[i].sum >= 56 && info[i].sum <= 144 && count > 28 - uint32_t(rates[i]) &&
+//                       ((info[i].mask & 0xFFU) == 0xFFU)) {
+//              rates[i] -= rates[i] > 2;
+//              info[i].reset();
+//            }
+//          }
         }
       reset();
     }
@@ -83,7 +88,7 @@ public:
      * @return
      */
     int p() override {
-      updater.subscribe(this);
+      updater->subscribe(this);
       assert(scaleFactor > 0);
       //if(mp)printf("nx: %d, numContexts: %d, base: %d\n",nx, numContexts, base); //for debugging: how many inputs do we have?
       while( nx & (simdWidth() - 1))

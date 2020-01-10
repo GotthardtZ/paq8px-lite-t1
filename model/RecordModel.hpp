@@ -3,7 +3,11 @@
 
 #include "../Shared.hpp"
 #include "../RingBuffer.hpp"
-
+#include "../ContextMap.hpp"
+#include "../IndirectMap.hpp"
+#include "../StationaryMap.hpp"
+#include "../SmallStationaryContextMap.hpp"
+#include "../IndirectContext.hpp"
 
 inline uint8_t clip(int const px) {
   if( px > 255 )

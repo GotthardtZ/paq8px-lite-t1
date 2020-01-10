@@ -2,6 +2,7 @@
 #define PAQ8PX_DMCFOREST_HPP
 
 #include "../Shared.hpp"
+#include "DmcModel.hpp"
 
 /**
  * This class solves two problems of the DMC model

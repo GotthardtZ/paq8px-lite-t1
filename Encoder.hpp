@@ -60,7 +60,7 @@ public:
      * @param m the mode to operate in
      * @param f the file to read from or write to
      */
-    Encoder(Mode m, File *f);
+    Encoder(Mode m, File *f, uint32_t level);
     [[nodiscard]] Mode getMode() const;
     /**
      * size() returns current length of archive
@@ -95,7 +95,7 @@ public:
     void printStatus();
 };
 
-Encoder::Encoder(Mode m, File *f) : mode(m), archive(f), x1(0), x2(0xffffffff), x(0), alt(0) {
+Encoder::Encoder(Mode m, File *f, uint32_t level) : mode(m), archive(f), x1(0), x2(0xffffffff), x(0), alt(0), predictor(level) {
   if( mode == DECOMPRESS ) {
     uint64_t start = size();
     archive->setEnd();

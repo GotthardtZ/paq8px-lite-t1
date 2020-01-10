@@ -19,6 +19,16 @@ with the bit history states to provide additional states that are then
 mapped to predictions.
 */
 
+#include "IPredictor.hpp"
+#include "Random.hpp"
+#include "StateMap.hpp"
+#include "Ilog.hpp"
+#include "Hash.hpp"
+#include "StateTable.hpp"
+#include "Mixer.hpp"
+#include "UpdateBroadcaster.hpp"
+#include "Stretch.hpp"
+
 #define CM_USE_NONE 0U
 #define CM_USE_RUN_STATS 1U
 #define CM_USE_BYTE_HISTORY 2U
@@ -75,6 +85,7 @@ private:
     uint64_t validFlags;
     int scale;
     uint32_t useWhat;
+    UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 
 public:
     int order = 0; // is set after mix()
@@ -211,7 +222,7 @@ public:
     void setScale(const int Scale) { scale = Scale; }
 
     void mix(Mixer &m) {
-      updater.subscribe(this);
+      updater->subscribe(this);
       stateMap.subscribe();
       if( useWhat & CM_USE_RUN_STATS ) {
         runMap.subscribe();

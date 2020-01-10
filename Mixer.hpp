@@ -1,7 +1,9 @@
 #ifndef PAQ8PX_MIXER_HPP
 #define PAQ8PX_MIXER_HPP
 
+#include <immintrin.h>
 #include "utils.hpp"
+#include "IPredictor.hpp"
 
 #ifdef __GNUC__
 
@@ -98,10 +100,6 @@ static void trainSimdNone(const short *const t, short *const w, int n, const int
   }
 }
 
-typedef enum {
-    SIMD_NONE, SIMD_SSE2, SIMD_AVX2
-} SIMD;
-
 class Mixer : protected IPredictor {
 protected:
     const Shared *const shared;
@@ -173,8 +171,9 @@ public:
       assert(numContexts < s);
       assert(cx < range);
       assert(base + range <= m);
-      if( !(options & OPTION_ADAPTIVE))
-        rates[numContexts] = rate;
+      // TODO: re-enable this
+//      if( !(options & OPTION_ADAPTIVE))
+//        rates[numContexts] = rate;
       cxt[numContexts++] = base + cx;
       base += range;
       //printf("numContexts: %d base: %d\n",numContexts,range); //for debugging: how many input sets do we have?
@@ -184,9 +183,6 @@ public:
       nx = base = numContexts = 0;
     }
 };
-
-#include "DummyMixer.hpp"
-#include "SimdMixer.hpp"
 
 static SIMD chosenSimd = SIMD_NONE; //default value, will be overridden by the CPU dispatcher, and may be overridden from the command line
 #include "MixerFactory.hpp"

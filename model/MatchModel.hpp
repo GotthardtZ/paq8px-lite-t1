@@ -51,9 +51,10 @@ private:
     bool delta = false; // indicates that a match has just failed (delta mode)
     const uint32_t mask;
     const int hashBits;
+    Ilog *ilog = Ilog::getInstance();
 
 public:
-    MatchModel(const Shared *const sh, ModelStats *st, const uint64_t size) : shared(sh), stats(st), table(size / sizeof(uint32_t)),
+    MatchModel(const Shared *const sh, ModelStats *st, const uint64_t size, uint32_t level) : shared(sh), stats(st), table(size / sizeof(uint32_t)),
             stateMaps {{sh, 1, 56 * 256,          1023, StateMap::Generic},
                        {sh, 1, 8 * 256 * 256 + 1, 1023, StateMap::Generic},
                        {sh, 1, 256 * 256,         1023, StateMap::Generic}}, cm(sh, MEM / 32, nCM, 74, CM_USE_RUN_STATS),
@@ -162,7 +163,7 @@ public:
         ctx[1] = ((expectedByte << 11) | (bpos << 8) | c1) + 1;
         const int sign = 2 * expectedBit - 1;
         m.add(sign * (min(length, 32) << 5)); // +/- 32..1024
-        m.add(sign * (ilog(min(length, 65535)) << 2)); // +/-  0..1024
+        m.add(sign * (ilog->log(min(length, 65535)) << 2)); // +/-  0..1024
       } else { // no match at all or delta mode
         m.add(0);
         m.add(0);

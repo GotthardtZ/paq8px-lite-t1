@@ -113,7 +113,7 @@ private:
     static constexpr uint32_t typesExceptions2[NUM_EXCEPTIONS2] = {English::Noun, English::Noun, English::Noun, English::Noun,
                                                                    English::Noun, English::Verb, English::Verb, English::Verb};
 
-    constexpr inline bool isConsonant(const char c) {
+    inline bool isConsonant(const char c) {
       return !isVowel(c);
     }
 

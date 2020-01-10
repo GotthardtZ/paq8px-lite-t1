@@ -14,6 +14,7 @@ private:
     uint32_t context, bCount, b;
     uint8_t *cp;
     int scale;
+    UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 
 public:
     IndirectMap(const Shared *const sh, const int bitsOfContext, const int inputBits, const int scale, const int limit) : shared(sh),
@@ -46,7 +47,7 @@ public:
     void setScale(const int Scale) { this->scale = Scale; }
 
     void mix(Mixer &m) {
-      updater.subscribe(this);
+      updater->subscribe(this);
       cp = &data[context + b];
       const uint8_t state = *cp;
       const int p1 = sm.p1(state);

@@ -2,6 +2,25 @@
 #define PAQ8PX_MODELS_HPP
 
 #include "text/TextModel.hpp"
+#include "model/NormalModel.hpp"
+#include "model/DmcForest.hpp"
+#include "ModelStats.hpp"
+#include "model/CharGroupModel.hpp"
+#include "model/RecordModel.hpp"
+#include "model/SparseModel.hpp"
+#include "model/MatchModel.hpp"
+#include "model/SparseMatchModel.hpp"
+#include "model/IndirectModel.hpp"
+#include "model/NestModel.hpp"
+#include "model/XMLModel.hpp"
+#include "model/ExeModel.hpp"
+#include "model/LinearPredictionModel.hpp"
+#include "model/JpegModel.hpp"
+#include "model/Image24BitModel.hpp"
+#include "model/Image8BitModel.hpp"
+#include "model/Image4BitModel.hpp"
+#include "model/Image1BitModel.hpp"
+#include "model/WordModel.hpp"
 
 /**
  * This is a factory class for lazy object creation for models.
@@ -11,8 +30,9 @@ class Models {
 private:
     const Shared *const shared; //read only
     ModelStats *stats; //read-write
+    uint32_t level {};
 public:
-    Models(const Shared *const sh, ModelStats *st) : shared(sh), stats(st) {}
+    Models(const Shared *const sh, ModelStats *st, uint32_t level) : shared(sh), stats(st), level(level) {}
 
 public:
     NormalModel &normalModel() {
@@ -41,7 +61,7 @@ public:
     }
 
     MatchModel &matchModel() {
-      static MatchModel instance {shared, stats, MEM * 4};
+      static MatchModel instance {shared, stats, MEM * 4, level};
       return instance;
     }
 
@@ -68,10 +88,12 @@ public:
     }
 
 #else
+
     WordModel &wordModel() {
       static WordModel instance {};
       return instance;
     }
+
 #endif //USE_TEXTMODEL
 
     NestModel &nestModel() {

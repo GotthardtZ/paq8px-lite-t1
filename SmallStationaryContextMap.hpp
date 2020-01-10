@@ -24,6 +24,7 @@ private:
     uint16_t *cp;
     const int rate;
     int scale;
+    UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 
 public:
     SmallStationaryContextMap(const Shared *const sh, const int bitsOfContext, const int inputBits, const int rate, const int scale)
@@ -54,7 +55,7 @@ public:
     void setScale(const int Scale) { scale = Scale; }
 
     void mix(Mixer &m) {
-      updater.subscribe(this);
+      updater->subscribe(this);
       cp = &data[context + b];
       const int prediction = (*cp) >> 4U;
       m.add((stretch(prediction) * scale) >> 8);

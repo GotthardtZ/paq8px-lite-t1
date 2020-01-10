@@ -1,6 +1,8 @@
 #ifndef PAQ8PX_JPEGMODEL_HPP
 #define PAQ8PX_JPEGMODEL_HPP
 
+#include "../BH.hpp"
+
 // Print a JPEG segment at buf[p...] for debugging
 /*
 void dump(const char* msg, int p) {
@@ -143,6 +145,7 @@ private:
     StateMap sm;
     Mixer *m1;
     APM apm1, apm2;
+    Ilog *ilog = Ilog::getInstance();
 
 public:
     JpegModel(const Shared *const sh, const uint64_t size) : shared(sh), t(size),
@@ -619,7 +622,7 @@ public:
                     p /= (images[idx].qTable[q + zz2] + 1) * 185 * (16 + zzv[zz2]) * (16 + zzu[zz2]) / 128;
                     if( zz2 == 0 && (norst || ls[acomp] == 64))
                       p -= cbuf2[cpos_dc - ls[acomp]];
-                    p = (p < 0 ? -1 : +1) * ilog(abs(p) + 1);
+                    p = (p < 0 ? -1 : +1) * ilog->log(abs(p) + 1);
                     if( st == 0 ) {
                       advPred[i] = p;
                     } else if( abs(p) > abs(advPred[i]) + 2 && abs(advPred[i]) < 210 ) {
@@ -637,7 +640,7 @@ public:
                 ex /= (images[idx].qTable[q + zz] + 1) * 185;
                 if( zz == 0 && (norst || ls[acomp] == 64))
                   ex -= cbuf2[cpos_dc - ls[acomp]];
-                advPred[3] = (ex < 0 ? -1 : +1) * ilog(abs(ex) + 1);
+                advPred[3] = (ex < 0 ? -1 : +1) * ilog->log(abs(ex) + 1);
 
                 for( int i = 0; i < 4; ++i ) {
                   const int a = (i & 1 ? zzv[zz] : zzu[zz]), b = (i & 2 ? 2 : 1);
@@ -646,21 +649,21 @@ public:
                   else {
                     const int zz2 = zpos[zzu[zz] + 8 * zzv[zz] - (i & 1 ? 8 : 1) * b];
                     ex = (images[idx].qTable[q + zz2] + 1) * cbuf2[cpos_dc + zz2] / (images[idx].qTable[q + zz] + 1);
-                    ex = (ex < 0 ? -1 : +1) * (ilog(abs(ex) + 1) + (ex != 0 ? 17 : 0));
+                    ex = (ex < 0 ? -1 : +1) * (ilog->log(abs(ex) + 1) + (ex != 0 ? 17 : 0));
                   }
                   lcp[i] = ex;
                 }
                 if((zzu[zz] * zzv[zz]) != 0 ) {
                   const int zz2 = zpos[zzu[zz] + 8 * zzv[zz] - 9];
                   ex = (images[idx].qTable[q + zz2] + 1) * cbuf2[cpos_dc + zz2] / (images[idx].qTable[q + zz] + 1);
-                  lcp[4] = (ex < 0 ? -1 : +1) * (ilog(abs(ex) + 1) + (ex != 0 ? 17 : 0));
+                  lcp[4] = (ex < 0 ? -1 : +1) * (ilog->log(abs(ex) + 1) + (ex != 0 ? 17 : 0));
 
                   ex = (images[idx].qTable[q + zpos[8 * zzv[zz]]] + 1) * cbuf2[cpos_dc + zpos[8 * zzv[zz]]] /
                        (images[idx].qTable[q + zz] + 1);
-                  lcp[5] = (ex < 0 ? -1 : +1) * (ilog(abs(ex) + 1) + (ex != 0 ? 17 : 0));
+                  lcp[5] = (ex < 0 ? -1 : +1) * (ilog->log(abs(ex) + 1) + (ex != 0 ? 17 : 0));
 
                   ex = (images[idx].qTable[q + zpos[zzu[zz]]] + 1) * cbuf2[cpos_dc + zpos[zzu[zz]]] / (images[idx].qTable[q + zz] + 1);
-                  lcp[6] = (ex < 0 ? -1 : +1) * (ilog(abs(ex) + 1) + (ex != 0 ? 17 : 0));
+                  lcp[6] = (ex < 0 ? -1 : +1) * (ilog->log(abs(ex) + 1) + (ex != 0 ? 17 : 0));
                 } else
                   lcp[4] = lcp[5] = lcp[6] = 65535;
 
@@ -686,8 +689,8 @@ public:
                   prev1 /= cnt1, r /= cnt1, s /= cnt1, prevCoefRs = (r << 4U) | s;
                 if( cnt2 > 0 )
                   prev2 /= cnt2;
-                prevCoef = (prev1 < 0 ? -1 : +1) * ilog(11 * abs(prev1) + 1) + (cnt1 << 20U);
-                prevCoef2 = (prev2 < 0 ? -1 : +1) * ilog(11 * abs(prev2) + 1);
+                prevCoef = (prev1 < 0 ? -1 : +1) * ilog->log(11 * abs(prev1) + 1) + (cnt1 << 20U);
+                prevCoef2 = (prev2 < 0 ? -1 : +1) * ilog->log(11 * abs(prev2) + 1);
 
                 if( column == 0 && blockW[acomp] > 64 * acomp )
                   runPred[1] = runPred[2], runPred[0] = 0, advPred[1] = advPred[2], advPred[0] = 0;

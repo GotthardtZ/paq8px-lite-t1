@@ -63,8 +63,11 @@
 //uRetVal, DWORD, UINT, TRUE, MAX_PATH, CP_UTF8, etc.
 #endif
 
-
 #define DEFAULT_LEARNING_RATE 7
+
+typedef enum {
+    SIMD_NONE, SIMD_SSE2, SIMD_AVX2
+} SIMD;
 
 struct ErrorInfo {
     uint32_t data[2], sum, mask, collected;

@@ -3,6 +3,8 @@
 
 #include "DivisionTable.hpp"
 #include "AdaptiveMap.hpp"
+#include "StateTable.hpp"
+#include "UpdateBroadcaster.hpp"
 
 /**
  * A StateMap maps a context to a probability.
@@ -13,6 +15,7 @@ protected:
     const uint32_t N; // Number of contexts in each context set
     uint32_t numContexts; // Number of context indexes present in cxt array (0..s-1)
     Array<uint32_t> cxt; // context index of last prediction per context set
+    UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 public:
     enum MAPTYPE {
         Generic, BitHistory, Run
@@ -82,7 +85,7 @@ public:
      * @return
      */
     int p1(const uint32_t cx) {
-      updater.subscribe(this);
+      updater->subscribe(this);
       assert(cx >= 0 && cx < N);
       cxt[0] = cx;
       numContexts++;
@@ -110,7 +113,7 @@ public:
     }
 
     void subscribe() {
-      updater.subscribe(this);
+      updater->subscribe(this);
     }
 
     /**

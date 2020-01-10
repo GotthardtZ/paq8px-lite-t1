@@ -2,6 +2,9 @@
 #define PAQ8PX_APM_HPP
 
 #include "AdaptiveMap.hpp"
+#include "Squash.hpp"
+#include "Stretch.hpp"
+#include "UpdateBroadcaster.hpp"
 
 /**
  * An APM maps a probability and a context to a new probability.
@@ -11,6 +14,7 @@ private:
     const int N; // Number of contexts
     const int steps;
     int cxt; // context index of last prediction
+    UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 public:
     /**
      * APM a(n,STEPS) creates with n contexts using 4*STEPS*n bytes memory.
@@ -47,7 +51,7 @@ public:
      * @return
      */
     int p(int pr, int cx, const int lim) {
-      updater.subscribe(this);
+      updater->subscribe(this);
       assert(pr >= 0 && pr < 4096);
       assert(cx >= 0 && cx < N / steps);
       assert(limit > 0 && limit < 1024);

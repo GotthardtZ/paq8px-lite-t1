@@ -1,6 +1,9 @@
 #ifndef PAQ8PX_IMAGE24BITMODEL_HPP
 #define PAQ8PX_IMAGE24BITMODEL_HPP
 
+#include <cmath>
+#include "../HashTable.hpp"
+
 inline uint8_t paeth(uint8_t const W, uint8_t const N, uint8_t const NW) {
   int p = W + N - NW;
   int pW = abs(p - (int) W), pN = abs(p - (int) N), pNW = abs(p - (int) NW);
@@ -22,6 +25,7 @@ private:
     static constexpr int nSM = nSM0 + nSM1 + nOLS;
     static constexpr int nSSM = 59;
     static constexpr int nCM = 45;
+    Ilog *ilog = Ilog::getInstance();
 
 public:
     static constexpr int MIXERINPUTS = nSSM * SmallStationaryContextMap::MIXERINPUTS + nSM * StationaryMap::MIXERINPUTS +
@@ -477,7 +481,7 @@ public:
             int mean = W + NW + N + NE;
             const int var = (W * W + NW * NW + N * N + NE * NE - mean * mean / 4) >> 2;
             mean >>= 2;
-            const int logvar = ilog(var);
+            const int logvar = ilog->log(var);
 
             uint64_t i = 0;
             cm.set(hash(++i, (N + 1) >> 1, logMeanDiffQt(N, clip(NN * 2 - NNN))));

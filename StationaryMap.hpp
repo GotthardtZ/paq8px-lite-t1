@@ -27,6 +27,7 @@ private:
     int scale;
     const uint16_t limit;
     int *dt;
+    UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 
 public:
     StationaryMap(const Shared *const sh, const int bitsOfContext, const int inputBits, const int scale, const uint16_t limit) : shared(sh),
@@ -68,7 +69,7 @@ public:
     void setScale(const int Scale) { scale = Scale; }
 
     void mix(Mixer &m) {
-      updater.subscribe(this);
+      updater->subscribe(this);
       cp = &data[context + b];
       int prediction = (*cp) >> 20U;
       m.add((stretch(prediction) * scale) >> 8);

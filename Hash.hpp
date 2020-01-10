@@ -29,12 +29,12 @@ static HASHEXPR uint64_t hashes[14] = {UINT64_C(0x9E3779B97F4A7C15), UINT64_C(0x
                                        UINT64_C(0xF501F1D0944B2383), UINT64_C(0xE3E4E8AA829AB9B5)};
 
 #ifndef NHASHCONFIG
-void loadHashesFromCmd(const char *hashes_from_commandline) {
-  if (strlen(hashes_from_commandline) != 16 * 14 + 13 /*237*/) quit("Bad hash config.");
+static void loadHashesFromCmd(const char *hashesFromCommandline) {
+  if ( strlen(hashesFromCommandline) != 16 * 14 + 13 /*237*/) quit("Bad hash config.");
   for (int i = 0; i < 14; i++) { // for each specified hash value
-    uint64_t hashval = 0;
+    uint64_t hashVal = 0;
     for (int j = 0; j < 16; j++) { // for each hex char
-      uint8_t c = hashes_from_commandline[i * 17 + j];
+      uint8_t c = hashesFromCommandline[i * 17 + j];
       if (c >= 'a' && c <= 'f') c = c + 'A' - 'a';
       if (c >= '0' && c <= '9')
         c -= '0';
@@ -42,9 +42,9 @@ void loadHashesFromCmd(const char *hashes_from_commandline) {
         c = c - 'A' + 10;
       else
         quit("Bad hash config.");
-      hashval = hashval << 4 | c;
+      hashVal = hashVal << 4U | c;
     }
-    hashes[i] = hashval;
+    hashes[i] = hashVal;
   }
 }
 #endif //NHASHCONFIG

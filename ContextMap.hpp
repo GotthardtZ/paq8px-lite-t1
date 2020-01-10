@@ -1,6 +1,14 @@
 #ifndef PAQ8PX_CONTEXTMAP_HPP
 #define PAQ8PX_CONTEXTMAP_HPP
 
+#include "IPredictor.hpp"
+#include "Random.hpp"
+#include "StateMap.hpp"
+#include "Ilog.hpp"
+#include "StateTable.hpp"
+#include "Stretch.hpp"
+#include "Hash.hpp"
+
 /////////////////////////// ContextMap /////////////////////////
 // TODO: update this documentation
 // A ContextMap maps contexts to bit histories and makes predictions
@@ -117,6 +125,8 @@ private:
     const uint32_t mask;
     const int hashBits;
     uint64_t validFlags;
+    Ilog *ilog = Ilog::getInstance();
+    UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 
 public:
     /**
@@ -222,7 +232,7 @@ public:
     }
 
     void mix(Mixer &m) {
-      updater.subscribe(this);
+      updater->subscribe(this);
       sm.subscribe();
       INJECT_SHARED_bpos
       INJECT_SHARED_c0
@@ -232,7 +242,7 @@ public:
           if((runP[i][1] + 256) >> (8 - bpos) == c0 ) {
             int rc = runP[i][0]; // count*2, +1 if 2 different bytes seen
             int sign = (runP[i][1] >> (7 - bpos) & 1) * 2 - 1; // predicted bit + for 1, - for 0
-            int c = ilog(rc + 1) << (2 + (~rc & 1));
+            int c = ilog->log(rc + 1) << (2 + (~rc & 1));
             m.add(sign * c);
           } else
             m.add(0); //p=0.5

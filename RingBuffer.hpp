@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <cassert>
+#include "Array.hpp"
 
 template<class T>
 class RingBuffer {

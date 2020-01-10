@@ -2,6 +2,7 @@
 #define PAQ8PX_CACHE_HPP
 
 #include "../utils.hpp"
+#include "../Array.hpp"
 
 template<class T, const uint32_t Size>
 class Cache {

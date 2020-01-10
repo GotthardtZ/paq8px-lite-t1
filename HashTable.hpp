@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <cassert>
 #include <cstring>
+#include "Ilog.hpp"
+#include "Hash.hpp"
 
 /**
  * A HashTable is an array of n items representing n contexts. Each item is a storage area of b bytes.

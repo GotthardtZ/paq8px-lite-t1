@@ -66,7 +66,7 @@ public:
       return (end - start >= i) ? letters[end - i] : 0;
     }
 
-    [[nodiscard]] uint32_t length() const {
+    [[nodiscard]] constexpr uint32_t length() const {
       if( letters[start] != 0 )
         return end - start + 1;
       return 0;

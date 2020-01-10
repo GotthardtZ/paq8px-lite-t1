@@ -1,6 +1,8 @@
 #ifndef PAQ8PX_SPARSEMATCHMODEL_HPP
 #define PAQ8PX_SPARSEMATCHMODEL_HPP
 
+#include "../MTFList.hpp"
+
 class SparseMatchModel {
 private:
     static constexpr int numHashes = 4;
