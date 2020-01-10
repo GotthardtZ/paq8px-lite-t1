@@ -13,7 +13,7 @@
 class Image1BitModel {
 private:
     static constexpr int s = 11;
-    Shared* shared = Shared::getInstance();
+    Shared *shared = Shared::getInstance();
     Random rnd;
     int w = 0;
     uint32_t r0 = 0, r1 = 0, r2 = 0, r3 = 0; // last 4 rows, bit 8 is over current pixel

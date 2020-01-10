@@ -48,6 +48,7 @@ public:
     static constexpr int MIXERINPUTS = 2 + 8 / 2; // 6 : fast models (2 individually) + slow models (8 combined pairwise)
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
+
     DmcForest(const uint64_t size) : dmcModels(MODELS) {
       for( int i = MODELS - 1; i >= 0; i-- )
         dmcModels[i] = new DmcModel(size / dmcMem[i], dmcParams[i]);

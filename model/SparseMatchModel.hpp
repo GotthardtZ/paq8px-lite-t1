@@ -42,11 +42,11 @@ public:
     static constexpr int MIXERCONTEXTS = numHashes * (64 + 2048); // 8448
     static constexpr int MIXERCONTEXTSETS = 2;
 
-    SparseMatchModel(const uint64_t size) : table(size / sizeof(uint32_t)),
-            maps {{22, 1, 128, 1023},
-                  {17, 4, 128, 1023},
-                  { 8,  1, 128, 1023},
-                  { 19, 1, 128, 1023}}, mask(uint32_t(size / sizeof(uint32_t) - 1)), hashBits(ilog2(mask + 1)) {
+    SparseMatchModel(const uint64_t size) : table(size / sizeof(uint32_t)), maps {{22, 1, 128, 1023},
+                                                                                  {17, 4, 128, 1023},
+                                                                                  {8,  1, 128, 1023},
+                                                                                  {19, 1, 128, 1023}},
+            mask(uint32_t(size / sizeof(uint32_t) - 1)), hashBits(ilog2(mask + 1)) {
       assert(isPowerOf2(size));
     }
 
@@ -65,7 +65,7 @@ public:
         if( length < MaxLen )
           length++;
       }
-      // or find a new match
+        // or find a new match
       else {
         for( int i = list.getFirst(); i >= 0; i = list.getNext()) {
           index = table[hashes[i]];

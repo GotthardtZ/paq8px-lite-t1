@@ -125,8 +125,7 @@ public:
      * @param m
      * @param s
      */
-    Mixer(const int n, const int m, const int s) : n(n), m(m), s(s), scaleFactor(0), tx(n), wx(n * m),
-            cxt(s), info(s), rates(s), pr(s) {
+    Mixer(const int n, const int m, const int s) : n(n), m(m), s(s), scaleFactor(0), tx(n), wx(n * m), cxt(s), info(s), rates(s), pr(s) {
       for( uint64_t i = 0; i < s; ++i ) {
         pr[i] = 2048; //initial p=0.5
         rates[i] = DEFAULT_LEARNING_RATE;

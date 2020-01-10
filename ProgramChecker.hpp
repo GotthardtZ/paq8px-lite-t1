@@ -32,7 +32,7 @@ private:
     /**
      * Assignment operator is private so that it cannot be called
      */
-    ProgramChecker &operator=(ProgramChecker const &) {return *this;};
+    ProgramChecker &operator=(ProgramChecker const &) { return *this; };
 
     static ProgramChecker *instance;
 public:

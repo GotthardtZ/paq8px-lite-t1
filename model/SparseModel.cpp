@@ -7,7 +7,7 @@ void SparseModel::mix(Mixer &m) {
   INJECT_SHARED_bpos
   if( bpos == 0 ) {
     INJECT_SHARED_buf
-            INJECT_SHARED_c4
+    INJECT_SHARED_c4
     uint64_t i = 0;
     cm.set(hash(++i, buf(1) | buf(5) << 8));
     cm.set(hash(++i, buf(1) | buf(6) << 8));

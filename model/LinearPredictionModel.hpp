@@ -20,13 +20,12 @@ public:
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
 
-    LinearPredictionModel() :
-            sMap {/* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
-                    {11, 1, 6, 128},
-                    {11, 1, 6, 128},
-                    {11, 1, 6, 128},
-                    {11, 1, 6, 128},
-                    {11, 1, 6, 128}} {}
+    LinearPredictionModel() : sMap {/* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
+            {11, 1, 6, 128},
+            {11, 1, 6, 128},
+            {11, 1, 6, 128},
+            {11, 1, 6, 128},
+            {11, 1, 6, 128}} {}
 
     void mix(Mixer &m) {
       INJECT_SHARED_bpos

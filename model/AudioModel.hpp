@@ -5,7 +5,6 @@
 #include "../Shared.hpp"
 #include "../ModelStats.hpp"
 
-#define USE_AUDIOMODEL
 #ifdef USE_AUDIOMODEL
 
 /**

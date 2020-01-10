@@ -51,13 +51,12 @@ public:
     static constexpr int MIXERCONTEXTS = 8;
     static constexpr int MIXERCONTEXTSETS = 1;
 
-    MatchModel(ModelStats *st, const uint64_t size, uint32_t level) : stats(st),
-            table(size / sizeof(uint32_t)), stateMaps {{1, 56 * 256,          1023, StateMap::Generic},
-                                                       {1, 8 * 256 * 256 + 1, 1023, StateMap::Generic},
-                                                       {1, 256 * 256,         1023, StateMap::Generic}},
-            cm(MEM / 32, nCM, 74, CM_USE_RUN_STATS), SCM {6, 1, 6, 64}, maps {{23, 1, 64, 1023},
-                                                                                      {15, 1, 64, 1023}}, iCtx {15, 1},
-            mask(uint32_t(size / sizeof(uint32_t) - 1)), hashBits(ilog2(mask + 1)) {
+    MatchModel(ModelStats *st, const uint64_t size, uint32_t level) : stats(st), table(size / sizeof(uint32_t)),
+            stateMaps {{1, 56 * 256,          1023, StateMap::Generic},
+                       {1, 8 * 256 * 256 + 1, 1023, StateMap::Generic},
+                       {1, 256 * 256,         1023, StateMap::Generic}}, cm(MEM / 32, nCM, 74, CM_USE_RUN_STATS), SCM {6, 1, 6, 64},
+            maps {{23, 1, 64, 1023},
+                  {15, 1, 64, 1023}}, iCtx {15, 1}, mask(uint32_t(size / sizeof(uint32_t) - 1)), hashBits(ilog2(mask + 1)) {
       assert(isPowerOf2(size));
     }
 

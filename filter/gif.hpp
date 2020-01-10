@@ -29,7 +29,7 @@
 int encodeGif(File *in, File *out, uint64_t len, int &headerSize) {
   int codeSize = in->getchar(), diffPos = 0, clearPos = 0, bsize = 0, code, offset = 0;
   uint64_t beginIn = in->curPos(), beginOut = out->curPos();
-  Array <uint8_t> output(4096);
+  Array<uint8_t> output(4096);
   headerSize = 6;
   out->putChar(headerSize >> 8U);
   out->putChar(headerSize & 255U);
@@ -173,7 +173,7 @@ int decodeGif(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFoun
     if( i > 0 )
       diffPos[i] += diffPos[i - 1];
   }
-  Array <uint8_t> output(256);
+  Array<uint8_t> output(256);
   size -= 6 + diffCount * 4;
   int last = in->getchar(), total = (int) size + 1, outsize = 1;
   if( mode == FDECOMPRESS )
@@ -183,7 +183,7 @@ int decodeGif(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFoun
       diffFound = 1;
   if( diffCount == 0 || diffPos[0] != 0 ) GIF_WRITE_CODE(1 << codesize) else
     curDiff++;
-  while( size != 0 && (input = in->getchar()) != EOF ) {
+  while( size != 0 && (input = in->getchar()) != EOF) {
     size--;
     int key = (last << 8) + input, index = (code = -1);
     if( last < 0 )

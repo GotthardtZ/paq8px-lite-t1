@@ -77,8 +77,9 @@ public:
     const uint8_t *olsCtx5[14] = {&WWWW, &WWW, &WW, &W, &NWWW, &NWW, &NW, &N, &NNWW, &NNW, &NN, &NNNW, &NNN, &NNNN};
     const uint8_t *olsCtx6[8] = {&WWW, &WW, &W, &NNN, &NN, &N, &p1, &p2};
     const uint8_t **olsCtxs[nOLS] = {&olsCtx1[0], &olsCtx2[0], &olsCtx3[0], &olsCtx4[0], &olsCtx5[0], &olsCtx6[0]};
-    Image24BitModel(ModelStats *st, const uint64_t size) : stats(st),
-            cm(size, nCM, 64, CM_USE_RUN_STATS), SCMap {/* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
+
+    Image24BitModel(ModelStats *st, const uint64_t size) : stats(st), cm(size, nCM, 64, CM_USE_RUN_STATS),
+            SCMap {/* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
                     {11, 1, 9, 86},
                     {11, 1, 9, 86},
                     {11, 1, 9, 86},
@@ -338,15 +339,15 @@ public:
           mapContexts[++j] = clip((W + clip(NE * 2 - NNE)) / 2 + p1 - (Wp1 + clip(NEp1 * 2 - buffer(w * 2 - stride + 1))) / 2);
           mapContexts[++j] = clip((W + clip(NE * 2 - NNE)) / 2 + p2 - (Wp2 + clip(NEp2 * 2 - buffer(w * 2 - stride + 2))) / 2);
           mapContexts[++j] = clip((-3 * WW + 8 * W + clip(NEE * 2 - NNEE)) / 6 + p1 -
-                              (-3 * WWp1 + 8 * Wp1 + clip(buffer(w - stride * 2 + 1) * 2 - buffer(w * 2 - stride * 2 + 1))) / 6);
+                                  (-3 * WWp1 + 8 * Wp1 + clip(buffer(w - stride * 2 + 1) * 2 - buffer(w * 2 - stride * 2 + 1))) / 6);
           mapContexts[++j] = clip((-3 * WW + 8 * W + clip(NEE * 2 - NNEE)) / 6 + p2 -
-                              (-3 * WWp2 + 8 * Wp2 + clip(buffer(w - stride * 2 + 2) * 2 - buffer(w * 2 - stride * 2 + 2))) / 6);
+                                  (-3 * WWp2 + 8 * Wp2 + clip(buffer(w - stride * 2 + 2) * 2 - buffer(w * 2 - stride * 2 + 2))) / 6);
           mapContexts[++j] = clip((W + NEE) / 2 + p1 - (Wp1 + buffer(w - stride * 2 + 1)) / 2);
           mapContexts[++j] = clip((W + NEE) / 2 + p2 - (Wp2 + buffer(w - stride * 2 + 2)) / 2);
           mapContexts[++j] = clip((WW + clip(NEE * 2 - NNEE)) / 2 + p1 -
-                              (WWp1 + clip(buffer(w - stride * 2 + 1) * 2 - buffer(w * 2 - stride * 2 + 1))) / 2);
+                                  (WWp1 + clip(buffer(w - stride * 2 + 1) * 2 - buffer(w * 2 - stride * 2 + 1))) / 2);
           mapContexts[++j] = clip((WW + clip(NEE * 2 - NNEE)) / 2 + p2 -
-                              (WWp2 + clip(buffer(w - stride * 2 + 2) * 2 - buffer(w * 2 - stride * 2 + 2))) / 2);
+                                  (WWp2 + clip(buffer(w - stride * 2 + 2) * 2 - buffer(w * 2 - stride * 2 + 2))) / 2);
           mapContexts[++j] = clip(WW + NEE - N + p1 - clip(WWp1 + buffer(w - stride * 2 + 1) - Np1));
           mapContexts[++j] = clip(WW + NEE - N + p2 - clip(WWp2 + buffer(w - stride * 2 + 2) - Np2));
           mapContexts[++j] = clip(W + N - NW);

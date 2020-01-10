@@ -16,7 +16,7 @@
 class Image4BitModel {
 private:
     static constexpr int S = 14; //number of contexts
-    Shared* shared = Shared::getInstance();
+    Shared *shared = Shared::getInstance();
     Random rnd;
     HashTable<16> t;
     StateMap sm;

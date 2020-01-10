@@ -66,6 +66,7 @@ class LZWFilter : Filter {
     }
 
 };
+
 int encodeLzw(File *in, File *out, uint64_t size, int &headerSize) {
   LZWDictionary dic;
   int parent = -1, code = 0, buffer = 0, bitsPerCode = 9, bitsUsed = 0;

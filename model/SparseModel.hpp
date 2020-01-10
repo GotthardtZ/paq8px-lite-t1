@@ -13,7 +13,7 @@
 class SparseModel {
 private:
     static constexpr int nCM = 38; //17+3*7
-    Shared* shared = Shared::getInstance();
+    Shared *shared = Shared::getInstance();
     ContextMap cm;
 
 public:

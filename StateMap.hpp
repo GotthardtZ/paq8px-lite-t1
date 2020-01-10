@@ -29,8 +29,7 @@ public:
      * @param lim
      * @param mapType
      */
-    StateMap(const int s, const int n, const int lim, const MAPTYPE mapType) : AdaptiveMap(n * s, lim), S(s),
-            N(n), numContexts(0), cxt(s) {
+    StateMap(const int s, const int n, const int lim, const MAPTYPE mapType) : AdaptiveMap(n * s, lim), S(s), N(n), numContexts(0), cxt(s) {
       assert(S > 0 && N > 0);
       assert(limit > 0 && limit < 1024);
       if( mapType == BitHistory ) { // when the context is a bit history byte, we have a-priory for p

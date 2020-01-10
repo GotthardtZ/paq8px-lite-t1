@@ -27,9 +27,8 @@ public:
     static constexpr int MIXERCONTEXTS = 64 + 8 + 1024 + 256 + 256 + 256 + 256 + 1536; //3656
     static constexpr int MIXERCONTEXTSETS = 7;
 
-    NormalModel(ModelStats *st, const uint64_t cmsize) : stats(st),
-            cm(cmsize, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY), smOrder0Slow(1, 255, 1023, StateMap::Generic),
-            smOrder1Slow(1, 255 * 256, 1023, StateMap::Generic),
+    NormalModel(ModelStats *st, const uint64_t cmsize) : stats(st), cm(cmsize, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY),
+            smOrder0Slow(1, 255, 1023, StateMap::Generic), smOrder1Slow(1, 255 * 256, 1023, StateMap::Generic),
             smOrder1Fast(1, 255 * 256, 64, StateMap::Generic) // 64->16 is also ok
     {
       assert(isPowerOf2(cmsize));

@@ -86,8 +86,8 @@ void Predictor::trainExe() {
   stats.reset();
 }
 
-Predictor::Predictor(uint32_t level) : level(level), stats(), models(&stats, level),
-        contextModel(&stats, models, level), sse(&stats), pr(2048) {
+Predictor::Predictor(uint32_t level) : level(level), stats(), models(&stats, level), contextModel(&stats, models, level), sse(&stats),
+        pr(2048) {
   shared->reset();
   shared->buf.setSize(MEM * 8);
   //initiate pre-training

@@ -36,7 +36,7 @@ public:
 private:
     Shared() {};  // Private so that it can  not be called
     Shared(Shared const &) {};             // copy constructor is private
-    Shared &operator=(Shared const &) {return *this;};  // assignment operator is private
+    Shared &operator=(Shared const &) { return *this; };  // assignment operator is private
     static Shared *mPInstance;
 
 };

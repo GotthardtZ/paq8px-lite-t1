@@ -1,7 +1,6 @@
 #ifndef PAQ8PX_WORDMODEL_HPP
 #define PAQ8PX_WORDMODEL_HPP
 
-#define USE_TEXTMODEL
 #ifdef USE_TEXTMODEL
 
 #include "../Shared.hpp"

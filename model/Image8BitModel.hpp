@@ -61,8 +61,8 @@ public:
     const uint8_t *olsCtx5[14] = {&WWWW, &WWW, &WW, &W, &NWWW, &NWW, &NW, &N, &NNWW, &NNW, &NN, &NNNW, &NNN, &NNNN};
     const uint8_t **olsCtxs[nOLS] = {&olsCtx1[0], &olsCtx2[0], &olsCtx3[0], &olsCtx4[0], &olsCtx5[0]};
 
-    Image8BitModel(ModelStats *st, const uint64_t size) : stats(st),
-            cm(size, nCM, 64, CM_USE_RUN_STATS), map {/* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
+    Image8BitModel(ModelStats *st, const uint64_t size) : stats(st), cm(size, nCM, 64, CM_USE_RUN_STATS),
+            map {/* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
                     /*nSM0: 0- 1*/ {0,  8, 64, 1023},
                                    {15, 1, 64, 1023},
                     /*nSM1: 0- 4*/

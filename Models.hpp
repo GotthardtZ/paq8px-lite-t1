@@ -21,6 +21,8 @@
 #include "model/Image4BitModel.hpp"
 #include "model/Image1BitModel.hpp"
 #include "model/WordModel.hpp"
+#include "model/Audio8BitModel.hpp"
+#include "model/Audio16BitModel.hpp"
 
 /**
  * This is a factory class for lazy object creation for models.
@@ -56,7 +58,7 @@ public:
     }
 
     SparseModel &sparseModel() {
-      static SparseModel instance { MEM * 2};
+      static SparseModel instance {MEM * 2};
       return instance;
     }
 

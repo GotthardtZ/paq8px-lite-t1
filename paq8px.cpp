@@ -11,33 +11,13 @@
 #define PROGVERSION  "184"  //update version here before publishing your changes
 #define PROGYEAR     "2020"
 
-//////////////////////// Build options /////////////////////////////////////
-
-// Uncomment one or more of the following #define-s to disable compilation of certain models/transformations
-// This is useful when
-// - you would like to slim the executable by eliminating unnecessary code for benchmarks where exe size matters or
-// - you would like to experiment with the model-mixture
 // TODO: make more models "optional"
-#define USE_ZLIB
-#define USE_AUDIOMODEL
-#define USE_TEXTMODEL
 
 #define NHASHCONFIG  //Remove (comment out) this line to enable hash configuration from the command line (somewhat slower compression)
-
-//////////////////////// Debug options /////////////////////////////////////
-
-#define NDEBUG    // Remove (comment out) this line for debugging (turns on Array bound checks and asserts)
-#define NVERBOSE  // Remove (comment out) this line for more on-screen progress information
-
-//
-//  User specified options are above
-//  Automatic definitions are below = for compiling no need to change anything below this line
-//
 
 #include "utils.hpp"
 
 // Platform-independent includes
-#include <cmath>     //floor(), sqrt()
 #include <stdexcept>  //std::exception
 
 // zlib

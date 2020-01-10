@@ -9,7 +9,6 @@
 #include <cstdint>
 #include <cmath>
 
-#define USE_AUDIOMODEL
 #ifdef USE_AUDIOMODEL
 
 class Audio8BitModel : AudioModel {

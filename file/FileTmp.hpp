@@ -70,10 +70,12 @@ public:
       assert(false);
       return false;
     }
+
     /**
      *  This method is forbidden for temporary files.
      */
     void create(const char *) override { assert(false); }
+
     void close() override {
       forgetContentInRam();
       forgetFileOnDisk();
