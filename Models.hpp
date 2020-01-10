@@ -28,62 +28,62 @@
  */
 class Models {
 private:
-    const Shared *const shared; //read only
+    Shared *shared = Shared::getInstance();
     ModelStats *stats; //read-write
     uint32_t level {};
 public:
-    Models(const Shared *const sh, ModelStats *st, uint32_t level) : shared(sh), stats(st), level(level) {}
+    Models(ModelStats *st, uint32_t level) : stats(st), level(level) {}
 
 public:
     NormalModel &normalModel() {
-      static NormalModel instance {shared, stats, MEM * 32};
+      static NormalModel instance {stats, MEM * 32};
       return instance;
     }
 
     DmcForest &dmcForest() {
-      static DmcForest instance {shared, MEM};
+      static DmcForest instance {MEM};
       return instance;
     }
 
     CharGroupModel &charGroupModel() {
-      static CharGroupModel instance {shared, MEM / 2};
+      static CharGroupModel instance {MEM / 2};
       return instance;
     }
 
     RecordModel &recordModel() {
-      static RecordModel instance {shared, stats, MEM * 2};
+      static RecordModel instance {stats, MEM * 2};
       return instance;
     }
 
     SparseModel &sparseModel() {
-      static SparseModel instance {shared, MEM * 2};
+      static SparseModel instance { MEM * 2};
       return instance;
     }
 
     MatchModel &matchModel() {
-      static MatchModel instance {shared, stats, MEM * 4, level};
+      static MatchModel instance {stats, MEM * 4, level};
       return instance;
     }
 
     SparseMatchModel &sparseMatchModel() {
-      static SparseMatchModel instance {shared, MEM};
+      static SparseMatchModel instance {MEM};
       return instance;
     }
 
     IndirectModel &indirectModel() {
-      static IndirectModel instance {shared, MEM};
+      static IndirectModel instance {MEM};
       return instance;
     }
 
 #ifdef USE_TEXTMODEL
 
     TextModel &textModel() {
-      static TextModel instance {shared, stats, MEM * 16};
+      static TextModel instance {stats, MEM * 16};
       return instance;
     }
 
     WordModel &wordModel() {
-      static WordModel instance {shared, stats, MEM * 16};
+      static WordModel instance {stats, MEM * 16};
       return instance;
     }
 
@@ -97,59 +97,59 @@ public:
 #endif //USE_TEXTMODEL
 
     NestModel &nestModel() {
-      static NestModel instance {shared, MEM};
+      static NestModel instance {MEM};
       return instance;
     }
 
     XMLModel &xmlModel() {
-      static XMLModel instance {shared, MEM / 4};
+      static XMLModel instance {MEM / 4};
       return instance;
     }
 
     ExeModel &exeModel() {
-      static ExeModel instance {shared, stats, MEM * 4};
+      static ExeModel instance {stats, MEM * 4};
       return instance;
     }
 
     LinearPredictionModel &linearPredictionModel() {
-      static LinearPredictionModel instance {shared};
+      static LinearPredictionModel instance {};
       return instance;
     }
 
     JpegModel &jpegModel() {
-      static JpegModel instance {shared, MEM};
+      static JpegModel instance {MEM};
       return instance;
     }
 
     Image24BitModel &image24BitModel() {
-      static Image24BitModel instance {shared, stats, MEM * 4};
+      static Image24BitModel instance {stats, MEM * 4};
       return instance;
     }
 
     Image8BitModel &image8BitModel() {
-      static Image8BitModel instance {shared, stats, MEM * 4};
+      static Image8BitModel instance {stats, MEM * 4};
       return instance;
     }
 
     Image4BitModel &image4BitModel() {
-      static Image4BitModel instance {shared, MEM / 2};
+      static Image4BitModel instance {MEM / 2};
       return instance;
     }
 
     Image1BitModel &image1BitModel() {
-      static Image1BitModel instance {shared};
+      static Image1BitModel instance {};
       return instance;
     }
 
 #ifdef USE_AUDIOMODEL
 
     Audio8BitModel &audio8BitModel() {
-      static Audio8BitModel instance {shared, stats};
+      static Audio8BitModel instance {stats};
       return instance;
     }
 
     Audio16BitModel &audio16BitModel() {
-      static Audio16BitModel instance {shared, stats};
+      static Audio16BitModel instance {stats};
       return instance;
     }
 

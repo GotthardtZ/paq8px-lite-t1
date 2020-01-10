@@ -2,6 +2,7 @@
 #define PAQ8PX_ENGLISHSTEMMER_HPP
 
 #include <cstdint>
+#include "English.hpp"
 
 /**
  * English affix stemmer, based on the Porter2 stemmer.

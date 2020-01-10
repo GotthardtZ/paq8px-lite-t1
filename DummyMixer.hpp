@@ -9,8 +9,9 @@
 class DummyMixer : public Mixer {
 private:
     UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
+    Shared *shared = Shared::getInstance();
 public:
-    DummyMixer(const Shared *const sh, const int n, const int m, const int s) : Mixer(sh, n, m, s) {}
+    DummyMixer(const int n, const int m, const int s) : Mixer(n, m, s) {}
 
     void update() override { reset(); }
 

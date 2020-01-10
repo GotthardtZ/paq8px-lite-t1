@@ -1,9 +1,9 @@
 #include "Image4BitModel.hpp"
 
 
-Image4BitModel::Image4BitModel(const Shared *const sh, const uint64_t size) : shared(sh), t(size),
-        sm {sh, S, 256, 1023, StateMap::BitHistory}, //StateMap: s, n, lim, init
-        map {sh, 1, 16, 1023, StateMap::Generic} //StateMap: s, n, lim, init
+Image4BitModel::Image4BitModel(const uint64_t size) : t(size),
+        sm {S, 256, 1023, StateMap::BitHistory}, //StateMap: s, n, lim, init
+        map {1, 16, 1023, StateMap::Generic} //StateMap: s, n, lim, init
 {}
 
 void Image4BitModel::setParam(int info0) {

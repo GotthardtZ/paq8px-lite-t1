@@ -1,6 +1,10 @@
 #ifndef PAQ8PX_FRENCHSTEMMER_HPP
 #define PAQ8PX_FRENCHSTEMMER_HPP
 
+#include "Language.hpp"
+#include "French.hpp"
+#include "Word.hpp"
+
 /**
  * French suffix stemmer, based on the Porter stemmer.
  */

@@ -23,7 +23,7 @@ private:
     };
 
     Ilog(Ilog const &) {};             // copy constructor is private
-    Ilog &operator=(Ilog const &) {};  // assignment operator is private
+    Ilog &operator=(Ilog const &) {return *this;};  // assignment operator is private
     static Ilog *mPInstance;
     Array<uint8_t> t = Array<uint8_t>(65536);
 };

@@ -7,14 +7,7 @@ class SparseMatchModel {
 private:
     static constexpr int numHashes = 4;
     static constexpr int nSM = 4;
-
-public:
-    static constexpr int MIXERINPUTS = 3 + nSM * StationaryMap::MIXERINPUTS; // 11
-    static constexpr int MIXERCONTEXTS = numHashes * (64 + 2048); // 8448
-    static constexpr int MIXERCONTEXTSETS = 2;
-
-private:
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     enum Parameters : uint32_t {
         MaxLen = 0xFFFF, // longest allowed match
         MinLen = 3, // default minimum required match length
@@ -45,11 +38,15 @@ private:
     const int hashBits;
 
 public:
-    SparseMatchModel(const Shared *const sh, const uint64_t size) : shared(sh), table(size / sizeof(uint32_t)),
-            maps {{sh, 22, 1, 128, 1023},
-                  {sh, 17, 4, 128, 1023},
-                  {sh, 8,  1, 128, 1023},
-                  {sh, 19, 1, 128, 1023}}, mask(uint32_t(size / sizeof(uint32_t) - 1)), hashBits(ilog2(mask + 1)) {
+    static constexpr int MIXERINPUTS = 3 + nSM * StationaryMap::MIXERINPUTS; // 11
+    static constexpr int MIXERCONTEXTS = numHashes * (64 + 2048); // 8448
+    static constexpr int MIXERCONTEXTSETS = 2;
+
+    SparseMatchModel(const uint64_t size) : table(size / sizeof(uint32_t)),
+            maps {{22, 1, 128, 1023},
+                  {17, 4, 128, 1023},
+                  { 8,  1, 128, 1023},
+                  { 19, 1, 128, 1023}}, mask(uint32_t(size / sizeof(uint32_t) - 1)), hashBits(ilog2(mask + 1)) {
       assert(isPowerOf2(size));
     }
 
@@ -68,7 +65,7 @@ public:
         if( length < MaxLen )
           length++;
       }
-        // or find a new match
+      // or find a new match
       else {
         for( int i = list.getFirst(); i >= 0; i = list.getNext()) {
           index = table[hashes[i]];

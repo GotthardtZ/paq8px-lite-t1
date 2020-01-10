@@ -13,14 +13,14 @@
 class SparseModel {
 private:
     static constexpr int nCM = 38; //17+3*7
-    const Shared *const shared;
+    Shared* shared = Shared::getInstance();
     ContextMap cm;
 
 public:
     static constexpr int MIXERINPUTS = nCM * (ContextMap::MIXERINPUTS); // 190
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
-    SparseModel(const Shared *sh, uint64_t size);
+    SparseModel(uint64_t size);
     void mix(Mixer &m);
 };
 

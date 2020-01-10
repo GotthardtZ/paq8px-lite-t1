@@ -67,16 +67,7 @@ private:
     static constexpr int nSSM = 4;
     static constexpr int nIM = 3;
     static constexpr int nIndContexts = 5;
-
-public:
-    static constexpr int MIXERINPUTS =
-            nCM * ContextMap::MIXERINPUTS + nSM * StationaryMap::MIXERINPUTS + nSSM * SmallStationaryContextMap::MIXERINPUTS +
-            nIM * IndirectMap::MIXERINPUTS; // 149
-    static constexpr int MIXERCONTEXTS = 1024 + 512 + 11 * 32; //1888
-    static constexpr int MIXERCONTEXTSETS = 3;
-
-private:
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     ModelStats *stats;
     ContextMap cm, cn, co;
     ContextMap cp;
@@ -96,23 +87,29 @@ private:
     dBASE dbase {};
 
 public:
-    RecordModel(const Shared *const sh, ModelStats *st, const uint64_t size) : shared(sh), stats(st), cm(sh, 32768, 3),
-            cn(sh, 32768 / 2, 3), co(sh, 32768 * 2, 3), cp(sh, size, 16), maps {{sh, 10, 8, 86, 1023},
-                                                                                {sh, 10, 8, 86, 1023},
-                                                                                {sh, 8,  8, 86, 1023},
-                                                                                {sh, 8,  8, 86, 1023},
-                                                                                {sh, 8,  8, 86, 1023},
-                                                                                {sh, 11, 1, 86, 1023}}, sMap {{sh, 11, 1, 6, 86},
-                                                                                                              {sh, 3,  1, 6, 86},
-                                                                                                              {sh, 19, 1, 5, 128},
-                                                                                                              {sh, 8,  8, 5, 64} // pos&255
-            }, iMap {{sh, 8, 8, 86, 255},
-                     {sh, 8, 8, 86, 255},
-                     {sh, 8, 8, 86, 255}}, iCtx {{16, 8},
-                                                 {16, 8},
-                                                 {16, 8},
-                                                 {20, 8},
-                                                 {11, 1}} {}
+    static constexpr int MIXERINPUTS =
+            nCM * ContextMap::MIXERINPUTS + nSM * StationaryMap::MIXERINPUTS + nSSM * SmallStationaryContextMap::MIXERINPUTS +
+            nIM * IndirectMap::MIXERINPUTS; // 149
+    static constexpr int MIXERCONTEXTS = 1024 + 512 + 11 * 32; //1888
+    static constexpr int MIXERCONTEXTSETS = 3;
+
+    RecordModel(ModelStats *st, const uint64_t size) : stats(st), cm(32768, 3), cn(32768 / 2, 3), co(32768 * 2, 3), cp(size, 16),
+            maps {{10, 8, 86, 1023},
+                  {10, 8, 86, 1023},
+                  {8,  8, 86, 1023},
+                  {8,  8, 86, 1023},
+                  {8,  8, 86, 1023},
+                  {11, 1, 86, 1023}}, sMap {{11, 1, 6, 86},
+                                            {3,  1, 6, 86},
+                                            {19, 1, 5, 128},
+                                            {8,  8, 5, 64} // pos&255
+            }, iMap {{8, 8, 86, 255},
+                     {8, 8, 86, 255},
+                     {8, 8, 86, 255}}, iCtx {{16, 8},
+                                             {16, 8},
+                                             {16, 8},
+                                             {20, 8},
+                                             {11, 1}} {}
 
     void mix(Mixer &m) {
       INJECT_SHARED_bpos
@@ -136,8 +133,8 @@ public:
                ((b = buf(29)) > 0 && b < 32) &&
                ((dbase.nRecords = buf(28) | (buf(27) << 8U) | (buf(26) << 16U) | (buf(25) << 24U)) > 0 && dbase.nRecords < 0xFFFFF) &&
                ((dbase.headerLength = buf(24) | (buf(23) << 8U)) > 32 && (((dbase.headerLength - 32 - 1) % 32) == 0 ||
-                                                                         (dbase.headerLength > 255 + 8 &&
-                                                                          (((dbase.headerLength -= 255 + 8) - 32 - 1) % 32) == 0))) &&
+                                                                          (dbase.headerLength > 255 + 8 &&
+                                                                           (((dbase.headerLength -= 255 + 8) - 32 - 1) % 32) == 0))) &&
                ((dbase.recordLength = buf(22) | (buf(21) << 8U)) > 8) && (buf(20) == 0 && buf(19) == 0 && buf(17) <= 1 && buf(16) <= 1)) {
               dbase.version = (((b = buf(32)) >> 4U) == 3) ? 3 : b & 7U;
               dbase.start = blpos - 32 + dbase.headerLength;
@@ -265,8 +262,8 @@ public:
         cp.set(hash(++i, col | runLength[0] << 12));
 
         if( runLength[0] > 8 ) {
-          cp.set(hash(++i, min(min(0xFF, runLength[0]), pos - prevTransition), min(0x3FF, col), (w & 0xF0F0) | (w == ((padding << 8) | padding)),
-                      nTransition));
+          cp.set(hash(++i, min(min(0xFF, runLength[0]), pos - prevTransition), min(0x3FF, col),
+                      (w & 0xF0F0) | (w == ((padding << 8) | padding)), nTransition));
           cp.set(hash(++i, w, (buf(runLength[0] + 1) == padding && N == padding), col / max(1, runLength[0] / 32)));
         } else
           cp.set(0), cp.set(0);

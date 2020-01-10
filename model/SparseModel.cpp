@@ -1,7 +1,7 @@
 #include "SparseModel.hpp"
 #include "../Hash.hpp"
 
-SparseModel::SparseModel(const Shared *const sh, const uint64_t size) : shared(sh), cm(sh, size, nCM) {}
+SparseModel::SparseModel(const uint64_t size) : cm(size, nCM) {}
 
 void SparseModel::mix(Mixer &m) {
   INJECT_SHARED_bpos

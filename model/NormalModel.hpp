@@ -14,15 +14,7 @@ class NormalModel {
 private:
     static constexpr int nCM = 9;
     static constexpr int nSM = 3;
-
-public:
-    static constexpr int MIXERINPUTS =
-            nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS + ContextMap2::MIXERINPUTS_BYTE_HISTORY) + nSM; //66
-    static constexpr int MIXERCONTEXTS = 64 + 8 + 1024 + 256 + 256 + 256 + 256 + 1536; //3656
-    static constexpr int MIXERCONTEXTSETS = 7;
-
-private:
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     ModelStats *stats;
     ContextMap2 cm;
     StateMap smOrder0Slow;
@@ -30,10 +22,15 @@ private:
     StateMap smOrder1Fast;
     uint64_t cxt[15] {}; // context hashes
 public:
-    NormalModel(const Shared *const sh, ModelStats *st, const uint64_t cmsize) : shared(sh), stats(st),
-            cm(sh, cmsize, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY), smOrder0Slow(sh, 1, 255, 1023, StateMap::Generic),
-            smOrder1Slow(sh, 1, 255 * 256, 1023, StateMap::Generic),
-            smOrder1Fast(sh, 1, 255 * 256, 64, StateMap::Generic) // 64->16 is also ok
+    static constexpr int MIXERINPUTS =
+            nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS + ContextMap2::MIXERINPUTS_BYTE_HISTORY) + nSM; //66
+    static constexpr int MIXERCONTEXTS = 64 + 8 + 1024 + 256 + 256 + 256 + 256 + 1536; //3656
+    static constexpr int MIXERCONTEXTSETS = 7;
+
+    NormalModel(ModelStats *st, const uint64_t cmsize) : stats(st),
+            cm(cmsize, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY), smOrder0Slow(1, 255, 1023, StateMap::Generic),
+            smOrder1Slow(1, 255 * 256, 1023, StateMap::Generic),
+            smOrder1Fast(1, 255 * 256, 64, StateMap::Generic) // 64->16 is also ok
     {
       assert(isPowerOf2(cmsize));
     }

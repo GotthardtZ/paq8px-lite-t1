@@ -3,6 +3,7 @@
 
 #include "UpdateBroadcaster.hpp"
 #include "Squash.hpp"
+#include "Ilog.hpp"
 
 template<SIMD simd>
 class SIMDMixer : public Mixer {
@@ -20,14 +21,15 @@ private:
 
     SIMDMixer *mp; // points to a Mixer to combine results
     UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
+    Shared *shared = Shared::getInstance();
 public:
-    SIMDMixer(const Shared *sh, const int n, const int m, const int s) : Mixer(sh, ((n + (simdWidth() - 1)) & -(simdWidth())), m, s) {
+    SIMDMixer(const int n, const int m, const int s) : Mixer(((n + (simdWidth() - 1)) & -(simdWidth())), m, s) {
       assert(n > 0);
       // TODO: This assertion fails
 //      assert((n & simdWidth() - 1) == 0);
       assert(m > 0);
       assert(s >= 1);
-      mp = (s > 1) ? new SIMDMixer<simd>(sh, s, 1, 1) : nullptr;
+      mp = (s > 1) ? new SIMDMixer<simd>(s, 1, 1) : nullptr;
     }
 
     ~SIMDMixer() override {
@@ -57,28 +59,27 @@ public:
             trainSimdSse2(&tx[0], &wx[cxt[i] * n], nx, err * rates[i]);
           if( simd == SIMD_AVX2 )
             trainSimdAvx2(&tx[0], &wx[cxt[i] * n], nx, err * rates[i]);
-          // TODO: re-enable this
-//          if( options & OPTION_ADAPTIVE ) {
-//            const uint32_t logErr = min(0xF, ilog2(abs(err)));
-//            info[i].sum -= square(info[i].data[1] >> 28U);
-//            info[i].data[1] <<= 4U;
-//            info[i].data[1] |= info[i].data[0] >> 28U;
-//            info[i].data[0] <<= 4U;
-//            info[i].data[0] |= logErr;
-//            info[i].sum += square(logErr);
-//            info[i].collected += info[i].collected < 4096;
-//            info[i].mask <<= 1U;
-//            info[i].mask |= (logErr <= ((info[i].data[0] >> 4U) & 0xFU));
-//            const uint32_t count = bitCount(info[i].mask);
-//            if( info[i].collected >= 64 && (info[i].sum > 1500 + uint32_t(rates[i]) * 64 || count < 9 || (info[i].mask & 0xFFU) == 0)) {
-//              rates[i] = DEFAULT_LEARNING_RATE;
-//              memset(&info[i], 0, sizeof(ErrorInfo));
-//            } else if( info[i].collected == 4096 && info[i].sum >= 56 && info[i].sum <= 144 && count > 28 - uint32_t(rates[i]) &&
-//                       ((info[i].mask & 0xFFU) == 0xFFU)) {
-//              rates[i] -= rates[i] > 2;
-//              info[i].reset();
-//            }
-//          }
+          if( shared->options & OPTION_ADAPTIVE ) {
+            const uint32_t logErr = min(0xF, ilog2(abs(err)));
+            info[i].sum -= square(info[i].data[1] >> 28U);
+            info[i].data[1] <<= 4U;
+            info[i].data[1] |= info[i].data[0] >> 28U;
+            info[i].data[0] <<= 4U;
+            info[i].data[0] |= logErr;
+            info[i].sum += square(logErr);
+            info[i].collected += info[i].collected < 4096;
+            info[i].mask <<= 1U;
+            info[i].mask |= (logErr <= ((info[i].data[0] >> 4U) & 0xFU));
+            const uint32_t count = bitCount(info[i].mask);
+            if( info[i].collected >= 64 && (info[i].sum > 1500 + uint32_t(rates[i]) * 64 || count < 9 || (info[i].mask & 0xFFU) == 0)) {
+              rates[i] = DEFAULT_LEARNING_RATE;
+              memset(&info[i], 0, sizeof(ErrorInfo));
+            } else if( info[i].collected == 4096 && info[i].sum >= 56 && info[i].sum <= 144 && count > 28 - uint32_t(rates[i]) &&
+                       ((info[i].mask & 0xFFU) == 0xFFU)) {
+              rates[i] -= rates[i] > 2;
+              info[i].reset();
+            }
+          }
         }
       reset();
     }

@@ -1,6 +1,11 @@
 #ifndef PAQ8PX_SMALLSTATIONARYCONTEXTMAP_HPP
 #define PAQ8PX_SMALLSTATIONARYCONTEXTMAP_HPP
 
+#include "IPredictor.hpp"
+#include "UpdateBroadcaster.hpp"
+#include "Mixer.hpp"
+#include "Stretch.hpp"
+
 /**
  * map for modelling contexts of (nearly-)stationary data.
  * The context is looked up directly. For each bit modelled, a 16bit prediction is stored.
@@ -17,7 +22,7 @@ public:
     static constexpr int MIXERINPUTS = 2;
 
 private:
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     Array<uint16_t> data;
     const uint32_t mask, stride, bTotal;
     uint32_t context, bCount, b;
@@ -27,8 +32,8 @@ private:
     UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 
 public:
-    SmallStationaryContextMap(const Shared *const sh, const int bitsOfContext, const int inputBits, const int rate, const int scale)
-            : shared(sh), data((UINT64_C(1) << bitsOfContext) * ((UINT64_C(1) << inputBits) - 1)), mask((1U << bitsOfContext) - 1),
+    SmallStationaryContextMap(const int bitsOfContext, const int inputBits, const int rate, const int scale) : data(
+            (UINT64_C(1) << bitsOfContext) * ((UINT64_C(1) << inputBits) - 1)), mask((1U << bitsOfContext) - 1),
             stride((1U << inputBits) - 1), bTotal(inputBits), rate(rate), scale(scale) {
       assert(inputBits > 0 && inputBits <= 8);
       reset();

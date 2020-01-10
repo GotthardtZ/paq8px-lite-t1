@@ -2,6 +2,9 @@
 #define PAQ8PX_GERMANSTEMMER_HPP
 
 #include <cstdint>
+#include "Language.hpp"
+#include "German.hpp"
+#include "Word.hpp"
 
 /**
  * German suffix stemmer, based on the Porter stemmer.

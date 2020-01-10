@@ -8,14 +8,7 @@ class LinearPredictionModel {
 private:
     static constexpr int nOLS = 3;
     static constexpr int nSSM = nOLS + 2;
-
-public:
-    static constexpr int MIXERINPUTS = nSSM * SmallStationaryContextMap::MIXERINPUTS; // 10
-    static constexpr int MIXERCONTEXTS = 0;
-    static constexpr int MIXERCONTEXTSETS = 0;
-
-private:
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     SmallStationaryContextMap sMap[nSSM];
     OLS<double, uint8_t> ols[nOLS] {{32, 4, 0.995},
                                     {32, 4, 0.995},
@@ -23,13 +16,17 @@ private:
     uint8_t prd[nSSM] {0};
 
 public:
-    LinearPredictionModel(const Shared *const sh) : shared(sh),
+    static constexpr int MIXERINPUTS = nSSM * SmallStationaryContextMap::MIXERINPUTS; // 10
+    static constexpr int MIXERCONTEXTS = 0;
+    static constexpr int MIXERCONTEXTSETS = 0;
+
+    LinearPredictionModel() :
             sMap {/* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
-                    {sh, 11, 1, 6, 128},
-                    {sh, 11, 1, 6, 128},
-                    {sh, 11, 1, 6, 128},
-                    {sh, 11, 1, 6, 128},
-                    {sh, 11, 1, 6, 128}} {}
+                    {11, 1, 6, 128},
+                    {11, 1, 6, 128},
+                    {11, 1, 6, 128},
+                    {11, 1, 6, 128},
+                    {11, 1, 6, 128}} {}
 
     void mix(Mixer &m) {
       INJECT_SHARED_bpos

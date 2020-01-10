@@ -1,6 +1,7 @@
 #ifndef PAQ8PX_WORDMODEL_HPP
 #define PAQ8PX_WORDMODEL_HPP
 
+#define USE_TEXTMODEL
 #ifdef USE_TEXTMODEL
 
 #include "../Shared.hpp"
@@ -23,7 +24,7 @@ public:
     static constexpr int MIXERCONTEXTSETS = 0;
 
 private:
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     ModelStats const *stats;
     ContextMap2 cm;
     static constexpr int wPosBits = 16;
@@ -33,7 +34,7 @@ private:
     static constexpr int maxLastLetter = 16;
 
     class Info {
-        const Shared *const shared;
+        Shared *shared = Shared::getInstance();
         ModelStats const *stats;
         ContextMap2 &cm;
         Array<uint32_t> wordPositions {1U << wPosBits}; // last positions of whole words/numbers
@@ -57,7 +58,7 @@ private:
         uint32_t mask {}, expr0Chars {}, mask2 {}, f4 {};
 
     public:
-        Info(const Shared *const sh, ModelStats const *st, ContextMap2 &contextmap) : shared(sh), stats(st), cm(contextmap) {
+        Info(ModelStats const *st, ContextMap2 &contextmap) : stats(st), cm(contextmap) {
           reset();
         }
 
@@ -504,9 +505,8 @@ private:
     Info infoPdf; //used only in case of pdf text - in place of infoNormal
     uint8_t pdfTextParserState; // 0..7
 public:
-    WordModel(const Shared *const sh, ModelStats const *st, const uint64_t size) : shared(sh), stats(st),
-            cm(sh, size, nCM, 74, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY), infoNormal(sh, st, cm), infoPdf(sh, st, cm),
-            pdfTextParserState(0) {}
+    WordModel(ModelStats const *st, const uint64_t size) : stats(st), cm(size, nCM, 74, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY),
+            infoNormal(st, cm), infoPdf(st, cm), pdfTextParserState(0) {}
 
     void reset() {
       infoNormal.reset();

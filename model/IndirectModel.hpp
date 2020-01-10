@@ -11,22 +11,20 @@
 class IndirectModel {
 private:
     static constexpr int nCM = 15;
+    Shared *shared = Shared::getInstance();
+    ContextMap cm;
+    Array<uint32_t> t1 {256};
+    Array<uint16_t> t2 {0x10000};
+    Array<uint16_t> t3 {0x8000};
+    Array<uint16_t> t4 {0x8000};
+    IndirectContext<uint32_t> iCtx {16, 8};
 
 public:
     static constexpr int MIXERINPUTS = nCM * (ContextMap::MIXERINPUTS); // 75
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
 
-private:
-    const Shared *const shared;
-    ContextMap cm;
-    Array<uint32_t> t1 {256};
-    Array<uint16_t> t2 {0x10000};
-    Array<uint16_t> t3 {0x8000};
-    Array<uint16_t> t4 {0x8000};
-    IndirectContext<uint32_t> iCtx {16, 8}; /* BitsPerContext, InputBits */
-public:
-    IndirectModel(const Shared *const sh, const uint64_t size) : shared(sh), cm(sh, size, nCM) {}
+    IndirectModel(const uint64_t size) : cm(size, nCM) {}
 
     void mix(Mixer &m) {
       INJECT_SHARED_bpos

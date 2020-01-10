@@ -4,19 +4,16 @@
 class NestModel {
 private:
     static constexpr int nCM = 12;
+    Shared *shared = Shared::getInstance();
+    int ic = 0, bc = 0, pc = 0, vc = 0, qc = 0, lvc = 0, wc = 0, ac = 0, ec = 0, uc = 0, sense1 = 0, sense2 = 0, w = 0;
+    ContextMap cm;
 
 public:
     static constexpr int MIXERINPUTS = nCM * (ContextMap::MIXERINPUTS); // 60
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
 
-private:
-    const Shared *const shared;
-    int ic = 0, bc = 0, pc = 0, vc = 0, qc = 0, lvc = 0, wc = 0, ac = 0, ec = 0, uc = 0, sense1 = 0, sense2 = 0, w = 0;
-    ContextMap cm;
-
-public:
-    NestModel(const Shared *const sh, const uint64_t size) : shared(sh), cm(sh, size, nCM) {}
+    NestModel(const uint64_t size) : cm(size, nCM) {}
 
     void mix(Mixer &m) {
       INJECT_SHARED_bpos

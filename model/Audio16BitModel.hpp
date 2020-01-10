@@ -12,13 +12,6 @@ private:
     static constexpr int nLMS = 3;
     static constexpr int nSSM = nOLS + nLMS + 3;
     static constexpr int nCtx = 4;
-
-public:
-    static constexpr int MIXERINPUTS = nCtx * nSSM * SmallStationaryContextMap::MIXERINPUTS;
-    static constexpr int MIXERCONTEXTS = 8192 + 4096 + 2560 + 256 + 20; //15124
-    static constexpr int MIXERCONTEXTSETS = 5;
-
-private:
     SmallStationaryContextMap sMap1B[nSSM][nCtx];
     OLS<double, short> ols[nOLS][2] {{{128, 24, 0.9975}, {128, 24, 0.9975}},
                                      {{90,  30, 0.997},  {90,  30, 0.997}},
@@ -37,30 +30,34 @@ private:
     short sample = 0;
 
 public:
-    Audio16BitModel(const Shared *const sh, ModelStats *st) : AudioModel(sh, st), sMap1B {
-            /*nOLS: 0-3*/ {{sh, 17, 1, 7, 128}, {sh, 17, 1, 10, 128}, {sh, 17, 1, 6, 86}, {sh, 17, 1, 6, 128}},
-                          {{sh, 17, 1, 7, 128}, {sh, 17, 1, 10, 128}, {sh, 17, 1, 6, 86}, {sh, 17, 1, 6, 128}},
-                          {{sh, 17, 1, 7, 128}, {sh, 17, 1, 10, 128}, {sh, 17, 1, 6, 86}, {sh, 17, 1, 6, 128}},
-                          {{sh, 17, 1, 7, 128}, {sh, 17, 1, 10, 128}, {sh, 17, 1, 6, 86}, {sh, 17, 1, 6, 128}},
+    static constexpr int MIXERINPUTS = nCtx * nSSM * SmallStationaryContextMap::MIXERINPUTS;
+    static constexpr int MIXERCONTEXTS = 8192 + 4096 + 2560 + 256 + 20; //15124
+    static constexpr int MIXERCONTEXTSETS = 5;
+
+    Audio16BitModel(ModelStats *st) : AudioModel(st), sMap1B {
+            /*nOLS: 0-3*/ {{17, 1, 7, 128}, {17, 1, 10, 128}, {17, 1, 6, 86}, {17, 1, 6, 128}},
+                          {{17, 1, 7, 128}, {17, 1, 10, 128}, {17, 1, 6, 86}, {17, 1, 6, 128}},
+                          {{17, 1, 7, 128}, {17, 1, 10, 128}, {17, 1, 6, 86}, {17, 1, 6, 128}},
+                          {{17, 1, 7, 128}, {17, 1, 10, 128}, {17, 1, 6, 86}, {17, 1, 6, 128}},
             /*nOLS: 4-7*/
-                          {{sh, 17, 1, 7, 128}, {sh, 17, 1, 10, 128}, {sh, 17, 1, 6, 86}, {sh, 17, 1, 6, 128}},
-                          {{sh, 17, 1, 7, 128}, {sh, 17, 1, 10, 128}, {sh, 17, 1, 6, 86}, {sh, 17, 1, 6, 128}},
-                          {{sh, 17, 1, 7, 128}, {sh, 17, 1, 10, 128}, {sh, 17, 1, 6, 86}, {sh, 17, 1, 6, 128}},
-                          {{sh, 17, 1, 7, 128}, {sh, 17, 1, 10, 128}, {sh, 17, 1, 6, 86}, {sh, 17, 1, 6, 128}},
+                          {{17, 1, 7, 128}, {17, 1, 10, 128}, {17, 1, 6, 86}, {17, 1, 6, 128}},
+                          {{17, 1, 7, 128}, {17, 1, 10, 128}, {17, 1, 6, 86}, {17, 1, 6, 128}},
+                          {{17, 1, 7, 128}, {17, 1, 10, 128}, {17, 1, 6, 86}, {17, 1, 6, 128}},
+                          {{17, 1, 7, 128}, {17, 1, 10, 128}, {17, 1, 6, 86}, {17, 1, 6, 128}},
             /*nLMS: 0-2*/
-                          {{sh, 17, 1, 7, 86},  {sh, 17, 1, 10, 86},  {sh, 17, 1, 6, 64}, {sh, 17, 1, 6, 86}},
-                          {{sh, 17, 1, 7, 86},  {sh, 17, 1, 10, 86},  {sh, 17, 1, 6, 64}, {sh, 17, 1, 6, 86}},
-                          {{sh, 17, 1, 7, 86},  {sh, 17, 1, 10, 86},  {sh, 17, 1, 6, 64}, {sh, 17, 1, 6, 86}},
+                          {{17, 1, 7, 86},  {17, 1, 10, 86},  {17, 1, 6, 64}, {17, 1, 6, 86}},
+                          {{17, 1, 7, 86},  {17, 1, 10, 86},  {17, 1, 6, 64}, {17, 1, 6, 86}},
+                          {{17, 1, 7, 86},  {17, 1, 10, 86},  {17, 1, 6, 64}, {17, 1, 6, 86}},
             /*nSSM: 0-2*/
-                          {{sh, 17, 1, 7, 86},  {sh, 17, 1, 10, 86},  {sh, 17, 1, 6, 64}, {sh, 17, 1, 6, 86}},
-                          {{sh, 17, 1, 7, 86},  {sh, 17, 1, 10, 86},  {sh, 17, 1, 6, 64}, {sh, 17, 1, 6, 86}},
-                          {{sh, 17, 1, 7, 86},  {sh, 17, 1, 10, 86},  {sh, 17, 1, 6, 64}, {sh, 17, 1, 6, 86}}} {}
+                          {{17, 1, 7, 86},  {17, 1, 10, 86},  {17, 1, 6, 64}, {17, 1, 6, 86}},
+                          {{17, 1, 7, 86},  {17, 1, 10, 86},  {17, 1, 6, 64}, {17, 1, 6, 86}},
+                          {{17, 1, 7, 86},  {17, 1, 10, 86},  {17, 1, 6, 64}, {17, 1, 6, 86}}} {}
 
     void setParam(int info) {
       INJECT_STATS_blpos
       INJECT_SHARED_bpos
       if( blpos == 0 && bpos == 0 ) {
-        info |= 4; // comment this line if skipping the endianness transform
+        info |= 4U; // comment this line if skipping the endianness transform
         assert((info & 2) != 0);
         stereo = (info & 1U);
         lsb = (info < 4);
@@ -78,9 +75,9 @@ public:
       INJECT_SHARED_c0
       INJECT_SHARED_c1
       if( bpos == 0 && blpos != 0 ) {
-        ch = (stereo) ? (blpos & 2) >> 1 : 0;
+        ch = (stereo) ? (blpos & 2U) >> 1U : 0;
         lsb = (blpos & 1U) ^ (wMode < 4);
-        if((blpos & 1) == 0 ) {
+        if((blpos & 1U) == 0 ) {
           sample = (wMode < 4) ? s2(2) : t2(2);
           const int pCh = ch ^stereo;
           int i = 0;
@@ -161,10 +158,10 @@ public:
         const uint32_t ctx1 = uint16_t(prd[i][ch][1] - b);
 
         const int shift = (!lsb);
-        sMap1B[i][0].set((lsb << 16) | (bpos << 13) | (ctx0 >> (3 << shift)));
-        sMap1B[i][1].set((lsb << 16) | (bpos << 13) | (ctx0 >> ((!lsb) + (3 << shift))));
-        sMap1B[i][2].set((lsb << 16) | (bpos << 13) | (ctx0 >> ((!lsb) * 2 + (3 << shift))));
-        sMap1B[i][3].set((lsb << 16) | (bpos << 13) | (ctx1 >> ((!lsb) + (3 << shift))));
+        sMap1B[i][0].set((lsb << 16) | (bpos << 13) | (ctx0 >> (3U << shift)));
+        sMap1B[i][1].set((lsb << 16) | (bpos << 13) | (ctx0 >> ((!lsb) + (3U << shift))));
+        sMap1B[i][2].set((lsb << 16) | (bpos << 13) | (ctx0 >> ((!lsb) * 2 + (3U << shift))));
+        sMap1B[i][3].set((lsb << 16) | (bpos << 13) | (ctx1 >> ((!lsb) + (3U << shift))));
         sMap1B[i][0].mix(m);
         sMap1B[i][1].mix(m);
         sMap1B[i][2].mix(m);
@@ -172,9 +169,9 @@ public:
       }
 
       m.set((errLog << 9U) | (lsb << 8U) | c0, 8192);
-      m.set((uint8_t(mask) << 4U) | (ch << 3U) | (lsb << 2) | (bpos >> 1), 4096);
-      m.set((mxCtx << 7) | (c1 >> 1), 2560);
-      m.set((errLog << 4) | (ch << 3) | (lsb << 2) | (bpos >> 1), 256);
+      m.set((uint8_t(mask) << 4U) | (ch << 3U) | (lsb << 2U) | (bpos >> 1U), 4096);
+      m.set((mxCtx << 7U) | (c1 >> 1U), 2560);
+      m.set((errLog << 4U) | (ch << 3U) | (lsb << 2U) | (bpos >> 1U), 256);
       m.set(mxCtx, 20);
     }
 };

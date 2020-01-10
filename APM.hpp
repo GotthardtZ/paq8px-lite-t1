@@ -15,14 +15,14 @@ private:
     const int steps;
     int cxt; // context index of last prediction
     UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
+    Shared *shared = Shared::getInstance();
 public:
     /**
      * APM a(n,STEPS) creates with n contexts using 4*STEPS*n bytes memory.
-     * @param sh
      * @param n
      * @param s
      */
-    APM(const Shared *const sh, const int n, const int s) : AdaptiveMap(sh, n * s, 1023), N(n * s), steps(s), cxt(0) {
+    APM(const int n, const int s) : AdaptiveMap(n * s, 1023), N(n * s), steps(s), cxt(0) {
       assert(s > 4); // number of steps - must be a positive integer bigger than 4
       for( int i = 0; i < N; ++i ) {
         int p = ((i % steps * 2 + 1) * 4096) / (steps * 2) - 2048;

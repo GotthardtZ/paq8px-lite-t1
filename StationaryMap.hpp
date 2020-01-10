@@ -19,7 +19,7 @@ public:
     static constexpr int MIXERINPUTS = 2;
 
 private:
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     Array<uint32_t> data;
     const uint32_t mask, maskBits, stride, bTotal;
     uint32_t context, bCount, b;
@@ -30,9 +30,9 @@ private:
     UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 
 public:
-    StationaryMap(const Shared *const sh, const int bitsOfContext, const int inputBits, const int scale, const uint16_t limit) : shared(sh),
-            data((UINT64_C(1) << bitsOfContext) * ((UINT64_C(1) << inputBits) - 1)), mask((1U << bitsOfContext) - 1),
-            maskBits(bitsOfContext), stride((1U << inputBits) - 1), bTotal(inputBits), scale(scale), limit(limit) {
+    StationaryMap(const int bitsOfContext, const int inputBits, const int scale, const uint16_t limit) : data(
+            (UINT64_C(1) << bitsOfContext) * ((UINT64_C(1) << inputBits) - 1)), mask((1U << bitsOfContext) - 1), maskBits(bitsOfContext),
+            stride((1U << inputBits) - 1), bTotal(inputBits), scale(scale), limit(limit) {
       assert(inputBits > 0 && inputBits <= 8);
       assert(bitsOfContext + inputBits <= 24);
       dt = DivisionTable::getDT();

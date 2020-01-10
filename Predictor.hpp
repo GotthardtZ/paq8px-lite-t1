@@ -19,7 +19,6 @@
  * A Predictor estimates the probability that the next bit of uncompressed data is 1.
  */
 class Predictor {
-    Shared shared;
     ModelStats stats;
     Models models;
     ContextModel contextModel;
@@ -27,7 +26,8 @@ class Predictor {
     int pr; // next prediction, scaled by 12 bits (0-4095)
     uint32_t level;
     UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
-    void trainText(const char *const dictionary, int iterations);
+    Shared *shared = Shared::getInstance();
+    void trainText(const char *dictionary, int iterations);
     void trainExe();
 
 public:

@@ -2,7 +2,10 @@
 #define PAQ8PX_AUDIOMODEL_HPP
 
 #include <cstdint>
+#include "../Shared.hpp"
+#include "../ModelStats.hpp"
 
+#define USE_AUDIOMODEL
 #ifdef USE_AUDIOMODEL
 
 /**
@@ -13,12 +16,12 @@
  */
 class AudioModel {
 protected:
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     ModelStats *stats;
     int s = 0;
     int wMode = 0;
 
-    AudioModel(const Shared *const sh, ModelStats *st) : shared(sh), stats(st) {}
+    AudioModel(ModelStats *st) : stats(st) {}
 
     inline int s2(int i) {
       INJECT_SHARED_buf
@@ -30,7 +33,7 @@ protected:
       return int(short(buf(i - 1) + 256 * buf(i)));
     }
 
-    inline int x1(int i) {
+    int x1(int i) {
       INJECT_SHARED_buf
       switch( wMode ) {
         case 0:
@@ -54,7 +57,7 @@ protected:
       }
     }
 
-    inline int x2(int i) {
+    int x2(int i) {
       INJECT_SHARED_buf
       switch( wMode ) {
         case 0:
@@ -62,7 +65,7 @@ protected:
         case 1:
           return buf((i << 1U) - 1) - 128;
         case 2:
-          return s2((i + s) << 1);
+          return s2((i + s) << 1U);
         case 3:
           return s2((i << 2U) - 2);
         case 4:

@@ -20,14 +20,12 @@
  * state: bit history state - as in a contextmap
  */
 struct DMCNode { // 12 bytes
-
-public:
-    uint16_t c0, c1;
-
 private:
     uint32_t _nx0, _nx1; // packed: their higher 28 bits are nx0, nx1; the lower 4+4 bits give the bit history state byte
 
 public:
+    uint16_t c0, c1;
+
     [[nodiscard]] uint8_t getState() const { return uint8_t(((_nx0 & 0xFU) << 4U) | (_nx1 & 0xFU)); }
 
     void setState(const uint8_t state) {
@@ -71,7 +69,7 @@ public:
  */
 class DmcModel {
 private:
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     Random rnd;
     Array<DMCNode> t; // state graph
     StateMap sm; // stateMap for bit history states
@@ -88,9 +86,9 @@ private:
     }
 
 public:
-    DmcModel(const Shared *const sh, const uint64_t dmcNodes, const uint32_t thStart) : shared(sh),
+    DmcModel(const uint64_t dmcNodes, const uint32_t thStart) :
             t(min(dmcNodes + DMC_NODES_BASE, DMC_NODES_MAX)),
-            sm(sh, 1, 256, 256 /*64-512 are all fine*/, StateMap::BitHistory) //StateMap: s, n, limit, init
+            sm(1, 256, 256 /*64-512 are all fine*/, StateMap::BitHistory) //StateMap: s, n, limit, init
     {
       resetStateGraph(thStart);
     }

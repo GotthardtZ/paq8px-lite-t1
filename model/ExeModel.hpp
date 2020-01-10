@@ -580,7 +580,7 @@ class ExeModel {
     static constexpr uint32_t minRequired = 8; // minimum required consecutive valid instructions to be considered as code
 private:
     static constexpr int nCM1 = 10, nCM2 = 10, nIM = 1;
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     const ModelStats *const stats;
     ContextMap2 cm;
     IndirectMap iMap;
@@ -622,8 +622,8 @@ public:
     static constexpr int MIXERCONTEXTS = 1024 + 1024 + 1024 + 8192 + 8192 + 8192; // 27648
     static constexpr int MIXERCONTEXTSETS = 6;
 
-    ExeModel(const Shared *const sh, const ModelStats *const st, const uint64_t size) : shared(sh), stats(st),
-            cm(sh, size, nCM1 + nCM2, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY), iMap(sh, 20, 1, 64, 1023), pState(Start), state(Start),
+    ExeModel(const ModelStats *const st, const uint64_t size) : stats(st),
+            cm(size, nCM1 + nCM2, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY), iMap(20, 1, 64, 1023), pState(Start), state(Start),
             totalOps(0), opMask(0), opCategoryMask(0), context(0), brkCtx(0), valid(false) {
       assert(isPowerOf2(size));
       memset(&cache, 0, sizeof(OpCache));

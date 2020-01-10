@@ -11,7 +11,7 @@
  * This combines all the context models with a Mixer.
  */
 class ContextModel {
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     ModelStats *stats;
     Models models;
     Mixer *m;
@@ -21,7 +21,7 @@ class ContextModel {
     uint32_t level{};
 
 public:
-    ContextModel(const Shared *sh, ModelStats *st, Models &models, uint32_t level);
+    ContextModel(ModelStats *st, Models &models, uint32_t level);
     int p();
     ~ContextModel();
 };

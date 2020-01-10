@@ -1,6 +1,8 @@
 #ifndef PAQ8PX_STEMMER_HPP
 #define PAQ8PX_STEMMER_HPP
 
+#include "Word.hpp"
+
 class Stemmer {
 protected:
     constexpr uint32_t getRegion(const Word *w, const uint32_t from) {

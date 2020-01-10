@@ -20,15 +20,7 @@ private:
     static constexpr int nST = 3;
     static constexpr int nSSM = 2;
     static constexpr int nSM = 2;
-
-public:
-    static constexpr int MIXERINPUTS = 2 + nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS) + nST +
-                                       nSSM * SmallStationaryContextMap::MIXERINPUTS + nSM * StationaryMap::MIXERINPUTS; // 23
-    static constexpr int MIXERCONTEXTS = 8;
-    static constexpr int MIXERCONTEXTSETS = 1;
-
-private:
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     ModelStats *stats;
     enum Parameters : uint32_t {
         MaxExtend = 0, // longest allowed match expansion // warning: larger value -> slowdown
@@ -54,13 +46,18 @@ private:
     Ilog *ilog = Ilog::getInstance();
 
 public:
-    MatchModel(const Shared *const sh, ModelStats *st, const uint64_t size, uint32_t level) : shared(sh), stats(st), table(size / sizeof(uint32_t)),
-            stateMaps {{sh, 1, 56 * 256,          1023, StateMap::Generic},
-                       {sh, 1, 8 * 256 * 256 + 1, 1023, StateMap::Generic},
-                       {sh, 1, 256 * 256,         1023, StateMap::Generic}}, cm(sh, MEM / 32, nCM, 74, CM_USE_RUN_STATS),
-            SCM {sh, 6, 1, 6, 64}, maps {{sh, 23, 1, 64, 1023},
-                                         {sh, 15, 1, 64, 1023}}, iCtx {15, 1}, mask(uint32_t(size / sizeof(uint32_t) - 1)),
-            hashBits(ilog2(mask + 1)) {
+    static constexpr int MIXERINPUTS = 2 + nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS) + nST +
+                                       nSSM * SmallStationaryContextMap::MIXERINPUTS + nSM * StationaryMap::MIXERINPUTS; // 23
+    static constexpr int MIXERCONTEXTS = 8;
+    static constexpr int MIXERCONTEXTSETS = 1;
+
+    MatchModel(ModelStats *st, const uint64_t size, uint32_t level) : stats(st),
+            table(size / sizeof(uint32_t)), stateMaps {{1, 56 * 256,          1023, StateMap::Generic},
+                                                       {1, 8 * 256 * 256 + 1, 1023, StateMap::Generic},
+                                                       {1, 256 * 256,         1023, StateMap::Generic}},
+            cm(MEM / 32, nCM, 74, CM_USE_RUN_STATS), SCM {6, 1, 6, 64}, maps {{23, 1, 64, 1023},
+                                                                                      {15, 1, 64, 1023}}, iCtx {15, 1},
+            mask(uint32_t(size / sizeof(uint32_t) - 1)), hashBits(ilog2(mask + 1)) {
       assert(isPowerOf2(size));
     }
 

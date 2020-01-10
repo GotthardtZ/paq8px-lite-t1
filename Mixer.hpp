@@ -102,7 +102,7 @@ static void trainSimdNone(const short *const t, short *const w, int n, const int
 
 class Mixer : protected IPredictor {
 protected:
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     const uint32_t n, m, s; // max inputs, max contexts, max context sets
     int scaleFactor; // scale factor for dot product
     Array<short, 32> tx; // n inputs from add()
@@ -121,12 +121,11 @@ public:
      * the outputs of these neural networks are combined using another
      * neural network (with arguments s, 1, 1).  If s = 1 then the
      * output is direct.  The weights are initially w (+-32K).
-     * @param sh
      * @param n
      * @param m
      * @param s
      */
-    Mixer(const Shared *const sh, const int n, const int m, const int s) : shared(sh), n(n), m(m), s(s), scaleFactor(0), tx(n), wx(n * m),
+    Mixer(const int n, const int m, const int s) : n(n), m(m), s(s), scaleFactor(0), tx(n), wx(n * m),
             cxt(s), info(s), rates(s), pr(s) {
       for( uint64_t i = 0; i < s; ++i ) {
         pr[i] = 2048; //initial p=0.5
@@ -171,9 +170,8 @@ public:
       assert(numContexts < s);
       assert(cx < range);
       assert(base + range <= m);
-      // TODO: re-enable this
-//      if( !(options & OPTION_ADAPTIVE))
-//        rates[numContexts] = rate;
+      if( !(shared->options & OPTION_ADAPTIVE))
+        rates[numContexts] = rate;
       cxt[numContexts++] = base + cx;
       base += range;
       //printf("numContexts: %d base: %d\n",numContexts,range); //for debugging: how many input sets do we have?

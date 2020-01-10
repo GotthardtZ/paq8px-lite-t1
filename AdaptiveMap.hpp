@@ -12,11 +12,11 @@
  */
 class AdaptiveMap : protected IPredictor {
 protected:
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     Array<uint32_t> t; // cxt -> prediction in high 22 bits, count in low 10 bits
     int limit;
     int *dt; // Pointer to division table
-    AdaptiveMap(const Shared *const sh, const int n, const int lim) : shared(sh), t(n), limit(lim) {
+    AdaptiveMap(const int n, const int lim) : t(n), limit(lim) {
       dt = DivisionTable::getDT();
     }
 

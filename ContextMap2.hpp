@@ -40,7 +40,7 @@ public:
     static constexpr int MIXERINPUTS_BYTE_HISTORY = 2;
 
 private:
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     Random rnd;
     const uint32_t c; // max number of contexts
     class Bucket { // hash bucket, 64 bytes
@@ -91,21 +91,20 @@ public:
     int order = 0; // is set after mix()
     /**
      * Construct using size bytes of memory for count contexts.
-     * @param sh
      * @param size
      * @param count
      * @param scale
      * @param uw
      */
-    ContextMap2(const Shared *const sh, const uint64_t size, const uint32_t count, const int scale, const uint32_t uw) : shared(sh),
-            c(count), table(size >> 6U), bitState(count), bitState0(count), byteHistory(count), contexts(count), checksums(count),
-            runMap(sh, count, (1U << 12U), 127, StateMap::Run),
+    ContextMap2(const uint64_t size, const uint32_t count, const int scale, const uint32_t uw) : c(count), table(size >> 6U),
+            bitState(count), bitState0(count), byteHistory(count), contexts(count), checksums(count),
+            runMap(count, (1U << 12U), 127, StateMap::Run),
             /* StateMap : s, n, lim, init */ // 63-255
-            stateMap(sh, count, (1U << 8U), 511, StateMap::BitHistory),
+            stateMap(count, (1U << 8U), 511, StateMap::BitHistory),
             /* StateMap : s, n, lim, init */ // 511-1023
-            bhMap8B(sh, count, (1U << 8U), 511, StateMap::Generic),
+            bhMap8B(count, (1U << 8U), 511, StateMap::Generic),
             /* StateMap : s, n, lim, init */ // 511-1023
-            bhMap12B(sh, count, (1U << 12U), 511, StateMap::Generic),
+            bhMap12B(count, (1U << 12U), 511, StateMap::Generic),
             /* StateMap : s, n, lim, init */ // 255-1023
             index(0), mask(uint32_t(table.size() - 1)), hashBits(ilog2(mask + 1)), validFlags(0), scale(scale), useWhat(uw) {
       assert(size >= 64 && isPowerOf2(size));

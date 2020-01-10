@@ -1,12 +1,13 @@
 #include "ContextModel.hpp"
 
-ContextModel::ContextModel(const Shared *const sh, ModelStats *st, Models &models, uint32_t level) : shared(sh), stats(st), models(models), level(level) {
-  m = MixerFactory::createMixer(sh, 1 + //bias
+ContextModel::ContextModel(ModelStats *st, Models &models, uint32_t level) : stats(st), models(models),
+        level(level) {
+  m = MixerFactory::createMixer(1 + //bias
                                     MatchModel::MIXERINPUTS + NormalModel::MIXERINPUTS + SparseMatchModel::MIXERINPUTS +
                                     SparseModel::MIXERINPUTS + RecordModel::MIXERINPUTS + CharGroupModel::MIXERINPUTS +
-                                    TextModel::MIXERINPUTS + WordModel::MIXERINPUTS + IndirectModel::MIXERINPUTS +
-                                    DmcForest::MIXERINPUTS + NestModel::MIXERINPUTS + XMLModel::MIXERINPUTS +
-                                    LinearPredictionModel::MIXERINPUTS + ExeModel::MIXERINPUTS,
+                                    TextModel::MIXERINPUTS + WordModel::MIXERINPUTS + IndirectModel::MIXERINPUTS + DmcForest::MIXERINPUTS +
+                                    NestModel::MIXERINPUTS + XMLModel::MIXERINPUTS + LinearPredictionModel::MIXERINPUTS +
+                                    ExeModel::MIXERINPUTS,
                                 MatchModel::MIXERCONTEXTS + NormalModel::MIXERCONTEXTS + SparseMatchModel::MIXERCONTEXTS +
                                 SparseModel::MIXERCONTEXTS + RecordModel::MIXERCONTEXTS + CharGroupModel::MIXERCONTEXTS +
                                 TextModel::MIXERCONTEXTS + WordModel::MIXERCONTEXTS + IndirectModel::MIXERCONTEXTS +

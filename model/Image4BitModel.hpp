@@ -16,7 +16,7 @@
 class Image4BitModel {
 private:
     static constexpr int S = 14; //number of contexts
-    const Shared *const shared;
+    Shared* shared = Shared::getInstance();
     Random rnd;
     HashTable<16> t;
     StateMap sm;
@@ -29,7 +29,7 @@ public:
     static constexpr int MIXERINPUTS = (S * 3 + 1);
     static constexpr int MIXERCONTEXTS = 256 + 512 + 512 + 1024 + 16 + 1; //2321
     static constexpr int MIXERCONTEXTSETS = 6;
-    Image4BitModel(const Shared *sh, uint64_t size);
+    Image4BitModel(uint64_t size);
     void setParam(int info0);
     void mix(Mixer &m);
 };

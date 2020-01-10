@@ -1,6 +1,8 @@
 #ifndef PAQ8PX_LANGUAGE_HPP
 #define PAQ8PX_LANGUAGE_HPP
 
+#include "Word.hpp"
+
 class Language {
 public:
     enum Flags {

@@ -50,14 +50,7 @@ enum XMLState {
 class XMLModel {
 private:
     static constexpr int nCM = 4;
-
-public:
-    static constexpr int MIXERINPUTS = nCM * (ContextMap::MIXERINPUTS); //20
-    static constexpr int MIXERCONTEXTS = 0;
-    static constexpr int MIXERCONTEXTSETS = 0;
-
-private:
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     ContextMap cm;
     XMLTagCache cache {};
     uint32_t stateBh[8] {};
@@ -115,7 +108,11 @@ private:
     }
 
 public:
-    XMLModel(const Shared *const sh, const uint64_t size) : shared(sh), cm(sh, size, nCM) {}
+    static constexpr int MIXERINPUTS = nCM * (ContextMap::MIXERINPUTS); //20
+    static constexpr int MIXERCONTEXTS = 0;
+    static constexpr int MIXERCONTEXTSETS = 0;
+
+    XMLModel(const uint64_t size) : cm(size, nCM) {}
 
     void update() {
       INJECT_SHARED_c1

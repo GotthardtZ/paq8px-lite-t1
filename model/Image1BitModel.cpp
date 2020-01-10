@@ -1,6 +1,6 @@
 #include "Image1BitModel.hpp"
 
-Image1BitModel::Image1BitModel(const Shared *const sh) : shared(sh), sm {sh, s, 256, 1023, StateMap::BitHistory} {}
+Image1BitModel::Image1BitModel() : sm {s, 256, 1023, StateMap::BitHistory} {}
 
 void Image1BitModel::setParam(int info0) {
   w = info0;
@@ -16,10 +16,10 @@ void Image1BitModel::mix(Mixer &m) {
   INJECT_SHARED_buf
   // update the contexts (pixels surrounding the predicted one)
   r0 += r0 + y;
-  r1 += r1 + ((buf(w - 1) >> (7 - bpos)) & 1);
-  r2 += r2 + ((buf(w + w - 1) >> (7 - bpos)) & 1);
+  r1 += r1 + ((buf(w - 1) >> (7 - bpos)) & 1U);
+  r2 += r2 + ((buf(w + w - 1) >> (7 - bpos)) & 1U);
   r3 += r3 + ((buf(w + w + w - 1) >> (7 - bpos)) & 1);
-  cxt[0] = (r0 & 0x7) | (r1 >> 4 & 0x38) | (r2 >> 3 & 0xc0);
+  cxt[0] = (r0 & 0x7) | (r1 >> 4 & 0x38) | (r2 >> 3U & 0xc0U);
   cxt[1] = 0x100 + ((r0 & 1) | (r1 >> 4 & 0x3e) | (r2 >> 2 & 0x40) | (r3 >> 1 & 0x80));
   cxt[2] = 0x200 + ((r0 & 1) | (r1 >> 4 & 0x1d) | (r2 >> 1 & 0x60) | (r3 & 0xC0));
   cxt[3] = 0x300 + (y | ((r0 << 1) & 4) | ((r1 >> 1) & 0xF0) | ((r2 >> 3) & 0xA));

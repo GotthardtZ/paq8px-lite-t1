@@ -72,7 +72,6 @@ public:
     static constexpr int MIXERCONTEXTSETS = 6;
 
 private:
-    const Shared *const shared;
     Random rnd;
     // state of parser
     enum {
@@ -146,12 +145,13 @@ private:
     Mixer *m1;
     APM apm1, apm2;
     Ilog *ilog = Ilog::getInstance();
+    Shared *shared = Shared::getInstance();
 
 public:
-    JpegModel(const Shared *const sh, const uint64_t size) : shared(sh), t(size),
-            MJPEGMap(sh, 21, 3, 128, 127), /* BitsOfContext, InputBits, Scale, Limit */
-            sm(sh, N, 256, 1023, StateMap::BitHistory), apm1(sh, 0x8000, 24), apm2(sh, 0x20000, 24) {
-      m1 = MixerFactory::createMixer(sh, N + 1, 2050, 3);
+    JpegModel(const uint64_t size) : t(size),
+            MJPEGMap(21, 3, 128, 127), /* BitsOfContext, InputBits, Scale, Limit */
+            sm(N, 256, 1023, StateMap::BitHistory), apm1(0x8000, 24), apm2(0x20000, 24) {
+      m1 = MixerFactory::createMixer(N + 1, 2050, 3);
       m1->setScaleFactor(1024, 128);
     }
 

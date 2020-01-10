@@ -6,7 +6,7 @@ public:
     static constexpr int MIXERINPUTS = 2;
 
 private:
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     Random rnd;
     Array<uint8_t> data;
     StateMap sm;
@@ -17,9 +17,9 @@ private:
     UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 
 public:
-    IndirectMap(const Shared *const sh, const int bitsOfContext, const int inputBits, const int scale, const int limit) : shared(sh),
+    IndirectMap(const int bitsOfContext, const int inputBits, const int scale, const int limit) :
             data((UINT64_C(1) << bitsOfContext) * ((UINT64_C(1) << inputBits) - 1)),
-            sm {sh, 1, 256, 1023, StateMap::BitHistory}, /* StateMap : s, n, lim, init */
+            sm {1, 256, 1023, StateMap::BitHistory}, /* StateMap : s, n, lim, init */
             mask((1U << bitsOfContext) - 1), maskBits(bitsOfContext), stride((1U << inputBits) - 1), bTotal(inputBits), scale(scale) {
       assert(inputBits > 0 && inputBits <= 8);
       assert(bitsOfContext + inputBits <= 24);

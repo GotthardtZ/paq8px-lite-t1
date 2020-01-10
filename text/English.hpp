@@ -1,6 +1,9 @@
 #ifndef PAQ8PX_ENGLISH_HPP
 #define PAQ8PX_ENGLISH_HPP
 
+#include "Language.hpp"
+#include "Word.hpp"
+
 class English : public Language {
 private:
     static constexpr int NUM_ABBREV = 6;

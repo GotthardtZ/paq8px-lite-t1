@@ -3,6 +3,7 @@
 
 #include "../file/FileDisk.hpp"
 #include "../file/OpenFromMyFolder.hpp"
+#include "Entry.hpp"
 
 class WordEmbeddingDictionary {
 private:

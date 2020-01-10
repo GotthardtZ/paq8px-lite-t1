@@ -11,7 +11,7 @@
  */
 class SSE {
 private:
-    const Shared *const shared;
+    Shared *shared = Shared::getInstance();
     ModelStats *stats;
     struct {
         APM APMs[4];
@@ -31,7 +31,7 @@ private:
     } Generic;
 
 public:
-    SSE(const Shared *sh, ModelStats *st);
+    SSE(ModelStats *st);
     int p(int pr0);
 };
 
