@@ -9,7 +9,6 @@
 class DummyMixer : public Mixer {
 private:
     UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
-    Shared *shared = Shared::getInstance();
 public:
     DummyMixer(const int n, const int m, const int s) : Mixer(n, m, s) {}
 
@@ -20,7 +19,7 @@ public:
       return 2048;
     }
 
-    void setScaleFactor(const int, const int) override {};
+    void setScaleFactor(const int, const int) override {}
 };
 
 #endif //PAQ8PX_DUMMYMIXER_HPP

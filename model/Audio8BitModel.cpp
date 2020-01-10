@@ -22,7 +22,7 @@ Audio8BitModel::Audio8BitModel(ModelStats *st) : AudioModel(st), sMap1B {
 void Audio8BitModel::setParam(int info) {
   INJECT_STATS_blpos
   INJECT_SHARED_bpos
-  if( blpos == 0 && bpos == 0 ) {
+  if( blPos == 0 && bpos == 0 ) {
     assert((info & 2) == 0);
     stereo = (info & 1U);
     mask = 0;
@@ -39,7 +39,7 @@ void Audio8BitModel::mix(Mixer &m) {
   INJECT_SHARED_c1
   if( bpos == 0 ) {
     INJECT_STATS_blpos
-    ch = (stereo) ? blpos & 1U : 0;
+    ch = (stereo) ? blPos & 1U : 0;
     const int8_t s = int(((wMode & 4U) > 0) ? c1 ^ 128U : c1) - 128U;
     const int pCh = ch ^stereo;
     int i = 0;

@@ -9,6 +9,7 @@
 #define RGB565_MIN_RUN 63
 
 void encodeBmp(File *in, File *out, uint64_t len, int width) {
+  Shared *shared = Shared::getInstance();
   int r, g, b, total = 0;
   bool isPossibleRGB565 = true;
   for( int i = 0; i < (int) (len / width); i++ ) {
@@ -28,8 +29,8 @@ void encodeBmp(File *in, File *out, uint64_t len, int width) {
         isPossibleRGB565 = total > 0;
       }
       out->putChar(g);
-      out->putChar(options & OPTION_SKIPRGB ? r : g - r);
-      out->putChar(options & OPTION_SKIPRGB ? b : g - b);
+      out->putChar(shared->options & OPTION_SKIPRGB ? r : g - r);
+      out->putChar(shared->options & OPTION_SKIPRGB ? b : g - b);
     }
     for( int j = 0; j < width % 3; j++ )
       out->putChar(in->getchar());
@@ -39,6 +40,7 @@ void encodeBmp(File *in, File *out, uint64_t len, int width) {
 }
 
 uint64_t decodeBmp(Encoder &en, uint64_t size, int width, File *out, FMode mode, uint64_t &diffFound) {
+  Shared *shared = Shared::getInstance();
   int r, g, b, p, total = 0;
   bool isPossibleRGB565 = true;
   for( int i = 0; i < (int) (size / width); i++ ) {
@@ -47,7 +49,7 @@ uint64_t decodeBmp(Encoder &en, uint64_t size, int width, File *out, FMode mode,
       g = en.decompress();
       r = en.decompress();
       b = en.decompress();
-      if( !(options & OPTION_SKIPRGB))
+      if( !(shared->options & OPTION_SKIPRGB))
         r = g - r, b = g - b;
       if( isPossibleRGB565 ) {
         if( total >= RGB565_MIN_RUN ) {

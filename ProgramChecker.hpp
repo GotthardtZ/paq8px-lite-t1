@@ -27,16 +27,16 @@ private:
     /**
      * Copy constructor is private so that it cannot be called
      */
-    ProgramChecker(ProgramChecker const &) {};
+    ProgramChecker(ProgramChecker const &) {}
 
     /**
      * Assignment operator is private so that it cannot be called
      */
-    ProgramChecker &operator=(ProgramChecker const &) { return *this; };
+    ProgramChecker &operator=(ProgramChecker const &) { return *this; }
 
     static ProgramChecker *instance;
 public:
-    static ProgramChecker *getInstance();;
+    static ProgramChecker *getInstance();
     void alloc(uint64_t n);
     void free(uint64_t n);
     [[nodiscard]] double getRuntime() const;

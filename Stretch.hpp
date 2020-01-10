@@ -15,7 +15,7 @@ struct Stretch {
       for( int x = -2047; x <= 2047; ++x ) {
         int i = squash(x);
         for( int j = pi; j <= i; ++j ) {
-          t[j] = (short) x;
+          t[j] = static_cast<short>(x);
         }
         pi = i + 1;
       }

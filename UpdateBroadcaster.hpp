@@ -14,9 +14,18 @@ public:
     void subscribe(IPredictor *subscriber);
     void broadcastUpdate();
 private:
-    UpdateBroadcaster() : n(0) {};  // Private so that it can  not be called
-    UpdateBroadcaster(UpdateBroadcaster const &) {};             // copy constructor is private
-    UpdateBroadcaster &operator=(UpdateBroadcaster const &) { return *this; };  // assignment operator is private
+    UpdateBroadcaster() : n(0) {}
+
+    /**
+     * Copy constructor is private so that it cannot be called
+     */
+    UpdateBroadcaster(UpdateBroadcaster const &) {}
+
+    /**
+     * Assignment operator is private so that it cannot be called
+     */
+    UpdateBroadcaster &operator=(UpdateBroadcaster const &) { return *this; }
+
     static UpdateBroadcaster *mPInstance;
     int n; /**< number of subscribed predictors, (number of items in "subscribers" array)*/
     IPredictor *subscribers[1024];

@@ -3,6 +3,7 @@
 
 #include "Mixer.hpp"
 #include <cstdint>
+#include <cmath>
 
 template<typename F, typename T, const bool hasZeroMean = true>
 class OLS {

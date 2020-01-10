@@ -1,6 +1,13 @@
 #ifndef PAQ8PX_FILEUTILS_HPP
 #define PAQ8PX_FILEUTILS_HPP
 
+#include "../String.hpp"
+#include <cstdint>
+#include <cstring>
+#include <cstdio>
+#include <sys/types.h>
+#include <sys/stat.h>
+
 //////////////////// IO functions and classes ///////////////////
 // Wrappers to utf8 vs. wchar functions
 // Linux i/o works with utf8 char* but on windows it's wchar_t*.

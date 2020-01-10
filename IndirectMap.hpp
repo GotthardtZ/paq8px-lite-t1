@@ -1,6 +1,14 @@
 #ifndef PAQ8PX_INDIRECTMAP_HPP
 #define PAQ8PX_INDIRECTMAP_HPP
 
+#include "IPredictor.hpp"
+#include <cstdint>
+#include <cassert>
+#include "StateMap.hpp"
+#include "UpdateBroadcaster.hpp"
+#include "Shared.hpp"
+#include "Mixer.hpp"
+
 class IndirectMap : IPredictor {
 public:
     static constexpr int MIXERINPUTS = 2;

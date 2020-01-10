@@ -14,7 +14,7 @@ private:
 
 public:
     /**
-     * RingBuffer(size) buf; creates an array of \size bytes (must be a power of 2).
+     * RingBuffer(size) buf; creates an array of size bytes (must be a power of 2).
      * @param size
      */
     RingBuffer(const uint32_t size = 0) : b(size), offset(0), mask(size - 1) {
@@ -72,7 +72,7 @@ public:
     }
 
     /**
-     * @return the size of the \RingBuffer
+     * @return the size of the RingBuffer
      */
     uint32_t size() {
       return (uint32_t) b.size();

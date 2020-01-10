@@ -207,7 +207,7 @@ void ExeModel::update() {
         count0 += mask & 1;
       }
       int j = (i < 4) ? i + 1 : 5 + (i - 4) * (2 + (i > 6));
-      cm.set(hash(i, execxt(j, buf(1) * (j > 6)), ((1 << nCM1) | mask) * (count0 * nCM1 / 2 >= i), (0x08 | (blpos & 0x07)) * (i < 4)));
+      cm.set(hash(i, exeCxt(j, buf(1) * (j > 6)), ((1 << nCM1) | mask) * (count0 * nCM1 / 2 >= i), (0x08 | (blPos & 0x07)) * (i < 4)));
       i++;
     }
 
@@ -406,9 +406,9 @@ int ExeModel::pref(const int i) {
   return (buf(i) == 0x0f) + 2 * (buf(i) == 0x66) + 3 * (buf(i) == 0x67);
 }
 
-uint32_t ExeModel::execxt(int i, int x) {
+uint32_t ExeModel::exeCxt(int i, int x) {
   INJECT_SHARED_buf
-  int prefix = 0, opcode = 0, modrm = 0, sib = 0;
+  int prefix = 0, opcode = 0, modRm = 0, sib = 0;
   if( i )
     prefix += 4 * pref(i--);
   if( i )
@@ -416,8 +416,8 @@ uint32_t ExeModel::execxt(int i, int x) {
   if( i )
     opcode += buf(i--);
   if( i )
-    modrm += buf(i--) & (ModRM_mod | ModRM_rm);
-  if( i && ((modrm & ModRM_rm) == 4) && (modrm < ModRM_mod))
+    modRm += buf(i--) & (ModRM_mod | ModRM_rm);
+  if( i && ((modRm & ModRM_rm) == 4) && (modRm < ModRM_mod))
     sib = buf(i) & SIB_scale;
-  return prefix | opcode << 4 | modrm << 12 | x << 20 | sib << (28 - 6);
+  return prefix | opcode << 4 | modRm << 12 | x << 20 | sib << (28 - 6);
 }

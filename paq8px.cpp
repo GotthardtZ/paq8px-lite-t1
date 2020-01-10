@@ -80,18 +80,14 @@ static_assert(sizeof(short) == 2, "sizeof(short)");
 static_assert(sizeof(int) == 4, "sizeof(int)");
 
 uint32_t level = 0; //this value will be overwritten at the beginning of compression/decompression
-uint8_t options = 0;
 
 #include "ProgramChecker.hpp"
 #include "String.hpp"
 #include "file/File.hpp"
 #include "Random.hpp"
-#include "RingBuffer.hpp"
 #include "ModelStats.hpp"
 #include "Shared.hpp"
-#include "Ilog.hpp"
 #include "StateTable.hpp"
-#include "Squash.hpp"
 #include "Stretch.hpp"
 #include "UpdateBroadcaster.hpp"
 #include "Mixer.hpp"
@@ -124,7 +120,6 @@ uint8_t options = 0;
 #include "text/EnglishStemmer.hpp"
 #include "text/FrenchStemmer.hpp"
 #include "text/GermanStemmer.hpp"
-#include "text/Entry.hpp"
 #include "text/WordEmbeddingDictionary.hpp"
 
 #endif //USE_TEXTMODEL
@@ -164,7 +159,7 @@ uint8_t options = 0;
 typedef enum { DoNone, DoCompress, DoExtract, DoCompare, DoList } WHATTODO;
 ProgramChecker *programChecker = ProgramChecker::getInstance();
 
-void printHelp() {
+static void printHelp() {
   printf("\n"
          "Free under GPL, http://www.gnu.org/licenses/gpl.txt\n\n"
          "To compress:\n"
@@ -262,7 +257,7 @@ void printHelp() {
          "      " PROGNAME " -v -simd sse2 enwik8 -log logfile.txt folder/ -8\n");
 }
 
-void printModules() {
+static void printModules() {
   printf("\n");
   printf("Build: ");
 #ifdef USE_ZLIB
@@ -286,7 +281,7 @@ void printModules() {
   printf("\n");
 }
 
-void printSimdInfo(int simdIset, int detectedSimdIset) {
+static void printSimdInfo(int simdIset, int detectedSimdIset) {
   printf("\nHighest SIMD vectorization support on this system: ");
   if( detectedSimdIset < 0 || detectedSimdIset > 9 )
     quit("Oops, sorry. Unexpected result.");
@@ -303,7 +298,7 @@ void printSimdInfo(int simdIset, int detectedSimdIset) {
   printf(" neural network functions.\n");
 }
 
-void printCommand(const WHATTODO &whattodo) {
+static void printCommand(const WHATTODO &whattodo) {
   printf(" To do          = ");
   if( whattodo == DoNone )
     printf("-");
@@ -318,15 +313,17 @@ void printCommand(const WHATTODO &whattodo) {
   printf("\n");
 }
 
-void printOptions() {
+static void printOptions() {
+  Shared *shared = Shared::getInstance();
   printf(" Level          = %d\n", level);
-  printf(" Brute      (b) = %s\n", options & OPTION_BRUTE ? "On  (Brute-force detection of DEFLATE streams)"
-                                                          : "Off"); //this is a compression-only option, but we put/get it for reproducibility
-  printf(" Train exe  (e) = %s\n", options & OPTION_TRAINEXE ? "On  (Pre-train x86/x64 model)" : "Off");
-  printf(" Train txt  (t) = %s\n", options & OPTION_TRAINTXT ? "On  (Pre-train main model with word and expression list)" : "Off");
-  printf(" Adaptive   (a) = %s\n", options & OPTION_ADAPTIVE ? "On  (Adaptive learning rate)" : "Off");
-  printf(" Skip RGB   (s) = %s\n", options & OPTION_SKIPRGB ? "On  (Skip the color transform, just reorder the RGB channels)" : "Off");
-  printf(" File mode      = %s\n", options & OPTION_MULTIPLE_FILE_MODE ? "Multiple" : "Single");
+  printf(" Brute      (b) = %s\n", shared->options & OPTION_BRUTE ? "On  (Brute-force detection of DEFLATE streams)"
+                                                                  : "Off"); //this is a compression-only option, but we put/get it for reproducibility
+  printf(" Train exe  (e) = %s\n", shared->options & OPTION_TRAINEXE ? "On  (Pre-train x86/x64 model)" : "Off");
+  printf(" Train txt  (t) = %s\n", shared->options & OPTION_TRAINTXT ? "On  (Pre-train main model with word and expression list)" : "Off");
+  printf(" Adaptive   (a) = %s\n", shared->options & OPTION_ADAPTIVE ? "On  (Adaptive learning rate)" : "Off");
+  printf(" Skip RGB   (s) = %s\n",
+         shared->options & OPTION_SKIPRGB ? "On  (Skip the color transform, just reorder the RGB channels)" : "Off");
+  printf(" File mode      = %s\n", shared->options & OPTION_MULTIPLE_FILE_MODE ? "Multiple" : "Single");
 }
 
 int main_utf8(int argc, char **argv) {
@@ -350,11 +347,12 @@ int main_utf8(int argc, char **argv) {
 
     FileName input;
     FileName output;
-    FileName inputpath;
-    FileName outputpath;
+    FileName inputPath;
+    FileName outputPath;
     FileName archiveName;
     FileName logfile;
-    String hashconfig;
+    String hashConfig;
+    Shared *shared = Shared::getInstance();
 
     for( int i = 1; i < argc; i++ ) {
       int argLen = (int) strlen(argv[i]);
@@ -370,19 +368,19 @@ int main_utf8(int argc, char **argv) {
           for( int j = 2; j < argLen; j++ ) {
             switch( argv[i][j] & 0xDFU ) {
               case 'B':
-                options |= OPTION_BRUTE;
+                shared->options |= OPTION_BRUTE;
                 break;
               case 'E':
-                options |= OPTION_TRAINEXE;
+                shared->options |= OPTION_TRAINEXE;
                 break;
               case 'T':
-                options |= OPTION_TRAINTXT;
+                shared->options |= OPTION_TRAINTXT;
                 break;
               case 'A':
-                options |= OPTION_ADAPTIVE;
+                shared->options |= OPTION_ADAPTIVE;
                 break;
               case 'S':
-                options |= OPTION_SKIPRGB;
+                shared->options |= OPTION_SKIPRGB;
                 break;
               default: {
                 printf("Invalid compression switch: %c", argv[1][j]);
@@ -413,10 +411,10 @@ int main_utf8(int argc, char **argv) {
         }
 #ifndef NHASHCONFIG
           else if (strcasecmp(argv[i],"-hash")==0) {
-            if(hashconfig.strsize()!=0)quit("Only one hash configuration may be specified.");
+            if(hashConfig.strsize()!=0)quit("Only one hash configuration may be specified.");
             if(++i==argc)quit("The -hash switch requires more parameters: 14 magic hash constants delimited by non-spaces.");
-            hashconfig+=argv[i];
-            loadHashesFromCmd(hashconfig.c_str());
+            hashConfig+=argv[i];
+            loadHashesFromCmd(hashConfig.c_str());
           }
 #endif
         else if( strcasecmp(argv[i], "-simd") == 0 ) {
@@ -496,60 +494,60 @@ int main_utf8(int argc, char **argv) {
     // File list supplied?
     if( input.beginsWith("@")) {
       if( whattodo == DoCompress ) {
-        options |= OPTION_MULTIPLE_FILE_MODE;
+        shared->options |= OPTION_MULTIPLE_FILE_MODE;
         input.stripStart(1);
       } else
         quit("A file list (a file name prefixed by '@') may only be specified when compressing.");
     }
 
-    int pathtype;
+    int pathType;
 
     //Logfile supplied?
     if( logfile.strsize() != 0 ) {
       if( whattodo != DoCompress )
         quit("A log file may only be specified for compression.");
-      pathtype = examinePath(logfile.c_str());
-      if( pathtype == 2 || pathtype == 4 )
+      pathType = examinePath(logfile.c_str());
+      if( pathType == 2 || pathType == 4 )
         quit("Specified log file should be a file not a directory.");
-      if( pathtype == 0 ) {
+      if( pathType == 0 ) {
         printf("\nThere is a problem with the log file: %s", logfile.c_str());
         quit();
       }
     }
 
     // Separate paths from input filename/directory name
-    pathtype = examinePath(input.c_str());
-    if( pathtype == 2 || pathtype == 4 ) {
+    pathType = examinePath(input.c_str());
+    if( pathType == 2 || pathType == 4 ) {
       printf("\nSpecified input is a directory but should be a file: %s", input.c_str());
       quit();
     }
-    if( pathtype == 3 ) {
+    if( pathType == 3 ) {
       printf("\nSpecified input file does not exist: %s", input.c_str());
       quit();
     }
-    if( pathtype == 0 ) {
+    if( pathType == 0 ) {
       printf("\nThere is a problem with the specified input file: %s", input.c_str());
       quit();
     }
     if( input.lastSlashPos() >= 0 ) {
-      inputpath += input.c_str();
-      inputpath.keepPath();
+      inputPath += input.c_str();
+      inputPath.keepPath();
       input.keepFilename();
     }
 
     // Separate paths from output filename/directory name
     if( output.strsize() > 0 ) {
-      pathtype = examinePath(output.c_str());
-      if( pathtype == 1 || pathtype == 3 ) { //is an existing file, or looks like a file
+      pathType = examinePath(output.c_str());
+      if( pathType == 1 || pathType == 3 ) { //is an existing file, or looks like a file
         if( output.lastSlashPos() >= 0 ) {
-          outputpath += output.c_str();
-          outputpath.keepPath();
+          outputPath += output.c_str();
+          outputPath.keepPath();
           output.keepFilename();
         }
-      } else if( pathtype == 2 || pathtype == 4 ) {//is an existing directory, or looks like a directory
-        outputpath += output.c_str();
-        if( !outputpath.endsWith("/") && !outputpath.endsWith("\\"))
-          outputpath += GOODSLASH;
+      } else if( pathType == 2 || pathType == 4 ) {//is an existing directory, or looks like a directory
+        outputPath += output.c_str();
+        if( !outputPath.endsWith("/") && !outputPath.endsWith("\\"))
+          outputPath += GOODSLASH;
         //output file is not specified
         output.resize(0);
         output.pushBack(0);
@@ -561,20 +559,20 @@ int main_utf8(int argc, char **argv) {
 
     //determine archive name
     if( whattodo == DoCompress ) {
-      archiveName += outputpath.c_str();
+      archiveName += outputPath.c_str();
       if( output.strsize() == 0 ) { // If no archive name is provided, construct it from input (append PROGNAME extension to input filename)
         archiveName += input.c_str();
         archiveName += "." PROGNAME PROGVERSION;
       } else
         archiveName += output.c_str();
     } else { // extract/compare/list: archivename is simply the input
-      archiveName += inputpath.c_str();
+      archiveName += inputPath.c_str();
       archiveName += input.c_str();
     }
     if( verbose ) {
       printf(" Archive        = %s\n", archiveName.c_str());
-      printf(" Input folder   = %s\n", inputpath.strsize() == 0 ? "." : inputpath.c_str());
-      printf(" Output folder  = %s\n", outputpath.strsize() == 0 ? "." : outputpath.c_str());
+      printf(" Input folder   = %s\n", inputPath.strsize() == 0 ? "." : inputPath.c_str());
+      printf(" Output folder  = %s\n", outputPath.strsize() == 0 ? "." : outputPath.c_str());
     }
 
     Mode mode = whattodo == DoCompress ? COMPRESS : DECOMPRESS;
@@ -582,14 +580,14 @@ int main_utf8(int argc, char **argv) {
     ListOfFiles listoffiles;
 
     //set basePath for filelist
-    listoffiles.setBasePath(whattodo == DoCompress ? inputpath.c_str() : outputpath.c_str());
+    listoffiles.setBasePath(whattodo == DoCompress ? inputPath.c_str() : outputPath.c_str());
 
     // Process file list (in multiple file mode)
-    if( options & OPTION_MULTIPLE_FILE_MODE ) { //multiple file mode
+    if( shared->options & OPTION_MULTIPLE_FILE_MODE ) { //multiple file mode
       assert(whattodo == DoCompress);
       // Read and parse filelist file
       FileDisk f;
-      FileName fn(inputpath.c_str());
+      FileName fn(inputPath.c_str());
       fn += input.c_str();
       f.open(fn.c_str(), true);
       while( true ) {
@@ -603,7 +601,7 @@ int main_utf8(int argc, char **argv) {
       for( int i = 0; i < listoffiles.getCount(); i++ )
         getFileSize(listoffiles.getfilename(i)); // Does file exist? Is it readable? (we don't actually need the filesize now)
     } else { //single file mode or extract/compare/list
-      FileName fn(inputpath.c_str());
+      FileName fn(inputPath.c_str());
       fn += input.c_str();
       getFileSize(fn.c_str()); // Does file exist? Is it readable? (we don't actually need the filesize now)
     }
@@ -623,7 +621,7 @@ int main_utf8(int argc, char **argv) {
       c = archive.getchar();
       if( c == EOF)
         printf("Unexpected end of archive file.\n");
-      options = (uint8_t) c;
+      shared->options = (uint8_t) c;
     }
 
     if( verbose ) {
@@ -636,7 +634,7 @@ int main_utf8(int argc, char **argv) {
 
     // Write archive header to archive file
     if( mode == COMPRESS ) {
-      if( options & OPTION_MULTIPLE_FILE_MODE ) { //multiple file mode
+      if( shared->options & OPTION_MULTIPLE_FILE_MODE ) { //multiple file mode
         numberOfFiles = listoffiles.getCount();
         printf("Creating archive %s in multiple file mode with %d file%s...\n", archiveName.c_str(), numberOfFiles,
                numberOfFiles > 1 ? "s" : "");
@@ -645,11 +643,11 @@ int main_utf8(int argc, char **argv) {
       archive.create(archiveName.c_str());
       archive.append(PROGNAME);
       archive.putChar(level);
-      archive.putChar(options);
+      archive.putChar(shared->options);
     }
 
     // In single file mode with no output filename specified we must construct it from the supplied archive filename
-    if((options & OPTION_MULTIPLE_FILE_MODE) == 0 ) { //single file mode
+    if((shared->options & OPTION_MULTIPLE_FILE_MODE) == 0 ) { //single file mode
       if((whattodo == DoExtract || whattodo == DoCompare) && output.strsize() == 0 ) {
         output += input.c_str();
         const char *fileExtension = "." PROGNAME PROGVERSION;
@@ -674,7 +672,7 @@ int main_utf8(int argc, char **argv) {
       if( verbose )
         printf("Writing header : %" PRIu64 " bytes\n", start);
       totalSize += start;
-      if((options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
+      if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
 
         en.compress(TEXT);
         uint64_t len1 = input.size(); //ASCIIZ filename of listfile - with ending zero
@@ -695,10 +693,10 @@ int main_utf8(int argc, char **argv) {
     }
 
     // Decompress list of files
-    if( mode == DECOMPRESS && (options & OPTION_MULTIPLE_FILE_MODE) != 0 ) {
+    if( mode == DECOMPRESS && (shared->options & OPTION_MULTIPLE_FILE_MODE) != 0 ) {
       const char *errmsgInvalidChar = "Invalid character or unexpected end of archive file.";
       // name of listfile
-      FileName listFilename(outputpath.c_str());
+      FileName listFilename(outputPath.c_str());
       if( output.strsize() != 0 )
         quit("Output filename must not be specified when extracting multiple files.");
       if((c = en.decompress()) != TEXT )
@@ -741,14 +739,14 @@ int main_utf8(int argc, char **argv) {
       }
     }
 
-    if( whattodo == DoList && (options & OPTION_MULTIPLE_FILE_MODE) == 0 )
+    if( whattodo == DoList && (shared->options & OPTION_MULTIPLE_FILE_MODE) == 0 )
       quit("Can't list. Filenames are not stored in single file mode.\n");
 
     // Compress or decompress files
     if( mode == COMPRESS ) {
       if( !toScreen ) //we need a minimal feedback when redirected
         fprintf(stderr, "Output is redirected - only minimal feedback is on screen\n");
-      if((options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
+      if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
         for( int i = 0; i < numberOfFiles; i++ ) {
           const char *fName = listoffiles.getfilename(i);
           uint64_t fSize = getFileSize(fName);
@@ -761,7 +759,7 @@ int main_utf8(int argc, char **argv) {
         }
       } else { //single file mode
         FileName fn;
-        fn += inputpath.c_str();
+        fn += inputPath.c_str();
         fn += input.c_str();
         const char *fName = fn.c_str();
         uint64_t fSize = getFileSize(fName);
@@ -785,10 +783,10 @@ int main_utf8(int argc, char **argv) {
       // Log compression results
       if( logfile.strsize() != 0 ) {
         String results;
-        pathtype = examinePath(logfile.c_str());
+        pathType = examinePath(logfile.c_str());
         //Write header if needed
-        if( pathtype == 3 /*does not exist*/ ||
-            (pathtype == 1 && getFileSize(logfile.c_str()) == 0)/*exists but does not contain a header*/)
+        if( pathType == 3 /*does not exist*/ ||
+            (pathType == 1 && getFileSize(logfile.c_str()) == 0)/*exists but does not contain a header*/)
           results += "PROG_NAME\tPROG_VERSION\tCOMMAND_LINE\tLEVEL\tINPUT_FILENAME\tORIGINAL_SIZE_BYTES\tCOMPRESSED_SIZE_BYTES\tRUNTIME_MS\n";
         //Write results to logfile
         results += PROGNAME "\t" PROGVERSION "\t";
@@ -816,14 +814,14 @@ int main_utf8(int argc, char **argv) {
     } else { //decompress
       if( whattodo == DoExtract || whattodo == DoCompare ) {
         FMode fMode = whattodo == DoExtract ? FDECOMPRESS : FCOMPARE;
-        if((options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
+        if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
           for( int i = 0; i < numberOfFiles; i++ ) {
             const char *fName = listoffiles.getfilename(i);
             decompressFile(fName, fMode, en);
           }
         } else { //single file mode
           FileName fn;
-          fn += outputpath.c_str();
+          fn += outputPath.c_str();
           fn += output.c_str();
           const char *fName = fn.c_str();
           decompressFile(fName, fMode, en);

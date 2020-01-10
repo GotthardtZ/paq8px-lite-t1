@@ -101,19 +101,19 @@ void TextModel::update() {
           printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
         switch( Lang.id ) {
           case Language::Unknown: {
-            printf("[language: Unknown, blpos: %d]\n", blpos);
+            printf("[language: Unknown, blPos: %d]\n", blPos);
             break;
           }
           case Language::English: {
-            printf("[language: English, blpos: %d]\n", blpos);
+            printf("[language: English, blPos: %d]\n", blPos);
             break;
           }
           case Language::French: {
-            printf("[language: French,  blpos: %d]\n", blpos);
+            printf("[language: French,  blPos: %d]\n", blPos);
             break;
           }
           case Language::German: {
-            printf("[language: German,  blpos: %d]\n", blpos);
+            printf("[language: German,  blPos: %d]\n", blPos);
             break;
           }
         }

@@ -13,7 +13,7 @@
 #define INJECT_SHARED_bpos const uint8_t bpos = shared->bitPosition;
 #define INJECT_SHARED_c4 const uint32_t c4 = shared->c4;
 #define INJECT_SHARED_c8 const uint32_t c8 = shared->c8;
-#define INJECT_STATS_blpos const uint32_t blpos = stats->blpos;
+#define INJECT_STATS_blpos const uint32_t blPos = stats->blPos;
 
 /**
  * Global context available to all models.
@@ -27,16 +27,25 @@ public:
     uint8_t bitPosition = 0; // Bits in c0 (0 to 7), in other words the position of the bit to be predicted (0=MSB)
     uint32_t c4 = 0; // Last 4 whole bytes (buf(4)..buf(1)), packed.  Last byte is bits 0-7.
     uint32_t c8 = 0; // Another 4 bytes (buf(8)..buf(5))
-    uint8_t options;
+    uint8_t options = 0;
 
     static Shared *getInstance();
     void update();
     void reset();
     void copyTo(Shared *dst);
 private:
-    Shared() {};  // Private so that it can  not be called
-    Shared(Shared const &) {};             // copy constructor is private
-    Shared &operator=(Shared const &) { return *this; };  // assignment operator is private
+    Shared() = default;
+
+    /**
+     * Copy constructor is private so that it cannot be called
+     */
+    Shared(Shared const &) {}
+
+    /**
+     * Assignment operator is private so that it cannot be called
+     */
+    Shared &operator=(Shared const &) { return *this; }
+
     static Shared *mPInstance;
 
 };

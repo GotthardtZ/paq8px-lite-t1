@@ -6,7 +6,7 @@ void Predictor::trainText(const char *const dictionary, int iterations) {
   DummyMixer mDummy(NormalModel::MIXERINPUTS + WordModel::MIXERINPUTS, NormalModel::MIXERCONTEXTS + WordModel::MIXERCONTEXTS,
                     NormalModel::MIXERCONTEXTSETS + WordModel::MIXERCONTEXTSETS);
   stats.blockType = TEXT;
-  assert(shared->buf.getpos() == 0 && stats.blpos == 0);
+  assert(shared->buf.getpos() == 0 && stats.blPos == 0);
   FileDisk f;
   printf("Pre-training models with text...");
   OpenFromMyFolder::anotherFile(&f, dictionary);
@@ -64,7 +64,7 @@ void Predictor::trainText(const char *const dictionary, int iterations) {
 void Predictor::trainExe() {
   ExeModel &exeModel = models.exeModel();
   DummyMixer dummyM(ExeModel::MIXERINPUTS, ExeModel::MIXERCONTEXTS, ExeModel::MIXERCONTEXTSETS);
-  assert(shared->buf.getpos() == 0 && stats.blpos == 0);
+  assert(shared->buf.getpos() == 0 && stats.blPos == 0);
   FileDisk f;
   printf("Pre-training x86/x64 model...");
   OpenFromMyFolder::myself(&f);
@@ -86,8 +86,8 @@ void Predictor::trainExe() {
   stats.reset();
 }
 
-Predictor::Predictor(uint32_t level) : level(level), stats(), models(&stats, level), contextModel(&stats, models, level), sse(&stats),
-        pr(2048) {
+Predictor::Predictor(uint32_t level)
+        : stats(), models(&stats, level), contextModel(&stats, models, level), sse(&stats), pr(2048), level(level) {
   shared->reset();
   shared->buf.setSize(MEM * 8);
   //initiate pre-training

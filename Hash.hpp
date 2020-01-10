@@ -2,6 +2,9 @@
 #define PAQ8PX_HASH_HPP
 
 #include <cstdint>
+#include <cstdio>
+#include "utils.hpp"
+#include <cassert>
 
 //////////////////////// Hash functions //////////////////////////
 //

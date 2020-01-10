@@ -452,7 +452,7 @@ pap8px_v60
 
 pap8px_v61
 2009.06.25
-- Added a simple color transformation to paq8px. All detected 24-bit image data are transformed. Different formats have diferent color order RGB (.tiff) vs. BGR (.bmp) -> this could cause different compression for the same image in different formats.
+- Added a simple color transformation to paq8px. All detected 24-bit image data are transformed. Different formats have different color order RGB (.tiff) vs. BGR (.bmp) -> this could cause different compression for the same image in different formats.
 
 
 pap8px_v62
@@ -954,7 +954,7 @@ paq8px_v130_fix1
 paq8px_v130_fix2 
 2017.01.18
 - On decompression the following message was printed: "FileDisk: unable to open file (No such file or directory)". Fixed.
-- Printing more info when FileDisk.create() or FileDisk.createtmp() fails for any reason (name of the file and error: access denied, filen not found, etc.)
+- Printing more info when FileDisk.create() or FileDisk.createtmp() fails for any reason (name of the file and error: access denied, file not found, etc.)
 - Cosmetic fixes in remarks and/or code (Array's chkindex, IntBuf, jpegModel, Encoder, detect(), etc.)
 - No model or compression improvements
 

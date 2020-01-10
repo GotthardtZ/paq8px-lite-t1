@@ -16,14 +16,13 @@ protected:
     uint32_t numContexts; // Number of context indexes present in cxt array (0..s-1)
     Array<uint32_t> cxt; // context index of last prediction per context set
     UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
-    Shared *shared = Shared::getInstance();
 public:
     enum MAPTYPE {
         Generic, BitHistory, Run
     };
 
     /**
-     * Creates a StateMap with \n contexts using 4*n bytes memory.
+     * Creates a StateMap with n contexts using 4*n bytes memory.
      * @param s
      * @param n number of contexts
      * @param lim

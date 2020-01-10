@@ -117,7 +117,7 @@ constexpr bool isPowerOf2(T x) {
 class IntentionalException : public std::exception {};
 
 // Error handler: print message if any, and exit
-static void quit(const char *const message = nullptr) {
+[[noreturn]] static void quit(const char *const message = nullptr) {
   if( message )
     printf("\n%s", message);
   printf("\n");
@@ -245,5 +245,75 @@ inline bool isPNG(BlockType ft) { return ft == PNG8 || ft == PNG8GRAY || ft == P
 #define SPACE 0x20
 #define QUOTE 0x22
 #define APOSTROPHE 0x27
+
+
+static inline uint8_t clip(int const px) {
+  if( px > 255 )
+    return 255;
+  if( px < 0 )
+    return 0;
+  return px;
+}
+
+static inline uint8_t clamp4(const int px, const uint8_t n1, const uint8_t n2, const uint8_t n3, const uint8_t n4) {
+  int maximum = n1;
+  if( maximum < n2 )
+    maximum = n2;
+  if( maximum < n3 )
+    maximum = n3;
+  if( maximum < n4 )
+    maximum = n4;
+  int minimum = n1;
+  if( minimum > n2 )
+    minimum = n2;
+  if( minimum > n3 )
+    minimum = n3;
+  if( minimum > n4 )
+    minimum = n4;
+  if( px < minimum )
+    return minimum;
+  if( px > maximum )
+    return maximum;
+  return px;
+}
+
+/**
+ * Returns floor(log2(x)).
+ * 0/1->0, 2->1, 3->1, 4->2 ..., 30->4,  31->4, 32->5,  33->5
+ * @param x
+ * @return floor(log2(x))
+ */
+static uint32_t ilog2(uint32_t x) {
+#ifdef _MSC_VER
+#include <intrin.h>
+  DWORD tmp = 0;
+  if (x != 0) _BitScanReverse(&tmp, x);
+  return tmp;
+#elif __GNUC__
+  if( x != 0 )
+    x = 31 - __builtin_clz(x);
+  return x;
+#else
+  //copy the leading "1" bit to its left (0x03000000 -> 0x03ffffff)
+  x |= (x >> 1);
+  x |= (x >> 2);
+  x |= (x >> 4);
+  x |= (x >> 8);
+  x |= (x >> 16);
+  //how many trailing bits do we have (except the first)?
+  return BitCount(x >> 1);
+#endif
+}
+
+static inline uint8_t logMeanDiffQt(const uint8_t a, const uint8_t b, const uint8_t limit = 7) {
+  if( a == b )
+    return 0;
+  uint8_t sign = a > b ? 8 : 0;
+  return sign | min(limit, ilog2((a + b) / max(2, abs(a - b) * 2) + 1));
+}
+
+static inline uint32_t logQt(const uint8_t px, const uint8_t bits) {
+  return (uint32_t(0x100 | px)) >> max(0, (int) (ilog2(px) - bits));
+}
 
 #endif //PAQ8PX_UTILS_HPP

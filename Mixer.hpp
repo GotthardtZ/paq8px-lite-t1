@@ -4,6 +4,7 @@
 #include <immintrin.h>
 #include "utils.hpp"
 #include "IPredictor.hpp"
+#include "Shared.hpp"
 
 #ifdef __GNUC__
 
@@ -144,13 +145,12 @@ public:
 
     /**
      * Input x (call up to n times)
-     * m.add(stretch(p)) inputs a prediction from one of \n models.  The
+     * m.add(stretch(p)) inputs a prediction from one of n models.  The
      * prediction should be positive to predict a 1 bit, negative for 0,
      * nominally +-256 to +-2K.  The maximum allowed value is +-32K but
-     * using such large values may cause overflow if \n is large.
+     * using such large values may cause overflow if n is large.
      * @param x
      */
-
     void add(const int x) {
       assert(nx < n);
       assert(x == short(x));
@@ -158,7 +158,7 @@ public:
     }
 
     /**
-     *  m.set(cx, range) selects cx as one of \range neural networks to
+     *  m.set(cx, range) selects cx as one of range neural networks to
      *  use.  0 <= cx < range. Should be called up to s times such
      *  that the total of the ranges is <= m.
      * @param cx

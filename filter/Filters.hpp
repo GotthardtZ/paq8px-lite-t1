@@ -11,8 +11,10 @@
 #include "../Array.hpp"
 #include "../file/FileDisk.hpp"
 #include "../file/FileTmp.hpp"
+#include "../Shared.hpp"
 
 /////////////////////////// Filters /////////////////////////////////
+//TODO: Update this documentation
 //
 // Before compression, data is encoded in blocks with the following format:
 //
@@ -118,6 +120,7 @@ bool isGrayscalePalette(File *in, int n = 256, int isRGBA = 0) {
 
 // Detect blocks
 BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
+  Shared *shared = Shared::getInstance();
   //TODO: Large file support
   int n = (int) blockSize;
   uint32_t buf3 = 0, buf2 = 0, buf1 = 0, buf0 = 0; // last 16 bytes
@@ -215,7 +218,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
 
     int zh = parseZlibHeader(((int) zBuf[(zBufPos - 32) & 0xFF]) * 256 + (int) zBuf[(zBufPos - 32 + 1) & 0xFF]);
     bool valid = (i >= 31 && zh != -1);
-    if( !valid && options & OPTION_BRUTE && i >= 255 ) {
+    if( !valid && shared->options & OPTION_BRUTE && i >= 255 ) {
       uint8_t bType = (zBuf[zBufPos] & 7) >> 1;
       if((valid = (bType == 1 || bType == 2))) {
         int maximum = 0, used = 0, offset = zBufPos;
@@ -348,10 +351,10 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
         cdi = 0;
       else if( p == 16 && i + 2336 < n ) {
         uint8_t data[2352];
-        const uint64_t savedpos = in->curPos();
+        const uint64_t savedPos = in->curPos();
         in->setpos(start + i - 23);
         in->blockRead(data, 2352);
-        in->setpos(savedpos);
+        in->setpos(savedPos);
         int t = expandCdSector(data, cda, 1);
         if( t != cdm )
           cdm = t * (i - cdi < 2352);
@@ -416,15 +419,15 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
           else if( p == 22 + wavLen )
             wavch = bswap(buf0) & 0xffff; // number of channels: 1 or 2
           else if( p == 34 + wavLen )
-            wavbps = bswap(buf0) & 0xffff; // bits per smaple: 8 or 16
+            wavbps = bswap(buf0) & 0xffff; // bits per sample: 8 or 16
           else if( p == 40 + wavLen + wavm && buf1 != 0x64617461 /*"data"*/)
             wavm += ((bswap(buf0) + 1) & (-2)) + 8, wavi = (wavm > 0xfffff ? 0 : wavi);
           else if( p == 40 + wavLen + wavm ) {
-            int wavd = bswap(buf0); // size of data section
+            int wavD = bswap(buf0); // size of data section
             wavLen = 0;
-            if((wavch == 1 || wavch == 2) && (wavbps == 8 || wavbps == 16) && wavd > 0 && wavSize >= wavd + 36 &&
-               wavd % ((wavbps / 8) * wavch) == 0 )
-              AUD_DET((wavbps == 8) ? AUDIO : AUDIO_LE, wavi - 3, 44 + wavm, wavd, wavch + wavbps / 4 - 3);
+            if((wavch == 1 || wavch == 2) && (wavbps == 8 || wavbps == 16) && wavD > 0 && wavSize >= wavD + 36 &&
+               wavD % ((wavbps / 8) * wavch) == 0 )
+              AUD_DET((wavbps == 8) ? AUDIO : AUDIO_LE, wavi - 3, 44 + wavm, wavD, wavch + wavbps / 4 - 3);
             wavi = 0;
           }
         } else {
@@ -438,9 +441,9 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
             if( p == 8 && (buf1 != 0x73647461 /*sdta*/ || buf0 != 0x736D706C /*smpl*/))
               wavi = 0;
             else if( p == 12 ) {
-              int wavd = bswap(buf0);
-              if( wavd && (wavd + 12) == wavLen )
-                AUD_DET(AUDIO_LE, wavi - 3, (12 + wavlist - (wavi - 3) + 1) & ~1, wavd, 1 + 16 / 4 - 3 /*mono, 16-bit*/);
+              int wavD = bswap(buf0);
+              if( wavD && (wavD + 12) == wavLen )
+                AUD_DET(AUDIO_LE, wavi - 3, (12 + wavlist - (wavi - 3) + 1) & ~1, wavD, 1 + 16 / 4 - 3 /*mono, 16-bit*/);
               wavi = 0;
             }
           }
@@ -470,10 +473,10 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
     // Detect .mod file header
     if((buf0 == 0x4d2e4b2e || buf0 == 0x3643484e || buf0 == 0x3843484e // m.K. 6CHN 8CHN
         || buf0 == 0x464c5434 || buf0 == 0x464c5438) && (buf1 & 0xc0c0c0c0) == 0 && i >= 1083 ) {
-      const uint64_t savedpos = in->curPos();
+      const uint64_t savedPos = in->curPos();
       const int chn = ((buf0 >> 24) == 0x36 ? 6 : (((buf0 >> 24) == 0x38 || (buf0 & 0xff) == 0x38) ? 8 : 4));
       int len = 0; // total length of samples
-      int numpat = 1; // number of patterns
+      int numPat = 1; // number of patterns
       for( int j = 0; j < 31; j++ ) {
         in->setpos(start + i - 1083 + 42 + j * 30);
         const int i1 = in->getchar();
@@ -483,12 +486,12 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
       in->setpos(start + i - 131);
       for( int j = 0; j < 128; j++ ) {
         int x = in->getchar();
-        if( x + 1 > numpat )
-          numpat = x + 1;
+        if( x + 1 > numPat )
+          numPat = x + 1;
       }
-      if( numpat < 65 )
-        AUD_DET(AUDIO, i - 1083, 1084 + numpat * 256 * chn, len, 4 /*mono, 8-bit*/);
-      in->setpos(savedpos);
+      if( numPat < 65 )
+        AUD_DET(AUDIO, i - 1083, 1084 + numPat * 256 * chn, len, 4 /*mono, 8-bit*/);
+      in->setpos(savedPos);
     }
 
     // Detect .s3m file header
@@ -502,7 +505,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
       } else if( p == 16 && (((buf1 >> 16) & 0xff) != 0x13 || buf0 != 0x5343524d /*SCRM*/))
         s3mi = 0;
       else if( p == 16 ) {
-        const uint64_t savedpos = in->curPos();
+        const uint64_t savedPos = in->curPos();
         int b[31], samStart = (1 << 16), samEnd = 0, ok = 1;
         for( int j = 0; j < s3Mni; j++ ) {
           in->setpos(start + s3mi - 31 + 0x60 + s3Mno + j * 2);
@@ -526,7 +529,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
         if( ok && samStart < (1 << 16))
           AUD_DET(AUDIO, s3mi - 31, samStart, samEnd - samStart, 0 /*mono, 8-bit*/);
         s3mi = 0;
-        in->setpos(savedpos);
+        in->setpos(savedPos);
       }
     }
 #endif //  USE_AUDIOMODEL
@@ -599,29 +602,29 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
 
           if( imgbpp == 8 ) {
             const uint64_t colorPalettePos = dibi - 18 + 54;
-            const uint64_t savedpos = in->curPos();
+            const uint64_t savedPos = in->curPos();
             in->setpos(colorPalettePos);
             if( isGrayscalePalette(in, nColors, 1))
               blockType = IMAGE8GRAY;
-            in->setpos(savedpos);
+            in->setpos(savedPos);
           }
 
-          const uint32_t headerpos = bmpi > 0 ? bmpi - 1 : dibi - 4;
-          const uint32_t minheadersize = (bmpi > 0 ? 54 : 54 - 14) + nColors * 4;
-          const uint32_t headersize = bmpi > 0 ? bmpof : minheadersize;
+          const uint32_t headerPos = bmpi > 0 ? bmpi - 1 : dibi - 4;
+          const uint32_t minHeaderSize = (bmpi > 0 ? 54 : 54 - 14) + nColors * 4;
+          const uint32_t headerSize = bmpi > 0 ? bmpof : minHeaderSize;
 
           // some final sanity checks
           if( bmps != 0 &&
               bmps < widthInBytes * bmpy ) { /*printf("\nBMP guard: image is larger than reported in header\n",bmps,widthInBytes*bmpy);*/
-          } else if( start + blockSize < headerpos + headersize + widthInBytes * bmpy ) { /*printf("\nBMP guard: cropped data\n");*/
-          } else if( headersize == (bmpi > 0 ? 54 : 54 - 14) && nColors > 0 ) { /*printf("\nBMP guard: missing palette\n");*/
-          } else if( bmpi > 0 && bmpof < minheadersize ) { /*printf("\nBMP guard: overlapping color palette\n");*/
+          } else if( start + blockSize < headerPos + headerSize + widthInBytes * bmpy ) { /*printf("\nBMP guard: cropped data\n");*/
+          } else if( headerSize == (bmpi > 0 ? 54 : 54 - 14) && nColors > 0 ) { /*printf("\nBMP guard: missing palette\n");*/
+          } else if( bmpi > 0 && bmpof < minHeaderSize ) { /*printf("\nBMP guard: overlapping color palette\n");*/
           } else if( bmpi > 0 && uint64_t(bmpi) - 1 + bmpof + widthInBytes * bmpy >
                                  start + blockSize ) { /*printf("\nBMP guard: reported pixel data offset is incorrect\n");*/
           } else if( widthInBytes * bmpy <= 64 ) { /*printf("\nBMP guard: too small\n");*/
           } // too small - not worthy to use the image models
           else
-            IMG_DET(blockType, headerpos, headersize, widthInBytes, bmpy);
+            IMG_DET(blockType, headerPos, headerSize, widthInBytes, bmpy);
         }
         bmpi = dibi = 0;
       }
@@ -747,41 +750,41 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
 
     // Detect .tiff file header (2/8/24 bit color, not compressed).
     if( buf1 == 0x49492a00 && n > i + (int) bswap(buf0)) {
-      const uint64_t savedpos = in->curPos();
+      const uint64_t savedPos = in->curPos();
       in->setpos(start + i + (uint64_t) bswap(buf0) - 7);
 
       // read directory
-      int dirsize = in->getchar();
-      int tifx = 0, tify = 0, tifz = 0, tifzb = 0, tifc = 0, tifofs = 0, tifofval = 0, tifsize = 0, b[12];
+      int dirSize = in->getchar();
+      int tifX = 0, tifY = 0, tifZ = 0, tifZb = 0, tifC = 0, tifofs = 0, tifofval = 0, tifSize = 0, b[12];
       if( in->getchar() == 0 ) {
-        for( int i = 0; i < dirsize; i++ ) {
+        for( int i = 0; i < dirSize; i++ ) {
           for( int j = 0; j < 12; j++ )
             b[j] = in->getchar();
           if( b[11] == EOF)
             break;
           int tag = b[0] + (b[1] << 8);
-          int tagfmt = b[2] + (b[3] << 8);
-          int taglen = b[4] + (b[5] << 8) + (b[6] << 16) + (b[7] << 24);
-          int tagval = b[8] + (b[9] << 8) + (b[10] << 16) + (b[11] << 24);
-          if( tagfmt == 3 || tagfmt == 4 ) {
+          int tagFmt = b[2] + (b[3] << 8);
+          int tagLen = b[4] + (b[5] << 8) + (b[6] << 16) + (b[7] << 24);
+          int tagVal = b[8] + (b[9] << 8) + (b[10] << 16) + (b[11] << 24);
+          if( tagFmt == 3 || tagFmt == 4 ) {
             if( tag == 256 )
-              tifx = tagval;
+              tifX = tagVal;
             else if( tag == 257 )
-              tify = tagval;
+              tifY = tagVal;
             else if( tag == 258 )
-              tifzb = taglen == 1 ? tagval : 8; // bits per component
+              tifZb = tagLen == 1 ? tagVal : 8; // bits per component
             else if( tag == 259 )
-              tifc = tagval; // 1 = no compression
-            else if( tag == 273 && tagfmt == 4 )
-              tifofs = tagval, tifofval = (taglen <= 1);
+              tifC = tagVal; // 1 = no compression
+            else if( tag == 273 && tagFmt == 4 )
+              tifofs = tagVal, tifofval = (tagLen <= 1);
             else if( tag == 277 )
-              tifz = tagval; // components per pixel
-            else if( tag == 279 && taglen == 1 )
-              tifsize = tagval;
+              tifZ = tagVal; // components per pixel
+            else if( tag == 279 && tagLen == 1 )
+              tifSize = tagVal;
           }
         }
       }
-      if( tifx && tify && tifzb && (tifz == 1 || tifz == 3) && ((tifc == 1) || (tifc == 5 /*LZW*/ && tifsize > 0)) &&
+      if( tifX && tifY && tifZb && (tifZ == 1 || tifZ == 3) && ((tifC == 1) || (tifC == 5 /*LZW*/ && tifSize > 0)) &&
           (tifofs && tifofs + i < n)) {
         if( !tifofval ) {
           in->setpos(start + i + tifofs - 7);
@@ -790,24 +793,24 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
           tifofs = b[0] + (b[1] << 8) + (b[2] << 16) + (b[3] << 24);
         }
         if( tifofs && tifofs < (1 << 18) && tifofs + i < n ) {
-          if( tifc == 1 ) {
-            if( tifz == 1 && tifzb == 1 )
-              IMG_DET(IMAGE1, i - 7, tifofs, ((tifx - 1) >> 3) + 1, tify);
-            else if( tifz == 1 && tifzb == 8 )
-              IMG_DET(IMAGE8, i - 7, tifofs, tifx, tify);
-            else if( tifz == 3 && tifzb == 8 )
-              IMG_DET(IMAGE24, i - 7, tifofs, tifx * 3, tify);
-          } else if( tifc == 5 && tifsize > 0 ) {
-            tifx = ((tifx + 8 - tifzb) / (9 - tifzb)) * tifz;
-            info = tifz * tifzb;
-            info = (((info == 1) ? IMAGE1 : ((info == 8) ? IMAGE8 : IMAGE24)) << 24) | tifx;
-            detd = tifsize;
+          if( tifC == 1 ) {
+            if( tifZ == 1 && tifZb == 1 )
+              IMG_DET(IMAGE1, i - 7, tifofs, ((tifX - 1) >> 3) + 1, tifY);
+            else if( tifZ == 1 && tifZb == 8 )
+              IMG_DET(IMAGE8, i - 7, tifofs, tifX, tifY);
+            else if( tifZ == 3 && tifZb == 8 )
+              IMG_DET(IMAGE24, i - 7, tifofs, tifX * 3, tifY);
+          } else if( tifC == 5 && tifSize > 0 ) {
+            tifX = ((tifX + 8 - tifZb) / (9 - tifZb)) * tifZ;
+            info = tifZ * tifZb;
+            info = (((info == 1) ? IMAGE1 : ((info == 8) ? IMAGE8 : IMAGE24)) << 24) | tifX;
+            detd = tifSize;
             in->setpos(start + i - 7 + tifofs);
             return dett = LZW;
           }
         }
       }
-      in->setpos(savedpos);
+      in->setpos(savedPos);
     }
 
     // Detect .tga image (8-bit 256 colors or 24-bit uncompressed)
@@ -832,7 +835,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
           else if( tgat == 3 )
             IMG_DET(IMAGE8GRAY, tga - 7, 18 + tgaid, tgax, tgay);
           else if( tgat == 9 || tgat == 11 ) {
-            const uint64_t savedpos = in->curPos();
+            const uint64_t savedPos = in->curPos();
             in->setpos(start + tga + 11 + tgaid);
             if( tgat == 9 ) {
               info = (isGrayscalePalette(in) ? IMAGE8GRAY : IMAGE8) << 24;
@@ -868,7 +871,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
               in->setpos(start + tga + 11 + tgaid + 256 * tgamap);
               return dett = RLE;
             } else
-              in->setpos(savedpos);
+              in->setpos(savedPos);
           }
         }
         tga = 0;
@@ -931,9 +934,9 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
     if(((buf1 & 0xfe) == 0xe8 || (buf1 & 0xfff0) == 0x0f80) && ((buf0 + 1) & 0xfe) == 0 ) {
       int r = buf0 >> 24; // relative address low 8 bits
       int a = ((buf0 >> 24) + i) & 0xff; // absolute address low 8 bits
-      int rdist = i - relPos[r];
-      int adist = i - absPos[a];
-      if( adist < rdist && adist < 0x800 && absPos[a] > 5 ) {
+      int rDist = i - relPos[r];
+      int aDist = i - absPos[a];
+      if( aDist < rDist && aDist < 0x800 && absPos[a] > 5 ) {
         e8e9last = i;
         ++e8e9count;
         if( e8e9pos == 0 || e8e9pos > absPos[a] )
@@ -1118,15 +1121,15 @@ transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int in
                      uint64_t begin) {
   if( hasTransform(type)) {
     FileTmp tmp;
-    int hdrsize = 0;
-    uint64_t diffFound = encodeFunc(type, in, &tmp, len, info, hdrsize);
-    const uint64_t tmpsize = tmp.curPos();
-    tmp.setpos(tmpsize); //switch to read mode
+    int headerSize = 0;
+    uint64_t diffFound = encodeFunc(type, in, &tmp, len, info, headerSize);
+    const uint64_t tmpSize = tmp.curPos();
+    tmp.setpos(tmpSize); //switch to read mode
     if( diffFound == 0 ) {
       tmp.setpos(0);
       en.setFile(&tmp);
       in->setpos(begin);
-      decodeFunc(type, en, &tmp, tmpsize, info, in, FCOMPARE, diffFound);
+      decodeFunc(type, en, &tmp, tmpSize, info, in, FCOMPARE, diffFound);
     }
     // Test fails, compress without transform
     if( diffFound > 0 || tmp.getchar() != EOF) {
@@ -1138,7 +1141,7 @@ transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int in
       if( hasRecursion(type)) {
         //TODO: Large file support
         en.compress(type);
-        en.encodeBlockSize(tmpsize);
+        en.encodeBlockSize(tmpSize);
         BlockType type2 = (BlockType) ((info >> 24) & 0xFF);
         if( type2 != DEFAULT ) {
           String blstrSub0;
@@ -1150,16 +1153,17 @@ transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int in
           String blstrSub2;
           blstrSub2 += blstr.c_str();
           blstrSub2 += "-->";
-          printf(" %-11s | ->  exploded     |%10d bytes [%d - %d]\n", blstrSub0.c_str(), int(tmpsize), 0, int(tmpsize - 1));
-          printf(" %-11s | --> added header |%10d bytes [%d - %d]\n", blstrSub1.c_str(), hdrsize, 0, hdrsize - 1);
-          directEncodeBlock(HDR, &tmp, hdrsize, en);
-          printf(" %-11s | --> data         |%10d bytes [%d - %d]\n", blstrSub2.c_str(), int(tmpsize - hdrsize), hdrsize, int(tmpsize - 1));
-          transformEncodeBlock(type2, &tmp, tmpsize - hdrsize, en, info & 0xffffff, blstr, recursionLevel, p1, p2, hdrsize);
+          printf(" %-11s | ->  exploded     |%10d bytes [%d - %d]\n", blstrSub0.c_str(), int(tmpSize), 0, int(tmpSize - 1));
+          printf(" %-11s | --> added header |%10d bytes [%d - %d]\n", blstrSub1.c_str(), headerSize, 0, headerSize - 1);
+          directEncodeBlock(HDR, &tmp, headerSize, en);
+          printf(" %-11s | --> data         |%10d bytes [%d - %d]\n", blstrSub2.c_str(), int(tmpSize - headerSize), headerSize,
+                 int(tmpSize - 1));
+          transformEncodeBlock(type2, &tmp, tmpSize - headerSize, en, info & 0xffffff, blstr, recursionLevel, p1, p2, headerSize);
         } else {
-          compressRecursive(&tmp, tmpsize, en, blstr, recursionLevel + 1, p1, p2);
+          compressRecursive(&tmp, tmpSize, en, blstr, recursionLevel + 1, p1, p2);
         }
       } else {
-        directEncodeBlock(type, &tmp, tmpsize, en, hasInfo(type) ? info : -1);
+        directEncodeBlock(type, &tmp, tmpSize, en, hasInfo(type) ? info : -1);
       }
     }
     tmp.close();
@@ -1169,12 +1173,12 @@ transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int in
 }
 
 void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, String &blstr, int recursionLevel, float p1, float p2) {
-  static const char *typenames[25] = {"default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
+  static const char *typeNames[25] = {"default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
                                       "24b-image", "32b-image", "audio", "audio - le", "exe", "cd", "zlib", "base64", "gif", "png-8b",
                                       "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol", "rle", "lzw"};
-  static const char *audiotypes[4] = {"8b-mono", "8b-stereo", "16b-mono", "16b-stereo"};
+  static const char *audioTypes[4] = {"8b-mono", "8b-stereo", "16b-mono", "16b-stereo"};
   BlockType type = DEFAULT;
-  int blnum = 0, info = 0; // image width or audio type
+  int blNum = 0, info = 0; // image width or audio type
   uint64_t begin = in->curPos();
   uint64_t blockEnd = begin + blockSize;
   if( recursionLevel == 5 ) {
@@ -1184,51 +1188,51 @@ void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, String &
   float pscale = blockSize > 0 ? (p2 - p1) / blockSize : 0;
 
   // Transform and test in blocks
-  uint64_t nextblockStart;
+  uint64_t nextBlockStart;
   uint64_t textStart;
   uint64_t textEnd = 0;
-  BlockType nextblockType;
-  BlockType nextblockTypeBak = DEFAULT; //initialized only to suppress a compiler warning, will be overwritten
+  BlockType nextBlockType;
+  BlockType nextBlockTypeBak = DEFAULT; //initialized only to suppress a compiler warning, will be overwritten
   uint64_t bytesToGo = blockSize;
   while( bytesToGo > 0 ) {
     if( type == TEXT || type == TEXT_EOL ) { // it was a split block in the previous iteration: TEXT -> DEFAULT -> ...
-      nextblockType = nextblockTypeBak;
-      nextblockStart = textEnd + 1;
+      nextBlockType = nextBlockTypeBak;
+      nextBlockStart = textEnd + 1;
     } else {
-      nextblockType = detect(in, bytesToGo, type, info);
-      nextblockStart = in->curPos();
+      nextBlockType = detect(in, bytesToGo, type, info);
+      nextBlockStart = in->curPos();
       in->setpos(begin);
     }
 
     // override (any) next block detection by a preceding text block
     textStart = begin + textParser._start[0];
     textEnd = begin + textParser._end[0];
-    if( textEnd > nextblockStart - 1 )
-      textEnd = nextblockStart - 1;
+    if( textEnd > nextBlockStart - 1 )
+      textEnd = nextBlockStart - 1;
     if( type == DEFAULT && textStart < textEnd ) { // only DEFAULT blocks may be overridden
-      if( textStart == begin && textEnd == nextblockStart - 1 ) { // whole first block is text
+      if( textStart == begin && textEnd == nextBlockStart - 1 ) { // whole first block is text
         type = (textParser._EOLType[0] == 1) ? TEXT_EOL : TEXT; // DEFAULT -> TEXT
       } else if( textEnd - textStart + 1 >= TEXT_MIN_SIZE ) { // we have one (or more) large enough text portion that splits DEFAULT
         if( textStart != begin ) { // text is not the first block
-          nextblockStart = textStart; // first block is still DEFAULT
-          nextblockTypeBak = nextblockType;
-          nextblockType = (textParser._EOLType[0] == 1) ? TEXT_EOL : TEXT; //next block is text
+          nextBlockStart = textStart; // first block is still DEFAULT
+          nextBlockTypeBak = nextBlockType;
+          nextBlockType = (textParser._EOLType[0] == 1) ? TEXT_EOL : TEXT; //next block is text
           textParser.removeFirst();
         } else {
           type = (textParser._EOLType[0] == 1) ? TEXT_EOL : TEXT; // first block is text
-          nextblockType = DEFAULT; // next block is DEFAULT
-          nextblockStart = textEnd + 1;
+          nextBlockType = DEFAULT; // next block is DEFAULT
+          nextBlockStart = textEnd + 1;
         }
       }
       // no text block is found, still DEFAULT
     }
 
-    if( nextblockStart > blockEnd ) { // if a detection reports a larger size than the actual block size, fall back
-      nextblockStart = begin + 1;
-      type = nextblockType = DEFAULT;
+    if( nextBlockStart > blockEnd ) { // if a detection reports a larger size than the actual block size, fall back
+      nextBlockStart = begin + 1;
+      type = nextBlockType = DEFAULT;
     }
 
-    uint64_t len = nextblockStart - begin;
+    uint64_t len = nextBlockStart - begin;
     if( len > 0 ) {
       en.setStatusRange(p1, p2 = p1 + pscale * len);
 
@@ -1237,18 +1241,18 @@ void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, String &
       blstrSub += blstr.c_str();
       if( blstrSub.strsize() != 0 )
         blstrSub += "-";
-      blstrSub += uint64_t(blnum);
-      blnum++;
+      blstrSub += uint64_t(blNum);
+      blNum++;
 
       printf(" %-11s | %-16s |%10" PRIu64 " bytes [%" PRIu64 " - %" PRIu64 "]", blstrSub.c_str(),
-             typenames[(type == ZLIB && isPNG(BlockType(info >> 24U))) ? info >> 24U : type], len, begin, nextblockStart - 1);
+             typeNames[(type == ZLIB && isPNG(BlockType(info >> 24U))) ? info >> 24U : type], len, begin, nextBlockStart - 1);
       if( type == AUDIO || type == AUDIO_LE )
-        printf(" (%s)", audiotypes[info % 4]);
+        printf(" (%s)", audioTypes[info % 4]);
       else if( type == IMAGE1 || type == IMAGE4 || type == IMAGE8 || type == IMAGE8GRAY || type == IMAGE24 || type == IMAGE32 ||
                (type == ZLIB && isPNG(BlockType(info >> 24U))))
         printf(" (width: %d)", (type == ZLIB) ? (info & 0xFFFFFFU) : info);
       else if( hasRecursion(type) && (info >> 24U) != DEFAULT )
-        printf(" (%s)", typenames[info >> 24U]);
+        printf(" (%s)", typeNames[info >> 24U]);
       else if( type == CD )
         printf(" (mode%d/form%d)", info == 1 ? 1 : 2, info != 3 ? 1 : 2);
       printf("\n");
@@ -1256,8 +1260,8 @@ void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, String &
       p1 = p2;
       bytesToGo -= len;
     }
-    type = nextblockType;
-    begin = nextblockStart;
+    type = nextBlockType;
+    begin = nextBlockStart;
   }
 }
 
@@ -1266,6 +1270,7 @@ void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, String &
 // <type> <size> and call encode_X to convert to type X.
 // Test transform and compress.
 void compressfile(const char *filename, uint64_t fileSize, Encoder &en, bool verbose) {
+  Shared *shared = Shared::getInstance();
   assert(en.getMode() == COMPRESS);
   assert(filename && filename[0]);
 
@@ -1280,7 +1285,7 @@ void compressfile(const char *filename, uint64_t fileSize, Encoder &en, bool ver
   compressRecursive(&in, fileSize, en, blstr, 0, 0.0f, 1.0f);
   in.close();
 
-  if( options & OPTION_MULTIPLE_FILE_MODE ) { //multiple file mode
+  if( shared->options & OPTION_MULTIPLE_FILE_MODE ) { //multiple file mode
     if( verbose )
       printf("File size to encode   : 4\n"); //This string must be long enough. "Compressing ..." is still on screen, we need to overwrite it.
     printf("File input size       : %" PRIu64 "\n", fileSize);
@@ -1313,7 +1318,7 @@ uint64_t decompressRecursive(File *out, uint64_t blockSize, Encoder &en, FMode m
       }
       tmp.close();
     } else if( hasTransform(type)) {
-      len = decodeFunc(type, en, NULL, len, info, out, mode, diffFound);
+      len = decodeFunc(type, en, nullptr, len, info, out, mode, diffFound);
     } else {
       for( uint64_t j = 0; j < len; ++j ) {
         if( !(j & 0xfff))

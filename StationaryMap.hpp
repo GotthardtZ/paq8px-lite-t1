@@ -1,6 +1,13 @@
 #ifndef PAQ8PX_STATIONARYMAP_HPP
 #define PAQ8PX_STATIONARYMAP_HPP
 
+#include "IPredictor.hpp"
+#include "UpdateBroadcaster.hpp"
+#include "Mixer.hpp"
+#include "DivisionTable.hpp"
+#include "Stretch.hpp"
+#include "Hash.hpp"
+
 /**
  * map for modelling contexts of (nearly-)stationary data.
  * The context is looked up directly. For each bit modelled, a 32bit element stores

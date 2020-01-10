@@ -611,7 +611,7 @@ private:
      * @param x
      * @return
      */
-    uint32_t execxt(int i, int x = 0);
+    uint32_t exeCxt(int i, int x = 0);
 
     void update();
 

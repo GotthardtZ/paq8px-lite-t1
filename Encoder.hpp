@@ -95,7 +95,7 @@ public:
     void printStatus();
 };
 
-Encoder::Encoder(Mode m, File *f, uint32_t level) : mode(m), archive(f), x1(0), x2(0xffffffff), x(0), alt(0), predictor(level) {
+Encoder::Encoder(Mode m, File *f, uint32_t level) : predictor(level), mode(m), archive(f), x1(0), x2(0xffffffff), x(0), alt(nullptr) {
   if( mode == DECOMPRESS ) {
     uint64_t start = size();
     archive->setEnd();

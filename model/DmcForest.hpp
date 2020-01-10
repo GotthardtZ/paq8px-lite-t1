@@ -3,6 +3,7 @@
 
 #include "../Shared.hpp"
 #include "DmcModel.hpp"
+#include "../Array.hpp"
 
 /**
  * This class solves two problems of the DMC model
@@ -48,41 +49,13 @@ public:
     static constexpr int MIXERINPUTS = 2 + 8 / 2; // 6 : fast models (2 individually) + slow models (8 combined pairwise)
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
-
-    DmcForest(const uint64_t size) : dmcModels(MODELS) {
-      for( int i = MODELS - 1; i >= 0; i-- )
-        dmcModels[i] = new DmcModel(size / dmcMem[i], dmcParams[i]);
-    }
-
-    ~DmcForest() {
-      for( int i = MODELS - 1; i >= 0; i-- )
-        delete dmcModels[i];
-    }
-
+    DmcForest(const uint64_t size);
+    ~DmcForest();
     /**
      * Update and predict
      * @param m
      */
-    void mix(Mixer &m) {
-      int i = MODELS;
-      // the slow models predict individually
-      m.add(dmcModels[--i]->st() >> 3U);
-      m.add(dmcModels[--i]->st() >> 3U);
-      // the fast models are combined for better stability
-      while( i > 0 ) {
-        const int pr1 = dmcModels[--i]->st();
-        const int pr2 = dmcModels[--i]->st();
-        m.add((pr1 + pr2) >> 4U);
-      }
-
-      // reset models when their structure can't adapt anymore
-      // the two slow models are never reset
-      INJECT_SHARED_bpos
-      if( bpos == 0 )
-        for( int j = MODELS - 3; j >= 0; j-- )
-          if( dmcModels[j]->isFull())
-            dmcModels[j]->resetStateGraph(dmcParams[j]);
-    }
+    void mix(Mixer &m);
 };
 
 #endif //PAQ8PX_DMCFOREST_HPP

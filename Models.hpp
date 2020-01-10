@@ -37,123 +37,49 @@ public:
     Models(ModelStats *st, uint32_t level) : stats(st), level(level) {}
 
 public:
-    NormalModel &normalModel() {
-      static NormalModel instance {stats, MEM * 32};
-      return instance;
-    }
+    NormalModel &normalModel();
 
-    DmcForest &dmcForest() {
-      static DmcForest instance {MEM};
-      return instance;
-    }
+    DmcForest &dmcForest();
 
-    CharGroupModel &charGroupModel() {
-      static CharGroupModel instance {MEM / 2};
-      return instance;
-    }
+    CharGroupModel &charGroupModel();
 
-    RecordModel &recordModel() {
-      static RecordModel instance {stats, MEM * 2};
-      return instance;
-    }
+    RecordModel &recordModel();
 
-    SparseModel &sparseModel() {
-      static SparseModel instance {MEM * 2};
-      return instance;
-    }
+    SparseModel &sparseModel();
 
-    MatchModel &matchModel() {
-      static MatchModel instance {stats, MEM * 4, level};
-      return instance;
-    }
+    MatchModel &matchModel();
 
-    SparseMatchModel &sparseMatchModel() {
-      static SparseMatchModel instance {MEM};
-      return instance;
-    }
+    SparseMatchModel &sparseMatchModel();
 
-    IndirectModel &indirectModel() {
-      static IndirectModel instance {MEM};
-      return instance;
-    }
+    IndirectModel &indirectModel();
 
-#ifdef USE_TEXTMODEL
+    TextModel &textModel();
 
-    TextModel &textModel() {
-      static TextModel instance {stats, MEM * 16};
-      return instance;
-    }
+    WordModel &wordModel();
 
-    WordModel &wordModel() {
-      static WordModel instance {stats, MEM * 16};
-      return instance;
-    }
+    NestModel &nestModel();
 
-#else
+    XMLModel &xmlModel();
 
-    WordModel &wordModel() {
-      static WordModel instance {};
-      return instance;
-    }
+    ExeModel &exeModel();
 
-#endif //USE_TEXTMODEL
+    static LinearPredictionModel &linearPredictionModel();
 
-    NestModel &nestModel() {
-      static NestModel instance {MEM};
-      return instance;
-    }
+    JpegModel &jpegModel();
 
-    XMLModel &xmlModel() {
-      static XMLModel instance {MEM / 4};
-      return instance;
-    }
+    Image24BitModel &image24BitModel();
 
-    ExeModel &exeModel() {
-      static ExeModel instance {stats, MEM * 4};
-      return instance;
-    }
+    Image8BitModel &image8BitModel();
 
-    LinearPredictionModel &linearPredictionModel() {
-      static LinearPredictionModel instance {};
-      return instance;
-    }
+    Image4BitModel &image4BitModel();
 
-    JpegModel &jpegModel() {
-      static JpegModel instance {MEM};
-      return instance;
-    }
-
-    Image24BitModel &image24BitModel() {
-      static Image24BitModel instance {stats, MEM * 4};
-      return instance;
-    }
-
-    Image8BitModel &image8BitModel() {
-      static Image8BitModel instance {stats, MEM * 4};
-      return instance;
-    }
-
-    Image4BitModel &image4BitModel() {
-      static Image4BitModel instance {MEM / 2};
-      return instance;
-    }
-
-    Image1BitModel &image1BitModel() {
-      static Image1BitModel instance {};
-      return instance;
-    }
+    static Image1BitModel &image1BitModel();
 
 #ifdef USE_AUDIOMODEL
 
-    Audio8BitModel &audio8BitModel() {
-      static Audio8BitModel instance {stats};
-      return instance;
-    }
+    Audio8BitModel &audio8BitModel();
 
-    Audio16BitModel &audio16BitModel() {
-      static Audio16BitModel instance {stats};
-      return instance;
-    }
+    Audio16BitModel &audio16BitModel();
 
 #endif //USE_AUDIOMODEL
 };

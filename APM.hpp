@@ -15,12 +15,11 @@ private:
     const int steps;
     int cxt; // context index of last prediction
     UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
-    Shared *shared = Shared::getInstance();
 public:
     /**
      * APM a(n,STEPS) creates with n contexts using 4*STEPS*n bytes memory.
-     * @param n
-     * @param s
+     * @param n the number of contexts
+     * @param s the number of steps
      */
     APM(const int n, const int s) : AdaptiveMap(n * s, 1023), N(n * s), steps(s), cxt(0) {
       assert(s > 4); // number of steps - must be a positive integer bigger than 4
@@ -45,10 +44,10 @@ public:
      * The output is computed by interpolating pr into STEPS ranges nonlinearly
      * with smaller ranges near the ends.  The initial output is pr.
      * limit=(0..1023): set a lower limit (like 255) for faster adaptation.
-     * @param pr
-     * @param cx
-     * @param lim
-     * @return
+     * @param pr the initial probability. Considered part of the context.
+     * @param cx the context
+     * @param lim limit; lower limit means faster adaptation
+     * @return the adjusted probability
      */
     int p(int pr, int cx, const int lim) {
       updater->subscribe(this);

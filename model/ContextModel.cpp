@@ -19,7 +19,7 @@ ContextModel::ContextModel(ModelStats *st, Models &models, uint32_t level) : sta
 }
 
 int ContextModel::p() {
-  uint32_t &blockPosition = stats->blpos;
+  uint32_t &blockPosition = stats->blPos;
   // Parse block type and block size
   INJECT_SHARED_bpos
   if( bpos == 0 ) {

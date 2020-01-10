@@ -10,7 +10,7 @@
 struct ModelStats {
     //General shared information
     BlockType blockType {}; //used by wordModel, recordModel, SSE stage
-    uint32_t blpos {}; //relative position in block, used by many models
+    uint32_t blPos {}; //relative position in block, used by many models
     uint64_t misses {}; //used by SSE stage
 
     //MatchModel

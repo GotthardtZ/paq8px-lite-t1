@@ -1,6 +1,11 @@
 #ifndef PAQ8PX_BH_HPP
 #define PAQ8PX_BH_HPP
 
+#include <cstdint>
+#include "Array.hpp"
+#include "utils.hpp"
+#include "Hash.hpp"
+
 /**
  * A BH maps a 32 bit hash to an array of b bytes (checksum and b-2 values)
  * The index must be a multiplicative hash.

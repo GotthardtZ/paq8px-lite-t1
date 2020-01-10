@@ -38,7 +38,7 @@ protected:
     }
 
 public:
-    void setLimit(const int lim) { limit = lim; };
+    void setLimit(const int lim) { limit = lim; }
 };
 
 #endif //PAQ8PX_ADAPTIVEMAP_HPP

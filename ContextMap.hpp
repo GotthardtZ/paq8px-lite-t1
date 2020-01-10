@@ -8,6 +8,7 @@
 #include "StateTable.hpp"
 #include "Stretch.hpp"
 #include "Hash.hpp"
+#include "Mixer.hpp"
 
 /////////////////////////// ContextMap /////////////////////////
 // TODO: update this documentation
@@ -130,7 +131,7 @@ private:
 
 public:
     /**
-     * Construct using \m bytes of memory for \c contexts
+     * Construct using m bytes of memory for \c contexts
      * @param sh
      * @param m
      * @param c

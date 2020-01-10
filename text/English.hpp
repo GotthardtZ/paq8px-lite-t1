@@ -6,8 +6,8 @@
 
 class English : public Language {
 private:
-    static constexpr int NUM_ABBREV = 6;
-    const char *Abbreviations[NUM_ABBREV] = {"mr", "mrs", "ms", "dr", "st", "jr"};
+    static constexpr int numAbbrev = 6;
+    const char *abbreviations[numAbbrev] = {"mr", "mrs", "ms", "dr", "st", "jr"};
 
 public:
     enum Flags {
@@ -36,7 +36,7 @@ public:
         PrefixUnder = (1U << 24U)
     };
 
-    bool isAbbreviation(Word *w) override { return w->matchesAny(Abbreviations, NUM_ABBREV); };
+    bool isAbbreviation(Word *w) override;
 };
 
 #endif //PAQ8PX_ENGLISH_HPP

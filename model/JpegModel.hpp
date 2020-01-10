@@ -2,6 +2,16 @@
 #define PAQ8PX_JPEGMODEL_HPP
 
 #include "../BH.hpp"
+#include "../Random.hpp"
+#include "../RingBuffer.hpp"
+#include "../IndirectMap.hpp"
+#include "../Mixer.hpp"
+#include "../Shared.hpp"
+#include "../APM.hpp"
+#include "../StateMap.hpp"
+#include "../Hash.hpp"
+#include <cstdint>
+
 
 // Print a JPEG segment at buf[p...] for debugging
 /*
@@ -18,7 +28,7 @@ void dump(const char* msg, int p) {
   { \
     uint32_t length = pos - images[idx].offset; \
     /*if (success && idx && pos-lastPos==1)*/ \
-    /*printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bEmbedded JPEG at offset %d, size: %d bytes, level %d\nCompressing... ", images[idx].offset-pos+blpos, length, idx), fflush(stdout);*/ \
+    /*printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bEmbedded JPEG at offset %d, size: %d bytes, level %d\nCompressing... ", images[idx].offset-pos+blPos, length, idx), fflush(stdout);*/ \
     memset(&images[idx], 0, sizeof(JPEGImage)); \
     mcusize = 0, dqt_state = -1; \
     idx -= (idx > 0); \
@@ -143,7 +153,8 @@ private:
     IndirectMap MJPEGMap;
     StateMap sm;
     Mixer *m1;
-    APM apm1, apm2;
+    APM apm1;
+    APM apm2;
     Ilog *ilog = Ilog::getInstance();
     Shared *shared = Shared::getInstance();
 

@@ -21,7 +21,6 @@ private:
 
     SIMDMixer *mp; // points to a Mixer to combine results
     UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
-    Shared *shared = Shared::getInstance();
 public:
     SIMDMixer(const int n, const int m, const int s) : Mixer(((n + (simdWidth() - 1)) & -(simdWidth())), m, s) {
       assert(n > 0);

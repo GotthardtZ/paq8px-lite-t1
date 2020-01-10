@@ -114,7 +114,7 @@ int encodeZlib(File *in, File *out, uint64_t len, int &headerSize) {
   }
 
   for( uint64_t i = 0; i < len; i += block ) {
-    uint32_t blsize = min(uint32_t(len - i), block);
+    uint32_t blSize = min(uint32_t(len - i), block);
     nTrials = 0;
     for( int j = 0; j < 81; j++ ) {
       if( diffCount[j] == limit )
@@ -128,11 +128,11 @@ int encodeZlib(File *in, File *out, uint64_t len, int &headerSize) {
       break;
     memmove(&zRec[0], &zRec[block], block);
     memmove(&zin[0], &zin[block], block);
-    in->blockRead(&zin[block], blsize); // Read block from input file
+    in->blockRead(&zin[block], blSize); // Read block from input file
 
     // Decompress/inflate block
     mainStrm.next_in = &zin[block];
-    mainStrm.avail_in = blsize;
+    mainStrm.avail_in = blSize;
     do {
       mainStrm.next_out = &zOut[0];
       mainStrm.avail_out = block;
@@ -213,10 +213,10 @@ int encodeZlib(File *in, File *out, uint64_t len, int &headerSize) {
   if( zlibInflateInit(&mainStrm, zh) != Z_OK )
     return false;
   for( uint64_t i = 0; i < len; i += block ) {
-    uint32_t blsize = min(uint32_t(len - i), block);
-    in->blockRead(&zin[0], blsize);
+    uint32_t blSize = min(uint32_t(len - i), block);
+    in->blockRead(&zin[0], blSize);
     mainStrm.next_in = &zin[0];
-    mainStrm.avail_in = blsize;
+    mainStrm.avail_in = blSize;
     do {
       mainStrm.next_out = &zOut[0];
       mainStrm.avail_out = block;
@@ -256,7 +256,7 @@ int decodeZlib(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFou
   size -= 7 + 5 * diffCount;
 
   z_stream recStrm;
-  int diffIndex = 1, recpos = 0;
+  int diffIndex = 1, recPos = 0;
   recStrm.zalloc = Z_NULL;
   recStrm.zfree = Z_NULL;
   recStrm.opaque = Z_NULL;
@@ -276,9 +276,9 @@ int decodeZlib(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFou
       ret = deflate(&recStrm, i + blSize == size ? Z_FINISH : Z_NO_FLUSH);
       if( ret != Z_BUF_ERROR && ret != Z_STREAM_END && ret != Z_OK )
         break;
-      const int have = min(block - recStrm.avail_out, len - recpos);
-      while( diffIndex <= diffCount && diffPos[diffIndex] >= recpos && diffPos[diffIndex] < recpos + have ) {
-        zOut[diffPos[diffIndex] - recpos] = diffByte[diffIndex];
+      const int have = min(block - recStrm.avail_out, len - recPos);
+      while( diffIndex <= diffCount && diffPos[diffIndex] >= recPos && diffPos[diffIndex] < recPos + have ) {
+        zOut[diffPos[diffIndex] - recPos] = diffByte[diffIndex];
         diffIndex++;
       }
       if( mode == FDECOMPRESS )
@@ -286,8 +286,8 @@ int decodeZlib(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFou
       else if( mode == FCOMPARE )
         for( int j = 0; j < have; j++ )
           if( zOut[j] != out->getchar() && !diffFound )
-            diffFound = recpos + j + 1;
-      recpos += have;
+            diffFound = recPos + j + 1;
+      recPos += have;
 
     } while( recStrm.avail_out == 0 );
   }
@@ -296,12 +296,12 @@ int decodeZlib(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFou
       out->putChar(diffByte[diffIndex]);
     else if( mode == FCOMPARE )
       if( diffByte[diffIndex] != out->getchar() && !diffFound )
-        diffFound = recpos + 1;
+        diffFound = recPos + 1;
     diffIndex++;
-    recpos++;
+    recPos++;
   }
   deflateEnd(&recStrm);
-  return recpos == len ? len : 0;
+  return recPos == len ? len : 0;
 }
 
 #endif //PAQ8PX_ZLIB_HPP

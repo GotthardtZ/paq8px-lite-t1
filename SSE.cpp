@@ -18,7 +18,7 @@ int SSE::p(int pr0) {
   switch( stats->blockType ) {
     case TEXT:
     case TEXT_EOL: {
-      int limit = 0x3FF >> ((blpos < 0xFFF) * 2);
+      int limit = 0x3FF >> ((blPos < 0xFFF) * 2);
       pr = Text.APMs[0].p(pr0, (c0 << 8) | (stats->Text.mask & 0xF) | ((stats->misses & 0xF) << 4), limit);
       pr1 = Text.APMs[1].p(pr0, finalize64(hash(bpos, stats->misses & 3, c4 & 0xffff, stats->Text.mask >> 4), 16), limit);
       pr2 = Text.APMs[2].p(pr0, finalize64(hash(c0, stats->Match.expectedByte, stats->Match.length3), 16), limit);
@@ -36,7 +36,7 @@ int SSE::p(int pr0) {
     }
     case IMAGE24:
     case IMAGE32: {
-      int limit = 0x3FF >> ((blpos < 0xFFF) * 4);
+      int limit = 0x3FF >> ((blPos < 0xFFF) * 4);
       pr = Image.Color.APMs[0].p(pr0, (c0 << 4) | (stats->misses & 0xF), limit);
       pr1 = Image.Color.APMs[1].p(pr0, finalize64(hash(c0, stats->Image.pixels.W, stats->Image.pixels.WW), 16), limit);
       pr2 = Image.Color.APMs[2].p(pr0, finalize64(hash(c0, stats->Image.pixels.N, stats->Image.pixels.NN), 16), limit);
@@ -55,7 +55,7 @@ int SSE::p(int pr0) {
       break;
     }
     case IMAGE8GRAY: {
-      int limit = 0x3FF >> ((blpos < 0xFFF) * 4);
+      int limit = 0x3FF >> ((blPos < 0xFFF) * 4);
       pr = Image.Gray.APMs[0].p(pr0, (c0 << 4) | (stats->misses & 0xF), limit);
       pr1 = Image.Gray.APMs[1].p(pr, (c0 << 8) | stats->Image.ctx, limit);
       pr2 = Image.Gray.APMs[2].p(pr0, bpos | (stats->Image.ctx & 0xF8) | (stats->Match.expectedByte << 8), limit);
@@ -65,7 +65,7 @@ int SSE::p(int pr0) {
       break;
     }
     case IMAGE8: {
-      int limit = 0x3FF >> ((blpos < 0xFFF) * 4);
+      int limit = 0x3FF >> ((blPos < 0xFFF) * 4);
       pr = Image.Palette.APMs[0].p(pr0, (c0 << 4) | (stats->misses & 0xF), limit);
       pr1 = Image.Palette.APMs[1].p(pr0, finalize64(hash(c0 | stats->Image.pixels.W << 8 | stats->Image.pixels.N << 16), 16), limit);
       pr2 = Image.Palette.APMs[2].p(pr0, finalize64(hash(c0 | stats->Image.pixels.N << 8 | stats->Image.pixels.NN << 16), 16), limit);
