@@ -11,7 +11,7 @@
 // converted to an absolute address by adding the offset mod 2^25
 // (in range +-2^24).
 
-void encodeExe(File *in, File *out, uint64_t len, uint64_t begin) {
+static void encodeExe(File *in, File *out, uint64_t len, uint64_t begin) {
   const int block = 0x10000;
   Array<uint8_t> blk(block);
   out->putVLI(begin); //TODO: Large file support
@@ -38,7 +38,7 @@ void encodeExe(File *in, File *out, uint64_t len, uint64_t begin) {
   }
 }
 
-uint64_t decodeExe(Encoder &en, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
+static uint64_t decodeExe(Encoder &en, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
   const int block = 0x10000; // block size
   int begin, offset = 6, a;
   uint8_t c[6];

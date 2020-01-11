@@ -153,7 +153,7 @@ void RecordModel::mix(Mixer &m) {
     // Set 2-3 dimensional contexts
     // assuming runLength[0]<1024; col<4096
     cm.set(hash(++i, c << 8 | (min(255, pos - cPos1[c]) >> 2)));
-    cm.set(hash(++i, w << 9 | llog(pos - wpos1[w]) >> 2));
+    cm.set(hash(++i, w << 9 | llog(pos - wPos1[w]) >> 2));
     cm.set(hash(++i, runLength[0] | N << 10 | NN << 18));
 
     cn.set(hash(++i, w | runLength[0] << 16));
@@ -161,7 +161,7 @@ void RecordModel::mix(Mixer &m) {
     cn.set(hash(++i, c | runLength[0] << 8));
 
     co.set(hash(++i, c << 8 | min(255, pos - cPos1[c])));
-    co.set(hash(++i, c << 17 | d << 9 | llog(pos - wpos1[w]) >> 2));
+    co.set(hash(++i, c << 17 | d << 9 | llog(pos - wPos1[w]) >> 2));
     co.set(hash(++i, c << 8 | N));
 
     cp.set(hash(++i, runLength[0] | N << 10 | col << 18));
@@ -211,7 +211,7 @@ void RecordModel::mix(Mixer &m) {
     cPos3[c] = cPos2[c];
     cPos2[c] = cPos1[c];
     cPos1[c] = pos;
-    wpos1[w] = pos;
+    wPos1[w] = pos;
 
     mxCtx = (runLength[0] > 128) ? (min(0x7F, col / max(1, runLength[0] / 128))) : col;
   }

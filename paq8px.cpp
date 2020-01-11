@@ -20,13 +20,6 @@
 // Platform-independent includes
 #include <stdexcept>  //std::exception
 
-// zlib
-#ifdef USE_ZLIB
-
-#include <zlib.h>
-
-#endif
-
 //////////////////// Cross-platform definitions /////////////////////////////////////
 
 #ifdef _MSC_VER
@@ -105,47 +98,12 @@ uint32_t level = 0; //this value will be overwritten at the beginning of compres
 
 #ifdef USE_TEXTMODEL
 
-#include "text/Segment.hpp"
-#include "text/Sentence.hpp"
-#include "text/Paragraph.hpp"
-#include "text/Language.hpp"
-#include "text/French.hpp"
-#include "text/English.hpp"
-#include "text/German.hpp"
-#include "text/Stemmer.hpp"
-#include "text/EnglishStemmer.hpp"
-#include "text/FrenchStemmer.hpp"
-#include "text/GermanStemmer.hpp"
 #include "text/WordEmbeddingDictionary.hpp"
 
 #endif //USE_TEXTMODEL
 
-#include "text/TextModel.hpp"
-#include "model/MatchModel.hpp"
-#include "model/SparseMatchModel.hpp"
-#include "model/CharGroupModel.hpp"
-#include "model/WordModel.hpp"
-#include "model/RecordModel.hpp"
-#include "model/LinearPredictionModel.hpp"
-#include "model/SparseModel.hpp"
-#include "model/Image24BitModel.hpp"
-#include "model/Image8BitModel.hpp"
-#include "model/Image4BitModel.hpp"
-#include "model/Image1BitModel.hpp"
-#include "model/JpegModel.hpp"
-#include "model/AudioModel.hpp"
-#include "model/Audio8BitModel.hpp"
-#include "model/Audio16BitModel.hpp"
 #include "model/ExeModel.hpp"
-#include "model/IndirectModel.hpp"
-#include "model/DmcModel.hpp"
-#include "model/NestModel.hpp"
 #include "model/XMLModel.hpp"
-#include "model/NormalModel.hpp"
-#include "Models.hpp"
-#include "model/ContextModel.hpp"
-#include "SSE.hpp"
-#include "Predictor.hpp"
 #include "Encoder.hpp"
 #include "filter/Filters.hpp"
 #include "file/ListOfFiles.hpp"
@@ -153,7 +111,6 @@ uint32_t level = 0; //this value will be overwritten at the beginning of compres
 #include "file/FileName.hpp"
 
 typedef enum { DoNone, DoCompress, DoExtract, DoCompare, DoList } WHATTODO;
-ProgramChecker *programChecker = ProgramChecker::getInstance();
 
 static void printHelp() {
   printf("\n"
@@ -323,6 +280,7 @@ static void printOptions() {
 }
 
 int main_utf8(int argc, char **argv) {
+  ProgramChecker *programChecker = ProgramChecker::getInstance();
   try {
 
     if( !toScreen ) //we need a minimal feedback when redirected

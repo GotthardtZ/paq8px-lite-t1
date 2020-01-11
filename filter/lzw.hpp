@@ -3,17 +3,13 @@
 
 #include "Filter.hpp"
 
-struct LZWentry {
-    short prefix;
-    short suffix;
-};
-
 #define LZW_RESET_CODE 256
 #define LZW_EOF_CODE 257
 
 #include "LZWDictionary.hpp"
 
 class LZWFilter : Filter {
+public:
     void encode(File *in, File *out, uint64_t size, int info, int &headerSize) override {
       LZWDictionary dic;
       int parent = -1, code = 0, buffer = 0, bitsPerCode = 9, bitsUsed = 0;
@@ -67,7 +63,7 @@ class LZWFilter : Filter {
 
 };
 
-int encodeLzw(File *in, File *out, uint64_t size, int &headerSize) {
+static int encodeLzw(File *in, File *out, uint64_t size, int &headerSize) {
   LZWDictionary dic;
   int parent = -1, code = 0, buffer = 0, bitsPerCode = 9, bitsUsed = 0;
   bool done = false;
@@ -110,8 +106,8 @@ int encodeLzw(File *in, File *out, uint64_t size, int &headerSize) {
   return 1;
 }
 
-inline void writeCode(File *f, const FMode mode, int *buffer, uint64_t *pos, int *bitsUsed, const int bitsPerCode, const int code,
-                      uint64_t *diffFound) {
+static inline void writeCode(File *f, const FMode mode, int *buffer, uint64_t *pos, int *bitsUsed, const int bitsPerCode, const int code,
+                             uint64_t *diffFound) {
   *buffer <<= bitsPerCode;
   *buffer |= code;
   (*bitsUsed) += bitsPerCode;
@@ -125,7 +121,7 @@ inline void writeCode(File *f, const FMode mode, int *buffer, uint64_t *pos, int
   }
 }
 
-uint64_t decodeLzw(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
+static uint64_t decodeLzw(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
   LZWDictionary dic;
   uint64_t pos = 0;
   int parent = -1, code = 0, buffer = 0, bitsPerCode = 9, bitsUsed = 0;

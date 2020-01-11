@@ -86,7 +86,7 @@ typedef enum {
                                                                      in->setpos(start + (start_pos)), HDR
 
 
-bool isGrayscalePalette(File *in, int n = 256, int isRGBA = 0) {
+static bool isGrayscalePalette(File *in, int n = 256, int isRGBA = 0) {
   uint64_t offset = in->curPos();
   int stride = 3 + isRGBA, res = (n > 0) << 8U, order = 1;
   for( int i = 0; (i < n * stride) && (res >> 8U); i++ ) {
@@ -119,8 +119,9 @@ bool isGrayscalePalette(File *in, int n = 256, int isRGBA = 0) {
 #include "TextParserStateInfo.hpp"
 
 // Detect blocks
-BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
+static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
   Shared *shared = Shared::getInstance();
+  TextParserStateInfo *textParser = new TextParserStateInfo();
   //TODO: Large file support
   int n = (int) blockSize;
   uint32_t buf3 = 0, buf2 = 0, buf1 = 0, buf0 = 0; // last 16 bytes
@@ -167,7 +168,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
     return DEFAULT;
   }
 
-  textParser.reset(0);
+  textParser->reset(0);
   for( int i = 0; i < n; ++i ) {
     int c = in->getchar();
     if( c == EOF)
@@ -709,7 +710,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
           pgmDataSize = pgmw * 4 * pgmh;
         }
       } else { // pixel data
-        if( textParser.start() == uint32_t(i) || // for any sign of non-text data in pixel area
+        if( textParser->start() == uint32_t(i) || // for any sign of non-text data in pixel area
             (pgm - 2 == 0 && n - pgmDataSize == i)) // or the image is the whole file/block -> FINISH (success)
         {
           if( pgmw && pgmh && !pgmc && pgmn == 4 )
@@ -997,27 +998,27 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
     // Detect text
     // This is different from the above detection routines: it's a negative detection (it detects a failure)
     uint32_t t = utf8StateTable[c];
-    textParser.UTF8State = utf8StateTable[256 + textParser.UTF8State + t];
-    if( textParser.UTF8State == UTF8_ACCEPT ) { // proper end of a valid utf8 sequence
+    textParser->UTF8State = utf8StateTable[256 + textParser->UTF8State + t];
+    if( textParser->UTF8State == UTF8_ACCEPT ) { // proper end of a valid utf8 sequence
       if( c == NEW_LINE ) {
         if(((buf0 >> 8) & 0xff) != CARRIAGE_RETURN )
-          textParser.setEolType(2); // mixed or LF-only
-        else if( textParser.eolType() == 0 )
-          textParser.setEolType(1); // CRLF-only
+          textParser->setEolType(2); // mixed or LF-only
+        else if( textParser->eolType() == 0 )
+          textParser->setEolType(1); // CRLF-only
       }
-      textParser.invalidCount = textParser.invalidCount * (TEXT_ADAPT_RATE - 1) / TEXT_ADAPT_RATE;
-      if( textParser.invalidCount == 0 )
-        textParser.setEnd(i); // a possible end of block position
-    } else if( textParser.UTF8State == UTF8_REJECT ) { // illegal state
-      textParser.invalidCount = textParser.invalidCount * (TEXT_ADAPT_RATE - 1) / TEXT_ADAPT_RATE + TEXT_ADAPT_RATE;
-      textParser.UTF8State = UTF8_ACCEPT; // reset state
-      if( textParser.validLength() < TEXT_MIN_SIZE ) {
-        textParser.reset(i + 1); // it's not text (or not long enough) - start over
-      } else if( textParser.invalidCount >= TEXT_MAX_MISSES * TEXT_ADAPT_RATE ) {
-        if( textParser.validLength() < TEXT_MIN_SIZE )
-          textParser.reset(i + 1); // it's not text (or not long enough) - start over
+      textParser->invalidCount = textParser->invalidCount * (TEXT_ADAPT_RATE - 1) / TEXT_ADAPT_RATE;
+      if( textParser->invalidCount == 0 )
+        textParser->setEnd(i); // a possible end of block position
+    } else if( textParser->UTF8State == UTF8_REJECT ) { // illegal state
+      textParser->invalidCount = textParser->invalidCount * (TEXT_ADAPT_RATE - 1) / TEXT_ADAPT_RATE + TEXT_ADAPT_RATE;
+      textParser->UTF8State = UTF8_ACCEPT; // reset state
+      if( textParser->validLength() < TEXT_MIN_SIZE ) {
+        textParser->reset(i + 1); // it's not text (or not long enough) - start over
+      } else if( textParser->invalidCount >= TEXT_MAX_MISSES * TEXT_ADAPT_RATE ) {
+        if( textParser->validLength() < TEXT_MIN_SIZE )
+          textParser->reset(i + 1); // it's not text (or not long enough) - start over
         else // Commit text block validation
-          textParser.next(i + 1);
+          textParser->next(i + 1);
       }
     }
   }
@@ -1033,7 +1034,7 @@ BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
 
 //////////////////// Compress, Decompress ////////////////////////////
 
-void directEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int info = -1) {
+static void directEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int info = -1) {
   //TODO: Large file support
   en.compress(type);
   en.encodeBlockSize(len);
@@ -1052,9 +1053,9 @@ void directEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int 
   fprintf(stderr, "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
 }
 
-void compressRecursive(File *in, uint64_t blockSize, Encoder &en, String &blstr, int recursionLevel, float p1, float p2);
+static void compressRecursive(File *in, uint64_t blockSize, Encoder &en, String &blstr, int recursionLevel, float p1, float p2);
 
-uint64_t decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File *out, FMode mode, uint64_t &diffFound) {
+static uint64_t decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File *out, FMode mode, uint64_t &diffFound) {
   if( type == IMAGE24 )
     return decodeBmp(en, len, info, out, mode, diffFound);
   else if( type == IMAGE32 )
@@ -1085,7 +1086,7 @@ uint64_t decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int in
   return 0;
 }
 
-uint64_t encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int info, int &hdrsize) {
+static uint64_t encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int info, int &hdrsize) {
   if( type == IMAGE24 )
     encodeBmp(in, tmp, len, info);
   else if( type == IMAGE32 )
@@ -1116,7 +1117,7 @@ uint64_t encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int info,
   return 0;
 }
 
-void
+static void
 transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int info, String &blstr, int recursionLevel, float p1, float p2,
                      uint64_t begin) {
   if( hasTransform(type)) {
@@ -1172,7 +1173,7 @@ transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int in
   }
 }
 
-void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, String &blstr, int recursionLevel, float p1, float p2) {
+static void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, String &blstr, int recursionLevel, float p1, float p2) {
   static const char *typeNames[25] = {"default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
                                       "24b-image", "32b-image", "audio", "audio - le", "exe", "cd", "zlib", "base64", "gif", "png-8b",
                                       "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol", "rle", "lzw"};
@@ -1194,6 +1195,7 @@ void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, String &
   BlockType nextBlockType;
   BlockType nextBlockTypeBak = DEFAULT; //initialized only to suppress a compiler warning, will be overwritten
   uint64_t bytesToGo = blockSize;
+  TextParserStateInfo *textParser = new TextParserStateInfo();
   while( bytesToGo > 0 ) {
     if( type == TEXT || type == TEXT_EOL ) { // it was a split block in the previous iteration: TEXT -> DEFAULT -> ...
       nextBlockType = nextBlockTypeBak;
@@ -1205,21 +1207,21 @@ void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, String &
     }
 
     // override (any) next block detection by a preceding text block
-    textStart = begin + textParser._start[0];
-    textEnd = begin + textParser._end[0];
+    textStart = begin + textParser->_start[0];
+    textEnd = begin + textParser->_end[0];
     if( textEnd > nextBlockStart - 1 )
       textEnd = nextBlockStart - 1;
     if( type == DEFAULT && textStart < textEnd ) { // only DEFAULT blocks may be overridden
       if( textStart == begin && textEnd == nextBlockStart - 1 ) { // whole first block is text
-        type = (textParser._EOLType[0] == 1) ? TEXT_EOL : TEXT; // DEFAULT -> TEXT
+        type = (textParser->_EOLType[0] == 1) ? TEXT_EOL : TEXT; // DEFAULT -> TEXT
       } else if( textEnd - textStart + 1 >= TEXT_MIN_SIZE ) { // we have one (or more) large enough text portion that splits DEFAULT
         if( textStart != begin ) { // text is not the first block
           nextBlockStart = textStart; // first block is still DEFAULT
           nextBlockTypeBak = nextBlockType;
-          nextBlockType = (textParser._EOLType[0] == 1) ? TEXT_EOL : TEXT; //next block is text
-          textParser.removeFirst();
+          nextBlockType = (textParser->_EOLType[0] == 1) ? TEXT_EOL : TEXT; //next block is text
+          textParser->removeFirst();
         } else {
-          type = (textParser._EOLType[0] == 1) ? TEXT_EOL : TEXT; // first block is text
+          type = (textParser->_EOLType[0] == 1) ? TEXT_EOL : TEXT; // first block is text
           nextBlockType = DEFAULT; // next block is DEFAULT
           nextBlockStart = textEnd + 1;
         }
@@ -1269,7 +1271,7 @@ void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, String &
 // For each block, output
 // <type> <size> and call encode_X to convert to type X.
 // Test transform and compress.
-void compressfile(const char *filename, uint64_t fileSize, Encoder &en, bool verbose) {
+static void compressfile(const char *filename, uint64_t fileSize, Encoder &en, bool verbose) {
   Shared *shared = Shared::getInstance();
   assert(en.getMode() == COMPRESS);
   assert(filename && filename[0]);
@@ -1293,7 +1295,7 @@ void compressfile(const char *filename, uint64_t fileSize, Encoder &en, bool ver
   }
 }
 
-uint64_t decompressRecursive(File *out, uint64_t blockSize, Encoder &en, FMode mode, int recursionLevel) {
+static uint64_t decompressRecursive(File *out, uint64_t blockSize, Encoder &en, FMode mode, int recursionLevel) {
   BlockType type;
   uint64_t len, i = 0;
   uint64_t diffFound = 0;
@@ -1340,7 +1342,7 @@ uint64_t decompressRecursive(File *out, uint64_t blockSize, Encoder &en, FMode m
 }
 
 // Decompress or compare a file
-void decompressFile(const char *filename, FMode fMode, Encoder &en) {
+static void decompressFile(const char *filename, FMode fMode, Encoder &en) {
   assert(en.getMode() == DECOMPRESS);
   assert(filename && filename[0]);
 

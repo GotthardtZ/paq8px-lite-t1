@@ -1,7 +1,7 @@
 #ifndef PAQ8PX_ENDIANNESS16B_HPP
 #define PAQ8PX_ENDIANNESS16B_HPP
 
-void encodeEndianness16B(File *in, File *out, uint64_t size) {
+static void encodeEndianness16B(File *in, File *out, uint64_t size) {
   for( uint64_t i = 0, l = size >> 1U; i < l; i++ ) {
     uint8_t b = in->getchar();
     out->putChar(in->getchar());
@@ -11,7 +11,7 @@ void encodeEndianness16B(File *in, File *out, uint64_t size) {
     out->putChar(in->getchar());
 }
 
-uint64_t decodeEndianness16B(Encoder &en, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
+static uint64_t decodeEndianness16B(Encoder &en, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
   for( uint64_t i = 0, l = size >> 1U; i < l; i++ ) {
     uint8_t b1 = en.decompress(), b2 = en.decompress();
     if( mode == FDECOMPRESS ) {

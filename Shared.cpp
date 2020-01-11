@@ -26,8 +26,10 @@ void Shared::reset() {
   buf.reset();
   y = 0;
   c0 = 1;
-  c1 = bitPosition = 0;
-  c4 = c8 = 0;
+  c1 = 0;
+  bitPosition = 0;
+  c4 = 0;
+  c8 = 0;
 }
 
 void Shared::copyTo(Shared *dst) {

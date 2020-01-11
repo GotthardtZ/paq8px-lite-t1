@@ -26,7 +26,7 @@
       ; \
   }
 
-int encodeGif(File *in, File *out, uint64_t len, int &headerSize) {
+static int encodeGif(File *in, File *out, uint64_t len, int &headerSize) {
   int codeSize = in->getchar(), diffPos = 0, clearPos = 0, bsize = 0, code, offset = 0;
   uint64_t beginIn = in->curPos(), beginOut = out->curPos();
   Array<uint8_t> output(4096);
@@ -114,11 +114,11 @@ int encodeGif(File *in, File *out, uint64_t len, int &headerSize) {
   }
   diffPos = (int) out->curPos();
   out->setpos(beginOut);
-  out->putChar(headerSize >> 8);
-  out->putChar(headerSize & 255);
+  out->putChar(headerSize >> 8U);
+  out->putChar(headerSize & 255U);
   out->putChar(255 - bsize);
-  out->putChar((clearPos >> 8) & 255);
-  out->putChar(clearPos & 255);
+  out->putChar((clearPos >> 8U) & 255U);
+  out->putChar(clearPos & 255U);
   out->setpos(diffPos);
   return in->curPos() - beginIn == len - 1;
 }
@@ -143,14 +143,14 @@ int encodeGif(File *in, File *out, uint64_t len, int &headerSize) {
     buffer += (c) << shift; \
     shift += bits; \
     while (shift >= 8) { \
-      output[++blockSize] = buffer & 255; \
-      buffer >>= 8; \
+      output[++blockSize] = buffer & 255U; \
+      buffer >>= 8U; \
       shift -= 8; \
       if (blockSize == bsize) GIF_WRITE_BLOCK(bsize); \
     } \
   }
 
-int decodeGif(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
+static int decodeGif(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
   int diffCount = in->getchar(), curDiff = 0;
   Array<int> diffPos(4096);
   diffCount = ((diffCount << 8) + in->getchar() - 6) / 4;
@@ -181,11 +181,11 @@ int decodeGif(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFoun
   else if( mode == FCOMPARE )
     if( codesize != out->getchar() && !diffFound )
       diffFound = 1;
-  if( diffCount == 0 || diffPos[0] != 0 ) GIF_WRITE_CODE(1 << codesize) else
+  if( diffCount == 0 || diffPos[0] != 0 ) GIF_WRITE_CODE(1U << codesize) else
     curDiff++;
   while( size != 0 && (input = in->getchar()) != EOF) {
     size--;
-    int key = (last << 8) + input, index = (code = -1);
+    int key = (last << 8U) + input, index = (code = -1);
     if( last < 0 )
       index = input;
     else LZW_FIND(key)
@@ -195,8 +195,8 @@ int decodeGif(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFoun
     if( code < 0 ) {
       GIF_WRITE_CODE(last)
       if( maxcode == clearPos ) {
-        GIF_WRITE_CODE(1 << codesize)
-        bits = codesize + 1, maxcode = (1 << codesize) + 1;
+        GIF_WRITE_CODE(1U << codesize)
+        bits = codesize + 1, maxcode = (1U << codesize) + 1;
         LZW_RESET
       } else {
         ++maxcode;

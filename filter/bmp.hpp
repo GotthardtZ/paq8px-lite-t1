@@ -8,7 +8,7 @@
 
 #define RGB565_MIN_RUN 63
 
-void encodeBmp(File *in, File *out, uint64_t len, int width) {
+static void encodeBmp(File *in, File *out, uint64_t len, int width) {
   Shared *shared = Shared::getInstance();
   int r, g, b, total = 0;
   bool isPossibleRGB565 = true;
@@ -39,7 +39,7 @@ void encodeBmp(File *in, File *out, uint64_t len, int width) {
     out->putChar(in->getchar());
 }
 
-uint64_t decodeBmp(Encoder &en, uint64_t size, int width, File *out, FMode mode, uint64_t &diffFound) {
+static uint64_t decodeBmp(Encoder &en, uint64_t size, int width, File *out, FMode mode, uint64_t &diffFound) {
   Shared *shared = Shared::getInstance();
   int r, g, b, p, total = 0;
   bool isPossibleRGB565 = true;

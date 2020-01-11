@@ -368,7 +368,7 @@ bool EnglishStemmer::step1C(Word *w) {
 }
 
 bool EnglishStemmer::step2(Word *w, const uint32_t r1) {
-  for( int i = 0; i < NUM_SUFFIXES_STEP2; i++ ) {
+  for( int i = 0; i < numSuffixesStep2; i++ ) {
     if( w->endsWith(suffixesStep2[i][0]) && suffixInRn(w, r1, suffixesStep2[i][0])) {
       w->changeSuffix(suffixesStep2[i][0], suffixesStep2[i][1]);
       w->type |= typesStep2[i];

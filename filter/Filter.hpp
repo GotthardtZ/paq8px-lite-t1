@@ -2,6 +2,8 @@
 #define PAQ8PX_FILTER_HPP
 
 #include "../file/File.hpp"
+#include "../Encoder.hpp"
+#include "Filters.hpp"
 #include <cstdint>
 
 class Filter {

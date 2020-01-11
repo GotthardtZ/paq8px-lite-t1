@@ -133,7 +133,7 @@ private:
     // sum of s in RS codes in block and sum of s in first component
 
     RingBuffer<int> cBuf2 {0x20000};
-    Array<int> advPred {4}, sumu {8}, sumv {8}, runPred {6};
+    Array<int> advPred {4}, sumU {8}, sumV {8}, runPred {6};
     int prevCoef = 0, prevCoef2 = 0, prevCoefRs = 0;
     Array<int> ls {10}; // block -> distance to previous block
     Array<int> blockW {10}, blockN {10}, samplingFactors {4};

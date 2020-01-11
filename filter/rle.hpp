@@ -126,8 +126,7 @@ public:
       return pos;
     }
 
-    void setEncoder(Encoder &en) override {
-    }
+    void setEncoder(Encoder &en) override {}
 };
 
 #endif //PAQ8PX_RLE_HPP

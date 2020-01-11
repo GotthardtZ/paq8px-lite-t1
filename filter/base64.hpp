@@ -25,11 +25,11 @@ namespace base64 {
     static constexpr char table1[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 }
 
-bool isBase64(unsigned char c) {
+static bool isBase64(unsigned char c) {
   return (base64::isalnum(c) || (c == '+') || (c == '/') || (c == 10) || (c == 13));
 }
 
-uint64_t decodeBase64(File *in, File *out, FMode mode, uint64_t &diffFound) {
+static uint64_t decodeBase64(File *in, File *out, FMode mode, uint64_t &diffFound) {
   uint8_t inn[3];
   int i, len = 0, blocksOut = 0;
   int fle = 0;
@@ -93,14 +93,14 @@ uint64_t decodeBase64(File *in, File *out, FMode mode, uint64_t &diffFound) {
   return outLen;
 }
 
-inline char valueB(char c) {
+static inline char valueB(char c) {
   const char *p = strchr(base64::table1, c);
   if( p )
     return (char) (p - base64::table1);
   return 0;
 }
 
-void encodeBase64(File *in, File *out, uint64_t len64) {
+static void encodeBase64(File *in, File *out, uint64_t len64) {
   int len = (int) len64;
   int inLen = 0;
   int i = 0;

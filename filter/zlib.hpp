@@ -2,8 +2,10 @@
 #define PAQ8PX_ZLIB_HPP
 
 #include "Filters.hpp"
+#include "../utils.hpp"
+#include <zlib.h>
 
-int parseZlibHeader(int header) {
+static int parseZlibHeader(int header) {
   switch( header ) {
     case 0x2815:
       return 0;
@@ -58,7 +60,7 @@ int parseZlibHeader(int header) {
   }
 }
 
-int zlibInflateInit(z_streamp strm, int zh) {
+static int zlibInflateInit(z_streamp strm, int zh) {
   if( zh == -1 )
     return inflateInit2(strm, -MAX_WBITS);
   else
@@ -67,7 +69,7 @@ int zlibInflateInit(z_streamp strm, int zh) {
 
 MTFList mtf(81);
 
-int encodeZlib(File *in, File *out, uint64_t len, int &headerSize) {
+static int encodeZlib(File *in, File *out, uint64_t len, int &headerSize) {
   const int block = 1U << 16U, limit = 128;
   uint8_t zin[block * 2], zOut[block], zRec[block * 2], diffByte[81 * limit];
   uint64_t diffPos[81 * limit];
@@ -231,7 +233,7 @@ int encodeZlib(File *in, File *out, uint64_t len, int &headerSize) {
   return mainRet == Z_STREAM_END;
 }
 
-int decodeZlib(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
+static int decodeZlib(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
   const int block = 1U << 16U, limit = 128;
   uint8_t zin[block], zOut[block];
   int diffCount = min(in->getchar(), limit - 1);

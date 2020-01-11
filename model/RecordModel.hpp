@@ -37,7 +37,7 @@ private:
     IndirectMap iMap[nIM];
     IndirectContext<uint16_t> iCtx[nIndContexts];
     Array<uint32_t> cPos1 {256}, cPos2 {256}, cPos3 {256}, cPos4 {256};
-    Array<uint32_t> wpos1 {256 * 256}; // buf(1..2) -> last position
+    Array<uint32_t> wPos1 {256 * 256}; // buf(1..2) -> last position
     uint32_t runLength[3] = {2, 0, 0}; // run length and 2 candidates
     uint32_t rCount[2] = {0, 0}; // candidate counts
     uint8_t padding = 0; // detected padding byte

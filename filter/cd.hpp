@@ -1,7 +1,7 @@
 #ifndef PAQ8PX_CD_HPP
 #define PAQ8PX_CD_HPP
 
-void encodeCd(File *in, File *out, uint64_t size, int info) {
+static void encodeCd(File *in, File *out, uint64_t size, int info) {
   //TODO: Large file support
   const int block = 2352;
   uint8_t blk[block];
@@ -27,7 +27,7 @@ void encodeCd(File *in, File *out, uint64_t size, int info) {
   }
 }
 
-int expandCdSector(uint8_t *data, int address, int test) {
+static int expandCdSector(uint8_t *data, int address, int test) {
   uint8_t d2[2352];
   eccedcInit();
   //sync pattern: 00 FF FF FF FF FF FF FF FF FF FF 00
@@ -97,7 +97,7 @@ int expandCdSector(uint8_t *data, int address, int test) {
   return mode + form - 1;
 }
 
-uint64_t decodeCd(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
+static uint64_t decodeCd(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
   //TODO: Large file support
   const int block = 2352;
   uint8_t blk[block];

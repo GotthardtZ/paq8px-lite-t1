@@ -110,6 +110,8 @@ constexpr bool isPowerOf2(T x) {
 #define BACKTRACE() \
   { }
 #endif
+#else
+#define BACKTRACE()
 #endif
 
 // A basic exception class to let catch() in main() know

@@ -1,4 +1,5 @@
 #include "Mixer.hpp"
+#include "utils.hpp"
 
 Mixer::Mixer(const int n, const int m, const int s) : n(n), m(m), s(s), scaleFactor(0), tx(n), wx(n * m), cxt(s), info(s), rates(s), pr(s) {
   for( uint64_t i = 0; i < s; ++i ) {
@@ -23,7 +24,9 @@ void Mixer::set(const uint32_t cx, const uint32_t range, const int rate) {
     rates[numContexts] = rate;
   cxt[numContexts++] = base + cx;
   base += range;
-  //printf("numContexts: %d base: %d\n",numContexts,range); //for debugging: how many input sets do we have?
+//#ifndef DNDEBUG
+//  printf("numContexts: %d base: %d\n", numContexts, range); //for debugging: how many input sets do we have?
+//#endif
 }
 
 void Mixer::reset() {

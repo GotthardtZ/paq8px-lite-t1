@@ -11,7 +11,7 @@ JpegModel::~JpegModel() {
 }
 
 int JpegModel::mix(Mixer &m) {
-  static constexpr uint8_t zzu[64] = {// zigzag coef -> u,v
+  static constexpr uint8_t zzu[64] = {// zigzag coefficient -> u,v
           0, 1, 0, 0, 1, 2, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 1, 0, 1, 2, 3, 4, 5, 6, 7,
           7, 6, 5, 4, 3, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 5, 6, 7, 7, 6, 7};
   static constexpr uint8_t zzv[64] = {0, 0, 1, 2, 1, 0, 0, 1, 2, 3, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5,
@@ -437,39 +437,39 @@ int JpegModel::mix(Mixer &m) {
 
           // UPDATE_ADV_PRED !!!!
           {
-            const int acomp = mcuPos >> 6, q = 64 * images[idx].qMap[acomp];
-            const int zz = mcuPos & 63, cpos_dc = cPos - zz;
-            const bool norst = resetPos != column + row * width;
+            const int aComp = mcuPos >> 6, q = 64 * images[idx].qMap[aComp];
+            const int zz = mcuPos & 63, cposDc = cPos - zz;
+            const bool noReset = resetPos != column + row * width;
             if( zz == 0 ) {
               for( int i = 0; i < 8; ++i )
-                sumu[i] = sumv[i] = 0;
+                sumU[i] = sumV[i] = 0;
               // position in the buffer of first (DC) coefficient of the block
               // of this same component that is to the west of this one, not
               // necessarily in this MCU
-              int offsetDcW = cpos_dc - blockW[acomp];
+              int offsetDcW = cposDc - blockW[aComp];
               // position in the buffer of first (DC) coefficient of the block
               // of this same component that is to the north of this one, not
               // necessarily in this MCU
-              int offsetDcN = cpos_dc - blockN[acomp];
+              int offsetDcN = cposDc - blockN[aComp];
               for( int i = 0; i < 64; ++i ) {
-                sumu[zzu[i]] += (zzv[i] & 1 ? -1 : 1) * (zzv[i] ? 16 * (16 + zzv[i]) : 185) * (images[idx].qTable[q + i] + 1) *
+                sumU[zzu[i]] += (zzv[i] & 1 ? -1 : 1) * (zzv[i] ? 16 * (16 + zzv[i]) : 185) * (images[idx].qTable[q + i] + 1) *
                                 cBuf2[offsetDcN + i];
-                sumv[zzv[i]] += (zzu[i] & 1 ? -1 : 1) * (zzu[i] ? 16 * (16 + zzu[i]) : 185) * (images[idx].qTable[q + i] + 1) *
+                sumV[zzv[i]] += (zzu[i] & 1 ? -1 : 1) * (zzu[i] ? 16 * (16 + zzu[i]) : 185) * (images[idx].qTable[q + i] + 1) *
                                 cBuf2[offsetDcW + i];
               }
             } else {
-              sumu[zzu[zz - 1]] -= (zzv[zz - 1] ? 16 * (16 + zzv[zz - 1]) : 185) * (images[idx].qTable[q + zz - 1] + 1) * cBuf2[cPos - 1];
-              sumv[zzv[zz - 1]] -= (zzu[zz - 1] ? 16 * (16 + zzu[zz - 1]) : 185) * (images[idx].qTable[q + zz - 1] + 1) * cBuf2[cPos - 1];
+              sumU[zzu[zz - 1]] -= (zzv[zz - 1] ? 16 * (16 + zzv[zz - 1]) : 185) * (images[idx].qTable[q + zz - 1] + 1) * cBuf2[cPos - 1];
+              sumV[zzv[zz - 1]] -= (zzu[zz - 1] ? 16 * (16 + zzu[zz - 1]) : 185) * (images[idx].qTable[q + zz - 1] + 1) * cBuf2[cPos - 1];
             }
 
             for( int i = 0; i < 3; ++i ) {
               runPred[i] = runPred[i + 3] = 0;
               for( int st = 0; st < 10 && zz + st < 64; ++st ) {
                 const int zz2 = zz + st;
-                int p = sumu[zzu[zz2]] * i + sumv[zzv[zz2]] * (2 - i);
+                int p = sumU[zzu[zz2]] * i + sumV[zzv[zz2]] * (2 - i);
                 p /= (images[idx].qTable[q + zz2] + 1) * 185 * (16 + zzv[zz2]) * (16 + zzu[zz2]) / 128;
-                if( zz2 == 0 && (norst || ls[acomp] == 64))
-                  p -= cBuf2[cpos_dc - ls[acomp]];
+                if( zz2 == 0 && (noReset || ls[aComp] == 64))
+                  p -= cBuf2[cposDc - ls[aComp]];
                 p = (p < 0 ? -1 : +1) * ilog->log(abs(p) + 1);
                 if( st == 0 ) {
                   advPred[i] = p;
@@ -483,11 +483,11 @@ int JpegModel::mix(Mixer &m) {
             }
             ex = 0;
             for( int i = 0; i < 8; ++i )
-              ex += (zzu[zz] < i) * sumu[i] + (zzv[zz] < i) * sumv[i];
-            ex = (sumu[zzu[zz]] * (2 + zzu[zz]) + sumv[zzv[zz]] * (2 + zzv[zz]) - ex * 2) * 4 / (zzu[zz] + zzv[zz] + 16);
+              ex += (zzu[zz] < i) * sumU[i] + (zzv[zz] < i) * sumV[i];
+            ex = (sumU[zzu[zz]] * (2 + zzu[zz]) + sumV[zzv[zz]] * (2 + zzv[zz]) - ex * 2) * 4 / (zzu[zz] + zzv[zz] + 16);
             ex /= (images[idx].qTable[q + zz] + 1) * 185;
-            if( zz == 0 && (norst || ls[acomp] == 64))
-              ex -= cBuf2[cpos_dc - ls[acomp]];
+            if( zz == 0 && (noReset || ls[aComp] == 64))
+              ex -= cBuf2[cposDc - ls[aComp]];
             advPred[3] = (ex < 0 ? -1 : +1) * ilog->log(abs(ex) + 1);
 
             for( int i = 0; i < 4; ++i ) {
@@ -496,38 +496,38 @@ int JpegModel::mix(Mixer &m) {
                 ex = 65535;
               else {
                 const int zz2 = zPos[zzu[zz] + 8 * zzv[zz] - (i & 1 ? 8 : 1) * b];
-                ex = (images[idx].qTable[q + zz2] + 1) * cBuf2[cpos_dc + zz2] / (images[idx].qTable[q + zz] + 1);
+                ex = (images[idx].qTable[q + zz2] + 1) * cBuf2[cposDc + zz2] / (images[idx].qTable[q + zz] + 1);
                 ex = (ex < 0 ? -1 : +1) * (ilog->log(abs(ex) + 1) + (ex != 0 ? 17 : 0));
               }
               lcp[i] = ex;
             }
             if((zzu[zz] * zzv[zz]) != 0 ) {
               const int zz2 = zPos[zzu[zz] + 8 * zzv[zz] - 9];
-              ex = (images[idx].qTable[q + zz2] + 1) * cBuf2[cpos_dc + zz2] / (images[idx].qTable[q + zz] + 1);
+              ex = (images[idx].qTable[q + zz2] + 1) * cBuf2[cposDc + zz2] / (images[idx].qTable[q + zz] + 1);
               lcp[4] = (ex < 0 ? -1 : +1) * (ilog->log(abs(ex) + 1) + (ex != 0 ? 17 : 0));
 
-              ex = (images[idx].qTable[q + zPos[8 * zzv[zz]]] + 1) * cBuf2[cpos_dc + zPos[8 * zzv[zz]]] / (images[idx].qTable[q + zz] + 1);
+              ex = (images[idx].qTable[q + zPos[8 * zzv[zz]]] + 1) * cBuf2[cposDc + zPos[8 * zzv[zz]]] / (images[idx].qTable[q + zz] + 1);
               lcp[5] = (ex < 0 ? -1 : +1) * (ilog->log(abs(ex) + 1) + (ex != 0 ? 17 : 0));
 
-              ex = (images[idx].qTable[q + zPos[zzu[zz]]] + 1) * cBuf2[cpos_dc + zPos[zzu[zz]]] / (images[idx].qTable[q + zz] + 1);
+              ex = (images[idx].qTable[q + zPos[zzu[zz]]] + 1) * cBuf2[cposDc + zPos[zzu[zz]]] / (images[idx].qTable[q + zz] + 1);
               lcp[6] = (ex < 0 ? -1 : +1) * (ilog->log(abs(ex) + 1) + (ex != 0 ? 17 : 0));
             } else
               lcp[4] = lcp[5] = lcp[6] = 65535;
 
             int prev1 = 0, prev2 = 0, cnt1 = 0, cnt2 = 0, r = 0, s = 0;
             prevCoefRs = coefficientBuffer[cPos - 64];
-            for( int i = 0; i < acomp; i++ ) {
+            for( int i = 0; i < aComp; i++ ) {
               ex = 0;
-              ex += cBuf2[cPos - (acomp - i) * 64];
-              if( zz == 0 && (norst || ls[i] == 64))
-                ex -= cBuf2[cpos_dc - (acomp - i) * 64 - ls[i]];
-              if( color[i] == color[acomp] - 1 ) {
+              ex += cBuf2[cPos - (aComp - i) * 64];
+              if( zz == 0 && (noReset || ls[i] == 64))
+                ex -= cBuf2[cposDc - (aComp - i) * 64 - ls[i]];
+              if( color[i] == color[aComp] - 1 ) {
                 prev1 += ex;
                 cnt1++;
-                r += coefficientBuffer[cPos - (acomp - i) * 64] >> 4;
-                s += coefficientBuffer[cPos - (acomp - i) * 64] & 0xF;
+                r += coefficientBuffer[cPos - (aComp - i) * 64] >> 4;
+                s += coefficientBuffer[cPos - (aComp - i) * 64] & 0xF;
               }
-              if( color[acomp] > 1 && color[i] == color[0] ) {
+              if( color[aComp] > 1 && color[i] == color[0] ) {
                 prev2 += ex;
                 cnt2++;
               }
@@ -539,9 +539,9 @@ int JpegModel::mix(Mixer &m) {
             prevCoef = (prev1 < 0 ? -1 : +1) * ilog->log(11 * abs(prev1) + 1) + (cnt1 << 20U);
             prevCoef2 = (prev2 < 0 ? -1 : +1) * ilog->log(11 * abs(prev2) + 1);
 
-            if( column == 0 && blockW[acomp] > 64 * acomp )
+            if( column == 0 && blockW[aComp] > 64 * aComp )
               runPred[1] = runPred[2], runPred[0] = 0, advPred[1] = advPred[2], advPred[0] = 0;
-            if( row == 0 && blockN[acomp] > 64 * acomp )
+            if( row == 0 && blockN[aComp] > 64 * aComp )
               runPred[1] = runPred[0], runPred[2] = 0, advPred[1] = advPred[0], advPred[2] = 0;
           } // !!!!
         }
@@ -632,36 +632,36 @@ int JpegModel::mix(Mixer &m) {
         cp[i] = t[cxt[i]] + 1;
         const uint8_t s = *cp[i];
         const uint32_t p = sm.p2(i, s);
-        m.add(((int) p - 2048) >> 3);
+        m.add(((int) p - 2048) >> 3U);
         const int st = stretch(p);
         m1->add(st);
-        m.add(st >> 1);
+        m.add(st >> 1U);
       }
       break;
     }
     case 1: {
-      int hc = 1 + (huffcode & 1) * 3;
+      int hc = 1U + (huffcode & 1U) * 3;
       for( int i = 0; i < N; ++i ) {
         cp[i] += hc;
         const uint8_t s = *cp[i];
         const uint32_t p = sm.p2(i, s);
-        m.add(((int) p - 2048) >> 3);
+        m.add(((int) p - 2048) >> 3U);
         const int st = stretch(p);
         m1->add(st);
-        m.add(st >> 1);
+        m.add(st >> 1U);
       }
       break;
     }
     default: {
-      int hc = 1 + (huffcode & 1);
+      int hc = 1U + (huffcode & 1U);
       for( int i = 0; i < N; ++i ) {
         cp[i] += hc;
         const uint8_t s = *cp[i];
         const uint32_t p = sm.p2(i, s);
-        m.add(((int) p - 2048) >> 3);
+        m.add(((int) p - 2048) >> 3U);
         const int st = stretch(p);
         m1->add(st);
-        m.add(st >> 1);
+        m.add(st >> 1U);
       }
       break;
     }
@@ -675,7 +675,7 @@ int JpegModel::mix(Mixer &m) {
   int pr = m1->p();
   m.add(stretch(pr) >> 1);
   m.add((pr >> 2) - 511);
-  pr = apm1.p(pr, (hc & 511) | (((advPred[1] / 16) & 63) << 9), 1023);
+  pr = apm1.p(pr, (hc & 511U) | (((advPred[1] / 16) & 63) << 9), 1023);
   m.add(stretch(pr) >> 1);
   m.add((pr >> 2) - 511);
   pr = apm2.p(pr, (hc & 511) | (coef << 9), 1023);

@@ -6,9 +6,8 @@
 #include "../Encoder.hpp"
 #include "Filter.hpp"
 
-
 // 32-bit image
-void encodeIm32(File *in, File *out, uint64_t len, int width) {
+static void encodeIm32(File *in, File *out, uint64_t len, int width) {
   Shared *shared = Shared::getInstance();
   int r, g, b, a;
   for( int i = 0; i < (int) (len / width); i++ ) {
@@ -29,7 +28,7 @@ void encodeIm32(File *in, File *out, uint64_t len, int width) {
     out->putChar(in->getchar());
 }
 
-uint64_t decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMode mode, uint64_t &diffFound) {
+static uint64_t decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMode mode, uint64_t &diffFound) {
   Shared *shared = Shared::getInstance();
   int r, g, b, a, p;
   bool rgb = (width & (1U << 31U)) > 0;
