@@ -87,11 +87,8 @@ uint32_t level = 0; //this value will be overwritten at the beginning of compres
 #include "Random.hpp"
 #include "ModelStats.hpp"
 #include "Shared.hpp"
-#include "StateTable.hpp"
-#include "Stretch.hpp"
 #include "UpdateBroadcaster.hpp"
 #include "Mixer.hpp"
-#include "APM1.hpp"
 #include "StateMap.hpp"
 #include "Hash.hpp"
 #include "BH.hpp"
@@ -108,7 +105,6 @@ uint32_t level = 0; //this value will be overwritten at the beginning of compres
 
 #ifdef USE_TEXTMODEL
 
-#include "text/Word.hpp"
 #include "text/Segment.hpp"
 #include "text/Sentence.hpp"
 #include "text/Paragraph.hpp"
@@ -315,7 +311,7 @@ static void printCommand(const WHATTODO &whattodo) {
 
 static void printOptions() {
   Shared *shared = Shared::getInstance();
-  printf(" Level          = %d\n", level);
+  printf(" level          = %d\n", level);
   printf(" Brute      (b) = %s\n", shared->options & OPTION_BRUTE ? "On  (Brute-force detection of DEFLATE streams)"
                                                                   : "Off"); //this is a compression-only option, but we put/get it for reproducibility
   printf(" Train exe  (e) = %s\n", shared->options & OPTION_TRAINEXE ? "On  (Pre-train x86/x64 model)" : "Off");

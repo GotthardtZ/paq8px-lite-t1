@@ -17,7 +17,7 @@ struct XMLContent {
 
 struct XMLTag {
     uint32_t name, length;
-    int Level;
+    int level;
     bool endTag, empty;
     XMLContent content;
     struct XMLAttributes {

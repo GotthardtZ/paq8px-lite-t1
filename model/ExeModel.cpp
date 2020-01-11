@@ -267,15 +267,15 @@ void ExeModel::mix(Mixer &m) {
   INJECT_SHARED_c0
   uint8_t s = ((stateBh[context] >> (28 - bpos)) & 0x08) | ((stateBh[context] >> (21 - bpos)) & 0x04) |
               ((stateBh[context] >> (14 - bpos)) & 0x02) | ((stateBh[context] >> (7 - bpos)) & 0x01) |
-              ((op.category == OP_GEN_BRANCH) << 4) | (((c0 & ((1 << bpos) - 1)) == 0) << 5);
+              ((op.category == OP_GEN_BRANCH) << 4) | (((c0 & ((1U << bpos) - 1)) == 0) << 5U);
 
-  m.set(context * 4 + (s >> 4), 1024);
-  m.set(state * 64 + bpos * 8 + (op.bytesRead > 0) * 4 + (s >> 4), 1024);
-  m.set((brkCtx & 0x1FF) | ((s & 0x20) << 4), 1024);
+  m.set(context * 4 + (s >> 4U), 1024);
+  m.set(state * 64 + bpos * 8 + (op.bytesRead > 0) * 4 + (s >> 4U), 1024);
+  m.set((brkCtx & 0x1FFU) | ((s & 0x20U) << 4U), 1024);
   m.set(finalize64(hash(op.code, state, opN(cache, 1) & codeMask), 13), 8192);
   m.set(finalize64(hash(state, bpos, op.code, op.bytesRead), 13), 8192);
-  m.set(finalize64(hash(state, (bpos << 2) | (c0 & 3), opCategoryMask & categoryMask,
-                        ((op.category == OP_GEN_BRANCH) << 2) | (((op.flags & fMODE) == fAM) << 1) | (op.bytesRead > 0)), 13), 8192);
+  m.set(finalize64(hash(state, (bpos << 2U) | (c0 & 3U), opCategoryMask & categoryMask,
+                        ((op.category == OP_GEN_BRANCH) << 2U) | (((op.flags & fMODE) == fAM) << 1) | (op.bytesRead > 0)), 13), 8192);
 }
 
 bool ExeModel::isInvalidX64Op(const uint8_t op) {
@@ -300,15 +300,15 @@ void ExeModel::processMode(ExeModel::Instruction &op, ExeModel::ExeState &state)
     op.bytesRead = 0;
     switch( op.flags & fTYPE ) {
       case fDR:
-        op.data |= (2 << typeShift);
+        op.data |= (2U << typeShift);
       case fDA:
-        op.data |= (1 << typeShift);
+        op.data |= (1U << typeShift);
       case fAD: {
         state = Read32;
         break;
       }
       case fBR: {
-        op.data |= (2 << typeShift);
+        op.data |= (2U << typeShift);
         state = Read8;
       }
     }
@@ -319,7 +319,7 @@ void ExeModel::processMode(ExeModel::Instruction &op, ExeModel::ExeState &state)
         break;
       case fWI: {
         state = Read16;
-        op.data |= (1 << typeShift);
+        op.data |= (1U << typeShift);
         op.bytesRead = 0;
         break;
       }
@@ -328,10 +328,10 @@ void ExeModel::processMode(ExeModel::Instruction &op, ExeModel::ExeState &state)
         op.imm8 = ((op.REX & REX_w) > 0 && (op.code & 0xF8U) == 0xB8U);
         if( !op.o16 || op.imm8 ) {
           state = Read32;
-          op.data |= (2 << typeShift);
+          op.data |= (2U << typeShift);
         } else {
           state = Read16;
-          op.data |= (3 << typeShift);
+          op.data |= (3U << typeShift);
         }
         op.bytesRead = 0;
         break;

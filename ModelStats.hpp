@@ -55,9 +55,7 @@ struct ModelStats {
     //RecordModel
     //ExeModel
 
-    void reset() {
-      memset(this, 0, sizeof(ModelStats));
-    }
+    void reset();
 };
 
 #endif //PAQ8PX_MODELSTATS_HPP

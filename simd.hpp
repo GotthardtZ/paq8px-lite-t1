@@ -58,7 +58,7 @@ static inline unsigned long long xgetbv(unsigned long ctr) {
 9: AVX2
  : AVX512 //TODO
 */
-int simdDetect() {
+static int simdDetect() {
   int cpuidResult[4] = {0, 0, 0, 0};
   cpuid(cpuidResult, 0); // call cpuid function 0 ("Get vendor ID and highest basic calling parameter")
   if( cpuidResult[0] == 0 )

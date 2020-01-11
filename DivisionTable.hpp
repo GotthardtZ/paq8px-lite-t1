@@ -4,6 +4,7 @@
 /**
  * This class provides a static (common) 1024-element lookup table for integer division
  * Initialization will run multiple times, but the table is created only once
+ * TODO: Split into declaration and definition
  */
 class DivisionTable {
 public:

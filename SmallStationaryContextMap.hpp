@@ -24,51 +24,24 @@ public:
 private:
     Shared *shared = Shared::getInstance();
     Array<uint16_t> data;
-    const uint32_t mask, stride, bTotal;
-    uint32_t context, bCount, b;
-    uint16_t *cp;
+    const uint32_t mask;
+    const uint32_t stride;
+    const uint32_t bTotal;
+    uint32_t b {};
+    uint32_t context {};
+    uint32_t bCount {};
+    uint16_t *cp {};
     const int rate;
     int scale;
     UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 
 public:
-    SmallStationaryContextMap(const int bitsOfContext, const int inputBits, const int rate, const int scale) : data(
-            (UINT64_C(1) << bitsOfContext) * ((UINT64_C(1) << inputBits) - 1)), mask((1U << bitsOfContext) - 1),
-            stride((1U << inputBits) - 1), bTotal(inputBits), rate(rate), scale(scale) {
-      assert(inputBits > 0 && inputBits <= 8);
-      reset();
-      set(0);
-    }
-
-    void set(uint32_t ctx) {
-      context = (ctx & mask) * stride;
-      bCount = b = 0;
-    }
-
-    void reset() {
-      for( uint32_t i = 0; i < data.size(); ++i )
-        data[i] = 0x7FFF;
-      cp = &data[0];
-    }
-
-    void update() override {
-      INJECT_SHARED_y
-      *cp += ((y << 16U) - (*cp) + (1 << (rate - 1))) >> rate;
-      b += (y && b > 0);
-    }
-
-    void setScale(const int Scale) { scale = Scale; }
-
-    void mix(Mixer &m) {
-      updater->subscribe(this);
-      cp = &data[context + b];
-      const int prediction = (*cp) >> 4U;
-      m.add((stretch(prediction) * scale) >> 8);
-      m.add(((prediction - 2048) * scale) >> 9);
-      bCount++;
-      b += b + 1;
-      assert(bCount <= bTotal);
-    }
+    SmallStationaryContextMap(int bitsOfContext, int inputBits, int rate, int scale);
+    void set(uint32_t ctx);
+    void reset();
+    void update() override;
+    void setScale(int Scale);
+    void mix(Mixer &m);
 };
 
 #endif //PAQ8PX_SMALLSTATIONARYCONTEXTMAP_HPP

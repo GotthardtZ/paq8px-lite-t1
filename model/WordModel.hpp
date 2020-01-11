@@ -1,13 +1,13 @@
 #ifndef PAQ8PX_WORDMODEL_HPP
 #define PAQ8PX_WORDMODEL_HPP
 
-#ifdef USE_TEXTMODEL
-
 #include <cctype>
 #include "../Shared.hpp"
 #include "../RingBuffer.hpp"
 #include "../ContextMap2.hpp"
 #include "../ModelStats.hpp"
+
+#ifdef USE_TEXTMODEL
 
 /**
  * Model words, expressions, numbers, paragraphs/lines, etc.
@@ -221,10 +221,8 @@ private:
             } else if( c1 == QUOTE || c1 == APOSTROPHE ) {
               mask2 |= c1;
               opened = 0;
-            } else if( c1 == '-' )
-              mask2 |= c1;
-            else
-              mask2 |= c1; //0, SPACE, NEW_LINE, /\+=%$ etc.
+            } else
+              mask2 |= c1; //0, SPACE, NEW_LINE, /\+=%$- etc.
           }
 
           //const uint8_t characterGroup = stats->Text.characterGroup;

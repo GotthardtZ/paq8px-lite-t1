@@ -79,12 +79,12 @@ void XMLModel::update() {
       if( c1 == 0x3C ) {
         state = ReadTagName;
         memset(tag, 0, sizeof(XMLTag));
-        (*tag).Level = ((*pTag).endTag || (*pTag).empty) ? (*pTag).Level : (*pTag).Level + 1;
+        (*tag).level = ((*pTag).endTag || (*pTag).empty) ? (*pTag).level : (*pTag).level + 1;
       }
-      if((*tag).Level > 1 )
+      if((*tag).level > 1 )
         detectContent(content);
 
-      cm.set(hash(pState, state, ((*pTag).Level + 1) * indentStep - whiteSpaceRun));
+      cm.set(hash(pState, state, ((*pTag).level + 1) * indentStep - whiteSpaceRun));
       break;
     }
     case ReadTagName: {
@@ -106,10 +106,10 @@ void XMLModel::update() {
       } else if((*tag).length == 0 ) {
         if( c1 == 0x2F ) {
           (*tag).endTag = true;
-          (*tag).Level = max(0, (*tag).Level - 1);
+          (*tag).level = max(0, (*tag).level - 1);
         } else if( c4 == 0x3C212D2D ) {
           state = ReadComment;
-          (*tag).Level = max(0, (*tag).Level - 1);
+          (*tag).level = max(0, (*tag).level - 1);
         }
       }
 
@@ -118,7 +118,7 @@ void XMLModel::update() {
         state = None;
       } else if((*tag).length == 5 && c8 == 0x215B4344 && c4 == 0x4154415B ) {
         state = ReadCDATA;
-        (*tag).Level = max(0, (*tag).Level - 1);
+        (*tag).level = max(0, (*tag).level - 1);
       }
 
       int i = 1;
@@ -127,7 +127,7 @@ void XMLModel::update() {
         i += 1 + ((*pTag).endTag && cache.tags[(cache.Index - i - 1) & (cacheSize - 1)].name == (*pTag).name);
       } while( i < cacheSize && ((*pTag).endTag || (*pTag).empty));
 
-      cm.set(hash(pState, state, (*tag).name, (*tag).Level, (*pTag).name, (*pTag).Level != (*tag).Level));
+      cm.set(hash(pState, state, (*tag).name, (*tag).level, (*pTag).name, (*pTag).level != (*tag).level));
       break;
     }
     case ReadTag: {
@@ -175,7 +175,7 @@ void XMLModel::update() {
         state = ReadTagName;
         cache.Index++;
         memset(&cache.tags[cache.Index & (cacheSize - 1)], 0, sizeof(XMLTag));
-        cache.tags[cache.Index & (cacheSize - 1)].Level = (*tag).Level + 1;
+        cache.tags[cache.Index & (cacheSize - 1)].level = (*tag).level + 1;
       } else {
         (*content).length++;
         (*content).data = (*content).data * 997 * 16 + (c1 & 0xDF);
@@ -205,7 +205,7 @@ void XMLModel::update() {
   stateBh[pState] = (stateBh[pState] << 8) | c1;
   pTag = &cache.tags[(cache.Index - 1) & (cacheSize - 1)];
   uint64_t i = 64;
-  cm.set(hash(++i, state, (*tag).Level, pState * 2 + (*tag).endTag, (*tag).name));
+  cm.set(hash(++i, state, (*tag).level, pState * 2 + (*tag).endTag, (*tag).name));
   cm.set(hash(++i, (*pTag).name, state * 2 + (*pTag).endTag, (*pTag).content.type, (*tag).content.type));
   cm.set(hash(++i, state * 2 + (*tag).endTag, (*tag).name, (*tag).content.type, c4 & 0xE0FF));
 }

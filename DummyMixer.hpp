@@ -2,6 +2,7 @@
 #define PAQ8PX_DUMMYMIXER_HPP
 
 #include "UpdateBroadcaster.hpp"
+#include "Mixer.hpp"
 
 /**
  * for training NormalModel, WordModel and ExeModel
@@ -10,14 +11,9 @@ class DummyMixer : public Mixer {
 private:
     UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 public:
-    DummyMixer(const int n, const int m, const int s) : Mixer(n, m, s) {}
-
-    void update() override { reset(); }
-
-    int p() override {
-      updater->subscribe(this);
-      return 2048;
-    }
+    DummyMixer(int n, int m, int s);
+    void update() override;
+    int p() override;
 
     void setScaleFactor(const int, const int) override {}
 };

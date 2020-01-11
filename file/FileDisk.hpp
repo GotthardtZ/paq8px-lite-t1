@@ -20,7 +20,7 @@ private:
      * Luckily the MS c runtime library provides two (MS specific) fopen() flags: "T"emporary and "d"elete.
      * @return
      */
-    FILE *makeTmpFile();
+    static FILE *makeTmpFile();
 protected:
     FILE *file;
 

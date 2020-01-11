@@ -5,19 +5,19 @@ bool EnglishStemmer::isConsonant(const char c) {
 }
 
 bool EnglishStemmer::isShortConsonant(const char c) {
-  return !charInArray(c, nonShortConsonants, NUM_NON_SHORT_CONSONANTS);
+  return !charInArray(c, nonShortConsonants, numNonShortConsonants);
 }
 
 bool EnglishStemmer::isDouble(const char c) {
-  return charInArray(c, doubles, NUM_DOUBLES);
+  return charInArray(c, doubles, numDoubles);
 }
 
 bool EnglishStemmer::isLiEnding(const char c) {
-  return charInArray(c, liEndings, NUM_LI_ENDINGS);
+  return charInArray(c, liEndings, numLiEndings);
 }
 
 uint32_t EnglishStemmer::getRegion1(const Word *w) {
-  for( int i = 0; i < NUM_EXCEPTION_REGION1; i++ ) {
+  for( int i = 0; i < numExceptionRegion1; i++ ) {
     if( w->startsWith(exceptionsRegion1[i]))
       return uint32_t(strlen(exceptionsRegion1[i]));
   }
@@ -163,7 +163,7 @@ bool EnglishStemmer::processSuperlatives(Word *w) {
 }
 
 bool EnglishStemmer::step0(Word *w) {
-  for( int i = 0; i < NUM_SUFFIXES_STEP0; i++ ) {
+  for( int i = 0; i < numSuffixesStep0; i++ ) {
     if( w->endsWith(suffixesStep0[i])) {
       w->end -= uint8_t(strlen(suffixesStep0[i]));
       w->type |= English::Plural;
@@ -238,7 +238,7 @@ bool EnglishStemmer::step1A(Word *w) {
 }
 
 bool EnglishStemmer::step1B(Word *w, const uint32_t r1) {
-  for( int i = 0; i < NUM_SUFFIXES_STEP1b; i++ ) {
+  for( int i = 0; i < numSuffixesStep1B; i++ ) {
     if( w->endsWith(suffixesStep1B[i])) {
       switch( i ) {
         case 0:
@@ -352,7 +352,7 @@ bool EnglishStemmer::step1B(Word *w, const uint32_t r1) {
           }
         }
       }
-      w->type |= TypesStep1b[i];
+      w->type |= typesStep1B[i];
       return true;
     }
   }
@@ -431,7 +431,7 @@ bool EnglishStemmer::step2(Word *w, const uint32_t r1) {
 
 bool EnglishStemmer::step3(Word *w, const uint32_t r1, const uint32_t r2) {
   bool res = false;
-  for( int i = 0; i < NUM_SUFFIXES_STEP3; i++ ) {
+  for( int i = 0; i < numSuffixesStep3; i++ ) {
     if( w->endsWith(suffixesStep3[i][0]) && suffixInRn(w, r1, suffixesStep3[i][0])) {
       w->changeSuffix(suffixesStep3[i][0], suffixesStep3[i][1]);
       w->type |= typesStep3[i];
@@ -454,7 +454,7 @@ bool EnglishStemmer::step3(Word *w, const uint32_t r1, const uint32_t r2) {
 
 bool EnglishStemmer::step4(Word *w, const uint32_t r2) {
   bool res = false;
-  for( int i = 0; i < NUM_SUFFIXES_STEP4; i++ ) {
+  for( int i = 0; i < numSuffixesStep4; i++ ) {
     if( w->endsWith(suffixesStep4[i]) && suffixInRn(w, r2, suffixesStep4[i])) {
       w->end -= uint8_t(strlen(suffixesStep4[i]) - (i >
                                                     17) /*sion, tion*/); // remove: al   ance   ence   er   ic   able   ible   ant   ement   ment   ent   ism   ate   iti   ous   ive   ize ; ion -> delete if preceded by s or t
@@ -489,7 +489,7 @@ bool EnglishStemmer::step5(Word *w, const uint32_t r1, const uint32_t r2) {
 }
 
 bool EnglishStemmer::isVowel(const char c) {
-  return charInArray(c, vowels, NUM_VOWELS);
+  return charInArray(c, vowels, numVowels);
 }
 
 bool EnglishStemmer::stem(Word *w) {
@@ -501,7 +501,7 @@ bool EnglishStemmer::stem(Word *w) {
   bool res = trimApostrophes(w);
   res |= processPrefixes(w);
   res |= processSuperlatives(w);
-  for( int i = 0; i < NUM_EXCEPTIONS1; i++ ) {
+  for( int i = 0; i < numExceptions1; i++ ) {
     if((*w) == exceptions1[i][0] ) {
       if( i < 11 ) {
         size_t len = strlen(exceptions1[i][1]);
@@ -521,7 +521,7 @@ bool EnglishStemmer::stem(Word *w) {
   uint32_t r1 = getRegion1(w), r2 = getRegion(w, r1);
   res |= step0(w);
   res |= step1A(w);
-  for( int i = 0; i < NUM_EXCEPTIONS2; i++ ) {
+  for( int i = 0; i < numExceptions2; i++ ) {
     if((*w) == exceptions2[i] ) {
       w->calculateStemHash();
       w->type |= typesExceptions2[i];
@@ -542,13 +542,13 @@ bool EnglishStemmer::stem(Word *w) {
       w->letters[i] = 'y';
   }
   if( !w->type || w->type == English::Plural ) {
-    if( w->matchesAny(maleWords, NUM_MALE_WORDS))
+    if( w->matchesAny(maleWords, numMaleWords))
       res = true, w->type |= English::Male;
-    else if( w->matchesAny(femaleWords, NUM_FEMALE_WORDS))
+    else if( w->matchesAny(femaleWords, numFemaleWords))
       res = true, w->type |= English::Female;
   }
   if( !res )
-    res = w->matchesAny(commonWords, NUM_COMMON_WORDS);
+    res = w->matchesAny(commonWords, numCommonWords);
   w->calculateStemHash();
   if( res )
     w->language = Language::English;

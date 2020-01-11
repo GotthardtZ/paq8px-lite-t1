@@ -15,7 +15,7 @@
 static void CHECK_INDEX(uint64_t index, uint64_t upperBound) {
   if( index >= upperBound ) {
     fprintf(stderr, "%" PRIu64 " out of upper bound %" PRIu64 "\n", index, upperBound);
-    BACKTRACE();
+    BACKTRACE()
     quit();
   }
 }

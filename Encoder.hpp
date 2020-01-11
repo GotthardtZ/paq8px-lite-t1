@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cassert>
+#include "Predictor.hpp"
 
 typedef enum {
     COMPRESS, DECOMPRESS
@@ -12,6 +13,7 @@ typedef enum {
 /**
  * An Encoder does arithmetic encoding.
  * If level (global) is 0, then data is stored without arithmetic coding.
+ * TODO: Split into separate declarations / definitions
  */
 class Encoder {
 private:

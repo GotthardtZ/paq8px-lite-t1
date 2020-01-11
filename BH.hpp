@@ -23,7 +23,7 @@
  */
 template<uint64_t B>
 class BH {
-    enum { M = 8 }; // search limit
+    uint32_t searchLimit = 8;
     Array<uint8_t> t; // elements
     const uint32_t mask; // size-1
     const int hashBits;
@@ -53,11 +53,11 @@ public:
 template<uint64_t B>
 inline uint8_t *BH<B>::operator[](const uint64_t ctx) {
   const auto chk = (uint16_t) checksum64(ctx, hashBits, 16);
-  const uint32_t i = finalize64(ctx, hashBits) * M & mask;
+  const uint32_t i = finalize64(ctx, hashBits) * searchLimit & mask;
   uint8_t *p = nullptr;
   uint16_t *cp = nullptr;
   int j;
-  for( j = 0; j < M; ++j ) {
+  for( j = 0; j < searchLimit; ++j ) {
     p = &t[(i + j) * B];
     cp = (uint16_t *) p;
     if( p[2] == 0 ) {
@@ -70,11 +70,11 @@ inline uint8_t *BH<B>::operator[](const uint64_t ctx) {
   if( j == 0 )
     return p + 1; // front
   static uint8_t tmp[B]; // element to move to front
-  if( j == M ) {
+  if( j == searchLimit ) {
     --j;
     memset(tmp, 0, B);
     memmove(tmp, &chk, 2);
-    if( M > 2 && t[(i + j) * B + 2] > t[(i + j - 1) * B + 2] )
+    if( searchLimit > 2 && t[(i + j) * B + 2] > t[(i + j - 1) * B + 2] )
       --j;
   } else
     memcpy(tmp, cp, B);

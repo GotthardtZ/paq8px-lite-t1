@@ -307,9 +307,7 @@ class StateTable {
     };
 
 public:
-    static uint8_t next(uint8_t const state, const int y) {
-      return stateTable[state][y];
-    }
+    static uint8_t next(uint8_t state, int y);
 
     /**
      * Probabilistic increment (approximate counting)
@@ -321,27 +319,11 @@ public:
      * @param rnd
      * @return
      */
-    static uint8_t next(uint8_t const oldState, const int y, Random &rnd) {
-      uint8_t newState = stateTable[oldState][y];
-      if( newState >= 205 ) { // for all groups of four states higher than idx 205
-        if( oldState < 249 ) { // still climbing
-          const int shift = (460 - newState) >> 3U;
-          //for each group the probability to advance to a higher state is less and less as we climb higher and higher
-          if((rnd() << shift) != 0 ) {
-            newState -= 4;
-          }
-        }
-      }
-      return newState;
-    }
+    static uint8_t next(uint8_t oldState, int y, Random &rnd);
 
-    static void update(uint8_t *const state, const int y, Random &rnd) {
-      *state = next(*state, y, rnd);
-    }
+    static void update(uint8_t *state, int y, Random &rnd);
 
-    static uint8_t group(const uint8_t state) {
-      return stateGroup[state];
-    }
+    static uint8_t group(uint8_t state);
 };
 
 #endif //PAQ8PX_STATETABLE_HPP

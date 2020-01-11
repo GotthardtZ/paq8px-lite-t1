@@ -189,7 +189,7 @@ void TextModel::update() {
         cSentence->segmentCount++;
         cParagraph->sentenceCount++;
         cParagraph->typeCount[cSentence->type]++;
-        cParagraph->typeMask <<= 2, cParagraph->typeMask |= cSentence->type;
+        cParagraph->typeMask <<= 2U, cParagraph->typeMask |= cSentence->type;
         cSentence = &sentences.next();
         Info.masks[3] += 3;
         skip = true;
