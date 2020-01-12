@@ -62,7 +62,7 @@ void ContextMap2::update() {
   INJECT_SHARED_y
   for( uint32_t i = 0; i < index; i++ ) {
     if(((validFlags >> (index - 1 - i)) & 1U) != 0 ) {
-      if( bitState[i] )
+      if( bitState[i] != nullptr )
         StateTable::update(bitState[i], y, rnd);
 
       auto byteHistoryPtr = byteHistory[i];
@@ -125,10 +125,10 @@ void ContextMap2::setScale(const int Scale) { scale = Scale; }
 void ContextMap2::mix(Mixer &m) {
   updater->subscribe(this);
   stateMap.subscribe();
-  if( useWhat & CM_USE_RUN_STATS ) {
+  if( (useWhat & CM_USE_RUN_STATS) != 0u ) {
     runMap.subscribe();
   }
-  if( useWhat & CM_USE_BYTE_HISTORY ) {
+  if( (useWhat & CM_USE_BYTE_HISTORY) != 0u ) {
     bhMap8B.subscribe();
     bhMap12B.subscribe();
   }
@@ -151,19 +151,19 @@ void ContextMap2::mix(Mixer &m) {
       const bool complete1 = (byteState >= 3) || (byteState >= 1 && bpos == 0);
       const bool complete2 = (byteState >= 7) || (byteState >= 3 && bpos == 0);
       const bool complete3 = (byteState >= 15) || (byteState >= 7 && bpos == 0);
-      if( useWhat & CM_USE_RUN_STATS ) {
+      if( (useWhat & CM_USE_RUN_STATS) != 0u ) {
         const int bp = (0xFEA4 >> (bpos << 1)) & 3; // {0}->0  {1}->1  {2,3,4}->2  {5,6,7}->3
         bool skipRunMap = true;
         if( complete1 ) {
           if(((byte1 + 256) >> (8 - bpos)) == c0 ) { // 1st candidate (last byte seen) matches
             const int predictedBit = (byte1 >> (7 - bpos)) & 1;
-            const int byte1IsUncertain = (byte2 != byte1);
+            const int byte1IsUncertain = static_cast<const int>(byte2 != byte1);
             const int runCount = byteHistoryPtr[0]; // 1..254
             m.add(stretch(runMap.p2(i, runCount << 4 | bp << 2 | byte1IsUncertain << 1 | predictedBit)) >> (1 + byte1IsUncertain));
             skipRunMap = false;
           } else if( complete2 && ((byte2 + 256) >> (8 - bpos)) == c0 ) { // 2nd candidate matches
             const int predictedBit = (byte2 >> (7 - bpos)) & 1;
-            const int byte2IsUncertain = (byte3 != byte2);
+            const int byte2IsUncertain = static_cast<const int>(byte3 != byte2);
             m.add(stretch(runMap.p2(i, bitIsUncertain << 1 | predictedBit)) >> (2 + byte2IsUncertain));
             skipRunMap = false;
           }
@@ -189,11 +189,11 @@ void ContextMap2::mix(Mixer &m) {
         m.add(((p1 - 2048) * scale) >> 9U);
         m.add((bitIsUncertain - 1) & st); // when both counts are nonzero add(0) otherwise add(st)
         const int p0 = 4095 - p1;
-        m.add((((p1 & (-!n0)) - (p0 & (-!n1))) * scale) >> 10U);
+        m.add((((p1 & (-static_cast<int>(n0) == 0)) - (p0 & (-static_cast<int>(n1) == 0))) * scale) >> 10U);
         order++;
       }
 
-      if( useWhat & CM_USE_BYTE_HISTORY ) {
+      if( (useWhat & CM_USE_BYTE_HISTORY) != 0u ) {
         const int bhBits = (((byte1 >> (7 - bpos)) & 1)) | (((byte2 >> (7 - bpos)) & 1) << 1) | (((byte3 >> (7 - bpos)) & 1) << 2);
 
         int bhState = 0; // 4 bit
@@ -211,11 +211,11 @@ void ContextMap2::mix(Mixer &m) {
         m.add(stretch(bhMap12B.p2(i, stateGroup << 7U | (bhState << 3U) | bpos)) >> 2U);
       }
     } else { //skipped context
-      if( useWhat & CM_USE_RUN_STATS ) {
+      if( (useWhat & CM_USE_RUN_STATS) != 0u ) {
         runMap.skip(i);
         m.add(0);
       }
-      if( useWhat & CM_USE_BYTE_HISTORY ) {
+      if( (useWhat & CM_USE_BYTE_HISTORY) != 0u ) {
         bhMap8B.skip(i);
         m.add(0);
         bhMap12B.skip(i);

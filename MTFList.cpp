@@ -9,11 +9,11 @@ MTFList::MTFList(const uint16_t n) : root(0), Index(0), previous(n), next(n) {
   next[n - 1] = -1;
 }
 
-int MTFList::getFirst() {
+auto MTFList::getFirst() -> int {
   return Index = root;
 }
 
-int MTFList::getNext() {
+auto MTFList::getNext() -> int {
   if( Index >= 0 )
     Index = next[Index];
   return Index;
@@ -23,7 +23,8 @@ void MTFList::moveToFront(const int i) {
   assert(uint32_t(i) < previous.size());
   if((Index = i) == root )
     return;
-  const int p = previous[Index], n = next[Index];
+  const int p = previous[Index];
+  const int n = next[Index];
   if( p >= 0 )
     next[p] = next[Index];
   if( n >= 0 )

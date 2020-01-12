@@ -15,13 +15,13 @@ private:
 #ifndef NVERBOSE
     uint32_t requests, hits;
 #endif
-    int findEntry(short prefix, uint8_t suffix);
-    void addEntry(short prefix, uint8_t suffix, int offset = -1);
+    auto findEntry(short prefix, uint8_t suffix) -> int;
+    void addEntry(short prefix, uint8_t suffix, int offset);
 public:
     WordEmbeddingDictionary();
     ~WordEmbeddingDictionary();
     void reset();
-    bool addWord(const Word *w, uint32_t embedding);
+    auto addWord(const Word *w, uint32_t embedding) -> bool;
     void getWordEmbedding(Word *w);
     void loadFromFile(const char *filename);
 };

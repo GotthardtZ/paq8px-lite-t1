@@ -21,9 +21,8 @@ void XMLModel::detectContent(XMLContent *content) {
       (*content).type |= ContentFlags::Date;
   }
 
-  if((c4 & 0xF0FFF0F0) == 0x303A3030 && buf(5) >= 0x30 && buf(5) <= 0x39 && ((buf(6) < 0x30 || buf(6) > 0x39) /*?dd:dd*/ ||
-                                                                             ((c8 & 0xF0F0FF00) == 0x30303A00 &&
-                                                                              (buf(9) < 0x30 || buf(9) > 0x39) /*?dd:dd:dd*/)))
+  if((c4 & 0xF0FFF0F0) == 0x303A3030 && buf(5) >= 0x30 && buf(5) <= 0x39 &&
+     ((buf(6) < 0x30 || buf(6) > 0x39) /*?dd:dd*/ || ((c8 & 0xF0F0FF00) == 0x30303A00 && (buf(9) < 0x30 || buf(9) > 0x39) /*?dd:dd:dd*/)))
     (*content).type |= ContentFlags::Time;
 
   if((*content).length >= 8 && (c8 & 0x80808080) == 0 && (c4 & 0x80808080) == 0 ) //8 ~ascii

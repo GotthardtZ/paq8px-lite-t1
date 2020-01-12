@@ -36,9 +36,8 @@ void FrenchStemmer::markVowelsAsConsonants(Word *w) {
 
 uint32_t FrenchStemmer::getRv(Word *w) {
   uint32_t len = w->length(), res = w->start + len;
-  if( len >= 3 &&
-      ((isVowel(w->letters[w->start]) && isVowel(w->letters[w->start + 1])) || w->startsWith("par") || w->startsWith("col") ||
-       w->startsWith("tap")))
+  if( len >= 3 && ((isVowel(w->letters[w->start]) && isVowel(w->letters[w->start + 1])) || w->startsWith("par") || w->startsWith("col") ||
+                   w->startsWith("tap")))
     return w->start + 3;
   else {
     for( int i = w->start + 1; i <= w->end; i++ ) {

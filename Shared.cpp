@@ -2,8 +2,8 @@
 
 Shared *Shared::mPInstance = nullptr;
 
-Shared *Shared::getInstance() {
-  if( !mPInstance ) {
+auto Shared::getInstance() -> Shared * {
+  if( mPInstance == nullptr ) {
     mPInstance = new Shared;
   }
 

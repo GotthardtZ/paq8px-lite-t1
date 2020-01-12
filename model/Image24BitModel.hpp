@@ -1,21 +1,23 @@
 #ifndef PAQ8PX_IMAGE24BITMODEL_HPP
 #define PAQ8PX_IMAGE24BITMODEL_HPP
 
-#include <cmath>
-#include "../HashTable.hpp"
-#include "../SmallStationaryContextMap.hpp"
 #include "../ContextMap2.hpp"
-#include "../StationaryMap.hpp"
+#include "../HashTable.hpp"
 #include "../ModelStats.hpp"
-#include "RecordModel.hpp"
 #include "../OLS.hpp"
+#include "../SmallStationaryContextMap.hpp"
+#include "../StationaryMap.hpp"
+#include "RecordModel.hpp"
+#include <cmath>
 
-static inline uint8_t paeth(uint8_t const W, uint8_t const N, uint8_t const NW) {
+static inline auto paeth(uint8_t const W, uint8_t const N, uint8_t const NW) -> uint8_t {
   int p = W + N - NW;
-  int pW = abs(p - (int) W), pN = abs(p - (int) N), pNW = abs(p - (int) NW);
+  int pW = abs(p - (int) W);
+  int pN = abs(p - (int) N);
+  int pNW = abs(p - (int) NW);
   if( pW <= pN && pW <= pNW )
     return W;
-  else if( pN <= pNW )
+  if( pN <= pNW )
     return N;
   return NW;
 }

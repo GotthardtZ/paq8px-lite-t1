@@ -1,6 +1,7 @@
 #ifndef PAQ8PX_UTF8_HPP
 #define PAQ8PX_UTF8_HPP
 
+#include <cstdint>
 // UTF8 validator
 // Based on: http://bjoern.hoehrmann.de/utf-8/decoder/dfa/
 // Control characters (0x00-0x1f) and 0x7f are not allowed (except for 0/tab/cr/lf)

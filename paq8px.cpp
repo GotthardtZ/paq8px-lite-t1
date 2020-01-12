@@ -11,7 +11,7 @@
 #define PROGVERSION  "184"  //update version here before publishing your changes
 #define PROGYEAR     "2020"
 
-// TODO: make more models "optional"
+// TODO(epsteina): make more models "optional"
 
 #define NHASHCONFIG  //Remove (comment out) this line to enable hash configuration from the command line (somewhat slower compression)
 
@@ -72,41 +72,33 @@ static_assert(sizeof(uint64_t) == 8, "sizeof(uint64_t)");
 static_assert(sizeof(short) == 2, "sizeof(short)");
 static_assert(sizeof(int) == 4, "sizeof(int)");
 
-#include "ProgramChecker.hpp"
-#include "String.hpp"
-#include "file/File.hpp"
-#include "Random.hpp"
-#include "ModelStats.hpp"
-#include "Shared.hpp"
-#include "UpdateBroadcaster.hpp"
-#include "Mixer.hpp"
-#include "StateMap.hpp"
-#include "Hash.hpp"
 #include "BH.hpp"
-#include "HashTable.hpp"
-#include "SmallStationaryContextMap.hpp"
-#include "StationaryMap.hpp"
-#include "IndirectMap.hpp"
 #include "ContextMap.hpp"
 #include "ContextMap2.hpp"
-#include "OLS.hpp"
-#include "LMS.hpp"
+#include "Hash.hpp"
+#include "HashTable.hpp"
 #include "IndirectContext.hpp"
+#include "IndirectMap.hpp"
+#include "LMS.hpp"
 #include "MTFList.hpp"
-
-#ifdef USE_TEXTMODEL
-
-#include "text/WordEmbeddingDictionary.hpp"
-
-#endif //USE_TEXTMODEL
-
-#include "model/ExeModel.hpp"
-#include "model/XMLModel.hpp"
+#include "Mixer.hpp"
+#include "OLS.hpp"
+#include "ProgramChecker.hpp"
+#include "Random.hpp"
+#include "Shared.hpp"
+#include "SmallStationaryContextMap.hpp"
+#include "StateMap.hpp"
+#include "StationaryMap.hpp"
+#include "String.hpp"
+#include "UpdateBroadcaster.hpp"
+#include "file/File.hpp"
 #include "Encoder.hpp"
-#include "filter/Filters.hpp"
+#include "file/FileName.hpp"
 #include "file/ListOfFiles.hpp"
 #include "file/fileUtils2.hpp"
-#include "file/FileName.hpp"
+#include "filter/Filters.hpp"
+#include "model/ExeModel.hpp"
+#include "model/XMLModel.hpp"
 
 typedef enum { DoNone, DoCompress, DoExtract, DoCompare, DoList } WHATTODO;
 
@@ -267,17 +259,18 @@ static void printCommand(const WHATTODO &whattodo) {
 static void printOptions() {
   Shared *shared = Shared::getInstance();
   printf(" level          = %d\n", shared->level);
-  printf(" Brute      (b) = %s\n", shared->options & OPTION_BRUTE ? "On  (Brute-force detection of DEFLATE streams)"
-                                                                  : "Off"); //this is a compression-only option, but we put/get it for reproducibility
-  printf(" Train exe  (e) = %s\n", shared->options & OPTION_TRAINEXE ? "On  (Pre-train x86/x64 model)" : "Off");
-  printf(" Train txt  (t) = %s\n", shared->options & OPTION_TRAINTXT ? "On  (Pre-train main model with word and expression list)" : "Off");
-  printf(" Adaptive   (a) = %s\n", shared->options & OPTION_ADAPTIVE ? "On  (Adaptive learning rate)" : "Off");
+  printf(" Brute      (b) = %s\n", (shared->options & OPTION_BRUTE) != 0u ? "On  (Brute-force detection of DEFLATE streams)"
+                                                                          : "Off"); //this is a compression-only option, but we put/get it for reproducibility
+  printf(" Train exe  (e) = %s\n", (shared->options & OPTION_TRAINEXE) != 0u ? "On  (Pre-train x86/x64 model)" : "Off");
+  printf(" Train txt  (t) = %s\n",
+         (shared->options & OPTION_TRAINTXT) != 0u ? "On  (Pre-train main model with word and expression list)" : "Off");
+  printf(" Adaptive   (a) = %s\n", (shared->options & OPTION_ADAPTIVE) != 0u ? "On  (Adaptive learning rate)" : "Off");
   printf(" Skip RGB   (s) = %s\n",
-         shared->options & OPTION_SKIPRGB ? "On  (Skip the color transform, just reorder the RGB channels)" : "Off");
-  printf(" File mode      = %s\n", shared->options & OPTION_MULTIPLE_FILE_MODE ? "Multiple" : "Single");
+         (shared->options & OPTION_SKIPRGB) != 0u ? "On  (Skip the color transform, just reorder the RGB channels)" : "Off");
+  printf(" File mode      = %s\n", (shared->options & OPTION_MULTIPLE_FILE_MODE) != 0u ? "Multiple" : "Single");
 }
 
-int main_utf8(int argc, char **argv) {
+auto main_utf8(int argc, char **argv) -> int {
   ProgramChecker *programChecker = ProgramChecker::getInstance();
   try {
 
@@ -294,7 +287,7 @@ int main_utf8(int argc, char **argv) {
     // Parse command line arguments
     WHATTODO whattodo = DoNone;
     bool verbose = false;
-    int c;
+    int c = 0;
     int simdIset = -1; //simd instruction set to use
 
     FileName input;
@@ -453,7 +446,7 @@ int main_utf8(int argc, char **argv) {
         quit("A file list (a file name prefixed by '@') may only be specified when compressing.");
     }
 
-    int pathType;
+    int pathType = 0;
 
     //Logfile supplied?
     if( logfile.strsize() != 0 ) {
@@ -536,7 +529,7 @@ int main_utf8(int argc, char **argv) {
     listoffiles.setBasePath(whattodo == DoCompress ? inputPath.c_str() : outputPath.c_str());
 
     // Process file list (in multiple file mode)
-    if( shared->options & OPTION_MULTIPLE_FILE_MODE ) { //multiple file mode
+    if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0u ) { //multiple file mode
       assert(whattodo == DoCompress);
       // Read and parse filelist file
       FileDisk f;
@@ -587,7 +580,7 @@ int main_utf8(int argc, char **argv) {
 
     // Write archive header to archive file
     if( mode == COMPRESS ) {
-      if( shared->options & OPTION_MULTIPLE_FILE_MODE ) { //multiple file mode
+      if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0u ) { //multiple file mode
         numberOfFiles = listoffiles.getCount();
         printf("Creating archive %s in multiple file mode with %d file%s...\n", archiveName.c_str(), numberOfFiles,
                numberOfFiles > 1 ? "s" : "");
@@ -794,7 +787,7 @@ int main_utf8(int argc, char **argv) {
   return 0;
 }
 
-int main(int argc, char **argv) {
+auto main(int argc, char **argv) -> int {
 #ifdef WINDOWS
   // On Windows, argv is encoded in the effective codepage, therefore unsuitable for acquiring command line arguments (file names
   // in our case) not representable in that particular codepage.

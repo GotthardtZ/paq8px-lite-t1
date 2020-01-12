@@ -8,6 +8,6 @@ Random::Random() : table(64) {
   i = 0;
 }
 
-uint32_t Random::operator()() {
+auto Random::operator()() -> uint32_t {
   return ++i, table[i & 63U] = table[(i - 24) & 63U] ^ table[(i - 55) & 63U];
 }

@@ -124,8 +124,8 @@ void ContextMap::mix(Mixer &m) {
         const int contextIsYoung = int(s <= 2);
         m.add(st >> contextIsYoung);
         m.add((p1 - 2048) >> 3U);
-        const int n0 = -!StateTable::next(s, 2);
-        const int n1 = -!StateTable::next(s, 3);
+        const int n0 = -static_cast<int>(StateTable::next(s, 2)) == 0u;
+        const int n1 = -static_cast<int>(StateTable::next(s, 3)) == 0u;
         m.add((n0 | n1) & st); // when both counts are nonzero add(0) otherwise add(st)
         const int p0 = 4095 - p1;
         m.add(((p1 & n0) - (p0 & n1)) >> 4);

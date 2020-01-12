@@ -12,7 +12,7 @@ APM1::APM1(const int n, const int r) : index(0), n(n), t(n * 33), rate(r) {
       }
 }
 
-int APM1::p(int pr, const int cxt) {
+auto APM1::p(int pr, const int cxt) -> int {
   updater->subscribe(this);
   assert(pr >= 0 && pr < 4096 && cxt >= 0 && cxt < n);
   pr = stretch(pr);

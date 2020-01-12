@@ -33,7 +33,7 @@ StateMap::StateMap(const int s, const int n, const int lim, const StateMap::MAPT
 
 void StateMap::reset(const int rate) {
   for( uint32_t i = 0; i < N * S; ++i )
-    t[i] = (t[i] & 0xfffffc00u) | min(rate, t[i] & 0x3FFU);
+    t[i] = (t[i] & 0xfffffc00U) | min(rate, t[i] & 0x3FFU);
 }
 
 void StateMap::update() {
@@ -48,7 +48,7 @@ void StateMap::update() {
   }
 }
 
-int StateMap::p1(const uint32_t cx) {
+auto StateMap::p1(const uint32_t cx) -> int {
   updater->subscribe(this);
   assert(cx >= 0 && cx < N);
   cxt[0] = cx;
@@ -56,7 +56,7 @@ int StateMap::p1(const uint32_t cx) {
   return t[cx] >> 20U;
 }
 
-int StateMap::p2(const uint32_t s, const uint32_t cx) {
+auto StateMap::p2(const uint32_t s, const uint32_t cx) -> int {
   assert(s >= 0 && s < S);
   assert(cx >= 0 && cx < N);
   assert(s == numContexts);

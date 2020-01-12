@@ -1,9 +1,9 @@
 #ifndef PAQ8PX_CHARGROUPMODEL_HPP
 #define PAQ8PX_CHARGROUPMODEL_HPP
 
-#include <cstdint>
-#include "../Shared.hpp"
 #include "../ContextMap2.hpp"
+#include "../Shared.hpp"
+#include <cstdint>
 
 /**
  * modeling ascii character sequences
@@ -28,7 +28,7 @@ public:
             nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS + ContextMap2::MIXERINPUTS_BYTE_HISTORY); // 35
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
-    CharGroupModel(uint64_t size);
+    explicit CharGroupModel(uint64_t size);
     void mix(Mixer &m);
 };
 

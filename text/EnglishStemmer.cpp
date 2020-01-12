@@ -291,8 +291,7 @@ bool EnglishStemmer::step1B(Word *w, const uint32_t r1) {
                     static constexpr char allowed[7] = {'a', 'd', 'e', 'i', 'l', 'r', 'u'};
                     if( charInArray((*w)(1), allowed, 7) || ((*w)(1) == 'n' &&
                                                              ((*w)(2) == 'e' || ((*w)(2) == 'u' && (*w)(3) != 'b' && (*w)(3) != 'd') ||
-                                                              ((*w)(2) == 'a' &&
-                                                               ((*w)(3) == 'r' || ((*w)(3) == 'h' && (*w)(4) == 'c'))) ||
+                                                              ((*w)(2) == 'a' && ((*w)(3) == 'r' || ((*w)(3) == 'h' && (*w)(4) == 'c'))) ||
                                                               (w->endsWith("ring") && ((*w)(4) == 'c' || (*w)(4) == 'f')))))
                       (*w) += 'e';
                     break;

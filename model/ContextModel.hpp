@@ -2,9 +2,9 @@
 #define PAQ8PX_CONTEXTMODEL_HPP
 
 #include "../text/TextModel.hpp"
-#include "../ModelStats.hpp"
-#include "../MixerFactory.hpp"
 #include "../Mixer.hpp"
+#include "../MixerFactory.hpp"
+#include "../ModelStats.hpp"
 #include "../Models.hpp"
 
 /**
@@ -21,7 +21,7 @@ class ContextModel {
 
 public:
     ContextModel(ModelStats *st, Models &models);
-    int p();
+    auto p() -> int;
     ~ContextModel();
 };
 

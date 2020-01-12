@@ -1,17 +1,17 @@
 #ifndef PAQ8PX_WORD_HPP
 #define PAQ8PX_WORD_HPP
 
-#include <cmath>
 #include "../Hash.hpp"
-#include <cstdio>
 #include <cctype>
+#include <cmath>
+#include <cstdio>
 
 #define MAX_WORD_SIZE 64
 #define WORD_EMBEDDING_SIZE 3
 
 class Word {
 private:
-    uint64_t calculateHash();
+    auto calculateHash() -> uint64_t;
 public:
     uint8_t letters[MAX_WORD_SIZE] {};
     uint8_t start {}, end {};
@@ -19,25 +19,25 @@ public:
     uint32_t type {}, language {}, embedding {};
     Word();
     void reset();
-    bool operator==(const char *s) const;
-    bool operator!=(const char *s) const;
+    auto operator==(const char *s) const -> bool;
+    auto operator!=(const char *s) const -> bool;
     void operator+=(char c);
-    uint32_t operator-(Word w) const;
-    uint32_t operator+(Word w) const;
-    uint8_t operator[](uint8_t i) const;
-    uint8_t operator()(uint8_t i) const;
-    [[nodiscard]] uint32_t length() const;
-    [[nodiscard]] uint32_t distanceTo(Word w) const;
+    auto operator-(Word w) const -> uint32_t;
+    auto operator+(Word w) const -> uint32_t;
+    auto operator[](uint8_t i) const -> uint8_t;
+    auto operator()(uint8_t i) const -> uint8_t;
+    [[nodiscard]] auto length() const -> uint32_t;
+    [[nodiscard]] auto distanceTo(Word w) const -> uint32_t;
     void calculateWordHash();
 
     /**
      * Called by a stemmer after stemming
      */
     void calculateStemHash();
-    bool changeSuffix(const char *oldSuffix, const char *newSuffix);
-    bool matchesAny(const char **a, int count);
-    bool endsWith(const char *suffix) const;
-    bool startsWith(const char *prefix) const;
+    auto changeSuffix(const char *oldSuffix, const char *newSuffix) -> bool;
+    auto matchesAny(const char **a, int count) -> bool;
+    auto endsWith(const char *suffix) const -> bool;
+    auto startsWith(const char *prefix) const -> bool;
     void print() const;
 };
 

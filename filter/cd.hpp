@@ -1,6 +1,9 @@
 #ifndef PAQ8PX_CD_HPP
 #define PAQ8PX_CD_HPP
 
+#include "Filter.hpp"
+#include "ecc.hpp"
+
 static void encodeCd(File *in, File *out, uint64_t size, int info) {
   //TODO: Large file support
   const int block = 2352;
@@ -19,15 +22,15 @@ static void encodeCd(File *in, File *out, uint64_t size, int info) {
         blk[15] = 3; //indicate Mode2/Form2
       if( offset == 0 )
         out->blockWrite(&blk[12],
-                        4 + 4 * (blk[15] != 1)); //4-byte address + 4 bytes from the 8-byte subheader goes only to the first sector
-      out->blockWrite(&blk[16 + 8 * (blk[15] != 1)], 2048 + 276 * (info == 3)); //user data goes to all sectors
+                        4 + 4 * static_cast<int>(blk[15] != 1)); //4-byte address + 4 bytes from the 8-byte subheader goes only to the first sector
+      out->blockWrite(&blk[16 + 8 * static_cast<int>(blk[15] != 1)], 2048 + 276 * static_cast<int>(info == 3)); //user data goes to all sectors
       if( offset + block * 2 > size && blk[15] != 1 )
         out->blockWrite(&blk[16], 4); //in Mode2 4 bytes from the 8-byte subheader goes after the last sector
     }
   }
 }
 
-static int expandCdSector(uint8_t *data, int address, int test) {
+static auto expandCdSector(uint8_t *data, int address, int test) -> int {
   uint8_t d2[2352];
   eccedcInit();
   //sync pattern: 00 FF FF FF FF FF FF FF FF FF FF 00
@@ -58,7 +61,7 @@ static int expandCdSector(uint8_t *data, int address, int test) {
   d2[15] = mode;
   if( mode == 2 )
     for( int i = 16; i < 24; i++ )
-      d2[i] = data[i - 4 * (i >= 20)]; //8 byte subheader
+      d2[i] = data[i - 4 * static_cast<int>(i >= 20)]; //8 byte subheader
   if( form == 1 ) {
     if( mode == 2 ) {
       d2[1] = d2[12], d2[2] = d2[13], d2[3] = d2[14];
@@ -67,11 +70,11 @@ static int expandCdSector(uint8_t *data, int address, int test) {
       for( int i = 2068; i < 2076; i++ )
         d2[i] = 0; //Mode1: reserved 8 (zero) bytes
     }
-    for( int i = 16 + 8 * (mode == 2); i < 2064 + 8 * (mode == 2); i++ )
+    for( int i = 16 + 8 * static_cast<int>(mode == 2); i < 2064 + 8 * static_cast<int>(mode == 2); i++ )
       d2[i] = data[i]; //data bytes
-    uint32_t edc = edcCompute(d2 + 16 * (mode == 2), 2064 - 8 * (mode == 2));
+    uint32_t edc = edcCompute(d2 + 16 * static_cast<int>(mode == 2), 2064 - 8 * static_cast<int>(mode == 2));
     for( int i = 0; i < 4; i++ )
-      d2[2064 + 8 * (mode == 2) + i] = (edc >> (8 * i)) & 0xff;
+      d2[2064 + 8 * static_cast<int>(mode == 2) + i] = (edc >> (8 * i)) & 0xff;
     eccCompute(d2 + 12, 86, 24, 2, 86, d2 + 2076);
     eccCompute(d2 + 12, 52, 43, 86, 88, d2 + 2248);
     if( mode == 2 ) {
@@ -80,7 +83,7 @@ static int expandCdSector(uint8_t *data, int address, int test) {
     }
   }
   for( int i = 0; i < 2352; i++ )
-    if( d2[i] != data[i] && test )
+    if( d2[i] != data[i] && (test != 0) )
       form = 2;
   if( form == 2 ) {
     for( int i = 24; i < 2348; i++ )
@@ -90,14 +93,14 @@ static int expandCdSector(uint8_t *data, int address, int test) {
       d2[2348 + i] = (edc >> (8 * i)) & 0xff; //EDC
   }
   for( int i = 0; i < 2352; i++ )
-    if( d2[i] != data[i] && test )
+    if( d2[i] != data[i] && (test != 0) )
       return 0;
     else
       data[i] = d2[i];
   return mode + form - 1;
 }
 
-static uint64_t decodeCd(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
+static auto decodeCd(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFound) -> uint64_t {
   //TODO: Large file support
   const int block = 2352;
   uint8_t blk[block];
@@ -114,21 +117,21 @@ static uint64_t decodeCd(File *in, uint64_t size, File *out, FMode mode, uint64_
         out->blockWrite(blk, residual);
       else if( mode == FCOMPARE )
         for( int j = 0; j < (int) residual; ++j )
-          if( blk[j] != out->getchar() && !diffFound )
+          if( blk[j] != out->getchar() && (diffFound == 0u) )
             diffFound = nextBlockPos + j + 1;
       return nextBlockPos + residual;
-    } else if( i == 0 ) { //first sector
+    } if( i == 0 ) { //first sector
       in->blockRead(blk + 12,
                     4); //header (4 bytes) consisting of address (Minutes, Seconds, Sectors) and mode (1 = Mode1, 2 = Mode2/Form1, 3 = Mode2/Form2)
       if( blk[15] != 1 )
         in->blockRead(blk + 16, 4); //Mode2: 4 bytes from the read 8-byte subheader
-      dataSize = 2048 + (blk[15] == 3) *
+      dataSize = 2048 + static_cast<int>(blk[15] == 3) *
                         276; //user data bytes: Mode1 and Mode2/Form1: 2048 (ECC is present) or Mode2/Form2: 2048+276=2324 bytes (ECC is not present)
-      i += 4 + 4 * (blk[15] != 1); //4 byte header + ( Mode2: 4 bytes from the 8-byte subheader )
+      i += 4 + 4 * static_cast<int>(blk[15] != 1); //4 byte header + ( Mode2: 4 bytes from the 8-byte subheader )
     } else { //normal sector
       address = (blk[12] << 16) + (blk[13] << 8) + blk[14]; //3-byte address (Minutes, Seconds, Sectors)
     }
-    in->blockRead(blk + 16 + (blk[15] != 1) * 8,
+    in->blockRead(blk + 16 + static_cast<int>(blk[15] != 1) * 8,
                   dataSize); //read data bytes, but skip 8-byte subheader in Mode 2 (which we processed already above)
     i += dataSize;
     if( dataSize > 2048 )
@@ -142,7 +145,7 @@ static uint64_t decodeCd(File *in, uint64_t size, File *out, FMode mode, uint64_
       out->blockWrite(blk, block);
     else if( mode == FCOMPARE )
       for( int j = 0; j < block; ++j )
-        if( blk[j] != out->getchar() && !diffFound )
+        if( blk[j] != out->getchar() && (diffFound == 0u) )
           diffFound = nextBlockPos + j + 1;
     nextBlockPos += block;
   }

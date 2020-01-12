@@ -2,14 +2,14 @@
 #define PAQ8PX_EXEMODEL_HPP
 
 #include "../RingBuffer.hpp"
+#include "../ContextMap2.hpp"
+#include "../Hash.hpp"
+#include "../IndirectMap.hpp"
+#include "../Mixer.hpp"
+#include "../ModelStats.hpp"
+#include "../Shared.hpp"
 #include <cstdint>
 #include <cstring>
-#include "../Shared.hpp"
-#include "../ModelStats.hpp"
-#include "../Mixer.hpp"
-#include "../Hash.hpp"
-#include "../ContextMap2.hpp"
-#include "../IndirectMap.hpp"
 
 /**
  * Model for x86/x64 code.
@@ -584,16 +584,16 @@ private:
     const ModelStats *const stats;
     ContextMap2 cm;
     IndirectMap iMap;
-    OpCache cache;
-    uint32_t stateBh[256];
+    OpCache cache {};
+    uint32_t stateBh[256] {};
     ExeState pState, state;
-    Instruction op;
+    Instruction op {};
     uint32_t totalOps, opMask, opCategoryMask, context;
     uint64_t brkCtx; // hash
     bool valid;
 
-    static inline bool isInvalidX64Op(uint8_t op);
-    static inline bool isValidX64Prefix(uint8_t prefix);
+    static inline auto isInvalidX64Op(uint8_t op) -> bool;
+    static inline auto isValidX64Prefix(uint8_t prefix) -> bool;
     static void processMode(Instruction &op, ExeState &state);
     static void processFlags2(Instruction &op, ExeState &state);
     static void processFlags(Instruction &op, ExeState &state);
@@ -601,9 +601,9 @@ private:
     static void readFlags(Instruction &op, ExeState &state);
     static void processModRm(Instruction &op, ExeState &state);
     static void applyCodeAndSetFlag(Instruction &op, uint32_t flag = 0);
-    static inline uint32_t opN(OpCache &cache, uint32_t n);
-    static inline uint32_t opNCategory(uint32_t &mask, uint32_t n);
-    inline int pref(int i);
+    static inline auto opN(OpCache &cache, uint32_t n) -> uint32_t;
+    static inline auto opNCategory(uint32_t &mask, uint32_t n) -> uint32_t;
+    inline auto pref(int i) -> int;
 
     /**
      * Get context at buf(i) relevant to parsing 32-bit x86 code
@@ -611,7 +611,7 @@ private:
      * @param x
      * @return
      */
-    uint32_t exeCxt(int i, int x = 0);
+    auto exeCxt(int i, int x) -> uint32_t;
 
     void update();
 

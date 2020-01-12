@@ -2,17 +2,17 @@
 #define PAQ8PX_JPEGMODEL_HPP
 
 #include "../BH.hpp"
-#include "../Random.hpp"
-#include "../RingBuffer.hpp"
+#include "../APM.hpp"
+#include "../Hash.hpp"
+#include "../Ilog.hpp"
 #include "../IndirectMap.hpp"
 #include "../Mixer.hpp"
-#include "../Shared.hpp"
-#include "../APM.hpp"
-#include "../StateMap.hpp"
-#include "../Hash.hpp"
-#include <cstdint>
 #include "../MixerFactory.hpp"
-#include "../Ilog.hpp"
+#include "../Random.hpp"
+#include "../RingBuffer.hpp"
+#include "../Shared.hpp"
+#include "../StateMap.hpp"
+#include <cstdint>
 
 // Print a JPEG segment at buf[p...] for debugging
 /*
@@ -160,9 +160,9 @@ private:
     Shared *shared = Shared::getInstance();
 
 public:
-    JpegModel(uint64_t size);
+    explicit JpegModel(uint64_t size);
     ~JpegModel();
-    int mix(Mixer &m);
+    auto mix(Mixer &m) -> int;
 };
 
 #endif //PAQ8PX_JPEGMODEL_HPP

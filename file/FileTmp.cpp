@@ -1,7 +1,7 @@
 #include "FileTmp.hpp"
 
 void FileTmp::forgetContentInRam() {
-  if( contentInRam ) {
+  if( contentInRam != nullptr ) {
     delete contentInRam;
     contentInRam = nullptr;
     filePos = 0;
@@ -10,7 +10,7 @@ void FileTmp::forgetContentInRam() {
 }
 
 void FileTmp::forgetFileOnDisk() {
-  if( fileOnDisk ) {
+  if( fileOnDisk != nullptr ) {
     fileOnDisk->close();
     delete fileOnDisk;
     fileOnDisk = nullptr;
@@ -36,33 +36,33 @@ FileTmp::FileTmp() {
 
 FileTmp::~FileTmp() { close(); }
 
-bool FileTmp::open(const char *, bool) {
+auto FileTmp::open(const char * /*filename*/, bool /*mustSucceed*/) -> bool {
   assert(false);
   return false;
 }
 
-void FileTmp::create(const char *) { assert(false); }
+void FileTmp::create(const char * /*filename*/) { assert(false); }
 
 void FileTmp::close() {
   forgetContentInRam();
   forgetFileOnDisk();
 }
 
-int FileTmp::getchar() {
-  if( contentInRam ) {
+auto FileTmp::getchar() -> int {
+  if( contentInRam != nullptr ) {
     if( filePos >= fileSize )
       return EOF;
-    else {
+    
       const uint8_t c = (*contentInRam)[filePos];
       filePos++;
       return c;
-    }
+    
   } else
     return fileOnDisk->getchar();
 }
 
 void FileTmp::putChar(uint8_t c) {
-  if( contentInRam ) {
+  if( contentInRam != nullptr ) {
     if( filePos < MAX_RAM_FOR_TMP_CONTENT ) {
       if( filePos == fileSize ) {
         contentInRam->pushBack(c);
@@ -71,14 +71,14 @@ void FileTmp::putChar(uint8_t c) {
         (*contentInRam)[filePos] = c;
       filePos++;
       return;
-    } else
+    } 
       ramToDisk();
   }
   fileOnDisk->putChar(c);
 }
 
-uint64_t FileTmp::blockRead(uint8_t *ptr, uint64_t count) {
-  if( contentInRam ) {
+auto FileTmp::blockRead(uint8_t *ptr, uint64_t count) -> uint64_t {
+  if( contentInRam != nullptr ) {
     const uint64_t available = fileSize - filePos;
     if( available < count )
       count = available;
@@ -86,12 +86,12 @@ uint64_t FileTmp::blockRead(uint8_t *ptr, uint64_t count) {
       memcpy(ptr, &((*contentInRam)[filePos]), count);
     filePos += count;
     return count;
-  } else
+  } 
     return fileOnDisk->blockRead(ptr, count);
 }
 
 void FileTmp::blockWrite(uint8_t *ptr, uint64_t count) {
-  if( contentInRam ) {
+  if( contentInRam != nullptr ) {
     if( filePos + count <= MAX_RAM_FOR_TMP_CONTENT ) {
       contentInRam->resize((filePos + count));
       if( count > 0 )
@@ -99,14 +99,14 @@ void FileTmp::blockWrite(uint8_t *ptr, uint64_t count) {
       fileSize += count;
       filePos += count;
       return;
-    } else
+    } 
       ramToDisk();
   }
   fileOnDisk->blockWrite(ptr, count);
 }
 
 void FileTmp::setpos(uint64_t newPos) {
-  if( contentInRam ) {
+  if( contentInRam != nullptr ) {
     if( newPos > fileSize )
       ramToDisk(); //panic: we don't support seeking past end of file (but stdio does) - let's switch to disk
     else {
@@ -118,22 +118,22 @@ void FileTmp::setpos(uint64_t newPos) {
 }
 
 void FileTmp::setEnd() {
-  if( contentInRam )
+  if( contentInRam != nullptr )
     filePos = fileSize;
   else
     fileOnDisk->setEnd();
 }
 
-uint64_t FileTmp::curPos() {
-  if( contentInRam )
+auto FileTmp::curPos() -> uint64_t {
+  if( contentInRam != nullptr )
     return filePos;
-  else
+  
     return fileOnDisk->curPos();
 }
 
-bool FileTmp::eof() {
-  if( contentInRam )
+auto FileTmp::eof() -> bool {
+  if( contentInRam != nullptr )
     return filePos >= fileSize;
-  else
+  
     return fileOnDisk->eof();
 }

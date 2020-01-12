@@ -40,8 +40,8 @@ private:
       }
     }
 
-    uint8_t handleLiteralRun(uint8_t *outPtr, uint8_t *lastLiteral) {
-      uint8_t loop;
+    auto handleLiteralRun(uint8_t *outPtr, uint8_t *lastLiteral) -> uint8_t {
+      uint8_t loop = 0;
       if( outPtr[-2] == 0x81 && *lastLiteral < (125)) {
         state = (((*lastLiteral) += 2) == 127) ? BASE : LITERAL;
         outPtr[-2] = outPtr[-1];
@@ -53,8 +53,10 @@ private:
 
 public:
     void encode(File *in, File *out, uint64_t size, int info, int &headerSize) override {
-      uint8_t b, c = in->getchar();
-      int i = 1, maxBlockSize = info & 0xFFFFFFU;
+      uint8_t b = 0;
+      uint8_t c = in->getchar();
+      int i = 1;
+      int maxBlockSize = info & 0xFFFFFFU;
       out->putVLI(maxBlockSize);
       headerSize = VLICost(maxBlockSize);
       while( i < (int) size ) {
@@ -62,7 +64,7 @@ public:
         if( c == 0x80 ) {
           c = b;
           continue;
-        } else if( c > 0x7F ) {
+        } if( c > 0x7F ) {
           for( int j = 0; j <= (c & 0x7FU); j++ )
             out->putChar(b);
           c = in->getchar(), i++;
@@ -75,7 +77,7 @@ public:
       }
     }
 
-    uint64_t decode(File *in, File *out, FMode fMode, uint64_t size, uint64_t &diffFound) override {
+    auto decode(File *in, File *out, FMode fMode, uint64_t  /*size*/, uint64_t &diffFound) -> uint64_t override {
       uint8_t inBuffer[0x10000] = {0};
       uint8_t outBuffer[0x10200] = {0};
       uint64_t pos = 0;
@@ -88,7 +90,8 @@ public:
         uint8_t *lastLiteral = nullptr;
         state = BASE;
         while( remaining > 0 ) {
-          uint8_t byte = *inPtr++, loop = 0;
+          uint8_t byte = *inPtr++;
+          uint8_t loop = 0;
           int run = 1;
           for( remaining--; remaining > 0 && byte == *inPtr; remaining--, run++, inPtr++ );
           do {
@@ -107,7 +110,7 @@ public:
                 loop = handleLiteralRun(outPtr, lastLiteral);
               }
             }
-          } while( loop );
+          } while( loop != 0u );
         }
 
         uint64_t length = outPtr - (&outBuffer[0]);
@@ -115,14 +118,14 @@ public:
           out->blockWrite(&outBuffer[0], length);
         else if( fMode == FCOMPARE ) {
           for( int j = 0; j < (int) length; ++j ) {
-            if( outBuffer[j] != out->getchar() && !diffFound ) {
+            if( outBuffer[j] != out->getchar() && (diffFound == 0u) ) {
               diffFound = pos + j + 1;
               break;
             }
           }
         }
         pos += length;
-      } while( !in->eof() && !diffFound );
+      } while( !in->eof() && (diffFound == 0u) );
       return pos;
     }
 

@@ -3,20 +3,19 @@
 ContextModel::ContextModel(ModelStats *st, Models &models) : stats(st), models(models) {
   auto mf = new MixerFactory();
   m = mf->createMixer(1 + //bias
-                                MatchModel::MIXERINPUTS + NormalModel::MIXERINPUTS + SparseMatchModel::MIXERINPUTS +
-                                SparseModel::MIXERINPUTS + RecordModel::MIXERINPUTS + CharGroupModel::MIXERINPUTS + TextModel::MIXERINPUTS +
-                                WordModel::MIXERINPUTS + IndirectModel::MIXERINPUTS + DmcForest::MIXERINPUTS + NestModel::MIXERINPUTS +
-                                XMLModel::MIXERINPUTS + LinearPredictionModel::MIXERINPUTS + ExeModel::MIXERINPUTS,
-                                MatchModel::MIXERCONTEXTS + NormalModel::MIXERCONTEXTS + SparseMatchModel::MIXERCONTEXTS +
-                                SparseModel::MIXERCONTEXTS + RecordModel::MIXERCONTEXTS + CharGroupModel::MIXERCONTEXTS +
-                                TextModel::MIXERCONTEXTS + WordModel::MIXERCONTEXTS + IndirectModel::MIXERCONTEXTS +
-                                DmcForest::MIXERCONTEXTS + NestModel::MIXERCONTEXTS + XMLModel::MIXERCONTEXTS +
-                                LinearPredictionModel::MIXERCONTEXTS + ExeModel::MIXERCONTEXTS,
-                                MatchModel::MIXERCONTEXTSETS + NormalModel::MIXERCONTEXTSETS + SparseMatchModel::MIXERCONTEXTSETS +
-                                SparseModel::MIXERCONTEXTSETS + RecordModel::MIXERCONTEXTSETS + CharGroupModel::MIXERCONTEXTSETS +
-                                TextModel::MIXERCONTEXTSETS + WordModel::MIXERCONTEXTSETS + IndirectModel::MIXERCONTEXTSETS +
-                                DmcForest::MIXERCONTEXTSETS + NestModel::MIXERCONTEXTSETS + XMLModel::MIXERCONTEXTSETS +
-                                LinearPredictionModel::MIXERCONTEXTSETS + ExeModel::MIXERCONTEXTSETS);
+                      MatchModel::MIXERINPUTS + NormalModel::MIXERINPUTS + SparseMatchModel::MIXERINPUTS + SparseModel::MIXERINPUTS +
+                      RecordModel::MIXERINPUTS + CharGroupModel::MIXERINPUTS + TextModel::MIXERINPUTS + WordModel::MIXERINPUTS +
+                      IndirectModel::MIXERINPUTS + DmcForest::MIXERINPUTS + NestModel::MIXERINPUTS + XMLModel::MIXERINPUTS +
+                      LinearPredictionModel::MIXERINPUTS + ExeModel::MIXERINPUTS,
+                      MatchModel::MIXERCONTEXTS + NormalModel::MIXERCONTEXTS + SparseMatchModel::MIXERCONTEXTS +
+                      SparseModel::MIXERCONTEXTS + RecordModel::MIXERCONTEXTS + CharGroupModel::MIXERCONTEXTS + TextModel::MIXERCONTEXTS +
+                      WordModel::MIXERCONTEXTS + IndirectModel::MIXERCONTEXTS + DmcForest::MIXERCONTEXTS + NestModel::MIXERCONTEXTS +
+                      XMLModel::MIXERCONTEXTS + LinearPredictionModel::MIXERCONTEXTS + ExeModel::MIXERCONTEXTS,
+                      MatchModel::MIXERCONTEXTSETS + NormalModel::MIXERCONTEXTSETS + SparseMatchModel::MIXERCONTEXTSETS +
+                      SparseModel::MIXERCONTEXTSETS + RecordModel::MIXERCONTEXTSETS + CharGroupModel::MIXERCONTEXTSETS +
+                      TextModel::MIXERCONTEXTSETS + WordModel::MIXERCONTEXTSETS + IndirectModel::MIXERCONTEXTSETS +
+                      DmcForest::MIXERCONTEXTSETS + NestModel::MIXERCONTEXTSETS + XMLModel::MIXERCONTEXTSETS +
+                      LinearPredictionModel::MIXERCONTEXTSETS + ExeModel::MIXERCONTEXTSETS);
 }
 
 int ContextModel::p() {

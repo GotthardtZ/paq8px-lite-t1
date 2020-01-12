@@ -1,8 +1,8 @@
 #ifndef PAQ8PX_SEGMENT_HPP
 #define PAQ8PX_SEGMENT_HPP
 
-#include <cstdint>
 #include "Word.hpp"
+#include <cstdint>
 
 class Segment {
 public:

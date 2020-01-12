@@ -14,7 +14,7 @@ public:
         Adjective = (1U << 2U), Plural = (1U << 3U), Female = (1U << 4U)
     };
 
-    bool isAbbreviation(Word *w) override;
+    auto isAbbreviation(Word *w) -> bool override;
 };
 
 #endif //PAQ8PX_GERMAN_HPP

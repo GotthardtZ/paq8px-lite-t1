@@ -20,9 +20,9 @@ public:
     ~ListOfFiles();
     void setBasePath(const char *s);
     void addChar(char c);
-    int getCount();
-    const char *getfilename(int i);
-    String *getString();
+    auto getCount() -> int;
+    auto getfilename(int i) -> const char *;
+    auto getString() -> String *;
 };
 
 #endif //PAQ8PX_LISTOFFILES_HPP

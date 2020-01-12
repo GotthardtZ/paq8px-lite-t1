@@ -2,42 +2,42 @@
 
 Models::Models(ModelStats *st) : stats(st) {}
 
-NormalModel &Models::normalModel() {
+auto Models::normalModel() -> NormalModel & {
   static NormalModel instance {stats, shared->mem * 32};
   return instance;
 }
 
-DmcForest &Models::dmcForest() {
+auto Models::dmcForest() -> DmcForest & {
   static DmcForest instance {shared->mem};
   return instance;
 }
 
-CharGroupModel &Models::charGroupModel() {
+auto Models::charGroupModel() -> CharGroupModel & {
   static CharGroupModel instance {shared->mem / 2};
   return instance;
 }
 
-RecordModel &Models::recordModel() {
+auto Models::recordModel() -> RecordModel & {
   static RecordModel instance {stats, shared->mem * 2};
   return instance;
 }
 
-SparseModel &Models::sparseModel() {
+auto Models::sparseModel() -> SparseModel & {
   static SparseModel instance {shared->mem * 2};
   return instance;
 }
 
-MatchModel &Models::matchModel() {
+auto Models::matchModel() -> MatchModel & {
   static MatchModel instance {stats, shared->mem * 4};
   return instance;
 }
 
-SparseMatchModel &Models::sparseMatchModel() {
+auto Models::sparseMatchModel() -> SparseMatchModel & {
   static SparseMatchModel instance {shared->mem};
   return instance;
 }
 
-IndirectModel &Models::indirectModel() {
+auto Models::indirectModel() -> IndirectModel & {
   static IndirectModel instance {shared->mem};
   return instance;
 }
@@ -56,54 +56,54 @@ WordModel &Models::wordModel() {
 
 #else
 
-WordModel &wordModel() {
+auto wordModel() -> WordModel & {
       static WordModel instance {};
       return instance;
     }
 
 #endif //USE_TEXTMODEL
 
-NestModel &Models::nestModel() {
+auto Models::nestModel() -> NestModel & {
   static NestModel instance {shared->mem};
   return instance;
 }
 
-XMLModel &Models::xmlModel() {
+auto Models::xmlModel() -> XMLModel & {
   static XMLModel instance {shared->mem / 4};
   return instance;
 }
 
-ExeModel &Models::exeModel() {
+auto Models::exeModel() -> ExeModel & {
   static ExeModel instance {stats, shared->mem * 4};
   return instance;
 }
 
-LinearPredictionModel &Models::linearPredictionModel() {
+auto Models::linearPredictionModel() -> LinearPredictionModel & {
   static LinearPredictionModel instance {};
   return instance;
 }
 
-JpegModel &Models::jpegModel() {
+auto Models::jpegModel() -> JpegModel & {
   static JpegModel instance {shared->mem};
   return instance;
 }
 
-Image24BitModel &Models::image24BitModel() {
+auto Models::image24BitModel() -> Image24BitModel & {
   static Image24BitModel instance {stats, shared->mem * 4};
   return instance;
 }
 
-Image8BitModel &Models::image8BitModel() {
+auto Models::image8BitModel() -> Image8BitModel & {
   static Image8BitModel instance {stats, shared->mem * 4};
   return instance;
 }
 
-Image4BitModel &Models::image4BitModel() {
+auto Models::image4BitModel() -> Image4BitModel & {
   static Image4BitModel instance {shared->mem / 2};
   return instance;
 }
 
-Image1BitModel &Models::image1BitModel() {
+auto Models::image1BitModel() -> Image1BitModel & {
   static Image1BitModel instance {};
   return instance;
 }

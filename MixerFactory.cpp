@@ -1,6 +1,6 @@
 #include "MixerFactory.hpp"
 
-Mixer *MixerFactory::createMixer(const int n, const int m, const int s) {
+auto MixerFactory::createMixer(const int n, const int m, const int s) -> Mixer * {
   if( shared->chosenSimd == SIMD_NONE )
     return new SIMDMixer<SIMD_NONE>(n, m, s);
   if( shared->chosenSimd == SIMD_SSE2 )

@@ -22,7 +22,7 @@ void SmallStationaryContextMap::reset() {
 void SmallStationaryContextMap::update() {
   INJECT_SHARED_y
   *cp += ((y << 16U) - (*cp) + (1 << (rate - 1))) >> rate;
-  b += (y && b > 0);
+  b += static_cast<unsigned int>((y != 0u) && b > 0);
 }
 
 void SmallStationaryContextMap::setScale(const int Scale) { scale = Scale; }

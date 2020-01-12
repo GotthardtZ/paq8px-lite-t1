@@ -1,9 +1,9 @@
 #ifndef PAQ8PX_LINEARPREDICTIONMODEL_HPP
 #define PAQ8PX_LINEARPREDICTIONMODEL_HPP
 
-#include <cmath>
 #include "../OLS.hpp"
 #include "../SmallStationaryContextMap.hpp"
+#include <cmath>
 
 class LinearPredictionModel {
 private:

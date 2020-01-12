@@ -36,7 +36,7 @@ public:
         PrefixUnder = (1U << 24U)
     };
 
-    bool isAbbreviation(Word *w) override;
+    auto isAbbreviation(Word *w) -> bool override;
 };
 
 #endif //PAQ8PX_ENGLISH_HPP

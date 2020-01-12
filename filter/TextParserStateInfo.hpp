@@ -1,8 +1,8 @@
 #ifndef PAQ8PX_TEXTPARSERSTATEINFO_HPP
 #define PAQ8PX_TEXTPARSERSTATEINFO_HPP
 
-#include <cstdint>
 #include "../Array.hpp"
+#include <cstdint>
 
 #define TEXT_MIN_SIZE 1500 // size of minimum allowed text block (in bytes)
 #define TEXT_MAX_MISSES 2 // threshold: max allowed number of invalid UTF8 sequences seen recently before reporting "fail"
@@ -16,12 +16,12 @@ struct TextParserStateInfo {
     uint32_t UTF8State {}; // state of utf8 parser; 0: valid;  12: invalid;  any other value: yet uncertain (more bytes must be read)
     TextParserStateInfo();
     void reset(uint64_t startPos);
-    uint64_t start();
-    uint64_t end();
+    auto start() -> uint64_t;
+    auto end() -> uint64_t;
     void setEnd(uint64_t end);
-    uint32_t eolType();
+    auto eolType() -> uint32_t;
     void setEolType(uint32_t eolType);
-    uint64_t validLength();
+    auto validLength() -> uint64_t;
     void next(uint64_t startPos);
     void removeFirst();
 };

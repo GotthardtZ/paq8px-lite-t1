@@ -1,6 +1,8 @@
 #ifndef PAQ8PX_ECC_HPP
 #define PAQ8PX_ECC_HPP
 
+#include <cstdint>
+
 // Function eccCompute(), edcCompute() and eccedcInit() taken from
 // ** UNECM - Decoder for ECM (Error code Modeler) format.
 // ** version 1.0
@@ -17,12 +19,12 @@ static void eccedcInit() {
     return;
   uint32_t i, j, edc;
   for( i = 0; i < 256; i++ ) {
-    j = (i << 1U) ^ (i & 0x80U ? 0x11DU : 0U);
+    j = (i << 1U) ^ ((i & 0x80U) != 0u ? 0x11DU : 0U);
     eccFLut[i] = j;
     eccBLut[i ^ j] = i;
     edc = i;
     for( j = 0; j < 8; j++ )
-      edc = (edc >> 1U) ^ (edc & 1U ? 0xD8018001 : 0);
+      edc = (edc >> 1U) ^ ((edc & 1U) != 0u ? 0xD8018001 : 0);
     edcLut[i] = edc;
   }
   tablesInit = true;
@@ -50,9 +52,9 @@ static void eccCompute(const uint8_t *src, uint32_t majorCount, uint32_t minorCo
   }
 }
 
-static uint32_t edcCompute(const uint8_t *src, int size) {
+static auto edcCompute(const uint8_t *src, int size) -> uint32_t {
   uint32_t edc = 0;
-  while( size-- )
+  while( (size--) != 0 )
     edc = (edc >> 8U) ^ edcLut[(edc ^ (*src++)) & 0xFFU];
   return edc;
 }

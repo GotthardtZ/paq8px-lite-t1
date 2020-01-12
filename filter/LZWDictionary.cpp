@@ -13,13 +13,13 @@ void LZWDictionary::reset() {
   index = 258; //2 extra codes, one for resetting the dictionary and one for signaling EOF
 }
 
-int LZWDictionary::findEntry(const int prefix, const int suffix) {
+auto LZWDictionary::findEntry(const int prefix, const int suffix) -> int {
   int i = finalize64(hash(prefix, suffix), 13);
   int offset = (i > 0) ? hashSize - i : 1;
   while( true ) {
     if( table[i] < 0 ) //free slot?
       return -i - 1;
-    else if( dictionary[table[i]].prefix == prefix && dictionary[table[i]].suffix == suffix ) //is it the entry we want?
+    if( dictionary[table[i]].prefix == prefix && dictionary[table[i]].suffix == suffix ) //is it the entry we want?
       return table[i];
     i -= offset;
     if( i < 0 )
@@ -33,10 +33,10 @@ void LZWDictionary::addEntry(const int prefix, const int suffix, const int offse
   dictionary[index].prefix = prefix;
   dictionary[index].suffix = suffix;
   table[-offset - 1] = index;
-  index += (index < 4096);
+  index += static_cast<int>(index < 4096);
 }
 
-int LZWDictionary::dumpEntry(File *f, int code) {
+auto LZWDictionary::dumpEntry(File *f, int code) -> int {
   int n = 4095;
   while( code > 256 && n >= 0 ) {
     buffer[n] = uint8_t(dictionary[code].suffix);

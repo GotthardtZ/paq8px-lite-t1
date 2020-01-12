@@ -20,25 +20,25 @@ private:
      * Luckily the MS c runtime library provides two (MS specific) fopen() flags: "T"emporary and "d"elete.
      * @return
      */
-    static FILE *makeTmpFile();
+    static auto makeTmpFile() -> FILE *;
 protected:
     FILE *file;
 
 public:
     FileDisk();
     ~FileDisk() override;
-    bool open(const char *filename, bool mustSucceed) override;
+    auto open(const char *filename, bool mustSucceed) -> bool override;
     void create(const char *filename) override;
     void createTmp();
     void close() override;
-    int getchar() override;
+    auto getchar() -> int override;
     void putChar(uint8_t c) override;
-    uint64_t blockRead(uint8_t *ptr, uint64_t count) override;
+    auto blockRead(uint8_t *ptr, uint64_t count) -> uint64_t override;
     void blockWrite(uint8_t *ptr, uint64_t count) override;
     void setpos(uint64_t newPos) override;
     void setEnd() override;
-    uint64_t curPos() override;
-    bool eof() override;
+    auto curPos() -> uint64_t override;
+    auto eof() -> bool override;
 };
 
 #endif //PAQ8PX_FILEDISK_HPP

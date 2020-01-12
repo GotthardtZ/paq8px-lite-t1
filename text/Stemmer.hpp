@@ -5,13 +5,13 @@
 
 class Stemmer {
 protected:
-    uint32_t getRegion(const Word *w, uint32_t from);
-    static bool suffixInRn(const Word *w, uint32_t rn, const char *suffix);
-    static bool charInArray(char c, const char a[], int len);
+    auto getRegion(const Word *w, uint32_t from) -> uint32_t;
+    static auto suffixInRn(const Word *w, uint32_t rn, const char *suffix) -> bool;
+    static auto charInArray(char c, const char a[], int len) -> bool;
 public:
     virtual ~Stemmer() = default;
-    virtual bool isVowel(char c) = 0;
-    virtual bool stem(Word *w) = 0;
+    virtual auto isVowel(char c) -> bool = 0;
+    virtual auto stem(Word *w) -> bool = 0;
 };
 
 #endif //PAQ8PX_STEMMER_HPP

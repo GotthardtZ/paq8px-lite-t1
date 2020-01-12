@@ -2,8 +2,8 @@
 
 ProgramChecker *ProgramChecker::instance = nullptr;
 
-ProgramChecker *ProgramChecker::getInstance() {
-  if( !instance ) {
+auto ProgramChecker::getInstance() -> ProgramChecker * {
+  if( instance == nullptr ) {
     instance = new ProgramChecker();
   }
   return instance;
@@ -20,7 +20,7 @@ void ProgramChecker::free(uint64_t n) {
   memUsed -= n;
 }
 
-double ProgramChecker::getRuntime() const {
+auto ProgramChecker::getRuntime() const -> double {
   const std::chrono::time_point<std::chrono::high_resolution_clock> finishTime = std::chrono::high_resolution_clock::now();
   return std::chrono::duration<double>(finishTime - startTime).count();
 }

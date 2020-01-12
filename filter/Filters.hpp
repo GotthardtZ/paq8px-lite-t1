@@ -1,17 +1,23 @@
 #ifndef PAQ8PX_FILTERS_HPP
 #define PAQ8PX_FILTERS_HPP
 
-#include <cstdint>
-#include <cctype>
-#include <cstring>
-#include "../UTF8.hpp"
-#include "../Encoder.hpp"
-#include "../file/File.hpp"
-#include "../utils.hpp"
 #include "../Array.hpp"
+#include "../Encoder.hpp"
+#include "../Shared.hpp"
+#include "../UTF8.hpp"
+#include "../file/File.hpp"
 #include "../file/FileDisk.hpp"
 #include "../file/FileTmp.hpp"
-#include "../Shared.hpp"
+#include "../utils.hpp"
+#include "Filter.hpp"
+#include "base64.hpp"
+#include "cd.hpp"
+#include "ecc.hpp"
+#include "gif.hpp"
+#include "lzw.hpp"
+#include <cctype>
+#include <cstdint>
+#include <cstring>
 
 /////////////////////////// Filters /////////////////////////////////
 //TODO: Update this documentation
@@ -59,23 +65,11 @@
 // decodes one byte from en and returns it.  decode() and decode_X()
 // maintain state information using static variables.
 
-
-typedef enum {
-    FDECOMPRESS, FCOMPARE, FDISCARD
-} FMode;
-
-#include "ecc.hpp"
-#include "cd.hpp"
-
 #ifdef USE_ZLIB
 
 #include "zlib.hpp"
 
 #endif //USE_ZLIB
-
-#include "lzw.hpp"
-#include "base64.hpp"
-#include "gif.hpp"
 
 #define IMG_DET(type, start_pos, header_len, width, height) return dett = (type), \
                                                                    deth = (header_len), detd = (width) * (height), info = (width), \
@@ -95,22 +89,22 @@ static bool isGrayscalePalette(File *in, int n = 256, int isRGBA = 0) {
       res = 0;
       break;
     }
-    if( !i ) {
+    if( i == 0 ) {
       res = 0x100 | b;
-      order = 1 - 2 * (b > int(ilog2(n) / 4));
+      order = 1 - 2 * static_cast<int>(b > int(ilog2(n) / 4));
       continue;
     }
     //"j" is the index of the current byte in this color entry
     int j = i % stride;
-    if( !j ) {
+    if( j == 0 ) {
       // load first component of this entry
       int k = (b - (res & 0xFF)) * order;
-      res = res & ((k >= 0 && k <= 8) << 8);
-      res |= (res) ? b : 0;
+      res = res & (static_cast<int>(k >= 0 && k <= 8) << 8);
+      res |= (res) != 0 ? b : 0;
     } else if( j == 3 )
-      res &= ((!b || (b == 0xFF)) * 0x1FF); // alpha/attribute component must be zero or 0xFF
+      res &= (static_cast<int>((b == 0) || (b == 0xFF)) * 0x1FF); // alpha/attribute component must be zero or 0xFF
     else
-      res &= ((b == (res & 0xFF)) * 0x1FF);
+      res &= (static_cast<int>(b == (res & 0xFF)) * 0x1FF);
   }
   in->setpos(offset);
   return (res >> 8) > 0;
@@ -119,50 +113,110 @@ static bool isGrayscalePalette(File *in, int n = 256, int isRGBA = 0) {
 #include "TextParserStateInfo.hpp"
 
 // Detect blocks
-static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info) {
+static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> BlockType {
   Shared *shared = Shared::getInstance();
   TextParserStateInfo *textParser = new TextParserStateInfo();
   //TODO: Large file support
   int n = (int) blockSize;
-  uint32_t buf3 = 0, buf2 = 0, buf1 = 0, buf0 = 0; // last 16 bytes
+  uint32_t buf3 = 0;
+  uint32_t buf2 = 0;
+  uint32_t buf1 = 0;
+  uint32_t buf0 = 0; // last 16 bytes
   uint64_t start = in->curPos();
 
   // For EXE detection
-  Array<int> absPos(256), // CALL/JMP abs. addr. low byte -> last offset
+  Array<int> absPos(256);
+  Array<int> // CALL/JMP abs. addr. low byte -> last offset
           relPos(256); // CALL/JMP relative addr. low byte -> last offset
   int e8e9count = 0; // number of consecutive CALL/JMPs
   int e8e9pos = 0; // offset of first CALL or JMP instruction
   int e8e9last = 0; // offset of most recent CALL or JMP
 
-  int soi = 0, sof = 0, sos = 0, app = 0; // For JPEG detection - position where found
+  int soi = 0;
+  int sof = 0;
+  int sos = 0;
+  int app = 0; // For JPEG detection - position where found
 #ifdef USE_AUDIOMODEL
   int wavi = 0, wavSize = 0, wavch = 0, wavbps = 0, wavm = 0, wavType = 0, wavLen = 0, wavlist = 0; // For WAVE detection
   int aiff = 0, aiffm = 0, aiffs = 0; // For AIFF detection
   int s3mi = 0, s3Mno = 0, s3Mni = 0; // For S3M detection
 #endif //  USE_AUDIOMODEL
-  uint32_t bmpi = 0, dibi = 0, imgbpp = 0, bmpx = 0, bmpy = 0, bmpof = 0, bmps = 0, nColors = 0; // For BMP detection
-  int rgbi = 0, rgbx = 0, rgby = 0; // For RGB detection
-  int tga = 0, tgax = 0, tgay = 0, tgaz = 0, tgat = 0, tgaid = 0, tgamap = 0; // For TGA detection
+  uint32_t bmpi = 0;
+  uint32_t dibi = 0;
+  uint32_t imgbpp = 0;
+  uint32_t bmpx = 0;
+  uint32_t bmpy = 0;
+  uint32_t bmpof = 0;
+  uint32_t bmps = 0;
+  uint32_t nColors = 0; // For BMP detection
+  int rgbi = 0;
+  int rgbx = 0;
+  int rgby = 0; // For RGB detection
+  int tga = 0;
+  int tgax = 0;
+  int tgay = 0;
+  int tgaz = 0;
+  int tgat = 0;
+  int tgaid = 0;
+  int tgamap = 0; // For TGA detection
   // ascii images are currently not supported
-  int pgm = 0, pgmComment = 0, pgmw = 0, pgmh = 0, pgmPtr = 0, pgmc = 0, pgmn = 0, pamatr = 0, pamd = 0, pgmdata = 0, pgmDataSize = 0; // For PBM, PGM, PPM, PAM detection
+  int pgm = 0;
+  int pgmComment = 0;
+  int pgmw = 0;
+  int pgmh = 0;
+  int pgmPtr = 0;
+  int pgmc = 0;
+  int pgmn = 0;
+  int pamatr = 0;
+  int pamd = 0;
+  int pgmdata = 0;
+  int pgmDataSize = 0; // For PBM, PGM, PPM, PAM detection
   char pgmBuf[32];
-  int cdi = 0, cda = 0, cdm = 0; // For CD sectors detection
+  int cdi = 0;
+  int cda = 0;
+  int cdm = 0; // For CD sectors detection
   uint32_t cdf = 0;
-  unsigned char zBuf[256 + 32] = {0}, zin[1U << 16] = {0}, zout[1 << 16] = {0}; // For ZLIB stream detection
-  int zBufPos = 0, zZipPos = -1, histogram[256] = {0};
-  int pdfIm = 0, pdfImW = 0, pdfImH = 0, pdfImB = 0, pdfGray = 0, pdfimp = 0;
-  int b64S = 0, b64I = 0, b64Line = 0, b64Nl = 0; // For base64 detection
-  int gif = 0, gifa = 0, gifi = 0, gifw = 0, gifc = 0, gifb = 0, gifplt = 0; // For GIF detection
+  unsigned char zBuf[256 + 32] = {0};
+  unsigned char zin[1U << 16] = {0};
+  unsigned char zout[1 << 16] = {0}; // For ZLIB stream detection
+  int zBufPos = 0;
+  int zZipPos = -1;
+  int histogram[256] = {0};
+  int pdfIm = 0;
+  int pdfImW = 0;
+  int pdfImH = 0;
+  int pdfImB = 0;
+  int pdfGray = 0;
+  int pdfimp = 0;
+  int b64S = 0;
+  int b64I = 0;
+  int b64Line = 0;
+  int b64Nl = 0; // For base64 detection
+  int gif = 0;
+  int gifa = 0;
+  int gifi = 0;
+  int gifw = 0;
+  int gifc = 0;
+  int gifb = 0;
+  int gifplt = 0; // For GIF detection
   static int gifGray = 0;
-  int png = 0, pngw = 0, pngh = 0, pngbps = 0, pngType = 0, pnggray = 0, lastChunk = 0, nextChunk = 0; // For PNG detection
+  int png = 0;
+  int pngw = 0;
+  int pngh = 0;
+  int pngbps = 0;
+  int pngType = 0;
+  int pnggray = 0;
+  int lastChunk = 0;
+  int nextChunk = 0; // For PNG detection
   // For image detection
-  static int deth = 0, detd = 0; // detected header/data size in bytes
+  static int deth = 0;
+  static int detd = 0; // detected header/data size in bytes
   static BlockType dett; // detected block type
-  if( deth ) {
+  if( deth != 0 ) {
     in->setpos(start + deth);
     deth = 0;
     return dett;
-  } else if( detd ) {
+  } if( detd != 0 ) {
     in->setpos(start + min(blockSize, (uint64_t) detd));
     detd = 0;
     return DEFAULT;
@@ -179,9 +233,9 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
     buf0 = buf0 << 8 | c;
 
     // detect PNG images
-    if( !png && buf3 == 0x89504E47 /*%PNG*/ && buf2 == 0x0D0A1A0A && buf1 == 0x0000000D && buf0 == 0x49484452 )
+    if( (png == 0) && buf3 == 0x89504E47 /*%PNG*/ && buf2 == 0x0D0A1A0A && buf1 == 0x0000000D && buf0 == 0x49484452 )
       png = i, pngType = -1, lastChunk = buf3;
-    if( png ) {
+    if( png != 0 ) {
       const int p = i - png;
       if( p == 12 ) {
         pngw = buf2;
@@ -189,20 +243,20 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
         pngbps = buf0 >> 24;
         pngType = (uint8_t) (buf0 >> 16);
         pnggray = 0;
-        png *= ((buf0 & 0xFFFF) == 0 && pngw && pngh && pngbps == 8 &&
-                (!pngType || pngType == 2 || pngType == 3 || pngType == 4 || pngType == 6));
+        png *= static_cast<int>((buf0 & 0xFFFF) == 0 && (pngw != 0) && (pngh != 0) && pngbps == 8 &&
+                ((pngType == 0) || pngType == 2 || pngType == 3 || pngType == 4 || pngType == 6));
       } else if( p > 12 && pngType < 0 )
         png = 0;
       else if( p == 17 ) {
-        png *= ((buf1 & 0xFF) == 0);
-        nextChunk = (png) ? i + 8 : 0;
+        png *= static_cast<int>((buf1 & 0xFF) == 0);
+        nextChunk = (png) != 0 ? i + 8 : 0;
       } else if( p > 17 && i == nextChunk ) {
         nextChunk += buf1 + 4 /*CRC*/ + 8 /*Chunk length+id*/;
         lastChunk = buf0;
-        png *= (lastChunk != 0x49454E44 /*IEND*/);
+        png *= static_cast<int>(lastChunk != 0x49454E44 /*IEND*/);
         if( lastChunk == 0x504C5445 /*PLTE*/) {
-          png *= (buf1 % 3 == 0);
-          pnggray = (png && isGrayscalePalette(in, buf1 / 3));
+          png *= static_cast<int>(buf1 % 3 == 0);
+          pnggray = static_cast<int>((png != 0) && isGrayscalePalette(in, buf1 / 3));
         }
       }
     }
@@ -323,30 +377,30 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
 
     if( i - pdfimp > 1024 )
       pdfIm = pdfImW = pdfImH = pdfImB = pdfGray = 0; // fail
-    if( pdfIm > 1 && !(isspace(c) || isdigit(c)))
+    if( pdfIm > 1 && !((isspace(c) != 0) || (isdigit(c) != 0)))
       pdfIm = 1;
-    if( pdfIm == 2 && isdigit(c))
+    if( pdfIm == 2 && (isdigit(c) != 0))
       pdfImW = pdfImW * 10 + (c - '0');
-    if( pdfIm == 3 && isdigit(c))
+    if( pdfIm == 3 && (isdigit(c) != 0))
       pdfImH = pdfImH * 10 + (c - '0');
-    if( pdfIm == 4 && isdigit(c))
+    if( pdfIm == 4 && (isdigit(c) != 0))
       pdfImB = pdfImB * 10 + (c - '0');
     if((buf0 & 0xffff) == 0x3c3c )
       pdfimp = i, pdfIm = 1; // <<
-    if( pdfIm && (buf1 & 0xffff) == 0x2f57 && buf0 == 0x69647468 )
+    if( (pdfIm != 0) && (buf1 & 0xffff) == 0x2f57 && buf0 == 0x69647468 )
       pdfIm = 2, pdfImW = 0; // /Width
-    if( pdfIm && (buf1 & 0xffffff) == 0x2f4865 && buf0 == 0x69676874 )
+    if( (pdfIm != 0) && (buf1 & 0xffffff) == 0x2f4865 && buf0 == 0x69676874 )
       pdfIm = 3, pdfImH = 0; // /Height
-    if( pdfIm && buf3 == 0x42697473 && buf2 == 0x50657243 && buf1 == 0x6f6d706f && buf0 == 0x6e656e74 &&
+    if( (pdfIm != 0) && buf3 == 0x42697473 && buf2 == 0x50657243 && buf1 == 0x6f6d706f && buf0 == 0x6e656e74 &&
         zBuf[(zBufPos - 32 + 15) & 0xFF] == '/' )
       pdfIm = 4, pdfImB = 0; // /BitsPerComponent
-    if( pdfIm && (buf2 & 0xFFFFFF) == 0x2F4465 && buf1 == 0x76696365 && buf0 == 0x47726179 )
+    if( (pdfIm != 0) && (buf2 & 0xFFFFFF) == 0x2F4465 && buf1 == 0x76696365 && buf0 == 0x47726179 )
       pdfGray = 1; // /DeviceGray
 
     // CD sectors detection (mode 1 and mode 2 form 1+2 - 2352 bytes)
-    if( buf1 == 0x00ffffff && buf0 == 0xffffffff && !cdi )
+    if( buf1 == 0x00ffffff && buf0 == 0xffffffff && (cdi == 0) )
       cdi = i, cda = -1, cdm = 0;
-    if( cdi && i > cdi ) {
+    if( (cdi != 0) && i > cdi ) {
       const int p = (i - cdi) % 2352;
       if( p == 8 && (buf1 != 0xffffff00 || ((buf0 & 0xff) != 1 && (buf0 & 0xff) != 2)))
         cdi = 0;
@@ -358,8 +412,8 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
         in->setpos(savedPos);
         int t = expandCdSector(data, cda, 1);
         if( t != cdm )
-          cdm = t * (i - cdi < 2352);
-        if( cdm && cda != 10 && (cdm == 1 || buf0 == buf1)) {
+          cdm = t * static_cast<int>(i - cdi < 2352);
+        if( (cdm != 0) && cda != 10 && (cdm == 1 || buf0 == buf1)) {
           if( type != CD )
             return info = cdm, in->setpos(start + cdi - 7), CD;
           cda = (data[12] << 16) + (data[13] << 8) + data[14];
@@ -370,7 +424,7 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
         } else
           cdi = 0;
       }
-      if( !cdi && type == CD ) {
+      if( (cdi == 0) && type == CD ) {
         in->setpos(start + i - p - 7);
         return DEFAULT;
       }
@@ -383,23 +437,23 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
     // Detect end by any code other than RST0-RST7 (FF D9-D7) or
     // a byte stuff (FF 00).
 
-    if( !soi && i >= 3 && (buf0 & 0xffffff00) == 0xffd8ff00 &&
+    if( (soi == 0) && i >= 3 && (buf0 & 0xffffff00) == 0xffd8ff00 &&
         ((buf0 & 0xFE) == 0xC0 || (uint8_t) buf0 == 0xC4 || ((uint8_t) buf0 >= 0xDB && (uint8_t) buf0 <= 0xFE)))
       soi = i, app = i + 2, sos = sof = 0;
-    if( soi ) {
+    if( soi != 0 ) {
       if( app == i && (buf0 >> 24) == 0xff && ((buf0 >> 16) & 0xff) > 0xc1 && ((buf0 >> 16) & 0xff) < 0xff )
         app = i + (buf0 & 0xffff) + 2;
       if( app < i && (buf1 & 0xff) == 0xff && (buf0 & 0xfe0000ff) == 0xc0000008 )
         sof = i;
-      if( sof && sof > soi && i - sof < 0x1000 && (buf0 & 0xffff) == 0xffda ) {
+      if( (sof != 0) && sof > soi && i - sof < 0x1000 && (buf0 & 0xffff) == 0xffda ) {
         sos = i;
         if( type != JPEG )
           return in->setpos(start + soi - 3), JPEG;
       }
-      if( i - soi > 0x40000 && !sos )
+      if( i - soi > 0x40000 && (sos == 0) )
         soi = 0;
     }
-    if( type == JPEG && sos && i > sos && (buf0 & 0xff00) == 0xff00 && (buf0 & 0xff) != 0 && (buf0 & 0xf8) != 0xd0 )
+    if( type == JPEG && (sos != 0) && i > sos && (buf0 & 0xff00) == 0xff00 && (buf0 & 0xff) != 0 && (buf0 & 0xf8) != 0xd0 )
       return DEFAULT;
 #ifdef USE_AUDIOMODEL
     // Detect .wav file header
@@ -536,7 +590,7 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
 #endif //  USE_AUDIOMODEL
 
     // Detect .bmp image
-    if( !bmpi && !dibi ) {
+    if( (bmpi == 0u) && (dibi == 0u) ) {
       if((buf0 & 0xffff) == 16973 ) { // 'BM'
         bmpi = i; // header start: bmpi-1
         dibi = i - 1 + 18; // we expect a DIB header to come
@@ -568,12 +622,12 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
         nColors = bswap(buf0); // the number of colors in the color palette, or 0 to default to (1<<imgbpp)
         if( nColors == 0 && imgbpp <= 8 )
           nColors = 1 << imgbpp;
-        if( nColors > (1u << imgbpp) || (imgbpp > 8 && nColors > 0))
+        if( nColors > (1U << imgbpp) || (imgbpp > 8 && nColors > 0))
           bmpi = dibi = 0;
       } else if( p == 50 + 4 ) { //the number of important colors used
         if( bswap(buf0) <= nColors || bswap(buf0) == 0x10000000 ) {
           if( bmpi == 0 /*headerless*/ && (bmpx * 2 == bmpy) && imgbpp > 1 && // possible icon/cursor?
-              ((bmps > 0 && bmps == ((bmpx * bmpy * (imgbpp + 1)) >> 4)) || ((!bmps || bmps < ((bmpx * bmpy * imgbpp) >> 3)) &&
+              ((bmps > 0 && bmps == ((bmpx * bmpy * (imgbpp + 1)) >> 4)) || (((bmps == 0u) || bmps < ((bmpx * bmpy * imgbpp) >> 3)) &&
                                                                              ((bmpx == 8) || (bmpx == 10) || (bmpx == 14) || (bmpx == 16) ||
                                                                               (bmpx == 20) || (bmpx == 22) || (bmpx == 24) ||
                                                                               (bmpx == 32) || (bmpx == 40) || (bmpx == 48) ||
@@ -637,11 +691,11 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
       if((pgmn >= 4 && pgmn <= 6) || pgmn == 7 )
         pgm = i, pgmPtr = pgmw = pgmh = pgmc = pgmComment = pamatr = pamd = pgmdata = pgmDataSize = 0; // "P4" (pbm), "P5" (pgm), "P6" (ppm), "P7" (pam)
     }
-    if( pgm ) {
+    if( pgm != 0 ) {
       if( pgmdata == 0 ) { // parse header
         if( i - pgm == 1 && c == 0x23 )
           pgmComment = 1; // # (pgm comment)
-        if( !pgmComment && pgmPtr ) {
+        if( (pgmComment == 0) && (pgmPtr != 0) ) {
           int s = 0;
           if( pgmn == 7 ) {
             if((buf1 & 0xdfdf) == 0x5749 && (buf0 & 0xdfdfdfff) == 0x44544820 )
@@ -664,13 +718,13 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
               if( pamatr != 6 )
                 pamatr = 0;
             }
-          } else if( c == 0x20 && !pgmw )
+          } else if( c == 0x20 && (pgmw == 0) )
             s = 1;
-          else if( c == 0x0a && !pgmh )
+          else if( c == 0x0a && (pgmh == 0) )
             s = 2;
-          else if( c == 0x0a && !pgmc && pgmn != 4 )
+          else if( c == 0x0a && (pgmc == 0) && pgmn != 4 )
             s = 3;
-          if( s ) {
+          if( s != 0 ) {
             pgmBuf[pgmPtr++] = 0;
             int v = atoi(pgmBuf); // parse width/height/depth/maxval value
             if( s == 1 )
@@ -687,25 +741,25 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
               pgmPtr = 0;
           }
         }
-        if( !pgmComment )
+        if( pgmComment == 0 )
           pgmBuf[pgmPtr++] = c;
         if( pgmPtr >= 32 )
           pgm = 0;
-        if( pgmComment && c == 0x0a )
+        if( (pgmComment != 0) && c == 0x0a )
           pgmComment = 0;
-        if( pgmw && pgmh && !pgmc && pgmn == 4 ) {
+        if( (pgmw != 0) && (pgmh != 0) && (pgmc == 0) && pgmn == 4 ) {
           pgmdata = i;
           pgmDataSize = (pgmw + 7) / 8 * pgmh;
         }
-        if( pgmw && pgmh && pgmc && (pgmn == 5 || (pgmn == 7 && pamd == 1 && pamatr == 6))) {
+        if( (pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 5 || (pgmn == 7 && pamd == 1 && pamatr == 6))) {
           pgmdata = i;
           pgmDataSize = pgmw * pgmh;
         }
-        if( pgmw && pgmh && pgmc && (pgmn == 6 || (pgmn == 7 && pamd == 3 && pamatr == 6))) {
+        if( (pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 6 || (pgmn == 7 && pamd == 3 && pamatr == 6))) {
           pgmdata = i;
           pgmDataSize = pgmw * 3 * pgmh;
         }
-        if( pgmw && pgmh && pgmc && (pgmn == 7 && pamd == 4 && pamatr == 6)) {
+        if( (pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 7 && pamd == 4 && pamatr == 6)) {
           pgmdata = i;
           pgmDataSize = pgmw * 4 * pgmh;
         }
@@ -713,13 +767,13 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
         if( textParser->start() == uint32_t(i) || // for any sign of non-text data in pixel area
             (pgm - 2 == 0 && n - pgmDataSize == i)) // or the image is the whole file/block -> FINISH (success)
         {
-          if( pgmw && pgmh && !pgmc && pgmn == 4 )
+          if( (pgmw != 0) && (pgmh != 0) && (pgmc == 0) && pgmn == 4 )
             IMG_DET(IMAGE1, pgm - 2, pgmdata - pgm + 3, (pgmw + 7) / 8, pgmh);
-          if( pgmw && pgmh && pgmc && (pgmn == 5 || (pgmn == 7 && pamd == 1 && pamatr == 6)))
+          if( (pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 5 || (pgmn == 7 && pamd == 1 && pamatr == 6)))
             IMG_DET(IMAGE8GRAY, pgm - 2, pgmdata - pgm + 3, pgmw, pgmh);
-          if( pgmw && pgmh && pgmc && (pgmn == 6 || (pgmn == 7 && pamd == 3 && pamatr == 6)))
+          if( (pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 6 || (pgmn == 7 && pamd == 3 && pamatr == 6)))
             IMG_DET(IMAGE24, pgm - 2, pgmdata - pgm + 3, pgmw * 3, pgmh);
-          if( pgmw && pgmh && pgmc && (pgmn == 7 && pamd == 4 && pamatr == 6))
+          if( (pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 7 && pamd == 4 && pamatr == 6))
             IMG_DET(IMAGE32, pgm - 2, pgmdata - pgm + 3, pgmw * 4, pgmh);
         } else if((--pgmDataSize) == 0 )
           pgm = 0; // all data was probably text in pixel area: fail
@@ -729,7 +783,7 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
     // Detect .rgb image
     if((buf0 & 0xffff) == 0x01da )
       rgbi = i, rgbx = rgby = 0;
-    if( rgbi ) {
+    if( rgbi != 0 ) {
       const int p = i - rgbi;
       if( p == 1 && c != 0 )
         rgbi = 0;
@@ -743,7 +797,7 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
         rgby = buf0 & 0xffff, rgbi = (rgby == 0 ? 0 : rgbi);
       else if( p == 10 ) {
         int z = buf0 & 0xffff;
-        if( rgbx && rgby && (z == 1 || z == 3 || z == 4))
+        if( (rgbx != 0) && (rgby != 0) && (z == 1 || z == 3 || z == 4))
           IMG_DET(IMAGE8, rgbi - 1, 512, rgbx, rgby * z);
         rgbi = 0;
       }
@@ -756,7 +810,15 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
 
       // read directory
       int dirSize = in->getchar();
-      int tifX = 0, tifY = 0, tifZ = 0, tifZb = 0, tifC = 0, tifofs = 0, tifofval = 0, tifSize = 0, b[12];
+      int tifX = 0;
+      int tifY = 0;
+      int tifZ = 0;
+      int tifZb = 0;
+      int tifC = 0;
+      int tifofs = 0;
+      int tifofval = 0;
+      int tifSize = 0;
+      int b[12];
       if( in->getchar() == 0 ) {
         for( int i = 0; i < dirSize; i++ ) {
           for( int j = 0; j < 12; j++ )
@@ -777,7 +839,7 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
             else if( tag == 259 )
               tifC = tagVal; // 1 = no compression
             else if( tag == 273 && tagFmt == 4 )
-              tifofs = tagVal, tifofval = (tagLen <= 1);
+              tifofs = tagVal, tifofval = static_cast<int>(tagLen <= 1);
             else if( tag == 277 )
               tifZ = tagVal; // components per pixel
             else if( tag == 279 && tagLen == 1 )
@@ -785,19 +847,19 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
           }
         }
       }
-      if( tifX && tifY && tifZb && (tifZ == 1 || tifZ == 3) && ((tifC == 1) || (tifC == 5 /*LZW*/ && tifSize > 0)) &&
-          (tifofs && tifofs + i < n)) {
-        if( !tifofval ) {
+      if( (tifX != 0) && (tifY != 0) && (tifZb != 0) && (tifZ == 1 || tifZ == 3) && ((tifC == 1) || (tifC == 5 /*LZW*/ && tifSize > 0)) &&
+          ((tifofs != 0) && tifofs + i < n)) {
+        if( tifofval == 0 ) {
           in->setpos(start + i + tifofs - 7);
           for( int j = 0; j < 4; j++ )
             b[j] = in->getchar();
           tifofs = b[0] + (b[1] << 8) + (b[2] << 16) + (b[3] << 24);
         }
-        if( tifofs && tifofs < (1 << 18) && tifofs + i < n ) {
+        if( (tifofs != 0) && tifofs < (1 << 18) && tifofs + i < n ) {
           if( tifC == 1 ) {
             if( tifZ == 1 && tifZb == 1 )
               IMG_DET(IMAGE1, i - 7, tifofs, ((tifX - 1) >> 3) + 1, tifY);
-            else if( tifZ == 1 && tifZb == 8 )
+            if( tifZ == 1 && tifZb == 8 )
               IMG_DET(IMAGE8, i - 7, tifofs, tifX, tifY);
             else if( tifZ == 3 && tifZb == 8 )
               IMG_DET(IMAGE24, i - 7, tifofs, tifX * 3, tifY);
@@ -821,17 +883,17 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
       tga = i, tgax = tgay, tgaz = 24, tgat = 2;
     else if((buf1 & 0xFFF7FF) == 0x00000300 && buf0 == 0x00000000 )
       tga = i, tgax = tgay, tgaz = 8, tgat = (buf1 >> 8) & 0xF;
-    if( tga ) {
+    if( tga != 0 ) {
       if( i - tga == 8 )
         tga = (buf1 == 0 ? tga : 0), tgax = (bswap(buf0) & 0xffff), tgay = (bswap(buf0) >> 16);
       else if( i - tga == 10 ) {
         if((buf0 & 0xFFF7) == 32 << 8 )
           tgaz = 32;
-        if((tgaz << 8) == (int) (buf0 & 0xFFD7) && tgax && tgay && uint32_t(tgax * tgay) < 0xFFFFFFF ) {
+        if((tgaz << 8) == (int) (buf0 & 0xFFD7) && (tgax != 0) && (tgay != 0) && uint32_t(tgax * tgay) < 0xFFFFFFF ) {
           if( tgat == 1 ) {
             in->setpos(start + tga + 11 + tgaid);
             IMG_DET((isGrayscalePalette(in)) ? IMAGE8GRAY : IMAGE8, tga - 7, 18 + tgaid + 256 * tgamap, tgax, tgay);
-          } else if( tgat == 2 )
+          } if( tgat == 2 )
             IMG_DET((tgaz == 24) ? IMAGE24 : IMAGE32, tga - 7, 18 + tgaid, tgax * (tgaz >> 3), tgay);
           else if( tgat == 3 )
             IMG_DET(IMAGE8GRAY, tga - 7, 18 + tgaid, tgax, tgay);
@@ -846,12 +908,15 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
             info |= tgax;
             // now detect compressed image data size
             detd = 0;
-            int c = in->getchar(), b = 0, total = tgax * tgay, line = 0;
+            int c = in->getchar();
+            int b = 0;
+            int total = tgax * tgay;
+            int line = 0;
             while( total > 0 && c >= 0 && (++detd, b = in->getchar()) >= 0 ) {
               if( c == 0x80 ) {
                 c = b;
                 continue;
-              } else if( c > 0x7F ) {
+              } if( c > 0x7F ) {
                 total -= (c = (c & 0x7F) + 1);
                 line += c;
                 c = in->getchar();
@@ -865,13 +930,13 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
               }
               if( line > tgax )
                 break;
-              else if( line == tgax )
+              if( line == tgax )
                 line = 0;
             }
             if( total == 0 ) {
               in->setpos(start + tga + 11 + tgaid + 256 * tgamap);
               return dett = RLE;
-            } else
+            }
               in->setpos(savedPos);
           }
         }
@@ -887,13 +952,13 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
       else
         gifGray = 0;
     }
-    if( !gif && (buf1 & 0xffff) == 0x4749 && (buf0 == 0x46383961 || buf0 == 0x46383761))
+    if( (gif == 0) && (buf1 & 0xffff) == 0x4749 && (buf0 == 0x46383961 || buf0 == 0x46383761))
       gif = 1, gifi = i + 5;
-    if( gif ) {
+    if( gif != 0 ) {
       if( gif == 1 && i == gifi )
-        gif = 2, gifi = i + 5 + (gifplt = (c & 128) ? (3 * (2 << (c & 7))) : 0);
-      if( gif == 2 && gifplt && i == gifi - gifplt - 3 )
-        gifGray = isGrayscalePalette(in, gifplt / 3), gifplt = 0;
+        gif = 2, gifi = i + 5 + (gifplt = (c & 128) != 0 ? (3 * (2 << (c & 7))) : 0);
+      if( gif == 2 && (gifplt != 0) && i == gifi - gifplt - 3 )
+        gifGray = static_cast<int>(isGrayscalePalette(in, gifplt / 3)), gifplt = 0;
       if( gif == 2 && i == gifi ) {
         if((buf0 & 0xff0000) == 0x210000 )
           gif = 5, gifi = i;
@@ -905,18 +970,18 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
       if( gif == 3 && i == gifi + 6 )
         gifw = (bswap(buf0) & 0xffff);
       if( gif == 3 && i == gifi + 7 )
-        gif = 4, gifc = gifb = 0, gifa = gifi = i + 2 + (gifplt = ((c & 128) ? (3 * (2 << (c & 7))) : 0));
-      if( gif == 4 && gifplt )
-        gifGray = isGrayscalePalette(in, gifplt / 3), gifplt = 0;
+        gif = 4, gifc = gifb = 0, gifa = gifi = i + 2 + (gifplt = ((c & 128) != 0 ? (3 * (2 << (c & 7))) : 0));
+      if( gif == 4 && (gifplt != 0) )
+        gifGray = static_cast<int>(isGrayscalePalette(in, gifplt / 3)), gifplt = 0;
       if( gif == 4 && i == gifi ) {
-        if( c > 0 && gifb && gifc != gifb )
+        if( c > 0 && (gifb != 0) && gifc != gifb )
           gifw = 0;
         if( c > 0 )
           gifb = gifc, gifc = c, gifi += c + 1;
-        else if( !gifw )
+        else if( gifw == 0 )
           gif = 2, gifi = i + 3;
         else
-          return in->setpos(start + gifa - 1), detd = i - gifa + 2, info = ((gifGray ? IMAGE8GRAY : IMAGE8) << 24) | gifw, dett = GIF;
+          return in->setpos(start + gifa - 1), detd = i - gifa + 2, info = ((gifGray != 0 ? IMAGE8GRAY : IMAGE8) << 24) | gifw, dett = GIF;
       }
       if( gif == 5 && i == gifi ) {
         if( c > 0 )
@@ -980,11 +1045,11 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
           b64S = 0;
       } else if( b64S == 2 && (buf0 & 0xffffff) == 0x3d0d0a )
         i -= 1, b64S = 5; // '=' or '=='
-      else if( b64S == 2 && !(isalnum(c) || c == '+' || c == '/' || c == 10 || c == 13 || c == '='))
+      else if( b64S == 2 && !((isalnum(c) != 0) || c == '+' || c == '/' || c == 10 || c == 13 || c == '='))
         b64S = 0;
       if( b64Line > 0 && (b64Line <= 4 || b64Line > 255))
         b64S = 0;
-      if( b64S == 3 && i >= b64I && !(isalnum(c) || c == '+' || c == '/' || c == '='))
+      if( b64S == 3 && i >= b64I && !((isalnum(c) != 0) || c == '+' || c == '/' || c == '='))
         b64S = 4;
       if((b64S == 4 && i - b64I > 128) || (b64S == 5 && i - b64I > 512 && i - b64I < (1 << 27)))
         return in->setpos(start + b64I), detd = i - b64I, BASE64;
@@ -1026,11 +1091,11 @@ static BlockType detect(File *in, uint64_t blockSize, BlockType type, int &info)
 }
 
 #include "bmp.hpp"
-#include "im32.hpp"
 #include "endianness16b.hpp"
 #include "eol.hpp"
-#include "rle.hpp"
 #include "exe.hpp"
+#include "im32.hpp"
+#include "rle.hpp"
 
 //////////////////// Compress, Decompress ////////////////////////////
 
@@ -1055,7 +1120,7 @@ static void directEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &e
 
 static void compressRecursive(File *in, uint64_t blockSize, Encoder &en, String &blstr, int recursionLevel, float p1, float p2);
 
-static uint64_t decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File *out, FMode mode, uint64_t &diffFound) {
+static auto decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File *out, FMode mode, uint64_t &diffFound) -> uint64_t {
   if( type == IMAGE24 )
     return decodeBmp(en, len, info, out, mode, diffFound);
   else if( type == IMAGE32 )
@@ -1086,7 +1151,7 @@ static uint64_t decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len,
   return 0;
 }
 
-static uint64_t encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int info, int &hdrsize) {
+static auto encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int info, int &hdrsize) -> uint64_t {
   if( type == IMAGE24 )
     encodeBmp(in, tmp, len, info);
   else if( type == IMAGE32 )
@@ -1106,12 +1171,12 @@ static uint64_t encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, in
   else if( type == BASE64 )
     encodeBase64(in, tmp, len);
   else if( type == GIF )
-    return encodeGif(in, tmp, len, hdrsize) ? 0 : 1;
+    return encodeGif(in, tmp, len, hdrsize) != 0 ? 0 : 1;
   else if( type == RLE ) {
     auto r = new RleFilter();
     r->encode(in, tmp, len, info, hdrsize);
   } else if( type == LZW )
-    return encodeLzw(in, tmp, len, hdrsize) ? 0 : 1;
+    return encodeLzw(in, tmp, len, hdrsize) != 0 ? 0 : 1;
   else
     assert(false);
   return 0;
@@ -1179,7 +1244,8 @@ static void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, S
                                       "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol", "rle", "lzw"};
   static const char *audioTypes[4] = {"8b-mono", "8b-stereo", "16b-mono", "16b-stereo"};
   BlockType type = DEFAULT;
-  int blNum = 0, info = 0; // image width or audio type
+  int blNum = 0;
+  int info = 0; // image width or audio type
   uint64_t begin = in->curPos();
   uint64_t blockEnd = begin + blockSize;
   if( recursionLevel == 5 ) {
@@ -1189,8 +1255,8 @@ static void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, S
   float pscale = blockSize > 0 ? (p2 - p1) / blockSize : 0;
 
   // Transform and test in blocks
-  uint64_t nextBlockStart;
-  uint64_t textStart;
+  uint64_t nextBlockStart = 0;
+  uint64_t textStart = 0;
   uint64_t textEnd = 0;
   BlockType nextBlockType;
   BlockType nextBlockTypeBak = DEFAULT; //initialized only to suppress a compiler warning, will be overwritten
@@ -1284,10 +1350,10 @@ static void compressfile(const char *filename, uint64_t fileSize, Encoder &en, b
   in.open(filename, true);
   printf("Block segmentation:\n");
   String blstr;
-  compressRecursive(&in, fileSize, en, blstr, 0, 0.0f, 1.0f);
+  compressRecursive(&in, fileSize, en, blstr, 0, 0.0F, 1.0F);
   in.close();
 
-  if( shared->options & OPTION_MULTIPLE_FILE_MODE ) { //multiple file mode
+  if( (shared->options & OPTION_MULTIPLE_FILE_MODE) != 0u ) { //multiple file mode
     if( verbose )
       printf("File size to encode   : 4\n"); //This string must be long enough. "Compressing ..." is still on screen, we need to overwrite it.
     printf("File input size       : %" PRIu64 "\n", fileSize);
@@ -1295,9 +1361,10 @@ static void compressfile(const char *filename, uint64_t fileSize, Encoder &en, b
   }
 }
 
-static uint64_t decompressRecursive(File *out, uint64_t blockSize, Encoder &en, FMode mode, int recursionLevel) {
+static auto decompressRecursive(File *out, uint64_t blockSize, Encoder &en, FMode mode, int recursionLevel) -> uint64_t {
   BlockType type;
-  uint64_t len, i = 0;
+  uint64_t len = 0;
+  uint64_t i = 0;
   uint64_t diffFound = 0;
   int info = 0;
   while( i < blockSize ) {
@@ -1323,12 +1390,12 @@ static uint64_t decompressRecursive(File *out, uint64_t blockSize, Encoder &en, 
       len = decodeFunc(type, en, nullptr, len, info, out, mode, diffFound);
     } else {
       for( uint64_t j = 0; j < len; ++j ) {
-        if( !(j & 0xfff))
+        if( (j & 0xfff) == 0u)
           en.printStatus();
         if( mode == FDECOMPRESS )
           out->putChar(en.decompress());
         else if( mode == FCOMPARE ) {
-          if( en.decompress() != out->getchar() && !diffFound ) {
+          if( en.decompress() != out->getchar() && (diffFound == 0u) ) {
             mode = FDISCARD;
             diffFound = i + j + 1;
           }
@@ -1363,9 +1430,9 @@ static void decompressFile(const char *filename, FMode fMode, Encoder &en) {
 
   // Decompress/Compare
   uint64_t r = decompressRecursive(&f, fileSize, en, fMode, 0);
-  if( fMode == FCOMPARE && !r && f.getchar() != EOF)
+  if( fMode == FCOMPARE && (r == 0u) && f.getchar() != EOF)
     printf("file is longer\n");
-  else if( fMode == FCOMPARE && r )
+  else if( fMode == FCOMPARE && (r != 0u) )
     printf("differ at %" PRIu64 "\n", r - 1);
   else if( fMode == FCOMPARE )
     printf("identical\n");

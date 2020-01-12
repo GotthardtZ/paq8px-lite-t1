@@ -1,12 +1,12 @@
 #ifndef PAQ8PX_FILE_HPP
 #define PAQ8PX_FILE_HPP
 
-#include <cerrno>
 #include "../String.hpp"
+#include <cerrno>
 #include <cstdint>
 #include <cstdio>
-#include <sys/stat.h>
 #include <cstring>
+#include <sys/stat.h>
 
 /**
  * This is an abstract class for all the required file operations.
@@ -16,22 +16,22 @@
 class File {
 public:
     virtual ~File() = default;
-    virtual bool open(const char *filename, bool mustSucceed) = 0;
+    virtual auto open(const char *filename, bool mustSucceed) -> bool = 0;
     virtual void create(const char *filename) = 0;
     virtual void close() = 0;
-    virtual int getchar() = 0;
+    virtual auto getchar() -> int = 0;
     virtual void putChar(uint8_t c) = 0;
     void append(const char *s);
-    virtual uint64_t blockRead(uint8_t *ptr, uint64_t count) = 0;
+    virtual auto blockRead(uint8_t *ptr, uint64_t count) -> uint64_t = 0;
     virtual void blockWrite(uint8_t *ptr, uint64_t count) = 0;
-    uint32_t get32();
+    auto get32() -> uint32_t;
     void put32(uint32_t x);
-    uint64_t getVLI();
+    auto getVLI() -> uint64_t;
     void putVLI(uint64_t i);
     virtual void setpos(uint64_t newPos) = 0;
     virtual void setEnd() = 0;
-    virtual uint64_t curPos() = 0;
-    virtual bool eof() = 0;
+    virtual auto curPos() -> uint64_t = 0;
+    virtual auto eof() -> bool = 0;
 };
 
 #endif //PAQ8PX_FILE_HPP

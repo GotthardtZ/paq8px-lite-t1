@@ -2,14 +2,14 @@
 #define PAQ8PX_RECORDMODEL_HPP
 
 #include "../Shared.hpp"
-#include "../RingBuffer.hpp"
 #include "../ContextMap.hpp"
-#include "../IndirectMap.hpp"
-#include "../StationaryMap.hpp"
-#include "../SmallStationaryContextMap.hpp"
 #include "../IndirectContext.hpp"
-#include "../utils.hpp"
+#include "../IndirectMap.hpp"
 #include "../ModelStats.hpp"
+#include "../RingBuffer.hpp"
+#include "../SmallStationaryContextMap.hpp"
+#include "../StationaryMap.hpp"
+#include "../utils.hpp"
 
 struct dBASE {
     uint8_t version;

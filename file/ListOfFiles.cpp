@@ -41,8 +41,8 @@ void ListOfFiles::addChar(char c) {
   }
 }
 
-int ListOfFiles::getCount() { return (int) names.size(); }
+auto ListOfFiles::getCount() -> int { return (int) names.size(); }
 
-const char *ListOfFiles::getfilename(int i) { return names[i]->c_str(); }
+auto ListOfFiles::getfilename(int i) -> const char * { return names[i]->c_str(); }
 
-String *ListOfFiles::getString() { return &listOfFiles; }
+auto ListOfFiles::getString() -> String * { return &listOfFiles; }

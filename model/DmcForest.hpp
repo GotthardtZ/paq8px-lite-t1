@@ -2,8 +2,8 @@
 #define PAQ8PX_DMCFOREST_HPP
 
 #include "../Shared.hpp"
-#include "DmcModel.hpp"
 #include "../Array.hpp"
+#include "DmcModel.hpp"
 
 /**
  * This class solves two problems of the DMC model
@@ -49,7 +49,7 @@ public:
     static constexpr int MIXERINPUTS = 2 + 8 / 2; // 6 : fast models (2 individually) + slow models (8 combined pairwise)
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
-    DmcForest(const uint64_t size);
+    explicit DmcForest(uint64_t size);
     ~DmcForest();
     /**
      * Update and predict

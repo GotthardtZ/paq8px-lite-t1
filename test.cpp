@@ -1,10 +1,10 @@
-#include <cstdint>
-#include "model/NormalModel.hpp"
 #include "Mixer.hpp"
 #include "MixerFactory.hpp"
 #include "ModelStats.hpp"
+#include "model/NormalModel.hpp"
+#include <cstdint>
 
-int main() {
+auto main() -> int {
   constexpr uint8_t ys[16] = {0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0};
   auto shared = Shared::getInstance();
   shared->chosenSimd = SIMD_AVX2;

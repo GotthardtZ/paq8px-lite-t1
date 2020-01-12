@@ -1,11 +1,11 @@
 #ifndef PAQ8PX_WORDMODEL_HPP
 #define PAQ8PX_WORDMODEL_HPP
 
-#include <cctype>
-#include "../Shared.hpp"
-#include "../RingBuffer.hpp"
 #include "../ContextMap2.hpp"
 #include "../ModelStats.hpp"
+#include "../RingBuffer.hpp"
+#include "../Shared.hpp"
+#include <cctype>
 
 #ifdef USE_TEXTMODEL
 

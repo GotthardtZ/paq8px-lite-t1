@@ -1,11 +1,11 @@
 #include "File.hpp"
 
 void File::append(const char *s) {
-  for( int i = 0; s[i]; i++ )
+  for( int i = 0; s[i] != 0; i++ )
     putChar((uint8_t) s[i]);
 }
 
-uint32_t File::get32() { return (getchar() << 24U) | (getchar() << 16U) | (getchar() << 8U) | (getchar()); }
+auto File::get32() -> uint32_t { return (getchar() << 24U) | (getchar() << 16U) | (getchar() << 8U) | (getchar()); }
 
 void File::put32(uint32_t x) {
   putChar((x >> 24U) & 255U);
@@ -14,7 +14,7 @@ void File::put32(uint32_t x) {
   putChar(x & 255U);
 }
 
-uint64_t File::getVLI() {
+auto File::getVLI() -> uint64_t {
   uint64_t i = 0;
   int k = 0;
   uint8_t b = 0;

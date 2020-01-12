@@ -1,9 +1,9 @@
 #ifndef PAQ8PX_AUDIOMODEL_HPP
 #define PAQ8PX_AUDIOMODEL_HPP
 
-#include <cstdint>
-#include "../Shared.hpp"
 #include "../ModelStats.hpp"
+#include "../Shared.hpp"
+#include <cstdint>
 
 #ifdef USE_AUDIOMODEL
 

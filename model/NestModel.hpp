@@ -15,7 +15,7 @@ public:
     static constexpr int MIXERINPUTS = nCM * (ContextMap::MIXERINPUTS); // 60
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
-    NestModel(uint64_t size);
+    explicit NestModel(uint64_t size);
     void mix(Mixer &m);
 };
 

@@ -2,9 +2,9 @@
 #define PAQ8PX_IMAGE1BITMODEL_HPP
 
 #include "../Shared.hpp"
-#include "../RingBuffer.hpp"
 #include "../Mixer.hpp"
 #include "../Random.hpp"
+#include "../RingBuffer.hpp"
 #include "../StateMap.hpp"
 
 /**

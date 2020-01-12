@@ -1,9 +1,9 @@
 #ifndef PAQ8PX_XMLMODEL_HPP
 #define PAQ8PX_XMLMODEL_HPP
 
-#include <cstdint>
-#include "../Shared.hpp"
 #include "../ContextMap.hpp"
+#include "../Shared.hpp"
+#include <cstdint>
 
 static constexpr uint32_t cacheSize = 32;
 
@@ -50,8 +50,8 @@ enum XMLState {
 class XMLModel {
 private:
     static constexpr int nCM = 4;
-    static_assert((cacheSize & (cacheSize - 1)) == 0);
-    static_assert(cacheSize > 8);
+    static_assert((cacheSize & (cacheSize - 1)) == 0, "");
+    static_assert(cacheSize > 8, "");
     Shared *shared = Shared::getInstance();
     ContextMap cm;
     XMLTagCache cache {};
@@ -69,7 +69,7 @@ public:
     static constexpr int MIXERINPUTS = nCM * (ContextMap::MIXERINPUTS); //20
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
-    XMLModel(uint64_t size);
+    explicit XMLModel(uint64_t size);
     void update();
     void mix(Mixer &m);
 };

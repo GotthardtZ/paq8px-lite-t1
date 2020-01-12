@@ -16,11 +16,11 @@ private:
 
 public:
     uint16_t c0, c1;
-    [[nodiscard]] uint8_t getState() const;
+    [[nodiscard]] auto getState() const -> uint8_t;
     void setState(uint8_t state);
-    [[nodiscard]] uint32_t getNx0() const;
+    [[nodiscard]] auto getNx0() const -> uint32_t;
     void setNx0(uint32_t nx0);
-    [[nodiscard]] uint32_t getNx1() const;
+    [[nodiscard]] auto getNx1() const -> uint32_t;
     void setNx1(uint32_t nx1);
 };
 

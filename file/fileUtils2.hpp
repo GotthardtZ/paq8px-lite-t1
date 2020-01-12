@@ -8,7 +8,7 @@
  * @param filename
  * @return
  */
-static uint64_t getFileSize(const char *filename) {
+static auto getFileSize(const char *filename) -> uint64_t {
   FileDisk f;
   f.open(filename, true);
   f.setEnd();

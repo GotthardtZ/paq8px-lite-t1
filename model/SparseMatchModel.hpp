@@ -2,11 +2,11 @@
 #define PAQ8PX_SPARSEMATCHMODEL_HPP
 
 #include "../MTFList.hpp"
+#include "../Hash.hpp"
+#include "../IndirectContext.hpp"
+#include "../Mixer.hpp"
 #include "../Shared.hpp"
 #include "../StationaryMap.hpp"
-#include "../IndirectContext.hpp"
-#include "../Hash.hpp"
-#include "../Mixer.hpp"
 
 class SparseMatchModel {
 private:
@@ -46,7 +46,7 @@ public:
     static constexpr int MIXERINPUTS = 3 + nSM * StationaryMap::MIXERINPUTS; // 11
     static constexpr int MIXERCONTEXTS = numHashes * (64 + 2048); // 8448
     static constexpr int MIXERCONTEXTSETS = 2;
-    SparseMatchModel(uint64_t size);
+    explicit SparseMatchModel(uint64_t size);
     void update();
     void mix(Mixer &m);
 };

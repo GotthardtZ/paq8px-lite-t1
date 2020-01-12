@@ -29,8 +29,10 @@ private:
     Shared *shared = Shared::getInstance();
     Array<uint32_t> data;
     const uint32_t mask, maskBits, stride, bTotal;
-    uint32_t context, bCount, b;
-    uint32_t *cp;
+    uint32_t context{};
+    uint32_t bCount {};
+    uint32_t b {};
+    uint32_t *cp{};
     int scale;
     const uint16_t limit;
     int *dt;

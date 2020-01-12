@@ -12,7 +12,11 @@ class LZWFilter : Filter {
 public:
     void encode(File *in, File *out, uint64_t size, int info, int &headerSize) override {
       LZWDictionary dic;
-      int parent = -1, code = 0, buffer = 0, bitsPerCode = 9, bitsUsed = 0;
+      int parent = -1;
+      int code = 0;
+      int buffer = 0;
+      int bitsPerCode = 9;
+      int bitsUsed = 0;
       bool done = false;
       while( !done ) {
         buffer = in->getchar();
@@ -25,7 +29,8 @@ public:
             if( code == LZW_EOF_CODE ) {
               done = true;
               break;
-            } else if( code == LZW_RESET_CODE ) {
+            }
+            if( code == LZW_RESET_CODE ) {
               dic.reset();
               parent = -1;
               bitsPerCode = 9;
@@ -50,10 +55,10 @@ public:
           }
         }
       }
-      return;// 1;
+      // 1;
     }
 
-    uint64_t decode(File *in, File *out, FMode fMode, uint64_t size, uint64_t &diffFound) override {
+    auto decode(File * /*in*/, File * /*out*/, FMode  /*fMode*/, uint64_t  /*size*/, uint64_t & /*diffFound*/) -> uint64_t override {
       return 0;
     }
 
@@ -63,9 +68,13 @@ public:
 
 };
 
-static int encodeLzw(File *in, File *out, uint64_t size, int &headerSize) {
+static auto encodeLzw(File *in, File *out, uint64_t size, int &headerSize) -> int {
   LZWDictionary dic;
-  int parent = -1, code = 0, buffer = 0, bitsPerCode = 9, bitsUsed = 0;
+  int parent = -1;
+  int code = 0;
+  int buffer = 0;
+  int bitsPerCode = 9;
+  int bitsUsed = 0;
   bool done = false;
   while( !done ) {
     buffer = in->getchar();
@@ -78,7 +87,8 @@ static int encodeLzw(File *in, File *out, uint64_t size, int &headerSize) {
         if( code == LZW_EOF_CODE ) {
           done = true;
           break;
-        } else if( code == LZW_RESET_CODE ) {
+        }
+        if( code == LZW_RESET_CODE ) {
           dic.reset();
           parent = -1;
           bitsPerCode = 9;
@@ -124,7 +134,11 @@ static inline void writeCode(File *f, const FMode mode, int *buffer, uint64_t *p
 static uint64_t decodeLzw(File *in, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
   LZWDictionary dic;
   uint64_t pos = 0;
-  int parent = -1, code = 0, buffer = 0, bitsPerCode = 9, bitsUsed = 0;
+  int parent = -1;
+  int code = 0;
+  int buffer = 0;
+  int bitsPerCode = 9;
+  int bitsUsed = 0;
   writeCode(out, mode, &buffer, &pos, &bitsUsed, bitsPerCode, LZW_RESET_CODE, &diffFound);
   while((code = in->getchar()) >= 0 && diffFound == 0 ) {
     int index = dic.findEntry(parent, code);

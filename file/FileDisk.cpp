@@ -1,6 +1,6 @@
 #include "FileDisk.hpp"
 
-FILE *FileDisk::makeTmpFile() {
+auto FileDisk::makeTmpFile() -> FILE * {
 #if defined(WINDOWS)
   char szTempFileName[MAX_PATH];
   const UINT uRetVal = GetTempFileName(TEXT("."), TEXT("tmp"), 0, szTempFileName);
@@ -15,7 +15,7 @@ FileDisk::FileDisk() { file = nullptr; }
 
 FileDisk::~FileDisk() { close(); }
 
-bool FileDisk::open(const char *filename, bool mustSucceed) {
+auto FileDisk::open(const char *filename, bool mustSucceed) -> bool {
   assert(file == nullptr);
   file = openFile(filename, READ);
   const bool success = (file != nullptr);
@@ -30,7 +30,7 @@ void FileDisk::create(const char *filename) {
   assert(file == nullptr);
   makeDirectories(filename);
   file = openFile(filename, WRITE);
-  if( !file ) {
+  if( file == nullptr ) {
     printf("Unable to create file %s (%s)", filename, strerror(errno));
     quit();
   }
@@ -39,23 +39,23 @@ void FileDisk::create(const char *filename) {
 void FileDisk::createTmp() {
   assert(file == nullptr);
   file = makeTmpFile();
-  if( !file ) {
+  if( file == nullptr ) {
     printf("Unable to create temporary file (%s)", strerror(errno));
     quit();
   }
 }
 
 void FileDisk::close() {
-  if( file )
+  if( file != nullptr )
     fclose(file);
   file = nullptr;
 }
 
-int FileDisk::getchar() { return fgetc(file); }
+auto FileDisk::getchar() -> int { return fgetc(file); }
 
 void FileDisk::putChar(uint8_t c) { fputc(c, file); }
 
-uint64_t FileDisk::blockRead(uint8_t *ptr, uint64_t count) { return fread(ptr, 1, count, file); }
+auto FileDisk::blockRead(uint8_t *ptr, uint64_t count) -> uint64_t { return fread(ptr, 1, count, file); }
 
 void FileDisk::blockWrite(uint8_t *ptr, uint64_t count) { fwrite(ptr, 1, count, file); }
 
@@ -63,6 +63,6 @@ void FileDisk::setpos(uint64_t newPos) { fseeko(file, newPos, SEEK_SET); }
 
 void FileDisk::setEnd() { fseeko(file, 0, SEEK_END); }
 
-uint64_t FileDisk::curPos() { return ftello(file); }
+auto FileDisk::curPos() -> uint64_t { return ftello(file); }
 
-bool FileDisk::eof() { return feof(file) != 0; }
+auto FileDisk::eof() -> bool { return feof(file) != 0; }

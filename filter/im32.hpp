@@ -1,10 +1,10 @@
 #ifndef PAQ8PX_IM32_HPP
 #define PAQ8PX_IM32_HPP
 
-#include <cstdint>
-#include "../file/File.hpp"
 #include "../Encoder.hpp"
+#include "../file/File.hpp"
 #include "Filter.hpp"
+#include <cstdint>
 
 // 32-bit image
 static void encodeIm32(File *in, File *out, uint64_t len, int width) {
@@ -17,8 +17,8 @@ static void encodeIm32(File *in, File *out, uint64_t len, int width) {
       r = in->getchar();
       a = in->getchar();
       out->putChar(g);
-      out->putChar(shared->options & OPTION_SKIPRGB ? r : g - r);
-      out->putChar(shared->options & OPTION_SKIPRGB ? b : g - b);
+      out->putChar((shared->options & OPTION_SKIPRGB) != 0u ? r : g - r);
+      out->putChar((shared->options & OPTION_SKIPRGB) != 0u ? b : g - b);
       out->putChar(a);
     }
     for( int j = 0; j < width % 4; j++ )
@@ -28,7 +28,7 @@ static void encodeIm32(File *in, File *out, uint64_t len, int width) {
     out->putChar(in->getchar());
 }
 
-static uint64_t decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMode mode, uint64_t &diffFound) {
+static auto decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMode mode, uint64_t &diffFound) -> uint64_t {
   Shared *shared = Shared::getInstance();
   int r, g, b, a, p;
   bool rgb = (width & (1U << 31U)) > 0;
@@ -39,20 +39,20 @@ static uint64_t decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMo
     for( int j = 0; j < width / 4; j++ ) {
       b = en.decompress(), g = en.decompress(), r = en.decompress(), a = en.decompress();
       if( mode == FDECOMPRESS ) {
-        out->putChar(shared->options & OPTION_SKIPRGB ? r : b - r);
+        out->putChar((shared->options & OPTION_SKIPRGB) != 0u ? r : b - r);
         out->putChar(b);
-        out->putChar(shared->options & OPTION_SKIPRGB ? g : b - g);
+        out->putChar((shared->options & OPTION_SKIPRGB) != 0u ? g : b - g);
         out->putChar(a);
-        if( !j && !(i & 0xf))
+        if( (j == 0) && ((i & 0xf) == 0))
           en.printStatus();
       } else if( mode == FCOMPARE ) {
-        if(((shared->options & OPTION_SKIPRGB ? r : b - r) & 255) != out->getchar() && !diffFound )
+        if((((shared->options & OPTION_SKIPRGB) != 0u ? r : b - r) & 255) != out->getchar() && (diffFound == 0u) )
           diffFound = p + 1;
-        if( b != out->getchar() && !diffFound )
+        if( b != out->getchar() && (diffFound == 0u) )
           diffFound = p + 2;
-        if(((shared->options & OPTION_SKIPRGB ? g : b - g) & 255) != out->getchar() && !diffFound )
+        if((((shared->options & OPTION_SKIPRGB) != 0u ? g : b - g) & 255) != out->getchar() && (diffFound == 0u) )
           diffFound = p + 3;
-        if(((a) & 255) != out->getchar() && !diffFound )
+        if(((a) & 255) != out->getchar() && (diffFound == 0u) )
           diffFound = p + 4;
         p += 4;
       }
@@ -61,7 +61,7 @@ static uint64_t decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMo
       if( mode == FDECOMPRESS ) {
         out->putChar(en.decompress());
       } else if( mode == FCOMPARE ) {
-        if( en.decompress() != out->getchar() && !diffFound )
+        if( en.decompress() != out->getchar() && (diffFound == 0u) )
           diffFound = p + j + 1;
       }
     }
@@ -70,7 +70,7 @@ static uint64_t decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMo
     if( mode == FDECOMPRESS ) {
       out->putChar(en.decompress());
     } else if( mode == FCOMPARE ) {
-      if( en.decompress() != out->getchar() && !diffFound ) {
+      if( en.decompress() != out->getchar() && (diffFound == 0u) ) {
         diffFound = size - i;
         break;
       }

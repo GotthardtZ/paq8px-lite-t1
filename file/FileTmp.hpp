@@ -38,21 +38,21 @@ public:
     /**
      *  This method is forbidden for temporary files.
      */
-    bool open(const char *, bool) override;
+    auto open(const char * /*filename*/, bool /*mustSucceed*/) -> bool override;
 
     /**
      *  This method is forbidden for temporary files.
      */
-    void create(const char *) override;
+    void create(const char * /*filename*/) override;
     void close() override;
-    int getchar() override;
+    auto getchar() -> int override;
     void putChar(uint8_t c) override;
-    uint64_t blockRead(uint8_t *ptr, uint64_t count) override;
+    auto blockRead(uint8_t *ptr, uint64_t count) -> uint64_t override;
     void blockWrite(uint8_t *ptr, uint64_t count) override;
     void setpos(uint64_t newPos) override;
     void setEnd() override;
-    uint64_t curPos() override;
-    bool eof() override;
+    auto curPos() -> uint64_t override;
+    auto eof() -> bool override;
 };
 
 #endif //PAQ8PX_FILETMP_HPP

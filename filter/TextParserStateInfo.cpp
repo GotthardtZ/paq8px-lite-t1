@@ -13,17 +13,17 @@ void TextParserStateInfo::reset(uint64_t startPos) {
   UTF8State = 0;
 }
 
-uint64_t TextParserStateInfo::start() { return _start[_start.size() - 1]; }
+auto TextParserStateInfo::start() -> uint64_t { return _start[_start.size() - 1]; }
 
-uint64_t TextParserStateInfo::end() { return _end[_end.size() - 1]; }
+auto TextParserStateInfo::end() -> uint64_t { return _end[_end.size() - 1]; }
 
 void TextParserStateInfo::setEnd(uint64_t end) { _end[_end.size() - 1] = end; }
 
-uint32_t TextParserStateInfo::eolType() { return _EOLType[_EOLType.size() - 1]; }
+auto TextParserStateInfo::eolType() -> uint32_t { return _EOLType[_EOLType.size() - 1]; }
 
 void TextParserStateInfo::setEolType(uint32_t eolType) { _EOLType[_EOLType.size() - 1] = eolType; }
 
-uint64_t TextParserStateInfo::validLength() { return end() - start() + 1; }
+auto TextParserStateInfo::validLength() -> uint64_t { return end() - start() + 1; }
 
 void TextParserStateInfo::next(uint64_t startPos) {
   _start.pushBack(startPos);

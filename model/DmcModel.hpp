@@ -1,17 +1,17 @@
 #ifndef PAQ8PX_DMCMODEL_HPP
 #define PAQ8PX_DMCMODEL_HPP
 
-#include <cstdint>
-#include <cassert>
-#include "../Shared.hpp"
-#include "../Random.hpp"
-#include "../StateMap.hpp"
-#include "../utils.hpp"
 #include "../Array.hpp"
+#include "../Mixer.hpp"
+#include "../Random.hpp"
+#include "../Shared.hpp"
+#include "../StateMap.hpp"
 #include "../StateTable.hpp"
 #include "../Stretch.hpp"
-#include "../Mixer.hpp"
+#include "../utils.hpp"
 #include "DmcNode.hpp"
+#include <cassert>
+#include <cstdint>
 
 #define DMC_NODES_BASE (255 * 256) // = 65280
 #define DMC_NODES_MAX ((uint64_t(1) << 31) / sizeof(DMCNode)) // = 178 956 970
@@ -45,7 +45,7 @@ private:
     // this is the number of skipped cloning events when the counts were already large enough (>1.0)
 
     // helper function: adaptively increment a counter
-    [[nodiscard]] uint32_t incrementCounter(uint32_t x, uint32_t increment) const;
+    [[nodiscard]] auto incrementCounter(uint32_t x, uint32_t increment) const -> uint32_t;
 public:
     DmcModel(uint64_t dmcNodes, uint32_t thStart);
 
@@ -61,10 +61,10 @@ public:
      * update state graph
      */
     void update();
-    [[nodiscard]] bool isFull() const;
-    [[nodiscard]] int pr1() const;
-    int pr2();
-    int st();
+    [[nodiscard]] auto isFull() const -> bool;
+    [[nodiscard]] auto pr1() const -> int;
+    auto pr2() -> int;
+    auto st() -> int;
 };
 
 #endif //PAQ8PX_DMCMODEL_HPP

@@ -1,11 +1,11 @@
 #ifndef PAQ8PX_FRENCHSTEMMER_HPP
 #define PAQ8PX_FRENCHSTEMMER_HPP
 
-#include <cctype>
-#include "Language.hpp"
 #include "French.hpp"
-#include "Word.hpp"
+#include "Language.hpp"
 #include "Stemmer.hpp"
+#include "Word.hpp"
+#include <cctype>
 
 /**
  * French suffix stemmer, based on the Porter stemmer.
@@ -56,20 +56,20 @@ private:
     static constexpr int NUM_SUFFIXES_STEP5 = 5;
     const char *suffixesStep5[NUM_SUFFIXES_STEP5] = {"enn", "onn", "ett", "ell", "eill"};
 
-    inline bool isConsonant(char c);
+    inline auto isConsonant(char c) -> bool;
     void convertUtf8(Word *w);
     void markVowelsAsConsonants(Word *w);
-    uint32_t getRv(Word *w);
-    bool step1(Word *w, uint32_t rv, uint32_t r1, uint32_t r2, bool *forceStep2A);
-    bool step2A(Word *w, uint32_t rv);
-    bool step2B(Word *w, uint32_t rv, uint32_t r2);
+    auto getRv(Word *w) -> uint32_t;
+    auto step1(Word *w, uint32_t rv, uint32_t r1, uint32_t r2, bool *forceStep2A) -> bool;
+    auto step2A(Word *w, uint32_t rv) -> bool;
+    auto step2B(Word *w, uint32_t rv, uint32_t r2) -> bool;
     static void step3(Word *w);
-    bool step4(Word *w, uint32_t rv, uint32_t r2);
-    bool step5(Word *w);
-    bool step6(Word *w);
+    auto step4(Word *w, uint32_t rv, uint32_t r2) -> bool;
+    auto step5(Word *w) -> bool;
+    auto step6(Word *w) -> bool;
 public:
-    bool isVowel(char c) final;
-    bool stem(Word *w) override;
+    auto isVowel(char c) -> bool final;
+    auto stem(Word *w) -> bool override;
 };
 
 #endif //PAQ8PX_FRENCHSTEMMER_HPP

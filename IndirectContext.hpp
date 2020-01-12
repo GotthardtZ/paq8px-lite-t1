@@ -1,6 +1,9 @@
 #ifndef PAQ8PX_INDIRECTCONTEXT_HPP
 #define PAQ8PX_INDIRECTCONTEXT_HPP
 
+#include <cassert>
+#include <cstdint>
+
 template<typename T>
 class IndirectContext {
 private:

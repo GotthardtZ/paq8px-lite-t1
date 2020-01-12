@@ -1,6 +1,11 @@
 #ifndef PAQ8PX_EXE_HPP
 #define PAQ8PX_EXE_HPP
 
+#include "../file/File.hpp"
+#include "../Encoder.hpp"
+#include "Filter.hpp"
+#include <cstdint>
+
 // EXE transform: <encoded-size> <begin> <block>...
 // Encoded-size is 4 bytes, MSB first.
 // begin is the offset of the start of the input file, 4 bytes, MSB first.
@@ -38,7 +43,7 @@ static void encodeExe(File *in, File *out, uint64_t len, uint64_t begin) {
   }
 }
 
-static uint64_t decodeExe(Encoder &en, uint64_t size, File *out, FMode mode, uint64_t &diffFound) {
+static auto decodeExe(Encoder &en, uint64_t size, File *out, FMode mode, uint64_t &diffFound) -> uint64_t {
   const int block = 0x10000; // block size
   int begin, offset = 6, a;
   uint8_t c[6];
@@ -64,9 +69,9 @@ static uint64_t decodeExe(Encoder &en, uint64_t size, File *out, FMode mode, uin
     }
     if( mode == FDECOMPRESS )
       out->putChar(c[5]);
-    else if( mode == FCOMPARE && c[5] != out->getchar() && !diffFound )
+    else if( mode == FCOMPARE && c[5] != out->getchar() && (diffFound == 0u) )
       diffFound = offset - 6 + 1;
-    if( mode == FDECOMPRESS && !(offset & 0xfffu))
+    if( mode == FDECOMPRESS && ((offset & 0xfffU) == 0u))
       en.printStatus();
     offset++;
   }

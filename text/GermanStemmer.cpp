@@ -34,7 +34,7 @@ void GermanStemmer::markVowelsAsConsonants(Word *w) {
 }
 
 bool GermanStemmer::isValidEnding(const char c, const bool includeR) {
-  return charInArray(c, endings, NUM_ENDINGS) || (includeR && c == 'r');
+  return charInArray(c, endings, numEndings) || (includeR && c == 'r');
 }
 
 bool GermanStemmer::step1(Word *w, const uint32_t r1) {
@@ -45,7 +45,7 @@ bool GermanStemmer::step1(Word *w, const uint32_t r1) {
       return true;
     }
   }
-  for( ; i < NUM_SUFFIXES_STEP1; i++ ) {
+  for( ; i < numSuffixesStep1; i++ ) {
     if( w->endsWith(suffixesStep1[i]) && suffixInRn(w, r1, suffixesStep1[i])) {
       w->end -= uint8_t(strlen(suffixesStep1[i]));
       w->end -= uint8_t(w->endsWith("niss"));
@@ -60,7 +60,7 @@ bool GermanStemmer::step1(Word *w, const uint32_t r1) {
 }
 
 bool GermanStemmer::step2(Word *w, const uint32_t r1) {
-  for( int i = 0; i < NUM_SUFFIXES_STEP2; i++ ) {
+  for( int i = 0; i < numSuffixesStep2; i++ ) {
     if( w->endsWith(suffixesStep2[i]) && suffixInRn(w, r1, suffixesStep2[i])) {
       w->end -= uint8_t(strlen(suffixesStep2[i]));
       return true;
@@ -93,7 +93,7 @@ bool GermanStemmer::step3(Word *w, const uint32_t r1, const uint32_t r2) {
       return true;
     }
   }
-  for( ; i < NUM_SUFFIXES_STEP3; i++ ) {
+  for( ; i < numSuffixesStep3; i++ ) {
     if( w->endsWith(suffixesStep3[i]) && suffixInRn(w, r2, suffixesStep3[i])) {
       w->end -= uint8_t(strlen(suffixesStep3[i]));
       if((w->endsWith("er") || w->endsWith("en")) && suffixInRn(w, r1, "e?"))
@@ -116,7 +116,7 @@ bool GermanStemmer::step3(Word *w, const uint32_t r1, const uint32_t r2) {
 }
 
 bool GermanStemmer::isVowel(const char c) {
-  return charInArray(c, vowels, NUM_VOWELS);
+  return charInArray(c, vowels, numVowels);
 }
 
 bool GermanStemmer::stem(Word *w) {
@@ -148,7 +148,7 @@ bool GermanStemmer::stem(Word *w) {
     }
   }
   if( !res )
-    res = w->matchesAny(commonWords, NUM_COMMON_WORDS);
+    res = w->matchesAny(commonWords, numCommonWords);
   w->calculateStemHash();
   if( res )
     w->language = Language::German;

@@ -2,12 +2,12 @@
 #define PAQ8PX_AUDIO8BITMODEL_HPP
 
 #include "AudioModel.hpp"
-#include "../SmallStationaryContextMap.hpp"
-#include "../OLS.hpp"
 #include "../Ilog.hpp"
 #include "../LMS.hpp"
-#include <cstdint>
+#include "../OLS.hpp"
+#include "../SmallStationaryContextMap.hpp"
 #include <cmath>
+#include <cstdint>
 
 #ifdef USE_AUDIOMODEL
 

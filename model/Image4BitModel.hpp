@@ -2,13 +2,13 @@
 #define PAQ8PX_IMAGE4BITMODEL_HPP
 
 #include "../Shared.hpp"
-#include "../RingBuffer.hpp"
-#include "../Random.hpp"
-#include "../StateMap.hpp"
-#include "../HashTable.hpp"
-#include "../Mixer.hpp"
 #include "../Hash.hpp"
+#include "../HashTable.hpp"
 #include "../Ilog.hpp"
+#include "../Mixer.hpp"
+#include "../Random.hpp"
+#include "../RingBuffer.hpp"
+#include "../StateMap.hpp"
 
 /**
  * Model for 4-bit image data
@@ -29,7 +29,7 @@ public:
     static constexpr int MIXERINPUTS = (S * 3 + 1);
     static constexpr int MIXERCONTEXTS = 256 + 512 + 512 + 1024 + 16 + 1; //2321
     static constexpr int MIXERCONTEXTSETS = 6;
-    Image4BitModel(uint64_t size);
+    explicit Image4BitModel(uint64_t size);
     void setParam(int info0);
     void mix(Mixer &m);
 };

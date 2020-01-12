@@ -1,11 +1,11 @@
 #ifndef PAQ8PX_SPARSEMODEL_HPP
 #define PAQ8PX_SPARSEMODEL_HPP
 
+#include "../ContextMap.hpp"
+#include "../Mixer.hpp"
+#include "../Shared.hpp"
 #include <cassert>
 #include <cstdint>
-#include "../Shared.hpp"
-#include "../Mixer.hpp"
-#include "../ContextMap.hpp"
 
 /**
  * Model order 1-2-3 contexts with gaps.
@@ -20,7 +20,7 @@ public:
     static constexpr int MIXERINPUTS = nCM * (ContextMap::MIXERINPUTS); // 190
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
-    SparseModel(uint64_t size);
+    explicit SparseModel(uint64_t size);
     void mix(Mixer &m);
 };
 

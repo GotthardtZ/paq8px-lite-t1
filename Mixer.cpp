@@ -20,7 +20,7 @@ void Mixer::set(const uint32_t cx, const uint32_t range, const int rate) {
   assert(numContexts < s);
   assert(cx < range);
   assert(base + range <= m);
-  if( !(shared->options & OPTION_ADAPTIVE))
+  if( (shared->options & OPTION_ADAPTIVE) == 0u)
     rates[numContexts] = rate;
   cxt[numContexts++] = base + cx;
   base += range;

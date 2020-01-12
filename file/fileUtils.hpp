@@ -3,10 +3,10 @@
 
 #include "../String.hpp"
 #include <cstdint>
-#include <cstring>
 #include <cstdio>
-#include <sys/types.h>
+#include <cstring>
 #include <sys/stat.h>
+#include <sys/types.h>
 
 //////////////////// IO functions and classes ///////////////////
 // Wrappers to utf8 vs. wchar functions
@@ -89,8 +89,8 @@ static constexpr int APPEND = 2;
  * @param mode
  * @return
  */
-static FILE *openFile(const char *filename, const int mode) {
-  FILE *file;
+static auto openFile(const char *filename, const int mode) -> FILE * {
+  FILE *file = nullptr;
 #ifdef WINDOWS
   file = _wfopen(WcharStr(filename).wchar_str, mode == READ ? L"rb" : mode == WRITE ? L"wb+" : L"a");
 #else
@@ -105,11 +105,11 @@ static FILE *openFile(const char *filename, const int mode) {
  * @param status
  * @return
  */
-static bool statPath(const char *path, struct STAT &status) {
+static auto statPath(const char *path, struct STAT &status) -> bool {
 #ifdef WINDOWS
   return _wstat(WcharStr(path).wchar_str, &status);
 #else
-  return stat(path, &status);
+  return stat(path, &status) != 0;
 #endif
 }
 
@@ -123,9 +123,9 @@ static bool statPath(const char *path, struct STAT &status) {
  * @param path
  * @return
  */
-static int examinePath(const char *path) {
+static auto examinePath(const char *path) -> int {
   struct STAT status {};
-  const bool success = statPath(path, status) == 0;
+  const bool success = static_cast<int>(statPath(path, status)) == 0;
   if( !success ) {
     if( errno == ENOENT ) { //no such file or directory
       const int len = (int) strlen(path);
@@ -134,7 +134,7 @@ static int examinePath(const char *path) {
       const char lastChar = path[len - 1];
       if( lastChar != '/' && lastChar != '\\' )
         return 3; //looks like a file
-      else
+      
         return 4; //looks like a directory
     }
     return 0; //error
@@ -151,7 +151,7 @@ static int examinePath(const char *path) {
  * @param dir
  * @return
  */
-static int makeDir(const char *dir) {
+static auto makeDir(const char *dir) -> int {
   if( examinePath(dir) == 2 ) //existing directory
     return 2; //2: directory already exists, no need to create
 #ifdef WINDOWS

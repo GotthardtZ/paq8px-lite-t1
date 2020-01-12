@@ -1,9 +1,9 @@
 #ifndef PAQ8PX_LZWDICTIONARY_HPP
 #define PAQ8PX_LZWDICTIONARY_HPP
 
-#include <cstdint>
 #include "../file/File.hpp"
 #include "LZWEntry.hpp"
+#include <cstdint>
 
 class LZWDictionary {
 private:
@@ -16,9 +16,9 @@ public:
     int index;
     LZWDictionary();
     void reset();
-    int findEntry(int prefix, int suffix);
+    auto findEntry(int prefix, int suffix) -> int;
     void addEntry(int prefix, int suffix, int offset = -1);
-    int dumpEntry(File *f, int code);
+    auto dumpEntry(File *f, int code) -> int;
 };
 
 #endif //PAQ8PX_LZWDICTIONARY_HPP

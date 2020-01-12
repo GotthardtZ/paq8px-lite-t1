@@ -29,11 +29,12 @@ void StationaryMap::reset(const int rate) {
 void StationaryMap::update() {
   INJECT_SHARED_y
   uint32_t count = min(min(limit, 0x3FF), ((*cp) & 0x3FFU) + 1);
-  int prediction = (*cp) >> 10U, error = (y << 22U) - prediction;
+  int prediction = (*cp) >> 10U;
+  int error = (y << 22U) - prediction;
   error = ((error / 8) * dt[count]) / 1024;
   prediction = min(0x3FFFFF, max(0, prediction + error));
   *cp = (prediction << 10U) | count;
-  b += (y && b > 0);
+  b += static_cast<unsigned int>((y != 0u) && b > 0);
 }
 
 void StationaryMap::setScale(const int Scale) { scale = Scale; }

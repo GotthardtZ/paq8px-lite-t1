@@ -13,7 +13,7 @@ void APM::update() {
   AdaptiveMap::update(&t[cxt]);
 }
 
-int APM::p(int pr, int cx, const int lim) {
+auto APM::p(int pr, int cx, const int lim) -> int {
   updater->subscribe(this);
   assert(pr >= 0 && pr < 4096);
   assert(cx >= 0 && cx < N / steps);

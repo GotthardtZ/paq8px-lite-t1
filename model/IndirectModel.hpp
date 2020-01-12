@@ -1,12 +1,12 @@
 #ifndef PAQ8PX_INDIRECTMODEL_HPP
 #define PAQ8PX_INDIRECTMODEL_HPP
 
-#include <cctype>
-#include "../Shared.hpp"
-#include "../RingBuffer.hpp"
 #include "../ContextMap.hpp"
-#include "../Mixer.hpp"
 #include "../IndirectContext.hpp"
+#include "../Mixer.hpp"
+#include "../RingBuffer.hpp"
+#include "../Shared.hpp"
+#include <cctype>
 
 /**
  * The context is a byte string history that occurs within a 1 or 2 byte context.
@@ -26,7 +26,7 @@ public:
     static constexpr int MIXERINPUTS = nCM * (ContextMap::MIXERINPUTS); // 75
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
-    IndirectModel(uint64_t size);
+    explicit IndirectModel(uint64_t size);
     void mix(Mixer &m);
 };
 

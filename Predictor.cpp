@@ -10,7 +10,7 @@ void Predictor::trainText(const char *const dictionary, int iterations) {
   FileDisk f;
   printf("Pre-training models with text...");
   OpenFromMyFolder::anotherFile(&f, dictionary);
-  int c;
+  int c = 0;
   int trainingByteCount = 0;
   while( iterations-- > 0 ) {
     f.setpos(0);
@@ -87,23 +87,23 @@ void Predictor::trainExe() {
 }
 
 Predictor::Predictor()
-        : stats(), models(&stats), contextModel(&stats, models), sse(&stats), pr(2048){
+        :  models(&stats), contextModel(&stats, models), sse(&stats), pr(2048){
   shared->reset();
   shared->buf.setSize(shared->mem * 8);
   //initiate pre-training
 
-  if( shared->options & OPTION_TRAINTXT ) {
+  if( (shared->options & OPTION_TRAINTXT) != 0u ) {
     trainText("english.dic", 3);
     trainText("english.exp", 1);
   }
-  if( shared->options & OPTION_TRAINEXE )
+  if( (shared->options & OPTION_TRAINEXE) != 0u )
     trainExe();
 }
 
-int Predictor::p() const { return pr; }
+auto Predictor::p() const -> int { return pr; }
 
 void Predictor::update(uint8_t y) {
-  stats.misses += stats.misses + ((pr >> 11U) != y);
+  stats.misses += stats.misses + static_cast<unsigned long long>((pr >> 11U) != y);
 
   // update global context: pos, bitPosition, c0, c4, c8, buf
   shared->y = y;

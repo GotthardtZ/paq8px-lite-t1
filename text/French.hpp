@@ -13,7 +13,7 @@ public:
     enum Flags {
         Adjective = (1U << 2U), Plural = (1U << 3U)
     };
-    bool isAbbreviation(Word *w) override;
+    auto isAbbreviation(Word *w) -> bool override;
 };
 
 #endif //PAQ8PX_FRENCH_HPP

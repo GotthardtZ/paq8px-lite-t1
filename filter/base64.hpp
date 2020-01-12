@@ -1,37 +1,43 @@
 #ifndef PAQ8PX_BASE64_HPP
 #define PAQ8PX_BASE64_HPP
 
+#include "Filter.hpp"
+#include "../Array.hpp"
+#include "../file/File.hpp"
+
 namespace base64 {
-    constexpr bool isdigit(int c) noexcept {
+    constexpr auto isdigit(int c) noexcept -> bool {
       return c >= '0' && c <= '9';
     }
 
-    constexpr bool islower(int c) noexcept {
+    constexpr auto islower(int c) noexcept -> bool {
       return c >= 'a' && c <= 'z';
     }
 
-    constexpr bool isupper(int c) noexcept {
+    constexpr auto isupper(int c) noexcept -> bool {
       return c >= 'A' && c <= 'Z';
     }
 
-    constexpr bool isalpha(int c) noexcept {
+    constexpr auto isalpha(int c) noexcept -> bool {
       return islower(c) || isupper(c);
     }
 
-    constexpr bool isalnum(int c) noexcept {
+    constexpr auto isalnum(int c) noexcept -> bool {
       return isalpha(c) || isdigit(c);
     }
 
     static constexpr char table1[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-}
+}  // namespace base64 // namespace base64
 
-static bool isBase64(unsigned char c) {
+static auto isBase64(unsigned char c) -> bool {
   return (base64::isalnum(c) || (c == '+') || (c == '/') || (c == 10) || (c == 13));
 }
 
-static uint64_t decodeBase64(File *in, File *out, FMode mode, uint64_t &diffFound) {
+static auto decodeBase64(File *in, File *out, FMode mode, uint64_t &diffFound) -> uint64_t {
   uint8_t inn[3];
-  int i, len = 0, blocksOut = 0;
+  int i = 0;
+  int len = 0;
+  int blocksOut = 0;
   int fle = 0;
   int lineSize = 0;
   int outLen = 0;
@@ -71,8 +77,8 @@ static uint64_t decodeBase64(File *in, File *out, FMode mode, uint64_t &diffFoun
       blocksOut++;
     }
     if( blocksOut >= (lineSize / 4) && lineSize != 0 ) { //no lf if lineSize==0
-      if( blocksOut && !in->eof() && fle <= outLen ) { //no lf if eof
-        if( tlf )
+      if( (blocksOut != 0) && !in->eof() && fle <= outLen ) { //no lf if eof
+        if( tlf != 0 )
           ptr[fle++] = (tlf);
         else
           ptr[fle++] = 13, ptr[fle++] = 10;
@@ -86,16 +92,16 @@ static uint64_t decodeBase64(File *in, File *out, FMode mode, uint64_t &diffFoun
   } else if( mode == FCOMPARE ) {
     for( i = 0; i < outLen; i++ ) {
       uint8_t b = ptr[i];
-      if( b != out->getchar() && !diffFound )
+      if( b != out->getchar() && (diffFound == 0u) )
         diffFound = (int) out->curPos();
     }
   }
   return outLen;
 }
 
-static inline char valueB(char c) {
+static inline auto valueB(char c) -> char {
   const char *p = strchr(base64::table1, c);
-  if( p )
+  if( p != nullptr )
     return (char) (p - base64::table1);
   return 0;
 }
@@ -136,7 +142,7 @@ static void encodeBase64(File *in, File *out, uint64_t len64) {
     }
   }
 
-  if( i ) {
+  if( i != 0 ) {
     for( j = i; j < 4; j++ )
       src[j] = 0;
 

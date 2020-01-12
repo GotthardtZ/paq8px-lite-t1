@@ -6,7 +6,7 @@
 
 namespace ofmf {
     static char myPathError[] = "Can't determine my path.";
-}
+} // namespace ofmf
 
 /**
  * Helper class: open a file from the executable's folder
