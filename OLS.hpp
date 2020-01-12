@@ -4,11 +4,13 @@
 #include "Mixer.hpp"
 #include <cstdint>
 #include <cmath>
+#include "Shared.hpp"
 
 template<typename F, typename T, const bool hasZeroMean = true>
 class OLS {
     static constexpr F ftol = 1E-8;
     static constexpr F sub = F(int64_t(!hasZeroMean) << (8 * sizeof(T) - 1));
+    Shared *shared = Shared::getInstance();
 
 private:
     int n, kMax, km, index;
@@ -111,7 +113,7 @@ public:
 
     inline void update(const T val) {
 #ifdef __GNUC__
-      if( chosenSimd == SIMD_AVX2 )
+      if( shared->chosenSimd == SIMD_AVX2 )
         updateAVX2(val);
       else
 #endif

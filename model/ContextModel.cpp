@@ -1,7 +1,8 @@
 #include "ContextModel.hpp"
 
-ContextModel::ContextModel(ModelStats *st, Models &models, uint32_t level) : stats(st), models(models), level(level) {
-  m = MixerFactory::createMixer(1 + //bias
+ContextModel::ContextModel(ModelStats *st, Models &models) : stats(st), models(models) {
+  auto mf = new MixerFactory();
+  m = mf->createMixer(1 + //bias
                                 MatchModel::MIXERINPUTS + NormalModel::MIXERINPUTS + SparseMatchModel::MIXERINPUTS +
                                 SparseModel::MIXERINPUTS + RecordModel::MIXERINPUTS + CharGroupModel::MIXERINPUTS + TextModel::MIXERINPUTS +
                                 WordModel::MIXERINPUTS + IndirectModel::MIXERINPUTS + DmcForest::MIXERINPUTS + NestModel::MIXERINPUTS +

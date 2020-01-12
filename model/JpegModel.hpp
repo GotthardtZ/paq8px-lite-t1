@@ -11,7 +11,8 @@
 #include "../StateMap.hpp"
 #include "../Hash.hpp"
 #include <cstdint>
-
+#include "../MixerFactory.hpp"
+#include "../Ilog.hpp"
 
 // Print a JPEG segment at buf[p...] for debugging
 /*

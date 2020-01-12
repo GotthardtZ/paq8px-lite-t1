@@ -6,6 +6,7 @@
 #include "../OLS.hpp"
 #include "../LMS.hpp"
 #include <cstdint>
+#include "../utils.hpp"
 
 #ifdef USE_AUDIOMODEL
 

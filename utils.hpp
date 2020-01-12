@@ -185,7 +185,6 @@ inline bool hasTransform(BlockType ft) {
 
 inline bool isPNG(BlockType ft) { return ft == PNG8 || ft == PNG8GRAY || ft == PNG24 || ft == PNG32; }
 
-#define MEM (uint64_t(65536) << level)
 #define OPTION_MULTIPLE_FILE_MODE 1U
 #define OPTION_BRUTE 2U
 #define OPTION_TRAINEXE 4U

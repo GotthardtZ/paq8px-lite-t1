@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cassert>
+#include "Ilog.hpp"
 
 ///////////////// Least Mean Squares predictor /////////////////
 

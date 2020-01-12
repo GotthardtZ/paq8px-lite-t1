@@ -4,20 +4,21 @@
 #include "MixerFactory.hpp"
 #include "ModelStats.hpp"
 
-#define MEM (uint64_t(65536) << 1U)
-
 int main() {
   constexpr uint8_t ys[16] = {0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0};
-  Mixer *m = MixerFactory::createMixer(1 + NormalModel::MIXERINPUTS, NormalModel::MIXERCONTEXTS, NormalModel::MIXERCONTEXTSETS);
+  auto shared = Shared::getInstance();
+  shared->chosenSimd = SIMD_AVX2;
+  shared->setLevel(9);
+  auto mf = new MixerFactory();
+  auto m = mf->createMixer(1 + NormalModel::MIXERINPUTS, NormalModel::MIXERCONTEXTS, NormalModel::MIXERCONTEXTSETS);
   m->setScaleFactor(1024, 128);
   auto *modelStats = new ModelStats();
-  NormalModel normalModel(modelStats, MEM * 32);
-  auto shared = Shared::getInstance();
+  NormalModel normalModel(modelStats, shared->mem * 32);
   auto updateBroadcaster = UpdateBroadcaster::getInstance();
   auto programChecker = ProgramChecker::getInstance();
 
   shared->reset();
-  shared->buf.setSize(MEM * 8);
+  shared->buf.setSize(shared->mem * 8);
   for( int i = 0; i < 256; ++i ) {
     for( auto &&y : ys ) {
       m->add(256); //network bias

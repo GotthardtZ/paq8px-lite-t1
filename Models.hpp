@@ -32,55 +32,30 @@ class Models {
 private:
     Shared *shared = Shared::getInstance();
     ModelStats *stats; //read-write
-    uint32_t level {};
 public:
-    Models(ModelStats *st, uint32_t level) : stats(st), level(level) {}
-
-public:
+    Models(ModelStats *st);
     NormalModel &normalModel();
-
     DmcForest &dmcForest();
-
     CharGroupModel &charGroupModel();
-
     RecordModel &recordModel();
-
     SparseModel &sparseModel();
-
     MatchModel &matchModel();
-
     SparseMatchModel &sparseMatchModel();
-
     IndirectModel &indirectModel();
-
     TextModel &textModel();
-
     WordModel &wordModel();
-
     NestModel &nestModel();
-
     XMLModel &xmlModel();
-
     ExeModel &exeModel();
-
     static LinearPredictionModel &linearPredictionModel();
-
     JpegModel &jpegModel();
-
     Image24BitModel &image24BitModel();
-
     Image8BitModel &image8BitModel();
-
     Image4BitModel &image4BitModel();
-
     static Image1BitModel &image1BitModel();
-
 #ifdef USE_AUDIOMODEL
-
     Audio8BitModel &audio8BitModel();
-
     Audio16BitModel &audio16BitModel();
-
 #endif //USE_AUDIOMODEL
 };
 

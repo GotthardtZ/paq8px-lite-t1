@@ -1,54 +1,56 @@
 #include "Models.hpp"
 
+Models::Models(ModelStats *st) : stats(st) {}
+
 NormalModel &Models::normalModel() {
-  static NormalModel instance {stats, MEM * 32};
+  static NormalModel instance {stats, shared->mem * 32};
   return instance;
 }
 
 DmcForest &Models::dmcForest() {
-  static DmcForest instance {MEM};
+  static DmcForest instance {shared->mem};
   return instance;
 }
 
 CharGroupModel &Models::charGroupModel() {
-  static CharGroupModel instance {MEM / 2};
+  static CharGroupModel instance {shared->mem / 2};
   return instance;
 }
 
 RecordModel &Models::recordModel() {
-  static RecordModel instance {stats, MEM * 2};
+  static RecordModel instance {stats, shared->mem * 2};
   return instance;
 }
 
 SparseModel &Models::sparseModel() {
-  static SparseModel instance {MEM * 2};
+  static SparseModel instance {shared->mem * 2};
   return instance;
 }
 
 MatchModel &Models::matchModel() {
-  static MatchModel instance {stats, MEM * 4, level};
+  static MatchModel instance {stats, shared->mem * 4};
   return instance;
 }
 
 SparseMatchModel &Models::sparseMatchModel() {
-  static SparseMatchModel instance {MEM};
+  static SparseMatchModel instance {shared->mem};
   return instance;
 }
 
 IndirectModel &Models::indirectModel() {
-  static IndirectModel instance {MEM};
+  static IndirectModel instance {shared->mem};
   return instance;
 }
 
 #ifdef USE_TEXTMODEL
 
 TextModel &Models::textModel() {
-  static TextModel instance {stats, MEM * 16};
+  static TextModel instance {stats, shared->mem * 16};
   return instance;
 }
 
 WordModel &Models::wordModel() {
-  static WordModel instance {stats, MEM * 16};
+  static WordModel instance {stats, shared->mem * 16};
   return instance;
 }
 
@@ -62,17 +64,17 @@ WordModel &wordModel() {
 #endif //USE_TEXTMODEL
 
 NestModel &Models::nestModel() {
-  static NestModel instance {MEM};
+  static NestModel instance {shared->mem};
   return instance;
 }
 
 XMLModel &Models::xmlModel() {
-  static XMLModel instance {MEM / 4};
+  static XMLModel instance {shared->mem / 4};
   return instance;
 }
 
 ExeModel &Models::exeModel() {
-  static ExeModel instance {stats, MEM * 4};
+  static ExeModel instance {stats, shared->mem * 4};
   return instance;
 }
 
@@ -82,22 +84,22 @@ LinearPredictionModel &Models::linearPredictionModel() {
 }
 
 JpegModel &Models::jpegModel() {
-  static JpegModel instance {MEM};
+  static JpegModel instance {shared->mem};
   return instance;
 }
 
 Image24BitModel &Models::image24BitModel() {
-  static Image24BitModel instance {stats, MEM * 4};
+  static Image24BitModel instance {stats, shared->mem * 4};
   return instance;
 }
 
 Image8BitModel &Models::image8BitModel() {
-  static Image8BitModel instance {stats, MEM * 4};
+  static Image8BitModel instance {stats, shared->mem * 4};
   return instance;
 }
 
 Image4BitModel &Models::image4BitModel() {
-  static Image4BitModel instance {MEM / 2};
+  static Image4BitModel instance {shared->mem / 2};
   return instance;
 }
 

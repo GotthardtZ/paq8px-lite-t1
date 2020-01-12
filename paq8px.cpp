@@ -72,8 +72,6 @@ static_assert(sizeof(uint64_t) == 8, "sizeof(uint64_t)");
 static_assert(sizeof(short) == 2, "sizeof(short)");
 static_assert(sizeof(int) == 4, "sizeof(int)");
 
-uint32_t level = 0; //this value will be overwritten at the beginning of compression/decompression
-
 #include "ProgramChecker.hpp"
 #include "String.hpp"
 #include "file/File.hpp"
@@ -268,7 +266,7 @@ static void printCommand(const WHATTODO &whattodo) {
 
 static void printOptions() {
   Shared *shared = Shared::getInstance();
-  printf(" level          = %d\n", level);
+  printf(" level          = %d\n", shared->level);
   printf(" Brute      (b) = %s\n", shared->options & OPTION_BRUTE ? "On  (Brute-force detection of DEFLATE streams)"
                                                                   : "Off"); //this is a compression-only option, but we put/get it for reproducibility
   printf(" Train exe  (e) = %s\n", shared->options & OPTION_TRAINEXE ? "On  (Pre-train x86/x64 model)" : "Off");
@@ -317,7 +315,7 @@ int main_utf8(int argc, char **argv) {
           if( whattodo != DoNone )
             quit("Only one command may be specified.");
           whattodo = DoCompress;
-          level = argv[i][1] - '0';
+          shared->setLevel(argv[i][1] - '0');
           //process optional compression switches
           for( int j = 2; j < argLen; j++ ) {
             switch( argv[i][j] & 0xDFU ) {
@@ -415,12 +413,13 @@ int main_utf8(int argc, char **argv) {
     }
 
     // Set highest or user selected vectorization mode
-    if( simdIset >= 9 )
-      MixerFactory::setSimd(SIMD_AVX2);
-    else if( simdIset >= 3 )
-      MixerFactory::setSimd(SIMD_SSE2);
-    else
-      MixerFactory::setSimd(SIMD_NONE);
+    if( simdIset >= 9 ) {
+      shared->chosenSimd = SIMD_AVX2;
+    } else if( simdIset >= 3 ) {
+      shared->chosenSimd = SIMD_SSE2;
+    } else {
+      shared->chosenSimd = SIMD_NONE;
+    }
 
     if( verbose ) {
       printf("\n");
@@ -571,7 +570,7 @@ int main_utf8(int argc, char **argv) {
           printf("%s: not a valid %s file.", archiveName.c_str(), PROGNAME);
           quit();
         }
-      level = archive.getchar();
+      shared->setLevel(archive.getchar());
       c = archive.getchar();
       if( c == EOF)
         printf("Unexpected end of archive file.\n");
@@ -596,7 +595,7 @@ int main_utf8(int argc, char **argv) {
         printf("Creating archive %s in single file mode...\n", archiveName.c_str());
       archive.create(archiveName.c_str());
       archive.append(PROGNAME);
-      archive.putChar(level);
+      archive.putChar(shared->level);
       archive.putChar(shared->options);
     }
 
@@ -615,8 +614,8 @@ int main_utf8(int argc, char **argv) {
     }
 
     // Set globals according to requested compression level
-    assert(level >= 0 && level <= 9);
-    Encoder en(mode, &archive, level);
+    assert(shared->level >= 0 && shared->level <= 9);
+    Encoder en(mode, &archive);
     uint64_t contentSize = 0;
     uint64_t totalSize = 0;
 
@@ -750,7 +749,7 @@ int main_utf8(int argc, char **argv) {
           results += argv[i];
         }
         results += "\t";
-        results += uint64_t(level);
+        results += uint64_t(shared->level);
         results += "\t";
         results += input.c_str();
         results += "\t";

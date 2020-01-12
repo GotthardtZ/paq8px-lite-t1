@@ -24,14 +24,13 @@ class Predictor {
     ContextModel contextModel;
     SSE sse;
     int pr; // next prediction, scaled by 12 bits (0-4095)
-    uint32_t level;
     UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
     Shared *shared = Shared::getInstance();
     void trainText(const char *dictionary, int iterations);
     void trainExe();
 
 public:
-    Predictor(uint32_t level);
+    Predictor();
 
     /**
      * returns P(1) as a 12 bit number (0-4095).

@@ -158,7 +158,4 @@ public:
     void reset();
 };
 
-static SIMD chosenSimd = SIMD_NONE; //default value, will be overridden by the CPU dispatcher, and may be overridden from the command line
-#include "MixerFactory.hpp"
-
 #endif //PAQ8PX_MIXER_HPP

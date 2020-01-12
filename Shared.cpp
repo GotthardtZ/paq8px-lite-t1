@@ -31,13 +31,7 @@ void Shared::reset() {
   c4 = 0;
   c8 = 0;
 }
-
-void Shared::copyTo(Shared *dst) {
-  this->buf.copyTo(dst->buf);
-  dst->y = y;
-  dst->c0 = c0;
-  dst->c1 = c1;
-  dst->bitPosition = bitPosition;
-  dst->c4 = c4;
-  dst->c8 = c8;
+void Shared::setLevel(uint8_t l) {
+  level = l;
+  mem = 65536ULL << level;
 }

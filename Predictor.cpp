@@ -86,10 +86,10 @@ void Predictor::trainExe() {
   stats.reset();
 }
 
-Predictor::Predictor(uint32_t level)
-        : stats(), models(&stats, level), contextModel(&stats, models, level), sse(&stats), pr(2048), level(level) {
+Predictor::Predictor()
+        : stats(), models(&stats), contextModel(&stats, models), sse(&stats), pr(2048){
   shared->reset();
-  shared->buf.setSize(MEM * 8);
+  shared->buf.setSize(shared->mem * 8);
   //initiate pre-training
 
   if( shared->options & OPTION_TRAINTXT ) {

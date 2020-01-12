@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cassert>
 #include "Predictor.hpp"
+#include "Shared.hpp"
 
 typedef enum {
     COMPRESS, DECOMPRESS
@@ -12,7 +13,7 @@ typedef enum {
 
 /**
  * An Encoder does arithmetic encoding.
- * If level (global) is 0, then data is stored without arithmetic coding.
+ * If shared->level is 0, then data is stored without arithmetic coding.
  * TODO: Split into separate declarations / definitions
  */
 class Encoder {
@@ -24,6 +25,7 @@ private:
     uint32_t x; // Decompress mode: last 4 input bytes of archive
     File *alt; // decompress() source in COMPRESS mode
     float p1 {}, p2 {}; // percentages for progress indicator: 0.0 .. 1.0
+    Shared *shared = Shared::getInstance();
 
     /**
      * code(i) in COMPRESS mode compresses bit i (0 or 1) to file f.
@@ -62,7 +64,7 @@ public:
      * @param m the mode to operate in
      * @param f the file to read from or write to
      */
-    Encoder(Mode m, File *f, uint32_t level);
+    Encoder(Mode m, File *f);
     [[nodiscard]] Mode getMode() const;
     /**
      * size() returns current length of archive
@@ -97,7 +99,7 @@ public:
     void printStatus();
 };
 
-Encoder::Encoder(Mode m, File *f, uint32_t level) : predictor(level), mode(m), archive(f), x1(0), x2(0xffffffff), x(0), alt(nullptr) {
+Encoder::Encoder(Mode m, File *f) : predictor(), mode(m), archive(f), x1(0), x2(0xffffffff), x(0), alt(nullptr) {
   if( mode == DECOMPRESS ) {
     uint64_t start = size();
     archive->setEnd();
@@ -107,7 +109,7 @@ Encoder::Encoder(Mode m, File *f, uint32_t level) : predictor(level), mode(m), a
     setStatusRange(0.0, (float) end);
     archive->setpos(start);
   }
-  if( level > 0 && mode == DECOMPRESS ) { // x = first 4 bytes of archive
+  if( shared->level > 0 && mode == DECOMPRESS ) { // x = first 4 bytes of archive
     for( int i = 0; i < 4; ++i )
       x = (x << 8U) + (archive->getchar() & 255U);
   }
@@ -118,7 +120,7 @@ Mode Encoder::getMode() const { return mode; }
 uint64_t Encoder::size() const { return archive->curPos(); }
 
 void Encoder::flush() {
-  if( mode == COMPRESS && level > 0 )
+  if( mode == COMPRESS && shared->level > 0 )
     archive->putChar(x1 >> 24U); // Flush first unequal byte of range
 }
 
@@ -126,7 +128,7 @@ void Encoder::setFile(File *f) { alt = f; }
 
 void Encoder::compress(int c) {
   assert(mode == COMPRESS);
-  if( level == 0 )
+  if( shared->level == 0 )
     archive->putChar(c);
   else
     for( int i = 7; i >= 0; --i )
@@ -137,7 +139,7 @@ int Encoder::decompress() {
   if( mode == COMPRESS ) {
     assert(alt);
     return alt->getchar();
-  } else if( level == 0 )
+  } else if( shared->level == 0 )
     return archive->getchar();
   else {
     int c = 0;

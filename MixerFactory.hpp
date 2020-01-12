@@ -4,11 +4,13 @@
 #include "utils.hpp"
 #include "Mixer.hpp"
 #include "SimdMixer.hpp"
+#include "Shared.hpp"
 
 class MixerFactory {
+private:
+    Shared *shared = Shared::getInstance();
 public:
-    static void setSimd(SIMD simd);
-    static Mixer *createMixer(const int n, const int m, const int s);
+    Mixer *createMixer(int n, int m, int s);
 };
 
 #endif //PAQ8PX_MIXERFACTORY_HPP
