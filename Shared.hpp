@@ -28,9 +28,10 @@ public:
     uint32_t c4 = 0; // Last 4 whole bytes (buf(4)..buf(1)), packed.  Last byte is bits 0-7.
     uint32_t c8 = 0; // Another 4 bytes (buf(8)..buf(5))
     uint8_t options = 0;
-    SIMD chosenSimd = SIMD_NONE; //default value, will be overridden by the CPU dispatcher, and may be overridden from the command line
+    SIMD chosenSimd = SIMD_NONE; /**< default value, will be overridden by the CPU dispatcher, and may be overridden from the command line */
     uint8_t level = 0;
     uint64_t mem = 0;
+    bool toScreen = true;
 
     static Shared *getInstance();
     void update();
@@ -49,8 +50,13 @@ private:
      */
     Shared &operator=(Shared const &) { return *this; }
 
-    static Shared *mPInstance;
+    /**
+     * Determine if output is redirected
+     * @return
+     */
+    static bool isOutputDirected();
 
+    static Shared *mPInstance;
 };
 
 #endif //PAQ8PX_SHARED_HPP

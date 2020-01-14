@@ -92,11 +92,11 @@ Predictor::Predictor()
   shared->buf.setSize(shared->mem * 8);
   //initiate pre-training
 
-  if( (shared->options & OPTION_TRAINTXT) != 0u ) {
+  if( (shared->options & OPTION_TRAINTXT) != 0U ) {
     trainText("english.dic", 3);
     trainText("english.exp", 1);
   }
-  if( (shared->options & OPTION_TRAINEXE) != 0u )
+  if( (shared->options & OPTION_TRAINEXE) != 0U )
     trainExe();
 }
 

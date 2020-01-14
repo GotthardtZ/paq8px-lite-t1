@@ -77,7 +77,7 @@ static auto decodeBase64(File *in, File *out, FMode mode, uint64_t &diffFound) -
       blocksOut++;
     }
     if( blocksOut >= (lineSize / 4) && lineSize != 0 ) { //no lf if lineSize==0
-      if( (blocksOut != 0) && !in->eof() && fle <= outLen ) { //no lf if eof
+      if((blocksOut != 0) && !in->eof() && fle <= outLen ) { //no lf if eof
         if( tlf != 0 )
           ptr[fle++] = (tlf);
         else
@@ -92,7 +92,7 @@ static auto decodeBase64(File *in, File *out, FMode mode, uint64_t &diffFound) -
   } else if( mode == FCOMPARE ) {
     for( i = 0; i < outLen; i++ ) {
       uint8_t b = ptr[i];
-      if( b != out->getchar() && (diffFound == 0u) )
+      if( b != out->getchar() && (diffFound == 0u))
         diffFound = (int) out->curPos();
     }
   }

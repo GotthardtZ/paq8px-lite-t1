@@ -43,16 +43,16 @@ static auto decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMode m
         out->putChar(b);
         out->putChar((shared->options & OPTION_SKIPRGB) != 0u ? g : b - g);
         out->putChar(a);
-        if( (j == 0) && ((i & 0xf) == 0))
+        if((j == 0) && ((i & 0xf) == 0))
           en.printStatus();
       } else if( mode == FCOMPARE ) {
-        if((((shared->options & OPTION_SKIPRGB) != 0u ? r : b - r) & 255) != out->getchar() && (diffFound == 0u) )
+        if((((shared->options & OPTION_SKIPRGB) != 0u ? r : b - r) & 255) != out->getchar() && (diffFound == 0u))
           diffFound = p + 1;
-        if( b != out->getchar() && (diffFound == 0u) )
+        if( b != out->getchar() && (diffFound == 0u))
           diffFound = p + 2;
-        if((((shared->options & OPTION_SKIPRGB) != 0u ? g : b - g) & 255) != out->getchar() && (diffFound == 0u) )
+        if((((shared->options & OPTION_SKIPRGB) != 0u ? g : b - g) & 255) != out->getchar() && (diffFound == 0u))
           diffFound = p + 3;
-        if(((a) & 255) != out->getchar() && (diffFound == 0u) )
+        if(((a) & 255) != out->getchar() && (diffFound == 0u))
           diffFound = p + 4;
         p += 4;
       }
@@ -61,7 +61,7 @@ static auto decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMode m
       if( mode == FDECOMPRESS ) {
         out->putChar(en.decompress());
       } else if( mode == FCOMPARE ) {
-        if( en.decompress() != out->getchar() && (diffFound == 0u) )
+        if( en.decompress() != out->getchar() && (diffFound == 0u))
           diffFound = p + j + 1;
       }
     }
@@ -70,7 +70,7 @@ static auto decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMode m
     if( mode == FDECOMPRESS ) {
       out->putChar(en.decompress());
     } else if( mode == FCOMPARE ) {
-      if( en.decompress() != out->getchar() && (diffFound == 0u) ) {
+      if( en.decompress() != out->getchar() && (diffFound == 0u)) {
         diffFound = size - i;
         break;
       }

@@ -882,7 +882,7 @@ paq8px_v125
 - Changes to the zlib transform:
   - Fixed bug when zlib doesn't produce any output when using Z_NO_FLUSH
   - Early break when no more combinations are left to try, skipping decompression of the remaining stream
-- Optional switch to skip the 24/32bpp RGB color transform and only perform channel reordering
+- optional switch to skip the 24/32bpp RGB color transform and only perform channel reordering
 
 
 paq8px_v126 

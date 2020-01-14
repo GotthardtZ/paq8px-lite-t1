@@ -125,10 +125,10 @@ void ContextMap2::setScale(const int Scale) { scale = Scale; }
 void ContextMap2::mix(Mixer &m) {
   updater->subscribe(this);
   stateMap.subscribe();
-  if( (useWhat & CM_USE_RUN_STATS) != 0u ) {
+  if( (useWhat & CM_USE_RUN_STATS) != 0U ) {
     runMap.subscribe();
   }
-  if( (useWhat & CM_USE_BYTE_HISTORY) != 0u ) {
+  if( (useWhat & CM_USE_BYTE_HISTORY) != 0U ) {
     bhMap8B.subscribe();
     bhMap12B.subscribe();
   }
@@ -151,7 +151,7 @@ void ContextMap2::mix(Mixer &m) {
       const bool complete1 = (byteState >= 3) || (byteState >= 1 && bpos == 0);
       const bool complete2 = (byteState >= 7) || (byteState >= 3 && bpos == 0);
       const bool complete3 = (byteState >= 15) || (byteState >= 7 && bpos == 0);
-      if( (useWhat & CM_USE_RUN_STATS) != 0u ) {
+      if( (useWhat & CM_USE_RUN_STATS) != 0U ) {
         const int bp = (0xFEA4 >> (bpos << 1)) & 3; // {0}->0  {1}->1  {2,3,4}->2  {5,6,7}->3
         bool skipRunMap = true;
         if( complete1 ) {
@@ -189,11 +189,11 @@ void ContextMap2::mix(Mixer &m) {
         m.add(((p1 - 2048) * scale) >> 9U);
         m.add((bitIsUncertain - 1) & st); // when both counts are nonzero add(0) otherwise add(st)
         const int p0 = 4095 - p1;
-        m.add((((p1 & (-static_cast<int>(n0) == 0)) - (p0 & (-static_cast<int>(n1) == 0))) * scale) >> 10U);
+        m.add((((p1 & static_cast<int>(-static_cast<int>(n0) == 0)) - (p0 & static_cast<int>(-static_cast<int>(n1) == 0))) * scale) >> 10U);
         order++;
       }
 
-      if( (useWhat & CM_USE_BYTE_HISTORY) != 0u ) {
+      if( (useWhat & CM_USE_BYTE_HISTORY) != 0U ) {
         const int bhBits = (((byte1 >> (7 - bpos)) & 1)) | (((byte2 >> (7 - bpos)) & 1) << 1) | (((byte3 >> (7 - bpos)) & 1) << 2);
 
         int bhState = 0; // 4 bit
@@ -211,11 +211,11 @@ void ContextMap2::mix(Mixer &m) {
         m.add(stretch(bhMap12B.p2(i, stateGroup << 7U | (bhState << 3U) | bpos)) >> 2U);
       }
     } else { //skipped context
-      if( (useWhat & CM_USE_RUN_STATS) != 0u ) {
+      if( (useWhat & CM_USE_RUN_STATS) != 0U ) {
         runMap.skip(i);
         m.add(0);
       }
-      if( (useWhat & CM_USE_BYTE_HISTORY) != 0u ) {
+      if( (useWhat & CM_USE_BYTE_HISTORY) != 0U ) {
         bhMap8B.skip(i);
         m.add(0);
         bhMap12B.skip(i);

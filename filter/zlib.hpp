@@ -299,7 +299,7 @@ static auto decodeZlib(File *in, uint64_t size, File *out, FMode mode, uint64_t 
         out->blockWrite(&zOut[0], have);
       else if( mode == FCOMPARE )
         for( int j = 0; j < have; j++ )
-          if( zOut[j] != out->getchar() && (diffFound == 0u) )
+          if( zOut[j] != out->getchar() && (diffFound == 0u))
             diffFound = recPos + j + 1;
       recPos += have;
 
@@ -309,7 +309,7 @@ static auto decodeZlib(File *in, uint64_t size, File *out, FMode mode, uint64_t 
     if( mode == FDECOMPRESS )
       out->putChar(diffByte[diffIndex]);
     else if( mode == FCOMPARE )
-      if( diffByte[diffIndex] != out->getchar() && (diffFound == 0u) )
+      if( diffByte[diffIndex] != out->getchar() && (diffFound == 0u))
         diffFound = recPos + 1;
     diffIndex++;
     recPos++;

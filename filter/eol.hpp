@@ -31,7 +31,7 @@ static auto decodeEol(Encoder &en, uint64_t size, File *out, FMode mode, uint64_
       if( mode == FDECOMPRESS )
         out->putChar(CARRIAGE_RETURN);
       else if( mode == FCOMPARE ) {
-        if( out->getchar() != CARRIAGE_RETURN && (diffFound == 0u) ) {
+        if( out->getchar() != CARRIAGE_RETURN && (diffFound == 0u)) {
           diffFound = size - i;
           break;
         }
@@ -41,7 +41,7 @@ static auto decodeEol(Encoder &en, uint64_t size, File *out, FMode mode, uint64_
     if( mode == FDECOMPRESS )
       out->putChar(b);
     else if( mode == FCOMPARE ) {
-      if( b != out->getchar() && (diffFound == 0u) ) {
+      if( b != out->getchar() && (diffFound == 0u)) {
         diffFound = size - i;
         break;
       }

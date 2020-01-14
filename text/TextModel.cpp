@@ -1,35 +1,35 @@
 #include "TextModel.hpp"
 
 void TextModel::update() {
-  Info.lastUpper = min(0xFF, Info.lastUpper + 1), Info.maskUpper <<= 1;
+  Info.lastUpper = min(0xFF, Info.lastUpper + 1), Info.maskUpper <<= 1U;
   Info.lastLetter = min(0x1F, Info.lastLetter + 1);
   Info.lastDigit = min(0xFF, Info.lastDigit + 1);
   Info.lastPunctuation = min(0x3F, Info.lastPunctuation + 1);
   Info.lastNewLine++;
   Info.prevNewLine++;
   Info.lastNest++;
-  Info.spaceCount -= (Info.spaces >> 31);
-  Info.spaces <<= 1;
-  Info.masks[0] <<= 2;
-  Info.masks[1] <<= 2;
-  Info.masks[2] <<= 4;
-  Info.masks[3] <<= 3;
+  Info.spaceCount -= (Info.spaces >> 31U);
+  Info.spaces <<= 1U;
+  Info.masks[0] <<= 2U;
+  Info.masks[1] <<= 2U;
+  Info.masks[2] <<= 4U;
+  Info.masks[3] <<= 3U;
   pState = State;
 
   INJECT_SHARED_buf
   uint8_t c = buf(1), lc = tolower(c), g = (c < 0x80) ? asciiGroup[c] : 31;
-  if( g > 4 || g != (Info.masks[4] & 0x1F))
-    Info.masks[4] <<= 5, Info.masks[4] |= g;
+  if( g > 4 || g != (Info.masks[4] & 0x1FU))
+    Info.masks[4] <<= 5U, Info.masks[4] |= g;
   INJECT_SHARED_pos
   bytePos[c] = pos;
   if( c != lc ) {
     c = lc;
-    Info.lastUpper = 0, Info.maskUpper |= 1;
+    Info.lastUpper = 0, Info.maskUpper |= 1U;
   }
   uint8_t pC = buf(2);
   State = Parse::Unknown;
   parseCtx = hash(State, pWord->Hash[0], c, (ilog2(Info.lastNewLine) + 1) * (Info.lastNewLine * 3 > Info.prevNewLine),
-                  Info.masks[1] & 0xFC);
+                  Info.masks[1] & 0xFCU);
 
   if((c >= 'a' && c <= 'z') || c == APOSTROPHE || c == '-' || c > 0x7F ) {
     if( Info.wordLength[0] == 0 ) {
@@ -54,7 +54,7 @@ void TextModel::update() {
     Info.lastLetter = 0;
     Info.wordLength[0]++;
     Info.masks[0] += (Lang.id != Language::Unknown) ? 1 + stemmers[Lang.id - 1]->isVowel(c) : 1, Info.masks[1]++, Info.masks[3] +=
-            Info.masks[0] & 3;
+            Info.masks[0] & 3U;
     if( c == APOSTROPHE ) {
       Info.masks[2] += 12;
       if( Info.wordLength[0] == 1 ) {
@@ -77,11 +77,11 @@ void TextModel::update() {
         memcpy(&words[Language::Unknown](0), cWord, sizeof(Word));
 
       for( int i = Language::Count - 1; i > Language::Unknown; i-- ) {
-        Lang.count[i - 1] -= (Lang.mask[i - 1] >> 63), Lang.mask[i - 1] <<= 1;
+        Lang.count[i - 1] -= (Lang.mask[i - 1] >> 63U), Lang.mask[i - 1] <<= 1U;
         if( i != Lang.id )
           memcpy(&words[i](0), cWord, sizeof(Word));
         if( stemmers[i - 1]->stem(&words[i](0)))
-          Lang.count[i - 1]++, Lang.mask[i - 1] |= 1;
+          Lang.count[i - 1]++, Lang.mask[i - 1] |= 1U;
       }
       Lang.id = Language::Unknown;
       uint32_t best = MIN_RECOGNIZED_WORDS;
@@ -97,7 +97,7 @@ void TextModel::update() {
       if( Lang.id != Lang.pId ) {
 #ifndef NVERBOSE
         INJECT_STATS_blpos
-        if( toScreen )
+        if( shared->toScreen )
           printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
         switch( Lang.id ) {
           case Language::Unknown: {
@@ -136,7 +136,7 @@ void TextModel::update() {
         if( Lang.id != Language::Unknown && dictionaries[Lang.id - 1] != nullptr )
           dictionaries[Lang.id - 1]->getWordEmbedding(pWord);
         wordDistances++;
-        for( uint32_t i = wordDistances.size - 1; i > 0; i-- )
+        for( uint32_t i = Cache<TextModel::WordDistance, 4>::size - 1; i > 0; i-- )
           memcpy(&wordDistances(i), &wordDistances(i - 1), sizeof(WordDistance));
         uint32_t minDistance = UINT32_MAX;
         for( uint32_t i = 1; i <= 4; i++ ) {
@@ -226,7 +226,7 @@ void TextModel::update() {
       case TAB:
       case CARRIAGE_RETURN:
       case SPACE: {
-        Info.spaceCount++, Info.spaces |= 1;
+        Info.spaceCount++, Info.spaces |= 1U;
         Info.masks[1] += 3, Info.masks[3] += 5;
         if( c == SPACE && pState == Parse::WasAbbreviation ) {
           State = Parse::AfterAbbreviation;
@@ -289,7 +289,7 @@ void TextModel::update() {
         else {
           Info.quoteLength = 0;
           State = Parse::AfterQuote;
-          parseCtx = hash(State, 0x100 | pC);
+          parseCtx = hash(State, 0x100U | pC);
         }
         break;
       }
@@ -311,11 +311,11 @@ void TextModel::update() {
         break;
     }
     if( c >= '0' && c <= '9' ) {
-      Info.numbers[0] = Info.numbers[0] * 10 + (c & 0xF), Info.numLength[0] = min(19, Info.numLength[0] + 1);
+      Info.numbers[0] = Info.numbers[0] * 10 + (c & 0xFU), Info.numLength[0] = min(19, Info.numLength[0] + 1);
       Info.numHashes[0] = combine64(Info.numHashes[0], c);
       Info.expectedDigit = -1;
-      if( Info.numLength[0] < Info.numLength[1] && (pState == Parse::ExpectDigit || ((Info.numDiff & 3) == 0 && Info.numLength[0] <= 1))) {
-        uint64_t expectedNum = Info.numbers[1] + (Info.numMask & 3) - 2, placeDivisor = 1;
+      if( Info.numLength[0] < Info.numLength[1] && (pState == Parse::ExpectDigit || ((Info.numDiff & 3U) == 0 && Info.numLength[0] <= 1))) {
+        uint64_t expectedNum = Info.numbers[1] + (Info.numMask & 3U) - 2, placeDivisor = 1;
         for( int i = 0; i < Info.numLength[1] - Info.numLength[0]; i++, placeDivisor *= 10 );
         if( expectedNum / placeDivisor == Info.numbers[0] ) {
           placeDivisor /= 10;
@@ -330,8 +330,8 @@ void TextModel::update() {
       Info.lastDigit = 0;
       Info.masks[3] += 7;
     } else if( Info.numbers[0] > 0 ) {
-      Info.numMask <<= 2, Info.numMask |= 1 + (Info.numbers[0] >= Info.numbers[1]) + (Info.numbers[0] > Info.numbers[1]);
-      Info.numDiff <<= 2, Info.numDiff |= min(3, ilog2(abs((int) (Info.numbers[0] - Info.numbers[1]))));
+      Info.numMask <<= 2U, Info.numMask |= 1U + (Info.numbers[0] >= Info.numbers[1]) + (Info.numbers[0] > Info.numbers[1]);
+      Info.numDiff <<= 2U, Info.numDiff |= min(3, ilog2(abs((int) (Info.numbers[0] - Info.numbers[1]))));
       Info.numbers[1] = Info.numbers[0], Info.numbers[0] = 0;
       Info.numHashes[1] = Info.numHashes[0], Info.numHashes[0] = 0;
       Info.numLength[1] = Info.numLength[0], Info.numLength[0] = 0;
@@ -343,18 +343,18 @@ void TextModel::update() {
   if( Info.lastNest > 512 )
     Info.nestHash = 0;
   int leadingBitsSet = 0;
-  while(((c >> (7 - leadingBitsSet)) & 1) != 0 )
+  while(((c >> (7 - leadingBitsSet)) & 1U) != 0 )
     leadingBitsSet++;
 
   if( Info.UTF8Remaining > 0 && leadingBitsSet == 1 )
     Info.UTF8Remaining--;
   else
     Info.UTF8Remaining = (leadingBitsSet != 1) ? (c != 0xC0 && c != 0xC1 && c < 0xF5) ? (leadingBitsSet - (leadingBitsSet > 0)) : -1 : 0;
-  Info.maskPunctuation = (bytePos[','] > bytePos['.']) | ((bytePos[','] > bytePos['!']) << 1) | ((bytePos[','] > bytePos['?']) << 2) |
-                         ((bytePos[','] > bytePos[':']) << 3) | ((bytePos[','] > bytePos[';']) << 4);
+  Info.maskPunctuation = (bytePos[','] > bytePos['.']) | ((bytePos[','] > bytePos['!']) << 1U) | ((bytePos[','] > bytePos['?']) << 2U) |
+                         ((bytePos[','] > bytePos[':']) << 3U) | ((bytePos[','] > bytePos[';']) << 4U);
 
   stats->Text.firstLetter = Info.firstLetter;
-  stats->Text.mask = Info.masks[1] & 0xFF;
+  stats->Text.mask = Info.masks[1] & 0xFFU;
 }
 
 void TextModel::setContexts() {
@@ -369,23 +369,23 @@ void TextModel::setContexts() {
   cm.set(parseCtx);
   uint64_t i = State * 64;
   cm.set(hash(++i, cWordHash0, pWordHash0,
-              (Info.lastUpper < Info.wordLength[0]) | ((Info.lastDigit < Info.wordLength[0] + Info.wordGap) << 1)));
+              (Info.lastUpper < Info.wordLength[0]) | ((Info.lastDigit < Info.wordLength[0] + Info.wordGap) << 1U)));
   cm.set(hash(++i, cWordHash0, words[Lang.pId](2).Hash[0], min(10, ilog2((uint32_t) Info.numbers[0])),
-              (Info.lastUpper < Info.lastLetter + Info.wordLength[1]) | ((Info.lastLetter > 3) << 1) |
-              ((Info.lastLetter > 0 && Info.wordLength[1] < 3) << 2)));
+              (Info.lastUpper < Info.lastLetter + Info.wordLength[1]) | ((Info.lastLetter > 3) << 1U) |
+              ((Info.lastLetter > 0 && Info.wordLength[1] < 3) << 2U)));
   cm.set(hash(++i, cWordHash0, Info.masks[1] & 0x3FF, words[Lang.pId](3).Hash[1],
-              (Info.lastDigit < Info.wordLength[0] + Info.wordGap) | ((Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1) |
+              (Info.lastDigit < Info.wordLength[0] + Info.wordGap) | ((Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1U) |
               ((Info.spaces & 0x7F) << 2)));
   cm.set(hash(++i, cWordHash0, pWordHash1));
   cm.set(hash(++i, cWordHash0, pWordHash1, words[Lang.pId](2).Hash[1]));
   cm.set(hash(++i, w, words[Lang.pId](2).Hash[0], words[Lang.pId](3).Hash[0]));
   cm.set(hash(++i, cWordHash0, c, (cSentence->verbIndex < cSentence->wordCount) ? cSentence->lastVerb.Hash[0] : 0));
-  cm.set(hash(++i, pWordHash1, Info.masks[1] & 0xFC, lc, Info.wordGap));
+  cm.set(hash(++i, pWordHash1, Info.masks[1] & 0xFCU, lc, Info.wordGap));
   cm.set(hash(++i, (Info.lastLetter == 0) ? cWordHash0 : pWordHash0, c, cSegment->firstWord.Hash[1],
               min(3, ilog2(cSegment->wordCount + 1))));
   cm.set(hash(++i, cWordHash0, c, segments(1).firstWord.Hash[1]));
-  cm.set(hash(++i, max(31, lc), Info.masks[1] & 0xFFC, (Info.spaces & 0xFE) | (Info.lastPunctuation < Info.lastLetter),
-              (Info.maskUpper & 0xFF) | (((0x100 | Info.firstLetter) * (Info.wordLength[0] > 1)) << 8)));
+  cm.set(hash(++i, max(31, lc), Info.masks[1] & 0xFFCU, (Info.spaces & 0xFEU) | (Info.lastPunctuation < Info.lastLetter),
+              (Info.maskUpper & 0xFFU) | (((0x100U | Info.firstLetter) * (Info.wordLength[0] > 1)) << 8U)));
   cm.set(hash(++i, column, min(7, ilog2(Info.lastUpper + 1)), ilog2(Info.lastPunctuation + 1)));
   cm.set(hash(++i,
               (column & 0xF8) | (Info.masks[1] & 3) | ((Info.prevNewLine - Info.lastNewLine > 63) << 2) | (min(3, Info.lastLetter) << 8) |

@@ -22,15 +22,15 @@ auto SSE::p(int pr0) -> int {
     case TEXT_EOL: {
       int limit = 0x3FFU >> (static_cast<int>(blPos < 0xFFF) * 2);
       pr = Text.APMs[0].p(pr0, (c0 << 8U) | (stats->Text.mask & 0xFU) | ((stats->misses & 0xFU) << 4U), limit);
-      pr1 = Text.APMs[1].p(pr0, finalize64(hash(bpos, stats->misses & 3U, c4 & 0xffffu, stats->Text.mask >> 4U), 16), limit);
+      pr1 = Text.APMs[1].p(pr0, finalize64(hash(bpos, stats->misses & 3U, c4 & 0xffffU, stats->Text.mask >> 4U), 16), limit);
       pr2 = Text.APMs[2].p(pr0, finalize64(hash(c0, stats->Match.expectedByte, stats->Match.length3), 16), limit);
-      pr3 = Text.APMs[3].p(pr0, finalize64(hash(c0, c4 & 0xffffu, stats->Text.firstLetter), 16), limit);
+      pr3 = Text.APMs[3].p(pr0, finalize64(hash(c0, c4 & 0xffffU, stats->Text.firstLetter), 16), limit);
 
       pr0 = (pr0 + pr1 + pr2 + pr3 + 2) >> 2U;
 
-      pr1 = Text.APM1s[0].p(pr0, finalize64(hash(stats->Match.expectedByte, stats->Match.length3, c4 & 0xffu), 16));
-      pr2 = Text.APM1s[1].p(pr, finalize64(hash(c0, c4 & 0x00ffffffu), 16));
-      pr3 = Text.APM1s[2].p(pr, finalize64(hash(c0, c4 & 0xffffff00u), 16));
+      pr1 = Text.APM1s[0].p(pr0, finalize64(hash(stats->Match.expectedByte, stats->Match.length3, c4 & 0xffU), 16));
+      pr2 = Text.APM1s[1].p(pr, finalize64(hash(c0, c4 & 0x00ffffffU), 16));
+      pr3 = Text.APM1s[2].p(pr, finalize64(hash(c0, c4 & 0xffffff00U), 16));
 
       pr = (pr + pr1 + pr2 + pr3 + 2) >> 2U;
       pr = (pr + pr0 + 1) >> 1;
@@ -46,10 +46,10 @@ auto SSE::p(int pr0) -> int {
 
       pr0 = (pr0 + pr1 + pr2 + pr3 + 2) >> 2U;
       pr1 = Image.Color.APM1s[0].p(pr,
-                                   finalize64(hash(c0, stats->Image.pixels.W, (c4 & 0xffu) - stats->Image.pixels.Wp1, stats->Image.plane),
+                                   finalize64(hash(c0, stats->Image.pixels.W, (c4 & 0xffU) - stats->Image.pixels.Wp1, stats->Image.plane),
                                               16));
       pr2 = Image.Color.APM1s[1].p(pr,
-                                   finalize64(hash(c0, stats->Image.pixels.N, (c4 & 0xffu) - stats->Image.pixels.Np1, stats->Image.plane),
+                                   finalize64(hash(c0, stats->Image.pixels.N, (c4 & 0xffU) - stats->Image.pixels.Np1, stats->Image.plane),
                                               16));
 
       pr = (pr * 2 + pr1 * 3 + pr2 * 3 + 4) >> 3U;
@@ -87,9 +87,9 @@ auto SSE::p(int pr0) -> int {
     }
     default: {
       pr = Generic.APM1s[0].p(pr0, (stats->Match.length3) << 11 | c0 << 3 | (stats->misses & 0x7));
-      const uint16_t ctx1 = c0 | (c4 & 0xffu) << 8U;
-      const uint16_t ctx2 = c0 ^finalize64(hash(c4 & 0xffffu), 16);
-      const uint16_t ctx3 = c0 ^finalize64(hash(c4 & 0xffffffu), 16);
+      const uint16_t ctx1 = c0 | (c4 & 0xffU) << 8U;
+      const uint16_t ctx2 = c0 ^finalize64(hash(c4 & 0xffffU), 16);
+      const uint16_t ctx3 = c0 ^finalize64(hash(c4 & 0xffffffU), 16);
       pr1 = Generic.APM1s[1].p(pr0, ctx1);
       pr2 = Generic.APM1s[2].p(pr0, ctx2);
       pr3 = Generic.APM1s[3].p(pr0, ctx3);

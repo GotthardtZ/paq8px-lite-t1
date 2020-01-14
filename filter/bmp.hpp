@@ -23,8 +23,8 @@ static void encodeBmp(File *in, File *out, uint64_t len, int width) {
       r = in->getchar();
       if( isPossibleRGB565 ) {
         int pTotal = total;
-        total = min(total + 1, 0xFFFF) *
-                static_cast<int>((b & 7) == ((b & 8) - ((b >> 3) & 1)) && (g & 3) == ((g & 4) - ((g >> 2) & 1)) && (r & 7) == ((r & 8) - ((r >> 3) & 1)));
+        total = min(total + 1, 0xFFFF) * static_cast<int>((b & 7) == ((b & 8) - ((b >> 3) & 1)) && (g & 3) == ((g & 4) - ((g >> 2) & 1)) &&
+                                                          (r & 7) == ((r & 8) - ((r >> 3) & 1)));
         if( total > RGB565_MIN_RUN || pTotal >= RGB565_MIN_RUN ) {
           b ^= (b & 8) - ((b >> 3) & 1);
           g ^= (g & 4) - ((g >> 2) & 1);
@@ -53,7 +53,7 @@ static auto decodeBmp(Encoder &en, uint64_t size, int width, File *out, FMode mo
       g = en.decompress();
       r = en.decompress();
       b = en.decompress();
-      if( (shared->options & OPTION_SKIPRGB) == 0u)
+      if((shared->options & OPTION_SKIPRGB) == 0u )
         r = g - r, b = g - b;
       if( isPossibleRGB565 ) {
         if( total >= RGB565_MIN_RUN ) {
@@ -61,22 +61,22 @@ static auto decodeBmp(Encoder &en, uint64_t size, int width, File *out, FMode mo
           g ^= (g & 4) - ((g >> 2) & 1);
           r ^= (r & 8) - ((r >> 3) & 1);
         }
-        total = min(total + 1, 0xFFFF) *
-                static_cast<int>((b & 7) == ((b & 8) - ((b >> 3) & 1)) && (g & 3) == ((g & 4) - ((g >> 2) & 1)) && (r & 7) == ((r & 8) - ((r >> 3) & 1)));
+        total = min(total + 1, 0xFFFF) * static_cast<int>((b & 7) == ((b & 8) - ((b >> 3) & 1)) && (g & 3) == ((g & 4) - ((g >> 2) & 1)) &&
+                                                          (r & 7) == ((r & 8) - ((r >> 3) & 1)));
         isPossibleRGB565 = total > 0;
       }
       if( mode == FDECOMPRESS ) {
         out->putChar(b);
         out->putChar(g);
         out->putChar(r);
-        if( (j == 0) && ((i & 0xf) == 0))
+        if((j == 0) && ((i & 0xf) == 0))
           en.printStatus();
       } else if( mode == FCOMPARE ) {
-        if((b & 255) != out->getchar() && (diffFound == 0u) )
+        if((b & 255) != out->getchar() && (diffFound == 0u))
           diffFound = p + 1;
-        if( g != out->getchar() && (diffFound == 0u) )
+        if( g != out->getchar() && (diffFound == 0u))
           diffFound = p + 2;
-        if((r & 255) != out->getchar() && (diffFound == 0u) )
+        if((r & 255) != out->getchar() && (diffFound == 0u))
           diffFound = p + 3;
         p += 3;
       }
@@ -85,7 +85,7 @@ static auto decodeBmp(Encoder &en, uint64_t size, int width, File *out, FMode mo
       if( mode == FDECOMPRESS ) {
         out->putChar(en.decompress());
       } else if( mode == FCOMPARE ) {
-        if( en.decompress() != out->getchar() && (diffFound == 0u) )
+        if( en.decompress() != out->getchar() && (diffFound == 0u))
           diffFound = p + j + 1;
       }
     }
@@ -94,7 +94,7 @@ static auto decodeBmp(Encoder &en, uint64_t size, int width, File *out, FMode mo
     if( mode == FDECOMPRESS ) {
       out->putChar(en.decompress());
     } else if( mode == FCOMPARE ) {
-      if( en.decompress() != out->getchar() && (diffFound == 0u) ) {
+      if( en.decompress() != out->getchar() && (diffFound == 0u)) {
         diffFound = size - i;
         break;
       }

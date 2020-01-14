@@ -88,7 +88,7 @@ void WordEmbeddingDictionary::getWordEmbedding(Word *w) {
 void WordEmbeddingDictionary::loadFromFile(const char *filename) {
   FileDisk f;
 #ifndef NVERBOSE
-  if (toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+  if (shared->toScreen) printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
     printf("Loading word embeddings...");
 #endif
   OpenFromMyFolder::anotherFile(&f, filename);

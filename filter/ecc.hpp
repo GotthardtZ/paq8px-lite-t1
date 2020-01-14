@@ -54,7 +54,7 @@ static void eccCompute(const uint8_t *src, uint32_t majorCount, uint32_t minorCo
 
 static auto edcCompute(const uint8_t *src, int size) -> uint32_t {
   uint32_t edc = 0;
-  while( (size--) != 0 )
+  while((size--) != 0 )
     edc = (edc >> 8U) ^ edcLut[(edc ^ (*src++)) & 0xFFU];
   return edc;
 }

@@ -11,7 +11,7 @@
 #define PROGVERSION  "184"  //update version here before publishing your changes
 #define PROGYEAR     "2020"
 
-// TODO(epsteina): make more models "optional"
+// TODO: make more models "optional"
 
 #define NHASHCONFIG  //Remove (comment out) this line to enable hash configuration from the command line (somewhat slower compression)
 
@@ -22,83 +22,16 @@
 
 //////////////////// Cross-platform definitions /////////////////////////////////////
 
-#ifdef _MSC_VER
-#define fseeko(a,b,c) _fseeki64(a,b,c)
-#define ftello(a) _ftelli64(a)
-#else
-#ifndef UNIX
-#ifndef fseeko
-#define fseeko(a,b,c) fseeko64(a,b,c)
-#endif
-#ifndef ftello
-#define ftello(a) ftello64(a)
-#endif
-#endif
-#endif
-
-#ifdef WINDOWS
-#define strcasecmp _stricmp
-#endif
-
-#if defined(__GNUC__) || defined(__clang__)
-#define bswap(x)   __builtin_bswap32(x)
-#define bswap64(x) __builtin_bswap64(x)
-#elif defined(_MSC_VER)
-#define bswap(x)   _byteswap_ulong(x)
-#define bswap64(x) _byteswap_uint64(x)
-#else
-#define bswap(x) \
-+   ((((x) & 0xff000000) >> 24) | \
-+    (((x) & 0x00ff0000) >>  8) | \
-+    (((x) & 0x0000ff00) <<  8) | \
-+    (((x) & 0x000000ff) << 24))
-#define bswap64(x) \
-+    ((x)>>56) |
-+   (((x)<<40) & 0x00FF000000000000) | \
-+   (((x)<<24) & 0x0000FF0000000000) | \
-+   (((x)<<8 ) & 0x000000FF00000000) | \
-+   (((x)>>8 ) & 0x00000000FF000000) | \
-+   (((x)>>24) & 0x0000000000FF0000) | \
-+   (((x)>>40) & 0x000000000000FF00) | \
-+   ((x) << 56))
-#endif
-
-#include "simd.hpp"
-
-static_assert(sizeof(uint8_t) == 1, "sizeof(uint8_t)");
-static_assert(sizeof(uint16_t) == 2, "sizeof(uint16_t)");
-static_assert(sizeof(uint32_t) == 4, "sizeof(uint32_t)");
-static_assert(sizeof(uint64_t) == 8, "sizeof(uint64_t)");
-static_assert(sizeof(short) == 2, "sizeof(short)");
-static_assert(sizeof(int) == 4, "sizeof(int)");
-
-#include "BH.hpp"
-#include "ContextMap.hpp"
-#include "ContextMap2.hpp"
-#include "Hash.hpp"
-#include "HashTable.hpp"
-#include "IndirectContext.hpp"
-#include "IndirectMap.hpp"
-#include "LMS.hpp"
-#include "MTFList.hpp"
-#include "Mixer.hpp"
-#include "OLS.hpp"
+#include "Encoder.hpp"
 #include "ProgramChecker.hpp"
-#include "Random.hpp"
 #include "Shared.hpp"
-#include "SmallStationaryContextMap.hpp"
-#include "StateMap.hpp"
-#include "StationaryMap.hpp"
 #include "String.hpp"
 #include "UpdateBroadcaster.hpp"
-#include "file/File.hpp"
-#include "Encoder.hpp"
 #include "file/FileName.hpp"
 #include "file/ListOfFiles.hpp"
 #include "file/fileUtils2.hpp"
 #include "filter/Filters.hpp"
-#include "model/ExeModel.hpp"
-#include "model/XMLModel.hpp"
+#include "simd.hpp"
 
 typedef enum { DoNone, DoCompress, DoExtract, DoCompare, DoList } WHATTODO;
 
@@ -117,7 +50,7 @@ static void printHelp() {
          "    depending on several factors including need for temporary files,\n"
          "    temporary memory needs of some preprocessing (transformations), etc.\n"
          "\n"
-         "    Optional compression SWITCHES:\n"
+         "    optional compression SWITCHES:\n"
          "      b = Brute-force detection of DEFLATE streams\n"
          "      e = Pre-train x86/x64 model\n"
          "      t = Pre-train main model with word and expression list\n"
@@ -228,7 +161,7 @@ static void printSimdInfo(int simdIset, int detectedSimdIset) {
   printf("\nHighest SIMD vectorization support on this system: ");
   if( detectedSimdIset < 0 || detectedSimdIset > 9 )
     quit("Oops, sorry. Unexpected result.");
-  static const char *vectorizationString[10] = {"None", "MMX", "SSE", "SSE2", "SSE3", "SSSE3", "SSE4.1", "SSE4.2", "AVX", "AVX2"};
+  static const char *vectorizationString[10] = {"none", "MMX", "SSE", "SSE2", "SSE3", "SSSE3", "SSE4.1", "SSE4.2", "AVX", "AVX2"};
   printf("%s.\n", vectorizationString[detectedSimdIset]);
 
   printf("Using ");
@@ -259,22 +192,23 @@ static void printCommand(const WHATTODO &whattodo) {
 static void printOptions() {
   Shared *shared = Shared::getInstance();
   printf(" level          = %d\n", shared->level);
-  printf(" Brute      (b) = %s\n", (shared->options & OPTION_BRUTE) != 0u ? "On  (Brute-force detection of DEFLATE streams)"
+  printf(" Brute      (b) = %s\n", (shared->options & OPTION_BRUTE) != 0U ? "On  (Brute-force detection of DEFLATE streams)"
                                                                           : "Off"); //this is a compression-only option, but we put/get it for reproducibility
-  printf(" Train exe  (e) = %s\n", (shared->options & OPTION_TRAINEXE) != 0u ? "On  (Pre-train x86/x64 model)" : "Off");
+  printf(" Train exe  (e) = %s\n", (shared->options & OPTION_TRAINEXE) != 0U ? "On  (Pre-train x86/x64 model)" : "Off");
   printf(" Train txt  (t) = %s\n",
-         (shared->options & OPTION_TRAINTXT) != 0u ? "On  (Pre-train main model with word and expression list)" : "Off");
-  printf(" Adaptive   (a) = %s\n", (shared->options & OPTION_ADAPTIVE) != 0u ? "On  (Adaptive learning rate)" : "Off");
+         (shared->options & OPTION_TRAINTXT) != 0U ? "On  (Pre-train main model with word and expression list)" : "Off");
+  printf(" Adaptive   (a) = %s\n", (shared->options & OPTION_ADAPTIVE) != 0U ? "On  (Adaptive learning rate)" : "Off");
   printf(" Skip RGB   (s) = %s\n",
-         (shared->options & OPTION_SKIPRGB) != 0u ? "On  (Skip the color transform, just reorder the RGB channels)" : "Off");
-  printf(" File mode      = %s\n", (shared->options & OPTION_MULTIPLE_FILE_MODE) != 0u ? "Multiple" : "Single");
+         (shared->options & OPTION_SKIPRGB) != 0U ? "On  (Skip the color transform, just reorder the RGB channels)" : "Off");
+  printf(" File mode      = %s\n", (shared->options & OPTION_MULTIPLE_FILE_MODE) != 0U ? "Multiple" : "Single");
 }
 
 auto main_utf8(int argc, char **argv) -> int {
   ProgramChecker *programChecker = ProgramChecker::getInstance();
+  Shared *shared = Shared::getInstance();
   try {
 
-    if( !toScreen ) //we need a minimal feedback when redirected
+    if( !shared->toScreen ) //we need a minimal feedback when redirected
       fprintf(stderr, PROGNAME " archiver v" PROGVERSION " (c) " PROGYEAR ", Matt Mahoney et al.\n");
     printf(PROGNAME " archiver v" PROGVERSION " (c) " PROGYEAR ", Matt Mahoney et al.\n");
 
@@ -297,7 +231,6 @@ auto main_utf8(int argc, char **argv) -> int {
     FileName archiveName;
     FileName logfile;
     String hashConfig;
-    Shared *shared = Shared::getInstance();
 
     for( int i = 1; i < argc; i++ ) {
       int argLen = (int) strlen(argv[i]);
@@ -529,7 +462,7 @@ auto main_utf8(int argc, char **argv) -> int {
     listoffiles.setBasePath(whattodo == DoCompress ? inputPath.c_str() : outputPath.c_str());
 
     // Process file list (in multiple file mode)
-    if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0u ) { //multiple file mode
+    if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0U ) { //multiple file mode
       assert(whattodo == DoCompress);
       // Read and parse filelist file
       FileDisk f;
@@ -580,7 +513,7 @@ auto main_utf8(int argc, char **argv) -> int {
 
     // Write archive header to archive file
     if( mode == COMPRESS ) {
-      if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0u ) { //multiple file mode
+      if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0U ) { //multiple file mode
         numberOfFiles = listoffiles.getCount();
         printf("Creating archive %s in multiple file mode with %d file%s...\n", archiveName.c_str(), numberOfFiles,
                numberOfFiles > 1 ? "s" : "");
@@ -690,13 +623,13 @@ auto main_utf8(int argc, char **argv) -> int {
 
     // Compress or decompress files
     if( mode == COMPRESS ) {
-      if( !toScreen ) //we need a minimal feedback when redirected
+      if( !shared->toScreen ) //we need a minimal feedback when redirected
         fprintf(stderr, "Output is redirected - only minimal feedback is on screen\n");
       if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
         for( int i = 0; i < numberOfFiles; i++ ) {
           const char *fName = listoffiles.getfilename(i);
           uint64_t fSize = getFileSize(fName);
-          if( !toScreen ) //we need a minimal feedback when redirected
+          if( !shared->toScreen ) //we need a minimal feedback when redirected
             fprintf(stderr, "\n%d/%d - Filename: %s (%" PRIu64 " bytes)\n", i + 1, numberOfFiles, fName, fSize);
           printf("\n%d/%d - Filename: %s (%" PRIu64 " bytes)\n", i + 1, numberOfFiles, fName, fSize);
           compressfile(fName, fSize, en, verbose);
@@ -709,7 +642,7 @@ auto main_utf8(int argc, char **argv) -> int {
         fn += input.c_str();
         const char *fName = fn.c_str();
         uint64_t fSize = getFileSize(fName);
-        if( !toScreen ) //we need a minimal feedback when redirected
+        if( !shared->toScreen ) //we need a minimal feedback when redirected
           fprintf(stderr, "\nFilename: %s (%" PRIu64 " bytes)\n", fName, fSize);
         printf("\nFilename: %s (%" PRIu64 " bytes)\n", fName, fSize);
         compressfile(fName, fSize, en, verbose);

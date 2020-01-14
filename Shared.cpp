@@ -5,6 +5,7 @@ Shared *Shared::mPInstance = nullptr;
 auto Shared::getInstance() -> Shared * {
   if( mPInstance == nullptr ) {
     mPInstance = new Shared;
+    mPInstance->toScreen = !Shared::isOutputDirected();
   }
 
   return mPInstance;
@@ -31,7 +32,18 @@ void Shared::reset() {
   c4 = 0;
   c8 = 0;
 }
+
 void Shared::setLevel(uint8_t l) {
   level = l;
   mem = 65536ULL << level;
+}
+
+auto Shared::isOutputDirected() -> bool {
+#ifdef WINDOWS
+  DWORD FileType = GetFileType(GetStdHandle(STD_OUTPUT_HANDLE));
+      return (FileType == FILE_TYPE_PIPE) || (FileType == FILE_TYPE_DISK);
+#endif
+#ifdef UNIX
+  return isatty(fileno(stdout)) == 0;
+#endif
 }

@@ -216,7 +216,8 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
     in->setpos(start + deth);
     deth = 0;
     return dett;
-  } if( detd != 0 ) {
+  }
+  if( detd != 0 ) {
     in->setpos(start + min(blockSize, (uint64_t) detd));
     detd = 0;
     return DEFAULT;
@@ -233,7 +234,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
     buf0 = buf0 << 8 | c;
 
     // detect PNG images
-    if( (png == 0) && buf3 == 0x89504E47 /*%PNG*/ && buf2 == 0x0D0A1A0A && buf1 == 0x0000000D && buf0 == 0x49484452 )
+    if((png == 0) && buf3 == 0x89504E47 /*%PNG*/ && buf2 == 0x0D0A1A0A && buf1 == 0x0000000D && buf0 == 0x49484452 )
       png = i, pngType = -1, lastChunk = buf3;
     if( png != 0 ) {
       const int p = i - png;
@@ -244,7 +245,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
         pngType = (uint8_t) (buf0 >> 16);
         pnggray = 0;
         png *= static_cast<int>((buf0 & 0xFFFF) == 0 && (pngw != 0) && (pngh != 0) && pngbps == 8 &&
-                ((pngType == 0) || pngType == 2 || pngType == 3 || pngType == 4 || pngType == 6));
+                                ((pngType == 0) || pngType == 2 || pngType == 3 || pngType == 4 || pngType == 6));
       } else if( p > 12 && pngType < 0 )
         png = 0;
       else if( p == 17 ) {
@@ -387,20 +388,20 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
       pdfImB = pdfImB * 10 + (c - '0');
     if((buf0 & 0xffff) == 0x3c3c )
       pdfimp = i, pdfIm = 1; // <<
-    if( (pdfIm != 0) && (buf1 & 0xffff) == 0x2f57 && buf0 == 0x69647468 )
+    if((pdfIm != 0) && (buf1 & 0xffff) == 0x2f57 && buf0 == 0x69647468 )
       pdfIm = 2, pdfImW = 0; // /Width
-    if( (pdfIm != 0) && (buf1 & 0xffffff) == 0x2f4865 && buf0 == 0x69676874 )
+    if((pdfIm != 0) && (buf1 & 0xffffff) == 0x2f4865 && buf0 == 0x69676874 )
       pdfIm = 3, pdfImH = 0; // /Height
-    if( (pdfIm != 0) && buf3 == 0x42697473 && buf2 == 0x50657243 && buf1 == 0x6f6d706f && buf0 == 0x6e656e74 &&
-        zBuf[(zBufPos - 32 + 15) & 0xFF] == '/' )
+    if((pdfIm != 0) && buf3 == 0x42697473 && buf2 == 0x50657243 && buf1 == 0x6f6d706f && buf0 == 0x6e656e74 &&
+       zBuf[(zBufPos - 32 + 15) & 0xFF] == '/' )
       pdfIm = 4, pdfImB = 0; // /BitsPerComponent
-    if( (pdfIm != 0) && (buf2 & 0xFFFFFF) == 0x2F4465 && buf1 == 0x76696365 && buf0 == 0x47726179 )
+    if((pdfIm != 0) && (buf2 & 0xFFFFFF) == 0x2F4465 && buf1 == 0x76696365 && buf0 == 0x47726179 )
       pdfGray = 1; // /DeviceGray
 
     // CD sectors detection (mode 1 and mode 2 form 1+2 - 2352 bytes)
-    if( buf1 == 0x00ffffff && buf0 == 0xffffffff && (cdi == 0) )
+    if( buf1 == 0x00ffffff && buf0 == 0xffffffff && (cdi == 0))
       cdi = i, cda = -1, cdm = 0;
-    if( (cdi != 0) && i > cdi ) {
+    if((cdi != 0) && i > cdi ) {
       const int p = (i - cdi) % 2352;
       if( p == 8 && (buf1 != 0xffffff00 || ((buf0 & 0xff) != 1 && (buf0 & 0xff) != 2)))
         cdi = 0;
@@ -413,7 +414,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
         int t = expandCdSector(data, cda, 1);
         if( t != cdm )
           cdm = t * static_cast<int>(i - cdi < 2352);
-        if( (cdm != 0) && cda != 10 && (cdm == 1 || buf0 == buf1)) {
+        if((cdm != 0) && cda != 10 && (cdm == 1 || buf0 == buf1)) {
           if( type != CD )
             return info = cdm, in->setpos(start + cdi - 7), CD;
           cda = (data[12] << 16) + (data[13] << 8) + data[14];
@@ -424,7 +425,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
         } else
           cdi = 0;
       }
-      if( (cdi == 0) && type == CD ) {
+      if((cdi == 0) && type == CD ) {
         in->setpos(start + i - p - 7);
         return DEFAULT;
       }
@@ -437,20 +438,20 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
     // Detect end by any code other than RST0-RST7 (FF D9-D7) or
     // a byte stuff (FF 00).
 
-    if( (soi == 0) && i >= 3 && (buf0 & 0xffffff00) == 0xffd8ff00 &&
-        ((buf0 & 0xFE) == 0xC0 || (uint8_t) buf0 == 0xC4 || ((uint8_t) buf0 >= 0xDB && (uint8_t) buf0 <= 0xFE)))
+    if((soi == 0) && i >= 3 && (buf0 & 0xffffff00) == 0xffd8ff00 &&
+       ((buf0 & 0xFE) == 0xC0 || (uint8_t) buf0 == 0xC4 || ((uint8_t) buf0 >= 0xDB && (uint8_t) buf0 <= 0xFE)))
       soi = i, app = i + 2, sos = sof = 0;
     if( soi != 0 ) {
       if( app == i && (buf0 >> 24) == 0xff && ((buf0 >> 16) & 0xff) > 0xc1 && ((buf0 >> 16) & 0xff) < 0xff )
         app = i + (buf0 & 0xffff) + 2;
       if( app < i && (buf1 & 0xff) == 0xff && (buf0 & 0xfe0000ff) == 0xc0000008 )
         sof = i;
-      if( (sof != 0) && sof > soi && i - sof < 0x1000 && (buf0 & 0xffff) == 0xffda ) {
+      if((sof != 0) && sof > soi && i - sof < 0x1000 && (buf0 & 0xffff) == 0xffda ) {
         sos = i;
         if( type != JPEG )
           return in->setpos(start + soi - 3), JPEG;
       }
-      if( i - soi > 0x40000 && (sos == 0) )
+      if( i - soi > 0x40000 && (sos == 0))
         soi = 0;
     }
     if( type == JPEG && (sos != 0) && i > sos && (buf0 & 0xff00) == 0xff00 && (buf0 & 0xff) != 0 && (buf0 & 0xf8) != 0xd0 )
@@ -590,7 +591,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
 #endif //  USE_AUDIOMODEL
 
     // Detect .bmp image
-    if( (bmpi == 0u) && (dibi == 0u) ) {
+    if((bmpi == 0u) && (dibi == 0u)) {
       if((buf0 & 0xffff) == 16973 ) { // 'BM'
         bmpi = i; // header start: bmpi-1
         dibi = i - 1 + 18; // we expect a DIB header to come
@@ -695,7 +696,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
       if( pgmdata == 0 ) { // parse header
         if( i - pgm == 1 && c == 0x23 )
           pgmComment = 1; // # (pgm comment)
-        if( (pgmComment == 0) && (pgmPtr != 0) ) {
+        if((pgmComment == 0) && (pgmPtr != 0)) {
           int s = 0;
           if( pgmn == 7 ) {
             if((buf1 & 0xdfdf) == 0x5749 && (buf0 & 0xdfdfdfff) == 0x44544820 )
@@ -718,9 +719,9 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
               if( pamatr != 6 )
                 pamatr = 0;
             }
-          } else if( c == 0x20 && (pgmw == 0) )
+          } else if( c == 0x20 && (pgmw == 0))
             s = 1;
-          else if( c == 0x0a && (pgmh == 0) )
+          else if( c == 0x0a && (pgmh == 0))
             s = 2;
           else if( c == 0x0a && (pgmc == 0) && pgmn != 4 )
             s = 3;
@@ -745,21 +746,21 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
           pgmBuf[pgmPtr++] = c;
         if( pgmPtr >= 32 )
           pgm = 0;
-        if( (pgmComment != 0) && c == 0x0a )
+        if((pgmComment != 0) && c == 0x0a )
           pgmComment = 0;
-        if( (pgmw != 0) && (pgmh != 0) && (pgmc == 0) && pgmn == 4 ) {
+        if((pgmw != 0) && (pgmh != 0) && (pgmc == 0) && pgmn == 4 ) {
           pgmdata = i;
           pgmDataSize = (pgmw + 7) / 8 * pgmh;
         }
-        if( (pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 5 || (pgmn == 7 && pamd == 1 && pamatr == 6))) {
+        if((pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 5 || (pgmn == 7 && pamd == 1 && pamatr == 6))) {
           pgmdata = i;
           pgmDataSize = pgmw * pgmh;
         }
-        if( (pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 6 || (pgmn == 7 && pamd == 3 && pamatr == 6))) {
+        if((pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 6 || (pgmn == 7 && pamd == 3 && pamatr == 6))) {
           pgmdata = i;
           pgmDataSize = pgmw * 3 * pgmh;
         }
-        if( (pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 7 && pamd == 4 && pamatr == 6)) {
+        if((pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 7 && pamd == 4 && pamatr == 6)) {
           pgmdata = i;
           pgmDataSize = pgmw * 4 * pgmh;
         }
@@ -767,13 +768,13 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
         if( textParser->start() == uint32_t(i) || // for any sign of non-text data in pixel area
             (pgm - 2 == 0 && n - pgmDataSize == i)) // or the image is the whole file/block -> FINISH (success)
         {
-          if( (pgmw != 0) && (pgmh != 0) && (pgmc == 0) && pgmn == 4 )
+          if((pgmw != 0) && (pgmh != 0) && (pgmc == 0) && pgmn == 4 )
             IMG_DET(IMAGE1, pgm - 2, pgmdata - pgm + 3, (pgmw + 7) / 8, pgmh);
-          if( (pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 5 || (pgmn == 7 && pamd == 1 && pamatr == 6)))
+          if((pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 5 || (pgmn == 7 && pamd == 1 && pamatr == 6)))
             IMG_DET(IMAGE8GRAY, pgm - 2, pgmdata - pgm + 3, pgmw, pgmh);
-          if( (pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 6 || (pgmn == 7 && pamd == 3 && pamatr == 6)))
+          if((pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 6 || (pgmn == 7 && pamd == 3 && pamatr == 6)))
             IMG_DET(IMAGE24, pgm - 2, pgmdata - pgm + 3, pgmw * 3, pgmh);
-          if( (pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 7 && pamd == 4 && pamatr == 6))
+          if((pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 7 && pamd == 4 && pamatr == 6))
             IMG_DET(IMAGE32, pgm - 2, pgmdata - pgm + 3, pgmw * 4, pgmh);
         } else if((--pgmDataSize) == 0 )
           pgm = 0; // all data was probably text in pixel area: fail
@@ -797,7 +798,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
         rgby = buf0 & 0xffff, rgbi = (rgby == 0 ? 0 : rgbi);
       else if( p == 10 ) {
         int z = buf0 & 0xffff;
-        if( (rgbx != 0) && (rgby != 0) && (z == 1 || z == 3 || z == 4))
+        if((rgbx != 0) && (rgby != 0) && (z == 1 || z == 3 || z == 4))
           IMG_DET(IMAGE8, rgbi - 1, 512, rgbx, rgby * z);
         rgbi = 0;
       }
@@ -847,15 +848,15 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
           }
         }
       }
-      if( (tifX != 0) && (tifY != 0) && (tifZb != 0) && (tifZ == 1 || tifZ == 3) && ((tifC == 1) || (tifC == 5 /*LZW*/ && tifSize > 0)) &&
-          ((tifofs != 0) && tifofs + i < n)) {
+      if((tifX != 0) && (tifY != 0) && (tifZb != 0) && (tifZ == 1 || tifZ == 3) && ((tifC == 1) || (tifC == 5 /*LZW*/ && tifSize > 0)) &&
+         ((tifofs != 0) && tifofs + i < n)) {
         if( tifofval == 0 ) {
           in->setpos(start + i + tifofs - 7);
           for( int j = 0; j < 4; j++ )
             b[j] = in->getchar();
           tifofs = b[0] + (b[1] << 8) + (b[2] << 16) + (b[3] << 24);
         }
-        if( (tifofs != 0) && tifofs < (1 << 18) && tifofs + i < n ) {
+        if((tifofs != 0) && tifofs < (1 << 18) && tifofs + i < n ) {
           if( tifC == 1 ) {
             if( tifZ == 1 && tifZb == 1 )
               IMG_DET(IMAGE1, i - 7, tifofs, ((tifX - 1) >> 3) + 1, tifY);
@@ -893,7 +894,8 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
           if( tgat == 1 ) {
             in->setpos(start + tga + 11 + tgaid);
             IMG_DET((isGrayscalePalette(in)) ? IMAGE8GRAY : IMAGE8, tga - 7, 18 + tgaid + 256 * tgamap, tgax, tgay);
-          } if( tgat == 2 )
+          }
+          if( tgat == 2 )
             IMG_DET((tgaz == 24) ? IMAGE24 : IMAGE32, tga - 7, 18 + tgaid, tgax * (tgaz >> 3), tgay);
           else if( tgat == 3 )
             IMG_DET(IMAGE8GRAY, tga - 7, 18 + tgaid, tgax, tgay);
@@ -916,7 +918,8 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
               if( c == 0x80 ) {
                 c = b;
                 continue;
-              } if( c > 0x7F ) {
+              }
+              if( c > 0x7F ) {
                 total -= (c = (c & 0x7F) + 1);
                 line += c;
                 c = in->getchar();
@@ -937,7 +940,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
               in->setpos(start + tga + 11 + tgaid + 256 * tgamap);
               return dett = RLE;
             }
-              in->setpos(savedPos);
+            in->setpos(savedPos);
           }
         }
         tga = 0;
@@ -952,7 +955,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
       else
         gifGray = 0;
     }
-    if( (gif == 0) && (buf1 & 0xffff) == 0x4749 && (buf0 == 0x46383961 || buf0 == 0x46383761))
+    if((gif == 0) && (buf1 & 0xffff) == 0x4749 && (buf0 == 0x46383961 || buf0 == 0x46383761))
       gif = 1, gifi = i + 5;
     if( gif != 0 ) {
       if( gif == 1 && i == gifi )
@@ -971,7 +974,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
         gifw = (bswap(buf0) & 0xffff);
       if( gif == 3 && i == gifi + 7 )
         gif = 4, gifc = gifb = 0, gifa = gifi = i + 2 + (gifplt = ((c & 128) != 0 ? (3 * (2 << (c & 7))) : 0));
-      if( gif == 4 && (gifplt != 0) )
+      if( gif == 4 && (gifplt != 0))
         gifGray = static_cast<int>(isGrayscalePalette(in, gifplt / 3)), gifplt = 0;
       if( gif == 4 && i == gifi ) {
         if( c > 0 && (gifb != 0) && gifc != gifb )
@@ -1120,7 +1123,8 @@ static void directEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &e
 
 static void compressRecursive(File *in, uint64_t blockSize, Encoder &en, String &blstr, int recursionLevel, float p1, float p2);
 
-static auto decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File *out, FMode mode, uint64_t &diffFound) -> uint64_t {
+static auto
+decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File *out, FMode mode, uint64_t &diffFound) -> uint64_t {
   if( type == IMAGE24 )
     return decodeBmp(en, len, info, out, mode, diffFound);
   else if( type == IMAGE32 )
@@ -1353,7 +1357,7 @@ static void compressfile(const char *filename, uint64_t fileSize, Encoder &en, b
   compressRecursive(&in, fileSize, en, blstr, 0, 0.0F, 1.0F);
   in.close();
 
-  if( (shared->options & OPTION_MULTIPLE_FILE_MODE) != 0u ) { //multiple file mode
+  if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0u ) { //multiple file mode
     if( verbose )
       printf("File size to encode   : 4\n"); //This string must be long enough. "Compressing ..." is still on screen, we need to overwrite it.
     printf("File input size       : %" PRIu64 "\n", fileSize);
@@ -1390,12 +1394,12 @@ static auto decompressRecursive(File *out, uint64_t blockSize, Encoder &en, FMod
       len = decodeFunc(type, en, nullptr, len, info, out, mode, diffFound);
     } else {
       for( uint64_t j = 0; j < len; ++j ) {
-        if( (j & 0xfff) == 0u)
+        if((j & 0xfff) == 0u )
           en.printStatus();
         if( mode == FDECOMPRESS )
           out->putChar(en.decompress());
         else if( mode == FCOMPARE ) {
-          if( en.decompress() != out->getchar() && (diffFound == 0u) ) {
+          if( en.decompress() != out->getchar() && (diffFound == 0u)) {
             mode = FDISCARD;
             diffFound = i + j + 1;
           }
@@ -1432,7 +1436,7 @@ static void decompressFile(const char *filename, FMode fMode, Encoder &en) {
   uint64_t r = decompressRecursive(&f, fileSize, en, fMode, 0);
   if( fMode == FCOMPARE && (r == 0u) && f.getchar() != EOF)
     printf("file is longer\n");
-  else if( fMode == FCOMPARE && (r != 0u) )
+  else if( fMode == FCOMPARE && (r != 0u))
     printf("differ at %" PRIu64 "\n", r - 1);
   else if( fMode == FCOMPARE )
     printf("identical\n");

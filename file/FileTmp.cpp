@@ -52,11 +52,11 @@ auto FileTmp::getchar() -> int {
   if( contentInRam != nullptr ) {
     if( filePos >= fileSize )
       return EOF;
-    
-      const uint8_t c = (*contentInRam)[filePos];
-      filePos++;
-      return c;
-    
+
+    const uint8_t c = (*contentInRam)[filePos];
+    filePos++;
+    return c;
+
   } else
     return fileOnDisk->getchar();
 }
@@ -71,8 +71,8 @@ void FileTmp::putChar(uint8_t c) {
         (*contentInRam)[filePos] = c;
       filePos++;
       return;
-    } 
-      ramToDisk();
+    }
+    ramToDisk();
   }
   fileOnDisk->putChar(c);
 }
@@ -86,8 +86,8 @@ auto FileTmp::blockRead(uint8_t *ptr, uint64_t count) -> uint64_t {
       memcpy(ptr, &((*contentInRam)[filePos]), count);
     filePos += count;
     return count;
-  } 
-    return fileOnDisk->blockRead(ptr, count);
+  }
+  return fileOnDisk->blockRead(ptr, count);
 }
 
 void FileTmp::blockWrite(uint8_t *ptr, uint64_t count) {
@@ -99,8 +99,8 @@ void FileTmp::blockWrite(uint8_t *ptr, uint64_t count) {
       fileSize += count;
       filePos += count;
       return;
-    } 
-      ramToDisk();
+    }
+    ramToDisk();
   }
   fileOnDisk->blockWrite(ptr, count);
 }
@@ -127,13 +127,13 @@ void FileTmp::setEnd() {
 auto FileTmp::curPos() -> uint64_t {
   if( contentInRam != nullptr )
     return filePos;
-  
-    return fileOnDisk->curPos();
+
+  return fileOnDisk->curPos();
 }
 
 auto FileTmp::eof() -> bool {
   if( contentInRam != nullptr )
     return filePos >= fileSize;
-  
-    return fileOnDisk->eof();
+
+  return fileOnDisk->eof();
 }

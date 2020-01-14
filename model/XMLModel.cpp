@@ -59,7 +59,7 @@ void XMLModel::update() {
   XMLAttribute *attribute = &((*tag).attributes.items[(*tag).attributes.Index & 3]);
   XMLContent *content = &(*tag).content;
   pState = state;
-  if((c1 == TAB || c1 == SPACE) && (c1 == (uint8_t) (c4 >> 8) || !whiteSpaceRun)) {
+  if((c1 == TAB || c1 == SPACE) && (c1 == (uint8_t)(c4 >> 8) || !whiteSpaceRun)) {
     whiteSpaceRun++;
     indentTab = (c1 == TAB);
   } else {
@@ -71,7 +71,7 @@ void XMLModel::update() {
     whiteSpaceRun = 0;
   }
   if( c1 == NEW_LINE )
-    lineEnding = 1 + ((uint8_t) (c4 >> 8) == CARRIAGE_RETURN);
+    lineEnding = 1 + ((uint8_t)(c4 >> 8) == CARRIAGE_RETURN);
 
   switch( state ) {
     case None: {

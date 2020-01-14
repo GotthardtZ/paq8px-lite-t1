@@ -134,8 +134,8 @@ static auto examinePath(const char *path) -> int {
       const char lastChar = path[len - 1];
       if( lastChar != '/' && lastChar != '\\' )
         return 3; //looks like a file
-      
-        return 4; //looks like a directory
+
+      return 4; //looks like a directory
     }
     return 0; //error
   }

@@ -45,7 +45,7 @@ static inline unsigned long long xgetbv(unsigned long ctr) {
 }
 
 /* Returns system's highest supported SIMD instruction set as
-0: None
+0: none
 1: MMX
 2: SSE
 3: SSE2

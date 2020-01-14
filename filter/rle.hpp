@@ -64,7 +64,8 @@ public:
         if( c == 0x80 ) {
           c = b;
           continue;
-        } if( c > 0x7F ) {
+        }
+        if( c > 0x7F ) {
           for( int j = 0; j <= (c & 0x7FU); j++ )
             out->putChar(b);
           c = in->getchar(), i++;
@@ -118,14 +119,14 @@ public:
           out->blockWrite(&outBuffer[0], length);
         else if( fMode == FCOMPARE ) {
           for( int j = 0; j < (int) length; ++j ) {
-            if( outBuffer[j] != out->getchar() && (diffFound == 0u) ) {
+            if( outBuffer[j] != out->getchar() && (diffFound == 0u)) {
               diffFound = pos + j + 1;
               break;
             }
           }
         }
         pos += length;
-      } while( !in->eof() && (diffFound == 0u) );
+      } while( !in->eof() && (diffFound == 0u));
       return pos;
     }
 

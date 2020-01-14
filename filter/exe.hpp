@@ -69,7 +69,7 @@ static auto decodeExe(Encoder &en, uint64_t size, File *out, FMode mode, uint64_
     }
     if( mode == FDECOMPRESS )
       out->putChar(c[5]);
-    else if( mode == FCOMPARE && c[5] != out->getchar() && (diffFound == 0u) )
+    else if( mode == FCOMPARE && c[5] != out->getchar() && (diffFound == 0u))
       diffFound = offset - 6 + 1;
     if( mode == FDECOMPRESS && ((offset & 0xfffU) == 0u))
       en.printStatus();

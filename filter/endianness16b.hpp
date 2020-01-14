@@ -26,7 +26,7 @@ static auto decodeEndianness16B(Encoder &en, uint64_t size, File *out, FMode mod
     } else if( mode == FCOMPARE ) {
       bool ok = out->getchar() == b2;
       ok &= out->getchar() == b1;
-      if( !ok && (diffFound == 0u) ) {
+      if( !ok && (diffFound == 0u)) {
         diffFound = size - i * 2;
         break;
       }
@@ -34,7 +34,7 @@ static auto decodeEndianness16B(Encoder &en, uint64_t size, File *out, FMode mod
     if( mode == FDECOMPRESS && ((i & 0x7FFU) == 0u))
       en.printStatus();
   }
-  if( (diffFound == 0u) && (size & 1U) > 0 ) {
+  if((diffFound == 0u) && (size & 1U) > 0 ) {
     if( mode == FDECOMPRESS )
       out->putChar(en.decompress());
     else if( mode == FCOMPARE ) {

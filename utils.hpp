@@ -1,6 +1,15 @@
 #ifndef PAQ8PX_UTILS_HPP
 #define PAQ8PX_UTILS_HPP
 
+#include <cstdint>
+
+static_assert(sizeof(uint8_t) == 1, "sizeof(uint8_t)");
+static_assert(sizeof(uint16_t) == 2, "sizeof(uint16_t)");
+static_assert(sizeof(uint32_t) == 4, "sizeof(uint32_t)");
+static_assert(sizeof(uint64_t) == 8, "sizeof(uint64_t)");
+static_assert(sizeof(short) == 2, "sizeof(short)");
+static_assert(sizeof(int) == 4, "sizeof(int)");
+
 //////////////////////// Target OS/Compiler ////////////////////////////////
 
 #if defined(_WIN32) || defined(_MSC_VER)
@@ -35,7 +44,6 @@
 #define ALWAYS_INLINE inline
 #endif
 
-#include <cstdint>
 #include <algorithm>
 #include <cstdio>
 // Determining the proper printf() format specifier for 64 bit unsigned integers:
@@ -126,19 +134,6 @@ class IntentionalException : public std::exception {};
   throw IntentionalException();
 }
 
-//determine if output is redirected
-static bool isOutputDirected() {
-#ifdef WINDOWS
-  DWORD FileType = GetFileType(GetStdHandle(STD_OUTPUT_HANDLE));
-  return (FileType == FILE_TYPE_PIPE) || (FileType == FILE_TYPE_DISK);
-#endif
-#ifdef UNIX
-  return !isatty(fileno(stdout));
-#endif
-}
-
-static bool toScreen = !isOutputDirected();
-
 /////////////////////// Global context /////////////////////////
 
 typedef enum {
@@ -169,21 +164,21 @@ typedef enum {
     LZW
 } BlockType;
 
-inline bool hasRecursion(BlockType ft) {
+static inline bool hasRecursion(BlockType ft) {
   return ft == CD || ft == ZLIB || ft == BASE64 || ft == GIF || ft == RLE || ft == LZW || ft == FILECONTAINER;
 }
 
-inline bool hasInfo(BlockType ft) {
+static inline bool hasInfo(BlockType ft) {
   return ft == IMAGE1 || ft == IMAGE4 || ft == IMAGE8 || ft == IMAGE8GRAY || ft == IMAGE24 || ft == IMAGE32 || ft == AUDIO ||
          ft == AUDIO_LE || ft == PNG8 || ft == PNG8GRAY || ft == PNG24 || ft == PNG32;
 }
 
-inline bool hasTransform(BlockType ft) {
+static inline bool hasTransform(BlockType ft) {
   return ft == IMAGE24 || ft == IMAGE32 || ft == AUDIO_LE || ft == EXE || ft == CD || ft == ZLIB || ft == BASE64 || ft == GIF ||
          ft == TEXT_EOL || ft == RLE || ft == LZW;
 }
 
-inline bool isPNG(BlockType ft) { return ft == PNG8 || ft == PNG8GRAY || ft == PNG24 || ft == PNG32; }
+static inline bool isPNG(BlockType ft) { return ft == PNG8 || ft == PNG8GRAY || ft == PNG24 || ft == PNG32; }
 
 #define OPTION_MULTIPLE_FILE_MODE 1U
 #define OPTION_BRUTE 2U

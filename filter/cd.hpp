@@ -21,9 +21,10 @@ static void encodeCd(File *in, File *out, uint64_t size, int info) {
       if( info == 3 )
         blk[15] = 3; //indicate Mode2/Form2
       if( offset == 0 )
-        out->blockWrite(&blk[12],
-                        4 + 4 * static_cast<int>(blk[15] != 1)); //4-byte address + 4 bytes from the 8-byte subheader goes only to the first sector
-      out->blockWrite(&blk[16 + 8 * static_cast<int>(blk[15] != 1)], 2048 + 276 * static_cast<int>(info == 3)); //user data goes to all sectors
+        out->blockWrite(&blk[12], 4 + 4 * static_cast<int>(blk[15] !=
+                                                           1)); //4-byte address + 4 bytes from the 8-byte subheader goes only to the first sector
+      out->blockWrite(&blk[16 + 8 * static_cast<int>(blk[15] != 1)],
+                      2048 + 276 * static_cast<int>(info == 3)); //user data goes to all sectors
       if( offset + block * 2 > size && blk[15] != 1 )
         out->blockWrite(&blk[16], 4); //in Mode2 4 bytes from the 8-byte subheader goes after the last sector
     }
@@ -83,7 +84,7 @@ static auto expandCdSector(uint8_t *data, int address, int test) -> int {
     }
   }
   for( int i = 0; i < 2352; i++ )
-    if( d2[i] != data[i] && (test != 0) )
+    if( d2[i] != data[i] && (test != 0))
       form = 2;
   if( form == 2 ) {
     for( int i = 24; i < 2348; i++ )
@@ -93,7 +94,7 @@ static auto expandCdSector(uint8_t *data, int address, int test) -> int {
       d2[2348 + i] = (edc >> (8 * i)) & 0xff; //EDC
   }
   for( int i = 0; i < 2352; i++ )
-    if( d2[i] != data[i] && (test != 0) )
+    if( d2[i] != data[i] && (test != 0))
       return 0;
     else
       data[i] = d2[i];
@@ -117,10 +118,11 @@ static auto decodeCd(File *in, uint64_t size, File *out, FMode mode, uint64_t &d
         out->blockWrite(blk, residual);
       else if( mode == FCOMPARE )
         for( int j = 0; j < (int) residual; ++j )
-          if( blk[j] != out->getchar() && (diffFound == 0u) )
+          if( blk[j] != out->getchar() && (diffFound == 0u))
             diffFound = nextBlockPos + j + 1;
       return nextBlockPos + residual;
-    } if( i == 0 ) { //first sector
+    }
+    if( i == 0 ) { //first sector
       in->blockRead(blk + 12,
                     4); //header (4 bytes) consisting of address (Minutes, Seconds, Sectors) and mode (1 = Mode1, 2 = Mode2/Form1, 3 = Mode2/Form2)
       if( blk[15] != 1 )
@@ -145,7 +147,7 @@ static auto decodeCd(File *in, uint64_t size, File *out, FMode mode, uint64_t &d
       out->blockWrite(blk, block);
     else if( mode == FCOMPARE )
       for( int j = 0; j < block; ++j )
-        if( blk[j] != out->getchar() && (diffFound == 0u) )
+        if( blk[j] != out->getchar() && (diffFound == 0u))
           diffFound = nextBlockPos + j + 1;
     nextBlockPos += block;
   }

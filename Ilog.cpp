@@ -18,7 +18,7 @@ auto llog(uint32_t x) -> int {
     return 256 + ilog->log(uint16_t(x >> 16U));
   if( x >= 0x10000 )
     return 128 + ilog->log(uint16_t(x >> 8U));
-  else
+  
     return ilog->log(uint16_t(x));
 }
 
