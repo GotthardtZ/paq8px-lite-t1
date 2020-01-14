@@ -7,7 +7,7 @@ void OpenFromMyFolder::myself(FileDisk *f) {
       if ((i = GetModuleFileNameW(nullptr, &myFileName[0], MAX_PATH)) && i < MAX_PATH && i != 0) {
         f->open(Utf8Str(&myFileName[0]).utf8_str, true);
       } else
-        quit(myPathError);
+        quit(ofmf::myPathError);
 #endif
 #ifdef __APPLE__
   char myFileName[PATH_MAX];
@@ -24,7 +24,7 @@ void OpenFromMyFolder::myself(FileDisk *f) {
       if( readlink("/proc/self/exe", &myFileName[0], PATH_MAX) != -1 )
         f->open(&myFileName[0], true);
       else
-        quit(myPathError);
+        quit(ofmf::myPathError);
 #endif
 #endif
 }
@@ -35,7 +35,7 @@ void OpenFromMyFolder::anotherFile(FileDisk *f, const char *filename) {
   int i;
       Array<char> myFileName(MAX_PATH + fLength);
       if ((i = GetModuleFileName(nullptr, &myFileName[0], MAX_PATH)) && i < MAX_PATH && i != 0) {
-        char *endofpath = strrchr(&myFileName[0], '\\');
+        char *endOfPath = strrchr(&myFileName[0], '\\');
 #endif
 #ifdef __APPLE__
   char myFileName[PATH_MAX + fLength];

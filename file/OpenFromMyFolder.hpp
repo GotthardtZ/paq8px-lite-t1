@@ -2,7 +2,12 @@
 #define PAQ8PX_OPENFROMMYFOLDER_HPP
 
 #include "FileDisk.hpp"
+
+#ifdef __APPLE__
+
 #include <mach-o/dyld.h>
+
+#endif
 
 namespace ofmf {
     static char myPathError[] = "Can't determine my path.";

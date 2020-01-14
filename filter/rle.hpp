@@ -129,8 +129,6 @@ public:
       } while( !in->eof() && (diffFound == 0u));
       return pos;
     }
-
-    void setEncoder(Encoder &en) override {}
 };
 
 #endif //PAQ8PX_RLE_HPP

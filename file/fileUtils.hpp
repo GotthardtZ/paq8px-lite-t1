@@ -7,6 +7,7 @@
 #include <cstring>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <cerrno>
 
 //////////////////// IO functions and classes ///////////////////
 // Wrappers to utf8 vs. wchar functions

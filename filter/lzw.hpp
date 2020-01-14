@@ -55,15 +55,11 @@ public:
           }
         }
       }
-      // 1;
+      // return 1;
     }
 
     auto decode(File * /*in*/, File * /*out*/, FMode  /*fMode*/, uint64_t  /*size*/, uint64_t & /*diffFound*/) -> uint64_t override {
       return 0;
-    }
-
-    void setEncoder(Encoder &en) override {
-
     }
 
 };

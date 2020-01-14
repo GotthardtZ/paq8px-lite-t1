@@ -18,6 +18,7 @@
 #include <cctype>
 #include <cstdint>
 #include <cstring>
+#include "TextParserStateInfo.hpp"
 
 /////////////////////////// Filters /////////////////////////////////
 //TODO: Update this documentation
@@ -109,8 +110,6 @@ static bool isGrayscalePalette(File *in, int n = 256, int isRGBA = 0) {
   in->setpos(offset);
   return (res >> 8) > 0;
 }
-
-#include "TextParserStateInfo.hpp"
 
 // Detect blocks
 static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> BlockType {
@@ -411,7 +410,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
         in->setpos(start + i - 23);
         in->blockRead(data, 2352);
         in->setpos(savedPos);
-        int t = expandCdSector(data, cda, 1);
+        int t = CdFilter::expandCdSector(data, cda, 1);
         if( t != cdm )
           cdm = t * static_cast<int>(i - cdi < 2352);
         if((cdm != 0) && cda != 10 && (cdm == 1 || buf0 == buf1)) {
@@ -1125,25 +1124,34 @@ static void compressRecursive(File *in, uint64_t blockSize, Encoder &en, String 
 
 static auto
 decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File *out, FMode mode, uint64_t &diffFound) -> uint64_t {
-  if( type == IMAGE24 )
-    return decodeBmp(en, len, info, out, mode, diffFound);
-  else if( type == IMAGE32 )
+  if( type == IMAGE24 ) {
+    auto b = new BmpFilter();
+    b->setWidth(info);
+    b->setEncoder(en);
+    return b->decode(tmp, out, mode, len, diffFound);
+  } else if( type == IMAGE32 )
     return decodeIm32(en, len, info, out, mode, diffFound);
-  else if( type == AUDIO_LE )
-    return decodeEndianness16B(en, len, out, mode, diffFound);
+  else if( type == AUDIO_LE ) {
+    auto e = new EndiannessFilter();
+    e->setEncoder(en);
+    return e->decode(tmp, out, mode, len, diffFound);
+  }
   else if( type == EXE )
     return decodeExe(en, len, out, mode, diffFound);
   else if( type == TEXT_EOL )
     return decodeEol(en, len, out, mode, diffFound);
-  else if( type == CD )
-    return decodeCd(tmp, len, out, mode, diffFound);
+  else if( type == CD ) {
+    auto c = new CdFilter();
+    c->decode(tmp, out, mode, len, diffFound);
+  }
 #ifdef USE_ZLIB
   else if( type == ZLIB )
     return decodeZlib(tmp, len, out, mode, diffFound);
 #endif //USE_ZLIB
-  else if( type == BASE64 )
-    return decodeBase64(tmp, out, mode, diffFound);
-  else if( type == GIF )
+  else if( type == BASE64 ) {
+    auto b = new Base64Filter();
+    return b->decode(tmp, out, mode, len, diffFound);
+  } else if( type == GIF )
     return decodeGif(tmp, len, out, mode, diffFound);
   else if( type == RLE ) {
     auto r = new RleFilter();
@@ -1156,25 +1164,31 @@ decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File 
 }
 
 static auto encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int info, int &hdrsize) -> uint64_t {
-  if( type == IMAGE24 )
-    encodeBmp(in, tmp, len, info);
-  else if( type == IMAGE32 )
+  if( type == IMAGE24 ) {
+    auto b = new BmpFilter();
+    b->encode(in, tmp, len, info, hdrsize);
+  } else if( type == IMAGE32 )
     encodeIm32(in, tmp, len, info);
-  else if( type == AUDIO_LE )
-    encodeEndianness16B(in, tmp, len);
+  else if( type == AUDIO_LE ) {
+    auto e = new EndiannessFilter();
+    e->encode(in, tmp, len, info, hdrsize);
+  }
   else if( type == EXE )
     encodeExe(in, tmp, len, info);
   else if( type == TEXT_EOL )
     encodeEol(in, tmp, len);
-  else if( type == CD )
-    encodeCd(in, tmp, len, info);
+  else if( type == CD ) {
+    auto c = new CdFilter();
+    c->encode(in, tmp, len, info, hdrsize);
+  }
 #ifdef USE_ZLIB
   else if( type == ZLIB )
     return encodeZlib(in, tmp, len, hdrsize) ? 0 : 1;
 #endif //USE_ZLIB
-  else if( type == BASE64 )
-    encodeBase64(in, tmp, len);
-  else if( type == GIF )
+  else if( type == BASE64 ) {
+    auto b = new Base64Filter();
+    b->encode(in, tmp, len, info, hdrsize);
+  } else if( type == GIF )
     return encodeGif(in, tmp, len, hdrsize) != 0 ? 0 : 1;
   else if( type == RLE ) {
     auto r = new RleFilter();
