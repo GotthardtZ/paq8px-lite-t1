@@ -70,9 +70,9 @@ public:
           for( int j = 0; j < 4; j++ ) {
             src[j] = valueB(src[j]);
           }
-          src[0] = (src[0] << 2) + ((src[1] & 0x30U) >> 4);
-          src[1] = ((src[1] & 0xf) << 4) + ((src[2] & 0x3CU) >> 2);
-          src[2] = ((src[2] & 0x3) << 6) + src[3];
+          src[0] = (src[0] << 2U) + ((src[1] & 0x30U) >> 4U);
+          src[1] = ((src[1] & 0xf) << 4U) + ((src[2] & 0x3CU) >> 2U);
+          src[2] = ((src[2] & 0x3) << 6U) + src[3];
 
           ptr[olen++] = src[0];
           ptr[olen++] = src[1];

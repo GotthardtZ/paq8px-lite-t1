@@ -2,6 +2,7 @@
 #include "utils.hpp"
 
 Mixer::Mixer(const int n, const int m, const int s) : n(n), m(m), s(s), scaleFactor(0), tx(n), wx(n * m), cxt(s), info(s), rates(s), pr(s) {
+  printf("Created Mixer with n = %d, m = %d, s = %d\n", n, m, s);
   for( uint64_t i = 0; i < s; ++i ) {
     pr[i] = 2048; //initial p=0.5
     rates[i] = DEFAULT_LEARNING_RATE;
@@ -20,7 +21,7 @@ void Mixer::set(const uint32_t cx, const uint32_t range, const int rate) {
   assert(numContexts < s);
   assert(cx < range);
   assert(base + range <= m);
-  if( (shared->options & OPTION_ADAPTIVE) == 0U)
+  if((shared->options & OPTION_ADAPTIVE) == 0U )
     rates[numContexts] = rate;
   cxt[numContexts++] = base + cx;
   base += range;

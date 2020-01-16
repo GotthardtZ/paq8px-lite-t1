@@ -1,7 +1,7 @@
 #include "StationaryMap.hpp"
 
 StationaryMap::StationaryMap(const int bitsOfContext, const int inputBits, const int scale, const uint16_t limit) : data(
-        (UINT64_C(1) << bitsOfContext) * ((UINT64_C(1) << inputBits) - 1)), mask((1U << bitsOfContext) - 1), maskBits(bitsOfContext),
+        (1ULL << bitsOfContext) * ((1ULL << inputBits) - 1)), mask((1U << bitsOfContext) - 1), maskBits(bitsOfContext),
         stride((1U << inputBits) - 1), bTotal(inputBits), scale(scale), limit(limit) {
   assert(inputBits > 0 && inputBits <= 8);
   assert(bitsOfContext + inputBits <= 24);
@@ -36,8 +36,6 @@ void StationaryMap::update() {
   *cp = (prediction << 10U) | count;
   b += static_cast<unsigned int>((y != 0U) && b > 0);
 }
-
-void StationaryMap::setScale(const int Scale) { scale = Scale; }
 
 void StationaryMap::mix(Mixer &m) {
   updater->subscribe(this);

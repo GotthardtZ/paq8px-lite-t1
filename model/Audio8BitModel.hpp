@@ -29,9 +29,13 @@ private:
     LMS<float, int8_t> lms[nLMS][2] {{{1280, 640, 3e-5f,   2e-5f}, {1280, 640, 3e-5f,   2e-5f}},
                                      {{640,  64,  8e-5f,   1e-5f}, {640,  64,  8e-5f,   1e-5f}},
                                      {{2450, 8,   1.6e-5f, 1e-6f}, {2450, 8,   1.6e-5f, 1e-6f}}};
-    int prd[nSSM][2][2] {0}, residuals[nSSM][2] {0};
-    int stereo = 0, ch = 0;
-    uint32_t mask = 0, errLog = 0, mxCtx = 0;
+    int prd[nSSM][2][2] {0};
+    int residuals[nSSM][2] {0};
+    int stereo = 0;
+    int ch = 0;
+    uint32_t mask = 0;
+    uint32_t errLog = 0;
+    uint32_t mxCtx = 0;
 
 public:
     static constexpr int MIXERINPUTS = nCtx * nSSM * SmallStationaryContextMap::MIXERINPUTS;

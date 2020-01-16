@@ -135,36 +135,34 @@ public:
     void update();
 
     void mix(Mixer &m) {
-      INJECT_SHARED_bpos
-      if( bpos == 0 ) {
+      if( shared->bitPosition == 0 ) {
         update();
         setContexts();
       }
       cm.mix(m);
 
       const uint8_t characterGroup = stats->Text.characterGroup;
-      INJECT_SHARED_c1
-      INJECT_SHARED_c0
-      m.set(finalize64(hash((Lang.id != Language::Unknown) ? 1 + stemmers[Lang.id - 1]->isVowel(c1) : 0, Info.masks[1] & 0xFF, c0), 11),
-            2048);
-      m.set(finalize64(hash(ilog2(Info.wordLength[0] + 1), c0, (Info.lastDigit < Info.wordLength[0] + Info.wordGap) |
-                                                               ((Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1) |
-                                                               ((Info.lastPunctuation < Info.wordLength[0] + Info.wordGap) << 2) |
-                                                               ((Info.lastUpper < Info.wordLength[0]) << 3)), 11), 2048);
-      m.set(finalize64(hash(Info.masks[1] & 0x3FF, characterGroup, Info.lastUpper < Info.wordLength[0],
+      m.set(finalize64(
+              hash((Lang.id != Language::Unknown) ? 1 + stemmers[Lang.id - 1]->isVowel(shared->c1) : 0, Info.masks[1] & 0xFF, shared->c0),
+              11), 2048);
+      m.set(finalize64(hash(ilog2(Info.wordLength[0] + 1), shared->c0, (Info.lastDigit < Info.wordLength[0] + Info.wordGap) |
+                                                                       ((Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1U) |
+                                                                       ((Info.lastPunctuation < Info.wordLength[0] + Info.wordGap) << 2U) |
+                                                                       ((Info.lastUpper < Info.wordLength[0]) << 3U)), 11), 2048);
+      m.set(finalize64(hash(Info.masks[1] & 0x3FFU, characterGroup, Info.lastUpper < Info.wordLength[0],
                             Info.lastUpper < Info.lastLetter + Info.wordLength[1]), 12), 4096);
-      m.set(finalize64(hash(Info.spaces & 0x1FF, characterGroup,
-                            (Info.lastUpper < Info.wordLength[0]) | ((Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1) |
-                            ((Info.lastPunctuation < Info.lastLetter) << 2) |
-                            ((Info.lastPunctuation < Info.wordLength[0] + Info.wordGap) << 3) |
-                            ((Info.lastPunctuation < Info.lastLetter + Info.wordLength[1] + Info.wordGap) << 4)), 12), 4096);
-      m.set(finalize64(hash(Info.firstLetter * (Info.wordLength[0] < 4), min(6, Info.wordLength[0]), c0), 11), 2048);
+      m.set(finalize64(hash(Info.spaces & 0x1FFU, characterGroup,
+                            (Info.lastUpper < Info.wordLength[0]) | ((Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1U) |
+                            ((Info.lastPunctuation < Info.lastLetter) << 2U) |
+                            ((Info.lastPunctuation < Info.wordLength[0] + Info.wordGap) << 3U) |
+                            ((Info.lastPunctuation < Info.lastLetter + Info.wordLength[1] + Info.wordGap) << 4U)), 12), 4096);
+      m.set(finalize64(hash(Info.firstLetter * (Info.wordLength[0] < 4), min(6, Info.wordLength[0]), shared->c0), 11), 2048);
       m.set(finalize64(hash((*pWord)[0], (*pWord)(0), min(4, Info.wordLength[0]), Info.lastPunctuation < Info.lastLetter), 11), 2048);
       m.set(finalize64(hash(min(4, Info.wordLength[0]), characterGroup, Info.lastUpper < Info.wordLength[0],
-                            (Info.nestHash > 0) ? Info.nestHash & 0xFF : 0x100 | (Info.firstLetter *
-                                                                                  (Info.wordLength[0] > 0 && Info.wordLength[0] < 4))), 12),
-            4096);
-      m.set(finalize64(hash(characterGroup, Info.masks[4] & 0x1F, (Info.masks[4] >> 5) & 0x1F), 13), 8192);
+                            (Info.nestHash > 0) ? Info.nestHash & 0xFFU : 0x100U | (Info.firstLetter *
+                                                                                    (Info.wordLength[0] > 0 && Info.wordLength[0] < 4))),
+                       12), 4096);
+      m.set(finalize64(hash(characterGroup, Info.masks[4] & 0x1FU, (Info.masks[4] >> 5) & 0x1FU), 13), 8192);
       m.set(finalize64(hash(characterGroup, uint8_t(pWord->embedding), Lang.id, State), 11), 2048);
     }
 };

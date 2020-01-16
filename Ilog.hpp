@@ -47,7 +47,6 @@ int llog(uint32_t x);
 uint32_t bitCount(uint32_t v);
 int VLICost(uint64_t n);
 
-
 float rsqrt(float x);
 
 #endif //PAQ8PX_ILOG_HPP

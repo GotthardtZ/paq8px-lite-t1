@@ -1,9 +1,9 @@
 #include "Image4BitModel.hpp"
+#include "../Stretch.hpp"
 
 
-Image4BitModel::Image4BitModel(const uint64_t size) : t(size), sm {S, 256, 1023, StateMap::BitHistory}, //StateMap: s, n, lim, init
-        map {1, 16, 1023, StateMap::Generic} //StateMap: s, n, lim, init
-{}
+Image4BitModel::Image4BitModel(const uint64_t size) : t(size), sm {S, 256, 1023, StateMap::BitHistory},
+        map {1, 16, 1023, StateMap::Generic} {}
 
 void Image4BitModel::setParam(int info0) {
   w = info0;
@@ -18,8 +18,7 @@ void Image4BitModel::mix(Mixer &m) {
   for( int i = 0; i < S; i++ )
     StateTable::update(cp[i], y, rnd); //update hashtable item priorities using predicted counts
 
-  INJECT_SHARED_bpos
-  if( bpos == 0 || bpos == 4 ) {
+  if( shared->bitPosition == 0 || shared->bitPosition == 4 ) {
     WW = W;
     NWW = NW;
     NW = N;
@@ -30,16 +29,14 @@ void Image4BitModel::mix(Mixer &m) {
     NN = NNE;
     NNE = NNEE;
     INJECT_SHARED_buf
-    if( bpos == 0 ) {
-      INJECT_SHARED_c4
-      W = c4 & 0xF;
-      NEE = buf(w - 1) >> 4;
-      NNEE = buf(w * 2 - 1) >> 4;
+    if( shared->bitPosition == 0 ) {
+      W = shared->c4 & 0xFU;
+      NEE = buf(w - 1) >> 4U;
+      NNEE = buf(w * 2 - 1) >> 4U;
     } else {
-      INJECT_SHARED_c0
-      W = c0 & 0xF;
-      NEE = buf(w - 1) & 0xF;
-      NNEE = buf(w * 2 - 1) & 0xF;
+      W = shared->c0 & 0xFU;
+      NEE = buf(w - 1) & 0xFU;
+      NNEE = buf(w * 2 - 1) & 0xFU;
     }
     run = (W != WW || col == 0) ? (prevColor = WW, 0) : min(0xFFF, run + 1);
     px = 1; //partial pixel (4 bits) with a leading "1"
@@ -80,7 +77,7 @@ void Image4BitModel::mix(Mixer &m) {
   } else {
     INJECT_SHARED_y
     px += px + y;
-    int j = (y + 1) << (bpos & 3);
+    int j = (y + 1) << (shared->bitPosition & 3U);
     for( int i = 0; i < S; i++ )
       cp[i] += j;
   }
@@ -92,17 +89,17 @@ void Image4BitModel::mix(Mixer &m) {
     const int n0 = -!StateTable::next(s, 2);
     const int n1 = -!StateTable::next(s, 3);
     const int p1 = sm.p2(i, s);
-    const int st = stretch(p1) >> 1;
+    const int st = stretch(p1) >> 1U;
     m.add(st);
-    m.add((p1 - 2048) >> 2);
+    m.add((p1 - 2048) >> 2U);
     m.add(st * abs(n1 - n0));
   }
-  m.add(stretch(map.p1(px)) >> 1);
+  m.add(stretch(map.p1(px)) >> 1U);
 
-  m.set((W << 4) | px, 256);
-  m.set(min(31, col / max(1, w / 16)) | (N << 5), 512);
-  m.set((bpos & 3) | (W << 2) | (min(7, ilog2(run + 1)) << 6), 512);
-  m.set(W | (NE << 4) | ((bpos & 3U) << 8), 1024);
+  m.set((W << 4U) | px, 256);
+  m.set(min(31, col / max(1, w / 16)) | (N << 5U), 512);
+  m.set((shared->bitPosition & 3U) | (W << 2U) | (min(7, ilog2(run + 1)) << 6U), 512);
+  m.set(W | (NE << 4U) | ((shared->bitPosition & 3U) << 8U), 1024);
   m.set(px, 16);
   m.set(0, 1);
 }

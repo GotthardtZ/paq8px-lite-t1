@@ -28,9 +28,14 @@ private:
     LMS<float, short> lms[nLMS][2] {{{1280, 640, 5e-5f, 5e-5f}, {1280, 640, 5e-5f, 5e-5f}},
                                     {{640,  64,  7e-5f, 1e-5f}, {640,  64,  7e-5f, 1e-5f}},
                                     {{2450, 8,   2e-5f, 2e-6f}, {2450, 8,   2e-5f, 2e-6f}}};
-    int prd[nSSM][2][2] {0}, residuals[nSSM][2] {0};
-    int stereo = 0, ch = 0, lsb = 0;
-    uint32_t mask = 0, errLog = 0, mxCtx = 0;
+    int prd[nSSM][2][2] {0};
+    int residuals[nSSM][2] {0};
+    int stereo = 0;
+    int ch = 0;
+    int lsb = 0;
+    uint32_t mask = 0;
+    uint32_t errLog = 0;
+    uint32_t mxCtx = 0;
     short sample = 0;
 
 public:

@@ -21,7 +21,7 @@
 #include "TextParserStateInfo.hpp"
 
 /////////////////////////// Filters /////////////////////////////////
-//TODO: Update this documentation
+//@todo: Update this documentation
 //
 // Before compression, data is encoded in blocks with the following format:
 //
@@ -1066,7 +1066,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
     // This is different from the above detection routines: it's a negative detection (it detects a failure)
     uint32_t t = utf8StateTable[c];
     textParser->UTF8State = utf8StateTable[256 + textParser->UTF8State + t];
-    if( textParser->UTF8State == UTF8_ACCEPT ) { // proper end of a valid utf8 sequence
+    if( textParser->UTF8State == UTF_8_ACCEPT ) { // proper end of a valid utf8 sequence
       if( c == NEW_LINE ) {
         if(((buf0 >> 8) & 0xff) != CARRIAGE_RETURN )
           textParser->setEolType(2); // mixed or LF-only
@@ -1076,9 +1076,9 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
       textParser->invalidCount = textParser->invalidCount * (TEXT_ADAPT_RATE - 1) / TEXT_ADAPT_RATE;
       if( textParser->invalidCount == 0 )
         textParser->setEnd(i); // a possible end of block position
-    } else if( textParser->UTF8State == UTF8_REJECT ) { // illegal state
+    } else if( textParser->UTF8State == UTF_8_REJECT ) { // illegal state
       textParser->invalidCount = textParser->invalidCount * (TEXT_ADAPT_RATE - 1) / TEXT_ADAPT_RATE + TEXT_ADAPT_RATE;
-      textParser->UTF8State = UTF8_ACCEPT; // reset state
+      textParser->UTF8State = UTF_8_ACCEPT; // reset state
       if( textParser->validLength() < TEXT_MIN_SIZE ) {
         textParser->reset(i + 1); // it's not text (or not long enough) - start over
       } else if( textParser->invalidCount >= TEXT_MAX_MISSES * TEXT_ADAPT_RATE ) {
@@ -1135,8 +1135,7 @@ decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File 
     auto e = new EndiannessFilter();
     e->setEncoder(en);
     return e->decode(tmp, out, mode, len, diffFound);
-  }
-  else if( type == EXE )
+  } else if( type == EXE )
     return decodeExe(en, len, out, mode, diffFound);
   else if( type == TEXT_EOL )
     return decodeEol(en, len, out, mode, diffFound);
@@ -1172,8 +1171,7 @@ static auto encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int in
   else if( type == AUDIO_LE ) {
     auto e = new EndiannessFilter();
     e->encode(in, tmp, len, info, hdrsize);
-  }
-  else if( type == EXE )
+  } else if( type == EXE )
     encodeExe(in, tmp, len, info);
   else if( type == TEXT_EOL )
     encodeEol(in, tmp, len);

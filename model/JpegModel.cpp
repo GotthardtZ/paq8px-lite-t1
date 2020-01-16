@@ -54,30 +54,28 @@ int JpegModel::mix(Mixer &m) {
                                                        0xd7, 0xd8, 0xd9, 0xda, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea, 0xf2,
                                                        0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa};
 
-  INJECT_SHARED_pos
   if( idx < 0 ) {
     memset(&images[0], 0, sizeof(images));
     idx = 0;
-    lastPos = pos;
+    lastPos = shared->buf.getpos();
   }
 
-  INJECT_SHARED_bpos
   INJECT_SHARED_buf
 
   // Be sure to quit on a byte boundary
-  if( bpos == 0 )
+  if( shared->bitPosition == 0 )
     images[idx].nextJpeg = images[idx].jpeg > 1;
-  if( bpos != 0 && !images[idx].jpeg )
+  if( shared->bitPosition != 0 && !images[idx].jpeg )
     return images[idx].nextJpeg;
-  if( bpos == 0 && images[idx].app > 0 ) {
+  if( shared->bitPosition == 0 && images[idx].app > 0 ) {
     --images[idx].app;
     if( idx < maxEmbeddedLevel && buf(4) == FF && buf(3) == SOI && buf(2) == FF &&
-        ((buf(1) & 0xFE) == 0xC0 || buf(1) == 0xC4 || (buf(1) >= 0xDB && buf(1) <= 0xFE)))
+        ((buf(1) & 0xFEU) == 0xC0 || buf(1) == 0xC4 || (buf(1) >= 0xDB && buf(1) <= 0xFE)))
       memset(&images[++idx], 0, sizeof(JPEGImage));
   }
   if( images[idx].app > 0 )
     return images[idx].nextJpeg;
-  if( bpos == 0 ) {
+  if( shared->bitPosition == 0 ) {
     // Parse.  Baseline DCT-Huffman JPEG syntax is:
     // SOI APPx... misc... SOF0 DHT... SOS data EOI
     // SOI (= FF D8) start of image.
@@ -115,9 +113,9 @@ int JpegModel::mix(Mixer &m) {
 
     // Detect JPEG (SOI followed by a valid marker)
     if( !images[idx].jpeg && buf(4) == FF && buf(3) == SOI && buf(2) == FF &&
-        ((buf(1) & 0xFE) == 0xC0 || buf(1) == 0xC4 || (buf(1) >= 0xDB && buf(1) <= 0xFE))) {
+        ((buf(1) & 0xFEU) == 0xC0 || buf(1) == 0xC4 || (buf(1) >= 0xDB && buf(1) <= 0xFE))) {
       images[idx].jpeg = 1;
-      images[idx].offset = pos - 4;
+      images[idx].offset = shared->buf.getpos() - 4;
       images[idx].sos = images[idx].sof = images[idx].htSize = images[idx].data = 0, images[idx].app = (buf(1) >> 4 == 0xE) * 2;
       mcusize = huffcode = huffBits = huffSize = mcuPos = cPos = 0, rs = -1;
       memset(&huf[0], 0, sizeof(huf));
@@ -127,11 +125,12 @@ int JpegModel::mix(Mixer &m) {
 
     // Detect end of JPEG when data contains a marker other than RSTx
     // or byte stuff (00), or if we jumped in position since the last byte seen
-    if( images[idx].jpeg && images[idx].data && ((buf(2) == FF && buf(1) && (buf(1) & 0xf8) != RST0) || (pos - lastPos > 1))) {
-      JASSERT((buf(1) == EOI) || (pos - lastPos > 1))
+    if( images[idx].jpeg && images[idx].data &&
+        ((buf(2) == FF && buf(1) && (buf(1) & 0xf8U) != RST0) || (shared->buf.getpos() - lastPos > 1))) {
+      JASSERT((buf(1) == EOI) || (shared->buf.getpos() - lastPos > 1))
       FINISH(true)
     }
-    lastPos = pos;
+    lastPos = shared->buf.getpos();
     if( !images[idx].jpeg )
       return images[idx].nextJpeg;
 
@@ -140,25 +139,25 @@ int JpegModel::mix(Mixer &m) {
         (((buf(3) > 0xC1) && (buf(3) <= 0xCF) && (buf(3) != DHT)) || ((buf(3) >= 0xDC) && (buf(3) <= 0xFE)))) {
       images[idx].app = buf(2) * 256 + buf(1) + 2;
       if( idx > 0 )
-        JASSERT(pos + images[idx].app < images[idx].offset + images[idx - 1].app)
+        JASSERT(shared->buf.getpos() + images[idx].app < images[idx].offset + images[idx - 1].app)
     }
 
     // Save pointers to sof, ht, sos, data,
     if( buf(5) == FF && buf(4) == SOS ) {
       int len = buf(3) * 256 + buf(2);
       if( len == 6 + 2 * buf(1) && buf(1) && buf(1) <= 4 ) // buf(1) is Ns
-        images[idx].sos = pos - 5, images[idx].data = images[idx].sos + len + 2, images[idx].jpeg = 2;
+        images[idx].sos = shared->buf.getpos() - 5, images[idx].data = images[idx].sos + len + 2, images[idx].jpeg = 2;
     }
     if( buf(4) == FF && buf(3) == DHT && images[idx].htSize < 8 )
-      images[idx].ht[images[idx].htSize++] = pos - 4;
+      images[idx].ht[images[idx].htSize++] = shared->buf.getpos() - 4;
     if( buf(4) == FF && (buf(3) & 0xFE) == SOF0 )
-      images[idx].sof = pos - 4;
+      images[idx].sof = shared->buf.getpos() - 4;
 
     // Parse quantization tables
     if( buf(4) == FF && buf(3) == DQT )
-      dqtEnd = pos + buf(2) * 256 + buf(1) - 1, dqt_state = 0;
+      dqtEnd = shared->buf.getpos() + buf(2) * 256 + buf(1) - 1, dqt_state = 0;
     else if( dqt_state >= 0 ) {
-      if( pos >= dqtEnd )
+      if( shared->buf.getpos() >= dqtEnd )
         dqt_state = -1;
       else {
         if( dqt_state % 65 == 0 )
@@ -173,7 +172,7 @@ int JpegModel::mix(Mixer &m) {
     }
 
     // Restart
-    if( buf(2) == FF && (buf(1) & 0xf8) == RST0 ) {
+    if( buf(2) == FF && (buf(1) & 0xf8U) == RST0 ) {
       huffcode = huffBits = huffSize = mcuPos = 0, rs = -1;
       memset(&pred[0], 0, pred.size() * sizeof(int));
       resetLen = column + row * width - resetPos;
@@ -184,13 +183,13 @@ int JpegModel::mix(Mixer &m) {
   {
     // Build Huffman tables
     // huf[Tc][Th][m] = min, max+1 codes of length m, pointer to byte values
-    if( pos == images[idx].data && bpos == 1 ) {
+    if( shared->buf.getpos() == images[idx].data && shared->bitPosition == 1 ) {
       for( uint32_t i = 0; i < images[idx].htSize; ++i ) {
         uint32_t p = images[idx].ht[i] + 4; // pointer to current table after length field
         uint32_t end = p + buf[p - 2] * 256 + buf[p - 1] - 2; // end of Huffman table
         uint32_t count = 0; // sanity check
-        while( p < end && end < pos && end < p + 2100 && ++count < 10 ) {
-          int tc = buf[p] >> 4, th = buf[p] & 15;
+        while( p < end && end < shared->buf.getpos() && end < p + 2100 && ++count < 10 ) {
+          int tc = buf[p] >> 4U, th = buf[p] & 15U;
           if( tc >= 2 || th >= 4 )
             break;
           JASSERT(tc >= 0 && tc < 2 && th >= 0 && th < 4)
@@ -287,9 +286,9 @@ int JpegModel::mix(Mixer &m) {
           if( buf[images[idx].sos + 2 * i + 5] == buf[images[idx].sof + 3 * j + 10] ) { // Cs == c ?
             int hv = buf[images[idx].sof + 3 * j + 11]; // packed dimensions H x V
             samplingFactors[j] = hv;
-            if( hv >> 4 > hmax )
-              hmax = hv >> 4;
-            hv = (hv & 15) * (hv >> 4); // number of blocks in component c
+            if( hv >> 4U > hmax )
+              hmax = hv >> 4U;
+            hv = (hv & 15U) * (hv >> 4U); // number of blocks in component c
             JASSERT(hv >= 1 && hv + mcusize <= 10)
             while( hv ) {
               JASSERT(mcusize < 10)
@@ -313,7 +312,7 @@ int JpegModel::mix(Mixer &m) {
         for( int i = 1; i < mcusize; ++i )
           if( color[(j + i) % mcusize] == color[j] )
             ls[j] = i;
-        ls[j] = (mcusize - ls[j]) << 6;
+        ls[j] = (mcusize - ls[j]) << 6U;
       }
       for( j = 0; j < 64; ++j )
         zPos[zzu[j] + 8 * zzv[j]] = j;
@@ -325,9 +324,9 @@ int JpegModel::mix(Mixer &m) {
 
       // we can have more blocks than components then we have subsampling
       int x = 0, y = 0;
-      for( j = 0; j < (mcusize >> 6); j++ ) {
+      for( j = 0; j < (mcusize >> 6U); j++ ) {
         int i = color[j];
-        int w = samplingFactors[i] >> 4, h = samplingFactors[i] & 0xf;
+        int w = samplingFactors[i] >> 4U, h = samplingFactors[i] & 0xfU;
         blockW[j] = x == 0 ? mcusize - 64 * (w - 1) : 64;
         blockN[j] = y == 0 ? mcusize * width - 64 * w * (h - 1) : w * 64;
         x++;
@@ -346,17 +345,17 @@ int JpegModel::mix(Mixer &m) {
 
   // Decode Huffman
   {
-    if( mcusize && buf(1 + (bpos == 0)) != FF ) { // skip stuffed byte
+    if( mcusize && buf(1 + (shared->bitPosition == 0)) != FF ) { // skip stuffed byte
       JASSERT(huffBits <= 32)
       INJECT_SHARED_y
       huffcode += huffcode + y;
       ++huffBits;
       if( rs < 0 ) {
         JASSERT(huffBits >= 1 && huffBits <= 16)
-        const int ac = (mcuPos & 63) > 0;
-        JASSERT(mcuPos >= 0 && (mcuPos >> 6) < 10)
+        const int ac = (mcuPos & 63U) > 0;
+        JASSERT(mcuPos >= 0 && (mcuPos >> 6U) < 10)
         JASSERT(ac == 0 || ac == 1)
-        const int sel = hufSel[ac][mcuPos >> 6];
+        const int sel = hufSel[ac][mcuPos >> 6U];
         JASSERT(sel >= 0 && sel < 4)
         const int i = huffBits - 1;
         JASSERT(i >= 0 && i < 16)
@@ -374,13 +373,13 @@ int JpegModel::mix(Mixer &m) {
         if( huffSize + (rs & 15) == huffBits ) { // done decoding
           rs1 = rs;
           int ex = 0; // decoded extra bits
-          if( mcuPos & 63 ) { // AC
+          if( mcuPos & 63U ) { // AC
             if( rs == 0 ) { // EOB
-              mcuPos = (mcuPos + 63) & -64;
+              mcuPos = (mcuPos + 63) & -64U;
               JASSERT(mcuPos >= 0 && mcuPos <= mcusize && mcuPos <= 640)
-              while( cPos & 63 ) {
+              while( cPos & 63U ) {
                 cBuf2.set(cPos, 0);
-                coefficientBuffer.set(cPos, (!rs) ? 0 : (63 - (cPos & 63)) << 4);
+                coefficientBuffer.set(cPos, (!rs) ? 0 : (63 - (cPos & 63U)) << 4U);
                 cPos++;
                 rs++;
               }
@@ -414,15 +413,15 @@ int JpegModel::mix(Mixer &m) {
             const int comp = color[mcuPos >> 6U];
             JASSERT(comp >= 0 && comp < 4)
             dc = pred[comp] += ex;
-            JASSERT((cPos & 63) == 0)
+            JASSERT((cPos & 63U) == 0)
             cBuf2.set(cPos, dc);
-            coefficientBuffer.set(cPos, (dc + 1023) >> 3);
+            coefficientBuffer.set(cPos, (dc + 1023) >> 3U);
             cPos++;
-            if((mcuPos >> 6) == 0 ) {
+            if((mcuPos >> 6U) == 0 ) {
               sSum1 = 0;
               sSum2 = sSum3;
             } else {
-              if( color[(mcuPos >> 6) - 1] == color[0] )
+              if( color[(mcuPos >> 6U) - 1] == color[0] )
                 sSum1 += (sSum3 = sSum);
               sSum2 = sSum1;
             }
@@ -438,8 +437,8 @@ int JpegModel::mix(Mixer &m) {
 
           // UPDATE_ADV_PRED !!!!
           {
-            const int aComp = mcuPos >> 6, q = 64 * images[idx].qMap[aComp];
-            const int zz = mcuPos & 63, cposDc = cPos - zz;
+            const int aComp = mcuPos >> 6U, q = 64 * images[idx].qMap[aComp];
+            const int zz = mcuPos & 63U, cposDc = cPos - zz;
             const bool noReset = resetPos != column + row * width;
             if( zz == 0 ) {
               for( int i = 0; i < 8; ++i )
@@ -492,11 +491,11 @@ int JpegModel::mix(Mixer &m) {
             advPred[3] = (ex < 0 ? -1 : +1) * ilog->log(abs(ex) + 1);
 
             for( int i = 0; i < 4; ++i ) {
-              const int a = (i & 1 ? zzv[zz] : zzu[zz]), b = (i & 2 ? 2 : 1);
+              const int a = (i & 1 ? zzv[zz] : zzu[zz]), b = (i & 2U ? 2 : 1);
               if( a < b )
                 ex = 65535;
               else {
-                const int zz2 = zPos[zzu[zz] + 8 * zzv[zz] - (i & 1 ? 8 : 1) * b];
+                const int zz2 = zPos[zzu[zz] + 8 * zzv[zz] - (i & 1U ? 8 : 1) * b];
                 ex = (images[idx].qTable[q + zz2] + 1) * cBuf2[cposDc + zz2] / (images[idx].qTable[q + zz] + 1);
                 ex = (ex < 0 ? -1 : +1) * (ilog->log(abs(ex) + 1) + (ex != 0 ? 17 : 0));
               }
@@ -525,8 +524,8 @@ int JpegModel::mix(Mixer &m) {
               if( color[i] == color[aComp] - 1 ) {
                 prev1 += ex;
                 cnt1++;
-                r += coefficientBuffer[cPos - (aComp - i) * 64] >> 4;
-                s += coefficientBuffer[cPos - (aComp - i) * 64] & 0xF;
+                r += coefficientBuffer[cPos - (aComp - i) * 64] >> 4U;
+                s += coefficientBuffer[cPos - (aComp - i) * 64] & 0xFU;
               }
               if( color[aComp] > 1 && color[i] == color[0] ) {
                 prev2 += ex;
@@ -553,14 +552,14 @@ int JpegModel::mix(Mixer &m) {
   // Estimate next bit probability
   if( !images[idx].jpeg || !images[idx].data )
     return images[idx].nextJpeg;
-  if( buf(1 + (bpos == 0)) == FF ) {
+  if( buf(1 + (shared->bitPosition == 0)) == FF ) {
     m.add(128); //network bias
     m.set(0, 1 + 8);
     m.set(0, 1 + 1024);
     m.set(buf(1), 1024);
     return true;
   }
-  if( resetLen > 0 && resetLen == column + row * width - resetPos && mcuPos == 0 && (int) huffcode == (1 << huffBits) - 1 ) {
+  if( resetLen > 0 && resetLen == column + row * width - resetPos && mcuPos == 0 && (int) huffcode == (1U << huffBits) - 1 ) {
     m.add(2047); //network bias
     m.set(0, 1 + 8);
     m.set(0, 1 + 1024);
@@ -577,9 +576,9 @@ int JpegModel::mix(Mixer &m) {
 
   // update context
   const int comp = color[mcuPos >> 6U];
-  const int coef = (mcuPos & 63) | comp << 6U;
-  const int hc = (huffcode * 4 + ((mcuPos & 63U) == 0) * 2 + (comp == 0)) | 1 << (huffBits + 2);
-  const bool firstCol = column == 0 && blockW[mcuPos >> 6] > mcuPos;
+  const int coef = (mcuPos & 63U) | comp << 6U;
+  const int hc = (huffcode * 4 + ((mcuPos & 63U) == 0) * 2 + (comp == 0)) | 1U << (huffBits + 2);
+  const bool firstCol = column == 0 && blockW[mcuPos >> 6U] > mcuPos;
   if( ++hbCount > 2 || huffBits == 0 )
     hbCount = 0;
   JASSERT(coef >= 0 && coef < 256)
@@ -587,29 +586,29 @@ int JpegModel::mix(Mixer &m) {
   if( hbCount == 0 ) {
     uint64_t n = hc * 32;
     int i = 0;
-    cxt[i++] = hash(++n, coef, advPred[2] / 12 + (runPred[2] << 8), sSum2 >> 6, prevCoef / 72);
-    cxt[i++] = hash(++n, coef, advPred[0] / 12 + (runPred[0] << 8), sSum2 >> 6, prevCoef / 72);
-    cxt[i++] = hash(++n, coef, advPred[1] / 11 + (runPred[1] << 8), sSum2 >> 6);
+    cxt[i++] = hash(++n, coef, advPred[2] / 12 + (runPred[2] << 8U), sSum2 >> 6U, prevCoef / 72);
+    cxt[i++] = hash(++n, coef, advPred[0] / 12 + (runPred[0] << 8U), sSum2 >> 6U, prevCoef / 72);
+    cxt[i++] = hash(++n, coef, advPred[1] / 11 + (runPred[1] << 8U), sSum2 >> 6U);
     cxt[i++] = hash(++n, rs1, advPred[2] / 7, runPred[5] / 2, prevCoef / 10);
     cxt[i++] = hash(++n, rs1, advPred[0] / 7, runPred[3] / 2, prevCoef / 10);
     cxt[i++] = hash(++n, rs1, advPred[1] / 11, runPred[4]);
     cxt[i++] = hash(++n, advPred[2] / 14, runPred[2], advPred[0] / 14, runPred[0]);
-    cxt[i++] = hash(++n, coefficientBuffer[cPos - blockN[mcuPos >> 6]] >> 4, advPred[3] / 17, runPred[1], runPred[5]);
-    cxt[i++] = hash(++n, coefficientBuffer[cPos - blockW[mcuPos >> 6]] >> 4, advPred[3] / 17, runPred[1], runPred[3]);
+    cxt[i++] = hash(++n, coefficientBuffer[cPos - blockN[mcuPos >> 6U]] >> 4U, advPred[3] / 17, runPred[1], runPred[5]);
+    cxt[i++] = hash(++n, coefficientBuffer[cPos - blockW[mcuPos >> 6U]] >> 4U, advPred[3] / 17, runPred[1], runPred[3]);
     cxt[i++] = hash(++n, lcp[0] / 22, lcp[1] / 22, advPred[1] / 7, runPred[1]);
-    cxt[i++] = hash(++n, lcp[0] / 22, lcp[1] / 22, mcuPos & 63, lcp[4] / 30);
-    cxt[i++] = hash(++n, zu / 2, lcp[0] / 13, lcp[2] / 30, prevCoef / 40 + ((prevCoef2 / 28) << 20));
-    cxt[i++] = hash(++n, zv / 2, lcp[1] / 13, lcp[3] / 30, prevCoef / 40 + ((prevCoef2 / 28) << 20));
+    cxt[i++] = hash(++n, lcp[0] / 22, lcp[1] / 22, mcuPos & 63U, lcp[4] / 30);
+    cxt[i++] = hash(++n, zu / 2, lcp[0] / 13, lcp[2] / 30, prevCoef / 40 + ((prevCoef2 / 28) << 20U));
+    cxt[i++] = hash(++n, zv / 2, lcp[1] / 13, lcp[3] / 30, prevCoef / 40 + ((prevCoef2 / 28) << 20U));
     cxt[i++] = hash(++n, rs1, prevCoef / 42, prevCoef2 / 34, lcp[0] / 60, lcp[2] / 14, lcp[1] / 60, lcp[3] / 14);
-    cxt[i++] = hash(++n, mcuPos & 63, column >> 1);
-    cxt[i++] = hash(++n, column >> 3, min(5 + 2 * (!comp), zu + zv), lcp[0] / 10, lcp[2] / 40, lcp[1] / 10, lcp[3] / 40);
-    cxt[i++] = hash(++n, sSum >> 3, mcuPos & 63);
-    cxt[i++] = hash(++n, rs1, mcuPos & 63, runPred[1]);
-    cxt[i++] = hash(++n, coef, sSum2 >> 5, advPred[3] / 30, (comp) ? hash(prevCoef / 22, prevCoef2 / 50) : sSum / ((mcuPos & 0x3F) + 1));
-    cxt[i++] = hash(++n, lcp[0] / 40, lcp[1] / 40, advPred[1] / 28, (comp) ? prevCoef / 40 + ((prevCoef2 / 40) << 20) : lcp[4] / 22,
+    cxt[i++] = hash(++n, mcuPos & 63U, column >> 1U);
+    cxt[i++] = hash(++n, column >> 3U, min(5 + 2 * (!comp), zu + zv), lcp[0] / 10, lcp[2] / 40, lcp[1] / 10, lcp[3] / 40);
+    cxt[i++] = hash(++n, sSum >> 3U, mcuPos & 63U);
+    cxt[i++] = hash(++n, rs1, mcuPos & 63U, runPred[1]);
+    cxt[i++] = hash(++n, coef, sSum2 >> 5U, advPred[3] / 30, (comp) ? hash(prevCoef / 22, prevCoef2 / 50) : sSum / ((mcuPos & 0x3F) + 1));
+    cxt[i++] = hash(++n, lcp[0] / 40, lcp[1] / 40, advPred[1] / 28, (comp) ? prevCoef / 40 + ((prevCoef2 / 40) << 20U) : lcp[4] / 22,
                     min(7, zu + zv), sSum / (2 * (zu + zv) + 1));
-    cxt[i++] = hash(++n, zv, coefficientBuffer[cPos - blockN[mcuPos >> 6]], advPred[2] / 28, runPred[2]);
-    cxt[i++] = hash(++n, zu, coefficientBuffer[cPos - blockW[mcuPos >> 6]], advPred[0] / 28, runPred[0]);
+    cxt[i++] = hash(++n, zv, coefficientBuffer[cPos - blockN[mcuPos >> 6U]], advPred[2] / 28, runPred[2]);
+    cxt[i++] = hash(++n, zu, coefficientBuffer[cPos - blockW[mcuPos >> 6U]], advPred[0] / 28, runPred[0]);
     cxt[i++] = hash(++n, advPred[2] / 7, runPred[2]);
     cxt[i++] = hash(n, advPred[0] / 7, runPred[0]);
     cxt[i++] = hash(n, advPred[1] / 7, runPred[1]);
@@ -617,7 +616,7 @@ int JpegModel::mix(Mixer &m) {
     cxt[i++] = hash(++n, zu, lcp[0] / 14, advPred[0] / 16, runPred[3]);
     cxt[i++] = hash(++n, lcp[0] / 14, lcp[1] / 14, advPred[3] / 16);
     cxt[i++] = hash(++n, coef, prevCoef / 10, prevCoef2 / 20);
-    cxt[i++] = hash(++n, coef, sSum >> 2, prevCoefRs);
+    cxt[i++] = hash(++n, coef, sSum >> 2U, prevCoefRs);
     cxt[i++] = hash(++n, coef, advPred[1] / 17, lcp[(zu < zv)] / 24, lcp[2] / 20, lcp[3] / 24);
     cxt[i++] = hash(++n, coef, advPred[3] / 11, lcp[(zu < zv)] / 50, lcp[2 + 3 * (zu * zv > 1)] / 50, lcp[3 + 3 * (zu * zv > 1)] / 50);
     assert(i == N);
@@ -668,23 +667,23 @@ int JpegModel::mix(Mixer &m) {
     }
   }
   if( !hbCount )
-    MJPEGMap.set(hash(mcuPos, column, row, hc >> 2));
+    MJPEGMap.set(hash(mcuPos, column, row, hc >> 2U));
   MJPEGMap.mix(*m1);
   m1->set(firstCol, 2);
   m1->set(coef | (min(3, huffBits) << 8), 1024);
-  m1->set(((hc & 0x1FE) << 1) | min(3, ilog2(zu + zv)), 1024);
+  m1->set(((hc & 0x1FEU) << 1) | min(3, ilog2(zu + zv)), 1024);
   int pr = m1->p();
-  m.add(stretch(pr) >> 1);
-  m.add((pr >> 2) - 511);
-  pr = apm1.p(pr, (hc & 511U) | (((advPred[1] / 16) & 63) << 9), 1023);
-  m.add(stretch(pr) >> 1);
-  m.add((pr >> 2) - 511);
-  pr = apm2.p(pr, (hc & 511) | (coef << 9), 1023);
-  m.add(stretch(pr) >> 1);
-  m.add((pr >> 2) - 511);
+  m.add(stretch(pr) >> 1U);
+  m.add((pr >> 2U) - 511);
+  pr = apm1.p(pr, (hc & 511U) | (((advPred[1] / 16) & 63U) << 9U), 1023);
+  m.add(stretch(pr) >> 1U);
+  m.add((pr >> 2U) - 511);
+  pr = apm2.p(pr, (hc & 511U) | (coef << 9U), 1023);
+  m.add(stretch(pr) >> 1U);
+  m.add((pr >> 2U) - 511);
 
-  m.set(1 + ((zu + zv < 5) | ((huffBits > 8) << 1) | (firstCol << 2)), 1 + 8);
-  m.set(1 + ((hc & 0xFF) | (min(3, (zu + zv) / 3)) << 8), 1 + 1024);
+  m.set(1 + ((zu + zv < 5) | ((huffBits > 8) << 1U) | (firstCol << 2U)), 1 + 8);
+  m.set(1 + ((hc & 0xFFU) | (min(3, (zu + zv) / 3)) << 8U), 1 + 1024);
   m.set(coef | (min(3, huffBits / 2) << 8), 1024);
 
   return true;

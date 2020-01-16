@@ -9,6 +9,7 @@
 #include "Stretch.hpp"
 #include "Hash.hpp"
 #include "Mixer.hpp"
+#include "Bucket.hpp"
 
 /////////////////////////// ContextMap /////////////////////////
 // TODO: update this documentation
@@ -85,36 +86,7 @@ private:
     Shared *shared = Shared::getInstance();
     Random rnd;
     const int c; // max number of contexts
-    // TODO: Split this into its own class
-    class E { // hash element, 64 bytes
-        uint16_t chk[7]; // byte context checksums
-        uint8_t last; // last 2 accesses (0-6) in low, high nibble
-    public:
-        uint8_t bh[7][7]; // byte context, 3-bit context -> bit history state
-        // bh[][0] = 1st bit, bh[][1,2] = 2nd bit, bh[][3..6] = 3rd bit
-        // bh[][0] is also a replacement priority, 0 = empty
-        inline uint8_t *get(const uint16_t checksum) { // find element (0-6) matching checksum.
-          // If not found, insert or replace lowest priority (not last).
-          // find or create hash element matching checksum ch
-          if( chk[last & 15U] == checksum )
-            return &bh[last & 15U][0];
-          int b = 0xffff, bi = 0;
-          for( int i = 0; i < 7; ++i ) {
-            if( chk[i] == checksum ) {
-              last = last << 4U | i;
-              return &bh[i][0];
-            }
-            int pri = bh[i][0];
-            if( pri < b && (last & 15U) != i && last >> 4U != i ) {
-              b = pri;
-              bi = i;
-            }
-          }
-          return last = 0xf0U | bi, chk[bi] = checksum, (uint8_t *) memset(&bh[bi][0], 0, 7);
-        }
-    };
-
-    Array<E, 64> t; // bit histories for bits 0-1, 2-4, 5-7
+    Array<Bucket, 64> t; // bit histories for bits 0-1, 2-4, 5-7
     // For 0-1, also contains a run count in bh[][4] and value in bh[][5]
     // and pending update count in bh[7]
     Array<uint8_t *> cp; // c pointers to current bit history

@@ -9,19 +9,17 @@ void WordModel::reset() {
 }
 
 void WordModel::mix(Mixer &m) {
-  INJECT_SHARED_bpos
-  if( bpos == 0 ) {
+  if( shared->bitPosition == 0 ) {
     //extract text from pdf
-    INJECT_SHARED_c4
-    const uint8_t c1 = c4;
-    if( c4 == 0x0a42540a /* "\nBT\n" */)
+    const uint8_t c1 = shared->c4;
+    if( shared->c4 == 0x0a42540aU /* "\nBT\n" */)
       pdfTextParserState = 1; // Begin Text
-    else if( c4 == 0x0a45540a /* "\nET\n" */) {
+    else if( shared->c4 == 0x0a45540aU /* "\nET\n" */) {
       pdfTextParserState = 0;
     } // end Text
     bool doPdfProcess = true;
     if( pdfTextParserState != 0 ) {
-      const uint8_t pC = c4 >> 8U;
+      const uint8_t pC = shared->c4 >> 8U;
       if( pC != '\\' ) {
         if( c1 == '[' ) {
           pdfTextParserState |= 2U;
@@ -47,7 +45,7 @@ void WordModel::mix(Mixer &m) {
         infoPdf.processChar(isExtendedChar);
       }
       infoPdf.predict(pdfTextParserState);
-      WordModel::Info::lineModelSkip(cm);
+      Info::lineModelSkip(cm);
     } else {
       const bool isTextBlock = stats->blockType == TEXT || stats->blockType == TEXT_EOL;
       const bool isExtendedChar = isTextBlock && c1 >= 128;

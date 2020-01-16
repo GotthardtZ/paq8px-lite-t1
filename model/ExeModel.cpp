@@ -2,8 +2,6 @@
 
 void ExeModel::update() {
   INJECT_SHARED_buf
-  INJECT_STATS_blpos
-  INJECT_SHARED_c1
   pState = state;
   op.size++;
   switch( state ) {
@@ -14,9 +12,9 @@ void ExeModel::update() {
       if( op.mustCheckRex ) {
         op.mustCheckRex = false;
         // valid x64 code?
-        if( !isInvalidX64Op(c1) && !isValidX64Prefix(c1)) {
+        if( !isInvalidX64Op(shared->c1) && !isValidX64Prefix(shared->c1)) {
           op.REX = op.code;
-          op.code = c1;
+          op.code = shared->c1;
           op.data = prefixRex | (op.code << codeShift) | (op.data & prefixMask);
           skip = true;
         }
@@ -24,9 +22,9 @@ void ExeModel::update() {
 
       op.ModRM = op.SIB = op.REX = op.flags = op.bytesRead = 0;
       if( !skip ) {
-        op.code = c1;
+        op.code = shared->c1;
         // possible REX prefix?
-        op.mustCheckRex = ((op.code & 0xF0) == 0x40) && (!(op.decoding && ((op.data & prefixMask) == 1)));
+        op.mustCheckRex = ((op.code & 0xF0U) == 0x40) && (!(op.decoding && ((op.data & prefixMask) == 1)));
 
         // check prefixes
         op.prefix = (op.code == ES_OVERRIDE || op.code == CS_OVERRIDE || op.code == SS_OVERRIDE || op.code == DS_OVERRIDE) +
@@ -36,7 +34,7 @@ void ExeModel::update() {
 
         if( !op.decoding ) {
           totalOps += (op.data != 0) - (cache.Index && cache.Op[cache.Index & (CacheSize - 1)] != 0);
-          opMask = (opMask << 1) | (state != Error);
+          opMask = (opMask << 1U) | (state != Error);
           opCategoryMask = (opCategoryMask << categoryShift) | (op.category);
           op.size = 0;
 
@@ -77,14 +75,14 @@ void ExeModel::update() {
       break;
     }
     case Pref_Op_Size: {
-      op.code = c1;
+      op.code = shared->c1;
       applyCodeAndSetFlag(op, operandSizeOverride);
       readFlags(op, state);
       brkCtx = hash(3, state);
       break;
     }
     case Pref_MultiByte_Op: {
-      op.code = c1;
+      op.code = shared->c1;
       op.data |= multiByteOpcode;
 
       if( op.code == 0x38 )
@@ -107,12 +105,12 @@ void ExeModel::update() {
     }
     case ExtraFlags:
     case ReadModRM: {
-      op.ModRM = c1;
+      op.ModRM = shared->c1;
       op.data |= (op.ModRM << ModRMShift) | hasModRm;
       op.SIB = 0;
       if( op.flags == fMEXTRA ) {
         op.data |= hasExtraFlags;
-        int i = ((op.ModRM >> 3) & 0x07) | ((op.code & 0x01) << 3) | ((op.code & 0x08) << 1);
+        int i = ((op.ModRM >> 3U) & 0x07U) | ((op.code & 0x01U) << 3U) | ((op.code & 0x08U) << 1U);
         op.flags = tableX[i];
         op.category = typeOpX[i];
         if( op.flags == fERR ) {
@@ -138,7 +136,7 @@ void ExeModel::update() {
     }
     case Read_OP3_38:
     case Read_OP3_3A: {
-      op.code = c1;
+      op.code = shared->c1;
       applyCodeAndSetFlag(op, prefix38 << (state - Read_OP3_38));
       if( state == Read_OP3_38 ) {
         op.flags = table3_38[op.code];
@@ -152,7 +150,7 @@ void ExeModel::update() {
       break;
     }
     case ReadSIB: {
-      op.SIB = c1;
+      op.SIB = shared->c1;
       op.data |= ((op.SIB & SIB_scale) << SIBScaleShift);
       processModRm(op, state);
       brkCtx = hash(11, state, op.SIB & SIB_scale);
@@ -167,7 +165,7 @@ void ExeModel::update() {
         state = Start;
       }
       brkCtx = hash(12, state, op.flags & fMODE, op.bytesRead,
-                    ((op.bytesRead > 1) ? (buf(op.bytesRead) << 8) : 0) | ((op.bytesRead) ? c1 : 0));
+                    ((op.bytesRead > 1) ? (buf(op.bytesRead) << 8U) : 0) | ((op.bytesRead) ? shared->c1 : 0));
       break;
     }
     case Read8_ModRM: {
@@ -193,9 +191,9 @@ void ExeModel::update() {
       break;
     }
   }
-  valid = (totalOps > 2 * minRequired) && ((opMask & ((1 << minRequired) - 1)) == ((1 << minRequired) - 1));
+  valid = (totalOps > 2 * minRequired) && ((opMask & ((1U << minRequired) - 1)) == ((1U << minRequired) - 1));
   context = state + 16 * op.bytesRead + 16 * (op.REX & REX_w);
-  stateBh[context] = (stateBh[context] << 8) | c1;
+  stateBh[context] = (stateBh[context] << 8U) | shared->c1;
 
   bool forced = stats->blockType == EXE;
   if( valid || forced ) {
@@ -204,29 +202,30 @@ void ExeModel::update() {
     while( i < nCM1 ) {
       if( i > 1 ) {
         mask = mask * 2 + (buf(i - 1) == 0);
-        count0 += mask & 1;
+        count0 += mask & 1U;
       }
       int j = (i < 4) ? i + 1 : 5 + (i - 4) * (2 + (i > 6));
-      cm.set(hash(i, exeCxt(j, buf(1) * (j > 6)), ((1 << nCM1) | mask) * (count0 * nCM1 / 2 >= i), (0x08 | (blPos & 0x07)) * (i < 4)));
+      cm.set(hash(i, exeCxt(j, buf(1) * (j > 6)), ((1U << nCM1) | mask) * (count0 * nCM1 / 2 >= i),
+                  (0x08U | (stats->blPos & 0x07U)) * (i < 4)));
       i++;
     }
 
     cm.set(brkCtx);
 
-    mask = prefixMask | (0xF8 << codeShift) | multiByteOpcode | prefix38 | prefix3A;
+    mask = prefixMask | (0xF8U << codeShift) | multiByteOpcode | prefix38 | prefix3A;
     cm.set(hash(++i, opN(cache, 1) & (mask | regDWordDisplacement | addressMode), state + 16 * op.bytesRead, op.data & mask, op.REX,
                 op.category));
 
-    mask = 0x04 | (0xFE << codeShift) | multiByteOpcode | prefix38 | prefix3A | ((ModRM_mod | ModRM_reg) << ModRMShift);
+    mask = 0x04U | (0xFEU << codeShift) | multiByteOpcode | prefix38 | prefix3A | ((ModRM_mod | ModRM_reg) << ModRMShift);
     cm.set(hash(++i, opN(cache, 1) & mask, opN(cache, 2) & mask, opN(cache, 3) & mask,
                 context + 256 * ((op.ModRM & ModRM_mod) == ModRM_mod), op.data & ((mask | prefixRex) ^ (ModRM_mod << ModRMShift))));
 
-    mask = 0x04 | codeMask;
+    mask = 0x04U | codeMask;
     cm.set(hash(++i, opN(cache, 1) & mask, opN(cache, 2) & mask, opN(cache, 3) & mask, opN(cache, 4) & mask,
-                (op.data & mask) | (state << 11) | (op.bytesRead << 15)));
+                (op.data & mask) | (state << 11U) | (op.bytesRead << 15U)));
 
-    mask = 0x04 | (0xFC << codeShift) | multiByteOpcode | prefix38 | prefix3A;
-    cm.set(hash(++i, state + 16 * op.bytesRead, op.data & mask, op.category * 8 + (opMask & 0x07), op.flags,
+    mask = 0x04U | (0xFCU << codeShift) | multiByteOpcode | prefix38 | prefix3A;
+    cm.set(hash(++i, state + 16 * op.bytesRead, op.data & mask, op.category * 8 + (opMask & 0x07U), op.flags,
                 ((op.SIB & SIB_base) == 5) * 4 + ((op.ModRM & ModRM_reg) == ModRM_reg) * 2 + ((op.ModRM & ModRM_mod) == 0)));
 
     mask = prefixMask | codeMask | operandSizeOverride | multiByteOpcode | prefixRex | prefix38 | prefix3A | hasExtraFlags | hasModRm |
@@ -237,45 +236,43 @@ void ExeModel::update() {
     cm.set(hash(++i, opN(cache, 1) & mask, state, op.bytesRead * 2 + ((op.REX & REX_w) > 0),
                 op.data & ((uint16_t) (mask ^ operandSizeOverride))));
 
-    mask = 0x04 | (0xFE << codeShift) | multiByteOpcode | prefix38 | prefix3A | (ModRM_reg << ModRMShift);
+    mask = 0x04U | (0xFEU << codeShift) | multiByteOpcode | prefix38 | prefix3A | (ModRM_reg << ModRMShift);
     cm.set(hash(++i, opN(cache, 1) & mask, opN(cache, 2) & mask, state + 16 * op.bytesRead, op.data & (mask | prefixMask | codeMask)));
 
     cm.set(hash(++i, state + 16 * op.bytesRead));
 
-    cm.set(hash(++i, (0x100 | c1) * (op.bytesRead > 0), state + 16 * pState + 256 * op.bytesRead,
-                ((op.flags & fMODE) == fAM) * 16 + (op.REX & REX_w) + (op.o16) * 4 + ((op.code & 0xFE) == 0xE8) * 2 +
-                ((op.data & multiByteOpcode) != 0 && (op.code & 0xF0) == 0x80)));
+    cm.set(hash(++i, (0x100U | shared->c1) * (op.bytesRead > 0), state + 16 * pState + 256 * op.bytesRead,
+                ((op.flags & fMODE) == fAM) * 16 + (op.REX & REX_w) + (op.o16) * 4 + ((op.code & 0xFEU) == 0xE8) * 2 +
+                ((op.data & multiByteOpcode) != 0 && (op.code & 0xF0U) == 0x80)));
   }
 }
 
 void ExeModel::mix(Mixer &m) {
-  INJECT_SHARED_bpos
   auto forced = stats->blockType == EXE;
-  if( bpos == 0 )
+  if( shared->bitPosition == 0 )
     update();
 
   if( valid || forced ) {
     cm.setScale(forced ? 128 : 64);
     cm.mix(m);
-    iMap.set(hash(brkCtx, bpos));
+    iMap.set(hash(brkCtx, shared->bitPosition));
     iMap.setScale(forced ? 128 : 64);
     iMap.mix(m);
   } else {
     for( int i = 0; i < MIXERINPUTS; ++i )
       m.add(0);
   }
-  INJECT_SHARED_c0
-  uint8_t s = ((stateBh[context] >> (28 - bpos)) & 0x08) | ((stateBh[context] >> (21 - bpos)) & 0x04) |
-              ((stateBh[context] >> (14 - bpos)) & 0x02) | ((stateBh[context] >> (7 - bpos)) & 0x01) |
-              ((op.category == OP_GEN_BRANCH) << 4) | (((c0 & ((1U << bpos) - 1)) == 0) << 5U);
+  uint8_t s = ((stateBh[context] >> (28 - shared->bitPosition)) & 0x08U) | ((stateBh[context] >> (21 - shared->bitPosition)) & 0x04U) |
+              ((stateBh[context] >> (14 - shared->bitPosition)) & 0x02U) | ((stateBh[context] >> (7 - shared->bitPosition)) & 0x01U) |
+              ((op.category == OP_GEN_BRANCH) << 4U) | (((shared->c0 & ((1U << shared->bitPosition) - 1)) == 0) << 5U);
 
   m.set(context * 4 + (s >> 4U), 1024);
-  m.set(state * 64 + bpos * 8 + (op.bytesRead > 0) * 4 + (s >> 4U), 1024);
+  m.set(state * 64 + shared->bitPosition * 8 + (op.bytesRead > 0) * 4 + (s >> 4U), 1024);
   m.set((brkCtx & 0x1FFU) | ((s & 0x20U) << 4U), 1024);
   m.set(finalize64(hash(op.code, state, opN(cache, 1) & codeMask), 13), 8192);
-  m.set(finalize64(hash(state, bpos, op.code, op.bytesRead), 13), 8192);
-  m.set(finalize64(hash(state, (bpos << 2U) | (c0 & 3U), opCategoryMask & categoryMask,
-                        ((op.category == OP_GEN_BRANCH) << 2U) | (((op.flags & fMODE) == fAM) << 1) | (op.bytesRead > 0)), 13), 8192);
+  m.set(finalize64(hash(state, shared->bitPosition, op.code, op.bytesRead), 13), 8192);
+  m.set(finalize64(hash(state, (shared->bitPosition << 2U) | (shared->c0 & 3U), opCategoryMask & categoryMask,
+                        ((op.category == OP_GEN_BRANCH) << 2U) | (((op.flags & fMODE) == fAM) << 1U) | (op.bytesRead > 0)), 13), 8192);
 }
 
 bool ExeModel::isInvalidX64Op(const uint8_t op) {
@@ -419,5 +416,5 @@ uint32_t ExeModel::exeCxt(int i, int x) {
     modRm += buf(i--) & (ModRM_mod | ModRM_rm);
   if( i && ((modRm & ModRM_rm) == 4) && (modRm < ModRM_mod))
     sib = buf(i) & SIB_scale;
-  return prefix | opcode << 4 | modRm << 12 | x << 20 | sib << (28 - 6);
+  return prefix | opcode << 4U | modRm << 12U | x << 20U | sib << (28 - 6);
 }

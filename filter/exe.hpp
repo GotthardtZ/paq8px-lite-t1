@@ -16,10 +16,17 @@
 // converted to an absolute address by adding the offset mod 2^25
 // (in range +-2^24).
 
+/**
+ * @todo Large file support
+ * @param in
+ * @param out
+ * @param len
+ * @param begin
+ */
 static void encodeExe(File *in, File *out, uint64_t len, uint64_t begin) {
   const int block = 0x10000;
   Array<uint8_t> blk(block);
-  out->putVLI(begin); //TODO: Large file support
+  out->putVLI(begin);
 
   // Transform
   for( uint64_t offset = 0; offset < len; offset += block ) {
@@ -28,26 +35,35 @@ static void encodeExe(File *in, File *out, uint64_t len, uint64_t begin) {
     if( bytesRead != (int) size )
       quit("encodeExe read error");
     for( int i = bytesRead - 1; i >= 5; --i ) {
-      if((blk[i - 4] == 0xe8 || blk[i - 4] == 0xe9 || (blk[i - 5] == 0x0f && (blk[i - 4] & 0xf0) == 0x80)) &&
+      if((blk[i - 4] == 0xe8 || blk[i - 4] == 0xe9 || (blk[i - 5] == 0x0f && (blk[i - 4] & 0xf0U) == 0x80)) &&
          (blk[i] == 0 || blk[i] == 0xff)) {
-        int a = (blk[i - 3] | blk[i - 2] << 8 | blk[i - 1] << 16 | blk[i] << 24) + (int) (offset + begin) + i + 1;
-        a <<= 7;
-        a >>= 7;
-        blk[i] = a >> 24;
-        blk[i - 1] = a ^ 176;
-        blk[i - 2] = (a >> 8) ^ 176;
-        blk[i - 3] = (a >> 16) ^ 176;
+        int a = (blk[i - 3] | blk[i - 2] << 8U | blk[i - 1] << 16U | blk[i] << 24U) + (int) (offset + begin) + i + 1;
+        a <<= 7U;
+        a >>= 7U;
+        blk[i] = a >> 24U;
+        blk[i - 1] = a ^ 176U;
+        blk[i - 2] = (a >> 8U) ^ 176U;
+        blk[i - 3] = (a >> 16U) ^ 176U;
       }
     }
     out->blockWrite(&blk[0], bytesRead);
   }
 }
 
+/**
+ * @todo Large file support
+ * @param en
+ * @param size
+ * @param out
+ * @param mode
+ * @param diffFound
+ * @return
+ */
 static auto decodeExe(Encoder &en, uint64_t size, File *out, FMode mode, uint64_t &diffFound) -> uint64_t {
   const int block = 0x10000; // block size
   int begin, offset = 6, a;
   uint8_t c[6];
-  begin = (int) en.decodeBlockSize(); //TODO: Large file support
+  begin = (int) en.decodeBlockSize();
   size -= VLICost(uint64_t(begin));
   for( int i = 4; i >= 0; i-- )
     c[i] = en.decompress(); // Fill queue
@@ -57,9 +73,9 @@ static auto decodeExe(Encoder &en, uint64_t size, File *out, FMode mode, uint64_
     if( offset <= (int) size )
       c[0] = en.decompress();
     // E8E9 transform: E8/E9 xx xx xx 00/FF -> subtract location from x
-    if((c[0] == 0x00 || c[0] == 0xFF) && (c[4] == 0xE8 || c[4] == 0xE9 || (c[5] == 0x0F && (c[4] & 0xF0) == 0x80)) &&
+    if((c[0] == 0x00 || c[0] == 0xFF) && (c[4] == 0xE8 || c[4] == 0xE9 || (c[5] == 0x0F && (c[4] & 0xF0U) == 0x80)) &&
        (((offset - 1) ^ (offset - 6)) & -block) == 0 && offset <= (int) size ) { // not crossing block boundary
-      a = ((c[1] ^ 176) | (c[2] ^ 176) << 8 | (c[3] ^ 176) << 16 | c[0] << 24) - offset - begin;
+      a = ((c[1] ^ 176U) | (c[2] ^ 176U) << 8 | (c[3] ^ 176U) << 16U | c[0] << 24U) - offset - begin;
       a <<= 7U;
       a >>= 7U;
       c[3] = a;

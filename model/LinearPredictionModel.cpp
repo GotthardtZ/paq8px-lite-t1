@@ -7,10 +7,11 @@ LinearPredictionModel::LinearPredictionModel() : sMap {{11, 1, 6, 128},
                                                        {11, 1, 6, 128}} {}
 
 void LinearPredictionModel::mix(Mixer &m) {
-  INJECT_SHARED_bpos
-  if( bpos == 0 ) {
+  if( shared->bitPosition == 0 ) {
     INJECT_SHARED_buf
-    const uint8_t W = buf(1), WW = buf(2), WWW = buf(3);
+    const uint8_t W = buf(1);
+    const uint8_t WW = buf(2);
+    const uint8_t WWW = buf(3);
     int i = 0;
     for( ; i < nOLS; i++ )
       ols[i].update(W);
@@ -24,10 +25,9 @@ void LinearPredictionModel::mix(Mixer &m) {
     prd[i++] = clip(W * 2 - WW);
     prd[i] = clip(W * 3 - WW * 3 + WWW);
   }
-  INJECT_SHARED_c0
-  const uint8_t b = c0 << (8 - bpos);
+  const uint8_t b = shared->c0 << (8 - shared->bitPosition);
   for( int i = 0; i < nSSM; i++ ) {
-    sMap[i].set((prd[i] - b) * 8 + bpos);
+    sMap[i].set((prd[i] - b) * 8 + shared->bitPosition);
     sMap[i].mix(m);
   }
 }

@@ -1,9 +1,9 @@
 #include "IndirectMap.hpp"
+#include "Stretch.hpp"
 
 IndirectMap::IndirectMap(const int bitsOfContext, const int inputBits, const int scale, const int limit) : data(
-        (UINT64_C(1) << bitsOfContext) * ((UINT64_C(1) << inputBits) - 1)),
-        sm {1, 256, 1023, StateMap::BitHistory}, /* StateMap : s, n, lim, init */
-        mask((1U << bitsOfContext) - 1), maskBits(bitsOfContext), stride((1U << inputBits) - 1), bTotal(inputBits), scale(scale) {
+        (1ULL << bitsOfContext) * ((1ULL << inputBits) - 1)), sm {1, 256, 1023, StateMap::BitHistory}, mask((1U << bitsOfContext) - 1),
+        maskBits(bitsOfContext), stride((1U << inputBits) - 1), bTotal(inputBits), scale(scale) {
   assert(inputBits > 0 && inputBits <= 8);
   assert(bitsOfContext + inputBits <= 24);
   cp = &data[0];

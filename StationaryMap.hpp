@@ -29,10 +29,10 @@ private:
     Shared *shared = Shared::getInstance();
     Array<uint32_t> data;
     const uint32_t mask, maskBits, stride, bTotal;
-    uint32_t context{};
+    uint32_t context {};
     uint32_t bCount {};
     uint32_t b {};
-    uint32_t *cp{};
+    uint32_t *cp {};
     int scale;
     const uint16_t limit;
     int *dt;
@@ -42,19 +42,18 @@ public:
     StationaryMap(int bitsOfContext, int inputBits, int scale, uint16_t limit);
 
     /**
-     *  ctx must be a direct context (no hash)
+     * ctx must be a direct context (no hash)
      * @param ctx
      */
     void setDirect(uint32_t ctx);
 
     /**
-     * // ctx must be a hash
+     * ctx must be a hash
      * @param ctx
      */
     void set(uint64_t ctx);
     void reset(int rate);
     void update() override;
-    void setScale(int Scale);
     void mix(Mixer &m);
 };
 

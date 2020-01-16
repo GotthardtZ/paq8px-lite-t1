@@ -6,7 +6,9 @@
 
 class Paragraph {
 public:
-    uint32_t sentenceCount, typeCount[Sentence::Types::Count], typeMask;
+    uint32_t sentenceCount;
+    uint32_t typeCount[Sentence::Types::Count];
+    uint32_t typeMask;
 };
 
 #endif //PAQ8PX_PARAGRAPH_HPP

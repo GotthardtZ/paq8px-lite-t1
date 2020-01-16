@@ -68,7 +68,7 @@ static auto encodeGif(File *in, File *out, uint64_t len, int &headerSize) -> int
           code = buffer & ((1U << bits) - 1);
           buffer >>= bits;
           shift -= bits;
-          if((bsize == 0) && code != (1 << codeSize)) {
+          if((bsize == 0) && code != (1U << codeSize)) {
             headerSize += 4;
             out->put32(0);
           }
@@ -80,9 +80,9 @@ static auto encodeGif(File *in, File *out, uint64_t len, int &headerSize) -> int
                 return 0;
               clearPos = 69631 - maxcode;
             }
-            bits = codeSize + 1, maxcode = (1 << codeSize) + 1, last = -1;
+            bits = codeSize + 1, maxcode = (1U << codeSize) + 1, last = -1;
             LZW_RESET
-          } else if( code == (1 << codeSize) + 1 )
+          } else if( code == (1U << codeSize) + 1 )
             end = true;
           else if( code > maxcode + 1 )
             return 0;
@@ -229,7 +229,7 @@ static auto decodeGif(File *in, uint64_t size, File *out, FMode mode, uint64_t &
           dict[maxcode] = key;
           table[(index < 0) ? -index - 1 : offset] = maxcode;
         }
-        if( maxcode >= (1 << bits) && bits < 12 )
+        if( maxcode >= (1U << bits) && bits < 12 )
           bits++;
       }
       code = input;

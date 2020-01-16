@@ -23,7 +23,7 @@ private:
     const uint32_t maskBits;
     const uint32_t stride;
     const uint32_t bTotal;
-    uint32_t b{};
+    uint32_t b {};
     uint32_t bCount {};
     uint32_t context {};
     uint8_t *cp;

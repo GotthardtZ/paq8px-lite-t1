@@ -4,7 +4,7 @@ APM::APM(const int n, const int s) : AdaptiveMap(n * s, 1023), N(n * s), steps(s
   assert(s > 4); // number of steps - must be a positive integer bigger than 4
   for( int i = 0; i < N; ++i ) {
     int p = ((i % steps * 2 + 1) * 4096) / (steps * 2) - 2048;
-    t[i] = (uint32_t(squash(p)) << 20) + 6; //initial count: 6
+    t[i] = (uint32_t(squash(p)) << 20U) + 6; //initial count: 6
   }
 }
 
@@ -20,10 +20,10 @@ auto APM::p(int pr, int cx, const int lim) -> int {
   assert(limit > 0 && limit < 1024);
   AdaptiveMap::setLimit(lim);
   pr = (stretch(pr) + 2048) * (steps - 1);
-  int wt = pr & 0xfff; // interpolation weight (0..4095)
-  cx = cx * steps + (pr >> 12);
+  int wt = pr & 0xfffU; // interpolation weight (0..4095)
+  cx = cx * steps + (pr >> 12U);
   assert(cx >= 0 && cx < N - 1);
-  cxt = cx + (wt >> 11);
-  pr = ((t[cx] >> 13) * (4096 - wt) + (t[cx + 1] >> 13) * wt) >> 19;
+  cxt = cx + (wt >> 11U);
+  pr = ((t[cx] >> 13U) * (4096 - wt) + (t[cx + 1] >> 13U) * wt) >> 19U;
   return pr;
 }

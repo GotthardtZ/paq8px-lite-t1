@@ -46,11 +46,11 @@ static auto decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMode m
         if((j == 0) && ((i & 0xf) == 0))
           en.printStatus();
       } else if( mode == FCOMPARE ) {
-        if((((shared->options & OPTION_SKIPRGB) != 0u ? r : b - r) & 255) != out->getchar() && (diffFound == 0u))
+        if((((shared->options & OPTION_SKIPRGB) != 0u ? r : b - r) & 255U) != out->getchar() && (diffFound == 0u))
           diffFound = p + 1;
         if( b != out->getchar() && (diffFound == 0u))
           diffFound = p + 2;
-        if((((shared->options & OPTION_SKIPRGB) != 0u ? g : b - g) & 255) != out->getchar() && (diffFound == 0u))
+        if((((shared->options & OPTION_SKIPRGB) != 0u ? g : b - g) & 255U) != out->getchar() && (diffFound == 0u))
           diffFound = p + 3;
         if(((a) & 255) != out->getchar() && (diffFound == 0u))
           diffFound = p + 4;

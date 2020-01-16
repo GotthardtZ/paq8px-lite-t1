@@ -12,20 +12,20 @@
  */
 class FrenchStemmer : public Stemmer {
 private:
-    static constexpr int NUM_VOWELS = 17;
-    static constexpr char vowels[NUM_VOWELS] = {'a', 'e', 'i', 'o', 'u', 'y', '\xE2', '\xE0', '\xEB', '\xE9', '\xEA', '\xE8', '\xEF',
-                                                '\xEE', '\xF4', '\xFB', '\xF9'};
-    static constexpr int NUM_COMMON_WORDS = 10;
-    const char *commonWords[NUM_COMMON_WORDS] = {"de", "la", "le", "et", "en", "un", "une", "du", "que", "pas"};
-    static constexpr int NUM_EXCEPTIONS = 3;
-    const char *(exceptions[NUM_EXCEPTIONS])[2] = {{"monument", "monument"},
-                                                   {"yeux",     "oeil"},
-                                                   {"travaux",  "travail"},};
-    static constexpr uint32_t typesExceptions[NUM_EXCEPTIONS] = {French::Noun, French::Noun | French::Plural,
+    static constexpr int numVowels = 17;
+    static constexpr char vowels[numVowels] = {'a', 'e', 'i', 'o', 'u', 'y', '\xE2', '\xE0', '\xEB', '\xE9', '\xEA', '\xE8', '\xEF',
+                                               '\xEE', '\xF4', '\xFB', '\xF9'};
+    static constexpr int numCommonWords = 10;
+    const char *commonWords[numCommonWords] = {"de", "la", "le", "et", "en", "un", "une", "du", "que", "pas"};
+    static constexpr int numExceptions = 3;
+    const char *(exceptions[numExceptions])[2] = {{"monument", "monument"},
+                                                  {"yeux",     "oeil"},
+                                                  {"travaux",  "travail"},};
+    static constexpr uint32_t typesExceptions[numExceptions] = {French::Noun, French::Noun | French::Plural,
                                                                  French::Noun | French::Plural};
-    static constexpr int NUM_SUFFIXES_STEP1 = 39;
-    const char *suffixesStep1[NUM_SUFFIXES_STEP1] = {"ance", "iqUe", "isme", "able", "iste", "eux", "ances", "iqUes", "ismes", "ables",
-                                                     "istes", //11
+    static constexpr int numSuffixesStep1 = 39;
+    const char *suffixesStep1[numSuffixesStep1] = {"ance", "iqUe", "isme", "able", "iste", "eux", "ances", "iqUes", "ismes", "ables",
+                                                   "istes", //11
                                                      "atrice", "ateur", "ation", "atrices", "ateurs", "ations", //6
                                                      "logie", "logies", //2
                                                      "usion", "ution", "usions", "utions", //4
@@ -37,24 +37,24 @@ private:
                                                      "euse", "euses", //2
                                                      "ment", "ments" //2
     };
-    static constexpr int NUM_SUFFIXES_STEP2a = 35;
-    const char *suffixesStep2A[NUM_SUFFIXES_STEP2a] = {"issaIent", "issantes", "iraIent", "issante", "issants", "issions", "irions",
-                                                       "issais", "issait", "issant", "issent", "issiez", "issons", "irais", "irait",
-                                                       "irent", "iriez", "irons", "iront", "isses", "issez", "\xEEmes", "\xEEtes", "irai",
-                                                       "iras", "irez", "isse", "ies", "ira", "\xEEt", "ie", "ir", "is", "it", "i"};
-    static constexpr int NUM_SUFFIXES_STEP2b = 38;
-    const char *suffixesStep2B[NUM_SUFFIXES_STEP2b] = {"eraIent", "assions", "erions", "assent", "assiez", "\xE8rent", "erais", "erait",
-                                                       "eriez", "erons", "eront", "aIent", "antes", "asses", "ions", "erai", "eras", "erez",
-                                                       "\xE2mes", "\xE2tes", "ante", "ants", "asse", "\xE9"
+    static constexpr int numSuffixesStep2A = 35;
+    const char *suffixesStep2A[numSuffixesStep2A] = {"issaIent", "issantes", "iraIent", "issante", "issants", "issions", "irions",
+                                                     "issais", "issait", "issant", "issent", "issiez", "issons", "irais", "irait",
+                                                     "irent", "iriez", "irons", "iront", "isses", "issez", "\xEEmes", "\xEEtes", "irai",
+                                                     "iras", "irez", "isse", "ies", "ira", "\xEEt", "ie", "ir", "is", "it", "i"};
+    static constexpr int numSuffixesStep2B = 38;
+    const char *suffixesStep2B[numSuffixesStep2B] = {"eraIent", "assions", "erions", "assent", "assiez", "\xE8rent", "erais", "erait",
+                                                     "eriez", "erons", "eront", "aIent", "antes", "asses", "ions", "erai", "eras", "erez",
+                                                     "\xE2mes", "\xE2tes", "ante", "ants", "asse", "\xE9"
                                                                                                      "es", "era", "iez", "ais", "ait",
-                                                       "ant", "\xE9"
+                                                     "ant", "\xE9"
                                                               "e", "\xE9s", "er", "ez", "\xE2t", "ai", "as", "\xE9", "a"};
-    static constexpr int NUM_SET_STEP4 = 6;
-    static constexpr char setStep4[NUM_SET_STEP4] = {'a', 'i', 'o', 'u', '\xE8', 's'};
-    static constexpr int NUM_SUFFIXES_STEP4 = 7;
-    const char *suffixesStep4[NUM_SUFFIXES_STEP4] = {"i\xE8re", "I\xE8re", "ion", "ier", "Ier", "e", "\xEB"};
-    static constexpr int NUM_SUFFIXES_STEP5 = 5;
-    const char *suffixesStep5[NUM_SUFFIXES_STEP5] = {"enn", "onn", "ett", "ell", "eill"};
+    static constexpr int numSetStep4 = 6;
+    static constexpr char setStep4[numSetStep4] = {'a', 'i', 'o', 'u', '\xE8', 's'};
+    static constexpr int numSuffixesStep4 = 7;
+    const char *suffixesStep4[numSuffixesStep4] = {"i\xE8re", "I\xE8re", "ion", "ier", "Ier", "e", "\xEB"};
+    static constexpr int numSuffixesStep5 = 5;
+    const char *suffixesStep5[numSuffixesStep5] = {"enn", "onn", "ett", "ell", "eill"};
 
     inline auto isConsonant(char c) -> bool;
     void convertUtf8(Word *w);

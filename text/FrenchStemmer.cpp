@@ -147,7 +147,7 @@ bool FrenchStemmer::step1(Word *w, const uint32_t rv, const uint32_t r1, const u
       }
     }
   }
-  for( ; i < NUM_SUFFIXES_STEP1; i++ ) {
+  for( ; i < numSuffixesStep1; i++ ) {
     if( w->endsWith(suffixesStep1[i]) && suffixInRn(w, rv + 1, suffixesStep1[i]) && isVowel((*w)((uint8_t) strlen(suffixesStep1[i])))) {
       w->end -= uint8_t(strlen(suffixesStep1[i]));
       (*forceStep2A) = true;
@@ -175,7 +175,7 @@ bool FrenchStemmer::step1(Word *w, const uint32_t rv, const uint32_t r1, const u
 }
 
 bool FrenchStemmer::step2A(Word *w, const uint32_t rv) {
-  for( int i = 0; i < NUM_SUFFIXES_STEP2a; i++ ) {
+  for( int i = 0; i < numSuffixesStep2A; i++ ) {
     if( w->endsWith(suffixesStep2A[i]) && suffixInRn(w, rv + 1, suffixesStep2A[i]) &&
         isConsonant((*w)((uint8_t) strlen(suffixesStep2A[i])))) {
       w->end -= uint8_t(strlen(suffixesStep2A[i]));
@@ -188,7 +188,7 @@ bool FrenchStemmer::step2A(Word *w, const uint32_t rv) {
 }
 
 bool FrenchStemmer::step2B(Word *w, const uint32_t rv, const uint32_t r2) {
-  for( int i = 0; i < NUM_SUFFIXES_STEP2b; i++ ) {
+  for( int i = 0; i < numSuffixesStep2B; i++ ) {
     if( w->endsWith(suffixesStep2B[i]) && suffixInRn(w, rv, suffixesStep2B[i])) {
       switch( suffixesStep2B[i][0] ) {
         case 'a':
@@ -220,11 +220,11 @@ void FrenchStemmer::step3(Word *w) {
 
 bool FrenchStemmer::step4(Word *w, const uint32_t rv, const uint32_t r2) {
   bool res = false;
-  if( w->length() >= 2 && w->letters[w->end] == 's' && !charInArray((*w)(1), setStep4, NUM_SET_STEP4)) {
+  if( w->length() >= 2 && w->letters[w->end] == 's' && !charInArray((*w)(1), setStep4, numSetStep4)) {
     w->end--;
     res = true;
   }
-  for( int i = 0; i < NUM_SUFFIXES_STEP4; i++ ) {
+  for( int i = 0; i < numSuffixesStep4; i++ ) {
     if( w->endsWith(suffixesStep4[i]) && suffixInRn(w, rv, suffixesStep4[i])) {
       switch( i ) {
         case 2: { //ion
@@ -257,7 +257,7 @@ bool FrenchStemmer::step4(Word *w, const uint32_t rv, const uint32_t r2) {
 }
 
 bool FrenchStemmer::step5(Word *w) {
-  for( int i = 0; i < NUM_SUFFIXES_STEP5; i++ ) {
+  for( int i = 0; i < numSuffixesStep5; i++ ) {
     if( w->endsWith(suffixesStep5[i])) {
       w->end--;
       return true;
@@ -280,7 +280,7 @@ bool FrenchStemmer::step6(Word *w) {
 }
 
 bool FrenchStemmer::isVowel(const char c) {
-  return charInArray(c, vowels, NUM_VOWELS);
+  return charInArray(c, vowels, numVowels);
 }
 
 bool FrenchStemmer::stem(Word *w) {
@@ -289,7 +289,7 @@ bool FrenchStemmer::stem(Word *w) {
     w->calculateStemHash();
     return false;
   }
-  for( int i = 0; i < NUM_EXCEPTIONS; i++ ) {
+  for( int i = 0; i < numExceptions; i++ ) {
     if((*w) == exceptions[i][0] ) {
       size_t len = strlen(exceptions[i][1]);
       memcpy(&w->letters[w->start], exceptions[i][1], len);
@@ -319,7 +319,7 @@ bool FrenchStemmer::stem(Word *w) {
   for( int i = w->start; i <= w->end; i++ )
     w->letters[i] = tolower(w->letters[i]);
   if( !res )
-    res = w->matchesAny(commonWords, NUM_COMMON_WORDS);
+    res = w->matchesAny(commonWords, numCommonWords);
   w->calculateStemHash();
   if( res )
     w->language = Language::French;

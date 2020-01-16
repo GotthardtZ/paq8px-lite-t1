@@ -21,19 +21,17 @@ ContextModel::ContextModel(ModelStats *st, Models &models) : stats(st), models(m
 int ContextModel::p() {
   uint32_t &blockPosition = stats->blPos;
   // Parse block type and block size
-  INJECT_SHARED_bpos
-  if( bpos == 0 ) {
+  if( shared->bitPosition == 0 ) {
     --blockSize;
     blockPosition++;
-    INJECT_SHARED_c1
     if( blockSize == -1 ) {
-      nextBlockType = (BlockType) c1; //got blockType but don't switch (we don't have all the info yet)
+      nextBlockType = (BlockType) shared->c1; //got blockType but don't switch (we don't have all the info yet)
       bytesRead = 0;
       readSize = true;
     } else if( blockSize < 0 ) {
       if( readSize ) {
-        bytesRead |= int(c1 & 0x7FU) << ((-blockSize - 2) * 7);
-        if((c1 >> 7U) == 0 ) {
+        bytesRead |= int(shared->c1 & 0x7FU) << ((-blockSize - 2) * 7);
+        if((shared->c1 >> 7U) == 0 ) {
           readSize = false;
           if( !hasInfo(nextBlockType)) {
             blockSize = bytesRead;
@@ -45,8 +43,7 @@ int ContextModel::p() {
         }
       } else if( blockSize == -5 ) {
         blockSize = bytesRead;
-        INJECT_SHARED_c4
-        blockInfo = c4;
+        blockInfo = shared->c4;
         blockPosition = 0;
       }
     }
@@ -69,7 +66,7 @@ int ContextModel::p() {
   // Test for special block types
   switch( blockType ) {
     case IMAGE1: {
-      Image1BitModel &image1BitModel = models.image1BitModel();
+      Image1BitModel &image1BitModel = Models::image1BitModel();
       image1BitModel.setParam(blockInfo);
       image1BitModel.mix(*m);
       break;
@@ -193,7 +190,7 @@ int ContextModel::p() {
     XMLModel &xmlModel = models.xmlModel();
     xmlModel.mix(*m);
     if( blockType != TEXT && blockType != TEXT_EOL ) {
-      LinearPredictionModel &linearPredictionModel = models.linearPredictionModel();
+      LinearPredictionModel &linearPredictionModel = Models::linearPredictionModel();
       linearPredictionModel.mix(*m);
       ExeModel &exeModel = models.exeModel();
       exeModel.mix(*m);

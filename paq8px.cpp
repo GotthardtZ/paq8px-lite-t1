@@ -318,7 +318,7 @@ auto main_utf8(int argc, char **argv) -> int {
           output += argv[i];
           output.replaceSlashes();
         } else
-          quit("More than two filenames specified. Only an input and an output is needed.");
+          quit("More than two file names specified. Only an input and an output is needed.");
       }
     }
 
@@ -387,7 +387,7 @@ auto main_utf8(int argc, char **argv) -> int {
         quit("A log file may only be specified for compression.");
       pathType = examinePath(logfile.c_str());
       if( pathType == 2 || pathType == 4 )
-        quit("Specified log file should be a file not a directory.");
+        quit("Specified log file should be a file, not a directory.");
       if( pathType == 0 ) {
         printf("\nThere is a problem with the log file: %s", logfile.c_str());
         quit();
@@ -458,13 +458,13 @@ auto main_utf8(int argc, char **argv) -> int {
 
     ListOfFiles listoffiles;
 
-    //set basePath for filelist
+    // set basePath for file list
     listoffiles.setBasePath(whattodo == DoCompress ? inputPath.c_str() : outputPath.c_str());
 
     // Process file list (in multiple file mode)
     if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0U ) { //multiple file mode
       assert(whattodo == DoCompress);
-      // Read and parse filelist file
+      // Read and parse file list file
       FileDisk f;
       FileName fn(inputPath.c_str());
       fn += input.c_str();
@@ -478,11 +478,11 @@ auto main_utf8(int argc, char **argv) -> int {
       f.close();
       //Verify input files
       for( int i = 0; i < listoffiles.getCount(); i++ )
-        getFileSize(listoffiles.getfilename(i)); // Does file exist? Is it readable? (we don't actually need the filesize now)
+        getFileSize(listoffiles.getfilename(i)); // Does file exist? Is it readable? (we don't actually need the file size now)
     } else { //single file mode or extract/compare/list
       FileName fn(inputPath.c_str());
       fn += input.c_str();
-      getFileSize(fn.c_str()); // Does file exist? Is it readable? (we don't actually need the filesize now)
+      getFileSize(fn.c_str()); // Does file exist? Is it readable? (we don't actually need the file size now)
     }
 
     FileDisk archive;  // compressed file

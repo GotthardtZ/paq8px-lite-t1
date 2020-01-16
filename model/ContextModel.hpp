@@ -15,8 +15,11 @@ class ContextModel {
     ModelStats *stats;
     Models models;
     Mixer *m;
-    BlockType nextBlockType = DEFAULT, blockType = DEFAULT;
-    int blockSize = 0, blockInfo = 0, bytesRead = 0;
+    BlockType nextBlockType = DEFAULT;
+    BlockType blockType = DEFAULT;
+    int blockSize = 0;
+    int blockInfo = 0;
+    int bytesRead = 0;
     bool readSize = false;
 
 public:

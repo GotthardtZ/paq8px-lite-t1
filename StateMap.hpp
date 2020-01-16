@@ -64,6 +64,4 @@ public:
     void print() const;
 };
 
-#include "APM.hpp"
-
 #endif //PAQ8PX_STATEMAP_HPP

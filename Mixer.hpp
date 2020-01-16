@@ -85,14 +85,14 @@ static void trainSimdSse2(const short *const t, short *const w, int n, const int
 static int dotProductSimdNone(const short *const t, const short *const w, int n) {
   int sum = 0;
   while((n -= 2) >= 0 ) {
-    sum += (t[n] * w[n] + t[n + 1] * w[n + 1]) >> 8;
+    sum += (t[n] * w[n] + t[n + 1] * w[n + 1]) >> 8U;
   }
   return sum;
 }
 
 static void trainSimdNone(const short *const t, short *const w, int n, const int err) {
   while((n -= 1) >= 0 ) {
-    int wt = w[n] + ((((t[n] * err * 2) >> 16) + 1) >> 1);
+    int wt = w[n] + ((((t[n] * err * 2) >> 16U) + 1) >> 1U);
     if( wt < -32768 )
       wt = -32768;
     else if( wt > 32767 )
@@ -130,8 +130,8 @@ public:
 
     ~Mixer() override = default;
     /**
-     * // m.p() returns the output prediction that the next bit is 1 as a 12 bit number (0 to 4095).
-     * @return
+     * Returns the output prediction that the next bit is 1 as a 12 bit number (0 to 4095).
+     * @return the prediction
      */
     virtual int p() = 0;
     virtual void setScaleFactor(int sf0, int sf1) = 0;

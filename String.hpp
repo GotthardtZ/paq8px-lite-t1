@@ -5,8 +5,6 @@
 
 /**
  * A specialized string class
- * size() includes NUL terminator.
- * strsize() does not include NUL terminator.
  */
 class String : public Array<char> {
 private:
@@ -27,6 +25,10 @@ protected:
 #endif
 public:
     [[nodiscard]] const char *c_str() const;
+    /**
+     * Does not include the NUL terminator
+     * @return length of the string
+     */
     [[nodiscard]] uint64_t strsize() const;
     void operator=(const char *s);
     void operator+=(const char *s);

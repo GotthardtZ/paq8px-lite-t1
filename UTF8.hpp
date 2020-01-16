@@ -6,8 +6,8 @@
 // Based on: http://bjoern.hoehrmann.de/utf-8/decoder/dfa/
 // Control characters (0x00-0x1f) and 0x7f are not allowed (except for 0/tab/cr/lf)
 
-#define UTF8_ACCEPT 0
-#define UTF8_REJECT 12
+#define UTF_8_ACCEPT 0
+#define UTF_8_REJECT 12
 
 static const constexpr uint8_t utf8StateTable[] = {
         // byte -> character class

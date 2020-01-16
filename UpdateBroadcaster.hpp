@@ -14,6 +14,10 @@ public:
     void subscribe(IPredictor *subscriber);
     void broadcastUpdate();
 private:
+    static UpdateBroadcaster *mPInstance;
+    int n; /**< number of subscribed predictors, (number of items in "subscribers" array)*/
+    IPredictor *subscribers[1024];
+
     UpdateBroadcaster() : n(0) {}
 
     /**
@@ -25,10 +29,6 @@ private:
      * Assignment operator is private so that it cannot be called
      */
     UpdateBroadcaster &operator=(UpdateBroadcaster const &) { return *this; }
-
-    static UpdateBroadcaster *mPInstance;
-    int n; /**< number of subscribed predictors, (number of items in "subscribers" array)*/
-    IPredictor *subscribers[1024];
 };
 
 #endif //PAQ8PX_UPDATEBROADCASTER_HPP

@@ -14,9 +14,12 @@ private:
     auto calculateHash() -> uint64_t;
 public:
     uint8_t letters[MAX_WORD_SIZE] {};
-    uint8_t start {}, end {};
+    uint8_t start {};
+    uint8_t end {};
     uint64_t Hash[2] {};
-    uint32_t type {}, language {}, embedding {};
+    uint32_t type {};
+    uint32_t language {};
+    uint32_t embedding {};
     Word();
     void reset();
     auto operator==(const char *s) const -> bool;

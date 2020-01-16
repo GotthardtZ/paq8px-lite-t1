@@ -28,6 +28,7 @@ mapped to predictions.
 #include "Mixer.hpp"
 #include "UpdateBroadcaster.hpp"
 #include "Stretch.hpp"
+#include "Bucket.hpp"
 
 #define CM_USE_NONE 0U
 #define CM_USE_RUN_STATS 1U
@@ -43,35 +44,6 @@ private:
     Shared *shared = Shared::getInstance();
     Random rnd;
     const uint32_t c; // max number of contexts
-    // TODO: Split this into its own class
-    class Bucket { // hash bucket, 64 bytes
-        uint16_t checksums[7]; // byte context checksums
-        uint8_t mostRecentlyUsed; // last 2 accesses (0-6) in low, high nibble
-    public:
-        uint8_t bitState[7][7]; // byte context, 3-bit context -> bit history state
-        // bitState[][0] = 1st bit, bitState[][1,2] = 2nd bit, bitState[][3..6] = 3rd bit
-        // bitState[][0] is also a replacement priority, 0 = empty
-        inline uint8_t *find(uint16_t checksum) { // find or create hash element matching checksum.
-          // If not found, insert or replace lowest priority (skipping 2 most recent).
-          if( checksums[mostRecentlyUsed & 15U] == checksum )
-            return &bitState[mostRecentlyUsed & 15U][0];
-          int worst = 0xFFFF, idx = 0;
-          for( int i = 0; i < 7; ++i ) {
-            if( checksums[i] == checksum ) {
-              mostRecentlyUsed = mostRecentlyUsed << 4U | i;
-              return &bitState[i][0];
-            }
-            if( bitState[i][0] < worst && (mostRecentlyUsed & 15U) != i && mostRecentlyUsed >> 4U != i ) {
-              worst = bitState[i][0];
-              idx = i;
-            }
-          }
-          mostRecentlyUsed = 0xF0U | idx;
-          checksums[idx] = checksum;
-          return (uint8_t *) memset(&bitState[idx][0], 0, 7);
-        }
-    };
-
     Array<Bucket, 64> table; // bit histories for bits 0-1, 2-4, 5-7
     // For 0-1, also contains run stats in bitState[][3] and byte history in bitState[][4..6]
     Array<uint8_t *> bitState; // c pointers to current bit history states

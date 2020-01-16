@@ -174,12 +174,10 @@ Image24BitModel::Image24BitModel(ModelStats *st, const uint64_t size) : stats(st
                                {11, 1, 86, 1023}} {}
 
 void Image24BitModel::update() {
-  INJECT_SHARED_bpos
-  if( bpos == 0 ) {
-    INJECT_SHARED_c1
+  if( shared->bitPosition == 0 ) {
     INJECT_SHARED_buf
     if( x == 1 && isPNG )
-      filter = c1;
+      filter = shared->c1;
     else {
       if( x + padding < w ) {
         color++;
@@ -194,38 +192,38 @@ void Image24BitModel::update() {
       if( isPNG ) {
         switch( filter ) {
           case 1: {
-            buffer.add((uint8_t) (c1 + buffer(stride) * (x > stride + 1 || !x)));
+            buffer.add((uint8_t) (shared->c1 + buffer(stride) * (x > stride + 1 || !x)));
             filterOn = x > stride;
             px = buffer(stride);
             break;
           }
           case 2: {
-            buffer.add((uint8_t) (c1 + buffer(w) * (filterOn = (line > 0))));
+            buffer.add((uint8_t) (shared->c1 + buffer(w) * (filterOn = (line > 0))));
             px = buffer(w);
             break;
           }
           case 3: {
-            buffer.add((uint8_t) (c1 + (buffer(w) * (line > 0) + buffer(stride) * (x > stride + 1 || !x)) / 2));
+            buffer.add((uint8_t) (shared->c1 + (buffer(w) * (line > 0) + buffer(stride) * (x > stride + 1 || !x)) / 2));
             filterOn = (x > stride || line > 0);
             px = (buffer(stride) * (x > stride) + buffer(w) * (line > 0)) / 2;
             break;
           }
           case 4: {
-            buffer.add((uint8_t) (c1 + paeth(buffer(stride) * (x > stride + 1 || !x), buffer(w) * (line > 0),
-                                             buffer(w + stride) * (line > 0 && (x > stride + 1 || !x)))));
+            buffer.add((uint8_t) (shared->c1 + paeth(buffer(stride) * (x > stride + 1 || !x), buffer(w) * (line > 0),
+                                                     buffer(w + stride) * (line > 0 && (x > stride + 1 || !x)))));
             filterOn = (x > stride || line > 0);
             px = paeth(buffer(stride) * (x > stride), buffer(w) * (line > 0), buffer(w + stride) * (x > stride && line > 0));
             break;
           }
           default:
-            buffer.add(c1);
+            buffer.add(shared->c1);
             filterOn = false;
             px = 0;
         }
         if( !filterOn )
           px = 0;
       } else
-        buffer.add(c1);
+        buffer.add(shared->c1);
     }
 
     if( x > 0 || !isPNG ) {
@@ -400,13 +398,13 @@ void Image24BitModel::update() {
 
       if( !isPNG ) {
         int mean = W + NW + N + NE;
-        const int var = (W * W + NW * NW + N * N + NE * NE - mean * mean / 4) >> 2;
-        mean >>= 2;
+        const int var = (W * W + NW * NW + N * N + NE * NE - mean * mean / 4) >> 2U;
+        mean >>= 2U;
         const int logVar = ilog->log(var);
 
         uint64_t i = 0;
-        cm.set(hash(++i, (N + 1) >> 1, logMeanDiffQt(N, clip(NN * 2 - NNN))));
-        cm.set(hash(++i, (W + 1) >> 1, logMeanDiffQt(W, clip(WW * 2 - WWW))));
+        cm.set(hash(++i, (N + 1) >> 1U, logMeanDiffQt(N, clip(NN * 2 - NNN))));
+        cm.set(hash(++i, (W + 1) >> 1U, logMeanDiffQt(W, clip(WW * 2 - WWW))));
         cm.set(hash(++i, clamp4(W + N - NW, W, NW, N, NE), logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW))));
         cm.set(hash(++i, (NNN + N + 4) / 8, clip(N * 3 - NN * 3 + NNN) >> 1));
         cm.set(hash(++i, (WWW + W + 4) / 8, clip(W * 3 - WW * 3 + WWW) >> 1));
@@ -431,13 +429,13 @@ void Image24BitModel::update() {
         cm.set(hash(++i, (W + NEE) / 2, logMeanDiffQt(W, (WW + NE) / 2)));
         cm.set(hash(++i, (clamp4(clip(W * 2 - WW) + clip(N * 2 - NN) - clip(NW * 2 - NNWW), W, NW, N, NE))));
         cm.set(hash(++i, color, W, p2));
-        cm.set(hash(++i, N, NN & 0x1F, NNN & 0x1F));
-        cm.set(hash(++i, W, WW & 0x1F, WWW & 0x1F));
+        cm.set(hash(++i, N, NN & 0x1FU, NNN & 0x1FU));
+        cm.set(hash(++i, W, WW & 0x1FU, WWW & 0x1FU));
         cm.set(hash(++i, color, N, column[0]));
         cm.set(hash(++i, color, clip(W + NEE - NE), logMeanDiffQt(W, clip(WW + NE - N))));
-        cm.set(hash(++i, NN, NNNN & 0x1F, NNNNNN & 0x1F, column[1]));
-        cm.set(hash(++i, WW, WWWW & 0x1F, WWWWWW & 0x1F, column[1]));
-        cm.set(hash(++i, NNN, NNNNNN & 0x1F, buffer(w * 9) & 0x1F, column[1]));
+        cm.set(hash(++i, NN, NNNN & 0x1FU, NNNNNN & 0x1FU, column[1]));
+        cm.set(hash(++i, WW, WWWW & 0x1FU, WWWWWW & 0x1FU, column[1]));
+        cm.set(hash(++i, NNN, NNNNNN & 0x1FU, buffer(w * 9) & 0x1FU, column[1]));
         cm.set(hash(++i, color, column[1]));
 
         cm.set(hash(++i, color, W, logMeanDiffQt(W, WW)));
@@ -446,7 +444,7 @@ void Image24BitModel::update() {
         cm.set(hash(++i, color, N, logMeanDiffQt(N, NN)));
         cm.set(hash(++i, color, N, p1));
         cm.set(hash(++i, color, N / 4, logMeanDiffQt(N, p1), logMeanDiffQt(N, p2)));
-        cm.set(hash(++i, color, (W + N) >> 3, p1 >> 4, p2 >> 4));
+        cm.set(hash(++i, color, (W + N) >> 3U, p1 >> 4U, p2 >> 4U));
         cm.set(hash(++i, color, p1 / 2, p2 / 2));
         cm.set(hash(++i, color, W, p1 - Wp1));
         cm.set(hash(++i, color, W + p1 - Wp1));
@@ -454,10 +452,10 @@ void Image24BitModel::update() {
         cm.set(hash(++i, color, N + p1 - Np1));
         cm.set(hash(++i, color, mean, logVar >> 4));
 
-        ctx[0] = (min(color, stride - 1) << 9) | ((abs(W - N) > 3) << 8) | ((W > N) << 7) | ((W > NW) << 6) | ((abs(N - NW) > 3) << 5) |
-                 ((N > NW) << 4) | ((abs(N - NE) > 3) << 3) | ((N > NE) << 2) | ((W > WW) << 1) | (N > NN);
-        ctx[1] = ((logMeanDiffQt(p1, clip(Np1 + NEp1 - buffer(w * 2 - stride + 1))) >> 1) << 5) |
-                 ((logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) >> 1) << 2) | min(color, stride - 1);
+        ctx[0] = (min(color, stride - 1) << 9U) | ((abs(W - N) > 3) << 8U) | ((W > N) << 7U) | ((W > NW) << 6U) | ((abs(N - NW) > 3) << 5U) |
+                 ((N > NW) << 4U) | ((abs(N - NE) > 3) << 3U) | ((N > NE) << 2U) | ((W > WW) << 1U) | (N > NN);
+        ctx[1] = ((logMeanDiffQt(p1, clip(Np1 + NEp1 - buffer(w * 2 - stride + 1))) >> 1U) << 5U) |
+                 ((logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) >> 1U) << 2U) | min(color, stride - 1);
       } else {
         int residuals[5] = {((int8_t) buf(stride + (x <= stride))) + 128, ((int8_t) buf(1 + (x < 2))) + 128,
                             ((int8_t) buf(stride + 1 + (x <= stride))) + 128, ((int8_t) buf(2 + (x < 3))) + 128,
@@ -505,15 +503,16 @@ void Image24BitModel::update() {
         cm.set(hash(++i, color, buf(stride + (x <= stride)), buf(1 + (x < 2)), buf(2 + (x < 3))));
         cm.set(hash(++i, color, buf(1 + (x < 2)), px));
         cm.set(hash(++i, buf(w + 1), buf((w + 1) * 2), buf((w + 1) * 3), px));
-        ctx[0] = (min(color, stride - 1) << 9) | ((abs(W - N) > 3) << 8) | ((W > N) << 7) | ((W > NW) << 6) | ((abs(N - NW) > 3) << 5) |
-                 ((N > NW) << 4) | ((N > NE) << 3) | min(5, filterOn ? filter + 1 : 0);
-        ctx[1] = ((logMeanDiffQt(p1, clip(Np1 + NEp1 - buffer(w * 2 - stride + 1))) >> 1) << 5) |
-                 ((logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) >> 1) << 2) | min(color, stride - 1);
+        ctx[0] =
+                (min(color, stride - 1) << 9U) | ((abs(W - N) > 3) << 8U) | ((W > N) << 7U) | ((W > NW) << 6U) | ((abs(N - NW) > 3) << 5U) |
+                ((N > NW) << 4U) | ((N > NE) << 3U) | min(5, filterOn ? filter + 1 : 0);
+        ctx[1] = ((logMeanDiffQt(p1, clip(Np1 + NEp1 - buffer(w * 2 - stride + 1))) >> 1) << 5U) |
+                 ((logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) >> 1) << 2U) | min(color, stride - 1);
       }
 
       int i = -1;
-      map[++i].setDirect((W & 0xC0) | ((N & 0xC0) >> 2) | ((WW & 0xC0) >> 4) | (NN >> 6));
-      map[++i].setDirect((N & 0xC0) | ((NN & 0xC0) >> 2) | ((NE & 0xC0) >> 4) | (NEE >> 6));
+      map[++i].setDirect((W & 0xC0U) | ((N & 0xC0U) >> 2U) | ((WW & 0xC0U) >> 4U) | (NN >> 6U));
+      map[++i].setDirect((N & 0xC0U) | ((NN & 0xC0U) >> 2U) | ((NE & 0xC0U) >> 4U) | (NEE >> 6U));
       map[++i].setDirect(buf(1 + (isPNG && x < 2)));
       map[++i].setDirect(min(color, stride - 1));
       map[++i].setDirect(0);
@@ -524,45 +523,46 @@ void Image24BitModel::update() {
       stats->Image.pixels.WW = WW;
       stats->Image.pixels.Wp1 = Wp1;
       stats->Image.pixels.Np1 = Np1;
-      stats->Image.ctx = ctx[0] >> 3;
+      stats->Image.ctx = ctx[0] >> 3U;
     }
   }
   if( x > 0 || !isPNG ) {
-    INJECT_SHARED_c0
-    uint8_t b = (c0 << (8 - bpos));
+    uint8_t b = (shared->c0 << (8 - shared->bitPosition));
     int i = 4;
 
+    map[++i].setDirect((((uint8_t) (clip(W + N - NW) - px - b)) * 8 + shared->bitPosition) |
+                       (logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) << 11));
+    map[++i].setDirect((((uint8_t) (clip(N * 2 - NN) - px - b)) * 8 + shared->bitPosition) | (logMeanDiffQt(W, clip(NW * 2 - NNW)) << 11));
+    map[++i].setDirect((((uint8_t) (clip(W * 2 - WW) - px - b)) * 8 + shared->bitPosition) | (logMeanDiffQt(N, clip(NW * 2 - NWW)) << 11));
     map[++i].setDirect(
-            (((uint8_t) (clip(W + N - NW) - px - b)) * 8 + bpos) | (logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) << 11));
-    map[++i].setDirect((((uint8_t) (clip(N * 2 - NN) - px - b)) * 8 + bpos) | (logMeanDiffQt(W, clip(NW * 2 - NNW)) << 11));
-    map[++i].setDirect((((uint8_t) (clip(W * 2 - WW) - px - b)) * 8 + bpos) | (logMeanDiffQt(N, clip(NW * 2 - NWW)) << 11));
-    map[++i].setDirect((((uint8_t) (clip(W + N - NW) - px - b)) * 8 + bpos) | (logMeanDiffQt(p1, clip(Wp1 + Np1 - NWp1)) << 11));
-    map[++i].setDirect((((uint8_t) (clip(W + N - NW) - px - b)) * 8 + bpos) | (logMeanDiffQt(p2, clip(Wp2 + Np2 - NWp2)) << 11));
-    map[++i].set(hash(W - px - b, N - px - b) * 8 + bpos);
-    map[++i].set(hash(W - px - b, WW - px - b) * 8 + bpos);
-    map[++i].set(hash(N - px - b, NN - px - b) * 8 + bpos);
-    map[++i].set(hash(clip(N + NE - NNE) - px - b, clip(N + NW - NNW) - px - b) * 8 + bpos);
-    map[++i].setDirect((min(color, stride - 1) << 11) | (((uint8_t) (clip(N + p1 - Np1) - px - b)) * 8 + bpos));
-    map[++i].setDirect((min(color, stride - 1) << 11) | (((uint8_t) (clip(N + p2 - Np2) - px - b)) * 8 + bpos));
-    map[++i].setDirect((min(color, stride - 1) << 11) | (((uint8_t) (clip(W + p1 - Wp1) - px - b)) * 8 + bpos));
-    map[++i].setDirect((min(color, stride - 1) << 11) | (((uint8_t) (clip(W + p2 - Wp2) - px - b)) * 8 + bpos));
+            (((uint8_t) (clip(W + N - NW) - px - b)) * 8 + shared->bitPosition) | (logMeanDiffQt(p1, clip(Wp1 + Np1 - NWp1)) << 11));
+    map[++i].setDirect(
+            (((uint8_t) (clip(W + N - NW) - px - b)) * 8 + shared->bitPosition) | (logMeanDiffQt(p2, clip(Wp2 + Np2 - NWp2)) << 11));
+    map[++i].set(hash(W - px - b, N - px - b) * 8 + shared->bitPosition);
+    map[++i].set(hash(W - px - b, WW - px - b) * 8 + shared->bitPosition);
+    map[++i].set(hash(N - px - b, NN - px - b) * 8 + shared->bitPosition);
+    map[++i].set(hash(clip(N + NE - NNE) - px - b, clip(N + NW - NNW) - px - b) * 8 + shared->bitPosition);
+    map[++i].setDirect((min(color, stride - 1) << 11U) | (((uint8_t) (clip(N + p1 - Np1) - px - b)) * 8 + shared->bitPosition));
+    map[++i].setDirect((min(color, stride - 1) << 11U) | (((uint8_t) (clip(N + p2 - Np2) - px - b)) * 8 + shared->bitPosition));
+    map[++i].setDirect((min(color, stride - 1) << 11U) | (((uint8_t) (clip(W + p1 - Wp1) - px - b)) * 8 + shared->bitPosition));
+    map[++i].setDirect((min(color, stride - 1) << 11U) | (((uint8_t) (clip(W + p2 - Wp2) - px - b)) * 8 + shared->bitPosition));
     ++i;
     assert(i == nSM0);
 
     for( int j = 0; j < nSM1; i++, j++ )
-      map[i].setDirect((mapContexts[j] - px - b) * 8 + bpos);
+      map[i].setDirect((mapContexts[j] - px - b) * 8 + shared->bitPosition);
 
     for( int j = 0; i < nSM; i++, j++ )
-      map[i].setDirect((pOLS[j] - px - b) * 8 + bpos);
+      map[i].setDirect((pOLS[j] - px - b) * 8 + shared->bitPosition);
 
     for( int i = 0; i < nSSM; i++ )
-      SCMap[i].set((scMapContexts[i] - px - b) * 8 + bpos);
+      SCMap[i].set((scMapContexts[i] - px - b) * 8 + shared->bitPosition);
   }
 }
 
 void Image24BitModel::init() {
   stride = 3 + alpha;
-  w = info & 0xFFFFFF;
+  w = info & 0xFFFFFFU;
   padding = w % stride;
   x = color = line = px = 0;
   filterOn = false;
@@ -583,9 +583,8 @@ void Image24BitModel::setParam(int info0, uint32_t alpha0, uint32_t isPNG0) {
 }
 
 void Image24BitModel::mix(Mixer &m) {
-  INJECT_SHARED_bpos
-  INJECT_SHARED_pos
-  if( bpos == 0 ) {
+  const uint32_t pos = shared->buf.getpos();
+  if( shared->bitPosition == 0 ) {
     if((color < 0) || (pos - lastPos != 1))
       init();
     else {
@@ -613,21 +612,20 @@ void Image24BitModel::mix(Mixer &m) {
     if( ++col >= stride * 8 )
       col = 0;
     m.set(5, 6);
-    m.set(min(63, column[0]) + ((ctx[0] >> 3) & 0xC0), 256);
-    m.set(min(127, column[1]) + ((ctx[0] >> 2) & 0x180), 512);
-    INJECT_SHARED_c0
-    m.set((ctx[0] & 0x7FC) | (bpos >> 1), 2048);
-    m.set(col + (isPNG ? (ctx[0] & 7) + 1 : (c0 == ((0x100 | ((N + W) / 2)) >> (8 - bpos)))) * 32, 8 * 32);
-    m.set(((isPNG ? p1 : 0) >> 4) * stride + (x % stride) + min(5, filterOn ? filter + 1 : 0) * 64, 6 * 64);
-    m.set(c0 + 256 * (isPNG && abs(R1 - 128) > 8), 256 * 2);
-    m.set((ctx[1] << 2) | (bpos >> 1), 1024);
+    m.set(min(63, column[0]) + ((ctx[0] >> 3U) & 0xC0U), 256);
+    m.set(min(127, column[1]) + ((ctx[0] >> 2U) & 0x180U), 512);
+    m.set((ctx[0] & 0x7FCU) | (shared->bitPosition >> 1), 2048);
+    m.set(col + (isPNG ? (ctx[0] & 7) + 1 : (shared->c0 == ((0x100U | ((N + W) / 2)) >> (8 - shared->bitPosition)))) * 32, 8 * 32);
+    m.set(((isPNG ? p1 : 0) >> 4U) * stride + (x % stride) + min(5, filterOn ? filter + 1 : 0) * 64, 6 * 64);
+    m.set(shared->c0 + 256 * (isPNG && abs(R1 - 128) > 8), 256 * 2);
+    m.set((ctx[1] << 2U) | (shared->bitPosition >> 1U), 1024);
     m.set(finalize64(hash(logMeanDiffQt(W, WW, 5), logMeanDiffQt(N, NN, 5), logMeanDiffQt(W, N, 5), ilog2(W), color), 13), 8192);
     m.set(finalize64(hash(ctx[0], column[0] / 8), 13), 8192);
-    m.set(finalize64(hash(logQt(N, 5), logMeanDiffQt(N, NN, 3), c0), 13), 8192);
-    m.set(finalize64(hash(logQt(W, 5), logMeanDiffQt(W, WW, 3), c0), 13), 8192);
+    m.set(finalize64(hash(logQt(N, 5), logMeanDiffQt(N, NN, 3), shared->c0), 13), 8192);
+    m.set(finalize64(hash(logQt(W, 5), logMeanDiffQt(W, WW, 3), shared->c0), 13), 8192);
     m.set(min(255, (x + line) / 32), 256);
   } else {
-    m.add(-2048 + ((filter >> (7 - bpos)) & 1) * 4096);
+    m.add(-2048 + ((filter >> (7 - shared->bitPosition)) & 1U) * 4096);
     m.set(min(4, filter), MIXERCONTEXTSETS);
   }
 }

@@ -98,12 +98,9 @@ void Image8BitModel::setParam(int info0, uint32_t gray0, uint32_t isPNG0) {
 
 void Image8BitModel::mix(Mixer &m) {
   // Select nearby pixels as context
-  INJECT_SHARED_bpos
-  if( bpos == 0 ) {
-    INJECT_SHARED_c1
+  if( shared->bitPosition == 0 ) {
     INJECT_SHARED_buf
-    INJECT_SHARED_pos
-    if( pos != lastPos + 1 ) {
+    if( shared->buf.getpos() != lastPos + 1 ) {
       x = line = px = jump = 0;
       filterOn = false;
       columns[0] = max(1, w / max(1, ilog2(w) * 2));
@@ -117,7 +114,7 @@ void Image8BitModel::mix(Mixer &m) {
       }
       buffer.fill(0x7F);
       prevFramePos = framePos;
-      framePos = pos;
+      framePos = shared->buf.getpos();
       prevFrameWidth = frameWidth;
       frameWidth = w;
     } else {
@@ -127,39 +124,39 @@ void Image8BitModel::mix(Mixer &m) {
         line++;
       }
     }
-    lastPos = pos;
+    lastPos = shared->buf.getpos();
 
     if( isPNG ) {
       if( x == 1 )
-        filter = (uint8_t) c1;
+        filter = (uint8_t) shared->c1;
       else {
         switch( filter ) {
           case 1: {
-            buffer.add((uint8_t) (c1 + buffer(1) * (x > 2 || !x)));
+            buffer.add((uint8_t) (shared->c1 + buffer(1) * (x > 2 || !x)));
             filterOn = x > 1;
             px = buffer(1);
             break;
           }
           case 2: {
-            buffer.add((uint8_t) (c1 + buffer(w) * (filterOn = (line > 0))));
+            buffer.add((uint8_t) (shared->c1 + buffer(w) * (filterOn = (line > 0))));
             px = buffer(w);
             break;
           }
           case 3: {
-            buffer.add((uint8_t) (c1 + (buffer(w) * (line > 0) + buffer(1) * (x > 2 || !x)) / 2));
+            buffer.add((uint8_t) (shared->c1 + (buffer(w) * (line > 0) + buffer(1) * (x > 2 || !x)) / 2));
             filterOn = (x > 1 || line > 0);
             px = (buffer(1) * (x > 1) + buffer(w) * (line > 0)) / 2;
             break;
           }
           case 4: {
-            buffer.add(
-                    (uint8_t) (c1 + paeth(buffer(1) * (x > 2 || !x), buffer(w) * (line > 0), buffer(w + 1) * (line > 0 && (x > 2 || !x)))));
+            buffer.add((uint8_t) (shared->c1 +
+                                  paeth(buffer(1) * (x > 2 || !x), buffer(w) * (line > 0), buffer(w + 1) * (line > 0 && (x > 2 || !x)))));
             filterOn = (x > 1 || line > 0);
             px = paeth(buffer(1) * (x > 1), buffer(w) * (line > 0), buffer(w + 1) * (x > 1 && line > 0));
             break;
           }
           default:
-            buffer.add(c1);
+            buffer.add(shared->c1);
             filterOn = false;
             px = 0;
         }
@@ -167,7 +164,7 @@ void Image8BitModel::mix(Mixer &m) {
           px = 0;
       }
     } else { // non-png
-      buffer.add(c1);
+      buffer.add(shared->c1);
       if( x == 0 ) {
         memset(&jumps[0], 0, sizeof(short) * jumps.size());
         if( line > 0 && w > 8 ) {
@@ -176,10 +173,10 @@ void Image8BitModel::mix(Mixer &m) {
           uint32_t left = 0, right = 0;
           int l = min(w, (int) jumps.size()), end = l - 4;
           do {
-            left = ((buffer(l - x) << 24) | (buffer(l - x - 1) << 16) | (buffer(l - x - 2) << 8) | buffer(l - x - 3)) & pMask;
+            left = ((buffer(l - x) << 24U) | (buffer(l - x - 1) << 16U) | (buffer(l - x - 2) << 8U) | buffer(l - x - 3)) & pMask;
             int i = end;
             while( i >= x + 4 ) {
-              right = ((buffer(l - i - 3) << 24) | (buffer(l - i - 2) << 16) | (buffer(l - i - 1) << 8) | buffer(l - i)) & pMask;
+              right = ((buffer(l - i - 3) << 24U) | (buffer(l - i - 2) << 16U) | (buffer(l - i - 1) << 8U) | buffer(l - i)) & pMask;
               if( left == right ) {
                 int j = (i + 3 - x - 1) / 2, k = 0;
                 for( ; k <= j; k++ ) {
@@ -241,14 +238,14 @@ void Image8BitModel::mix(Mixer &m) {
       int j = 0;
       jump = jumps[min(x, (int) jumps.size() - 1)];
       uint64_t i = (filterOn ? (filter + 1) * 64 : 0) + (gray * 1024);
-      cm.set(hash(++i, (jump != 0) ? (0x100 | buffer(abs(jump))) * (1 - 2 * (jump < 0)) : N, line & 3));
+      cm.set(hash(++i, (jump != 0) ? (0x100U | buffer(abs(jump))) * (1 - 2 * (jump < 0)) : N, line & 3U));
       if( !gray ) {
         for( j = 0; j < nPltMaps; j++ )
           iCtx[j] += W;
-        iCtx[0] = W | (NE << 8);
-        iCtx[1] = W | (N << 8);
-        iCtx[2] = W | (WW << 8);
-        iCtx[3] = N | (NN << 8);
+        iCtx[0] = W | (NE << 8U);
+        iCtx[1] = W | (N << 8U);
+        iCtx[2] = W | (WW << 8U);
+        iCtx[3] = N | (NN << 8U);
 
         cm.set(hash(++i, W, px));
         cm.set(hash(++i, W, px, column[0]));
@@ -293,7 +290,7 @@ void Image8BitModel::mix(Mixer &m) {
         cm.set(hash(++i, N, NE, NN, NNE, px));
         cm.set(hash(++i, N, NW, NNW, NN, px));
         cm.set(hash(++i, W, WW, NWW, NW, px));
-        cm.set(hash(++i, W, NW << 8 | N, WW << 8 | NWW, px));
+        cm.set(hash(++i, W, NW << 8U | N, WW << 8U | NWW, px));
         cm.set(hash(++i, px, column[0]));
         cm.set(hash(++i, px));
         cm.set(hash(++i, N, px, column[1]));
@@ -395,11 +392,11 @@ void Image8BitModel::mix(Mixer &m) {
         cm.set(hash(++i, clip(W * 2 - WW) - px, logMeanDiffQt(NE, clip(N * 2 - NW))));
 
         if( isPNG )
-          ctx = ((abs(W - N) > 8) << 10) | ((W > N) << 9) | ((abs(N - NW) > 8) << 8) | ((N > NW) << 7) | ((abs(N - NE) > 8) << 6) |
-                ((N > NE) << 5) | ((W > WW) << 4) | ((N > NN) << 3) | min(5, filterOn ? filter + 1 : 0);
+          ctx = ((abs(W - N) > 8) << 10U) | ((W > N) << 9U) | ((abs(N - NW) > 8) << 8U) | ((N > NW) << 7U) | ((abs(N - NE) > 8) << 6U) |
+                ((N > NE) << 5U) | ((W > WW) << 4U) | ((N > NN) << 3U) | min(5, filterOn ? filter + 1 : 0);
         else
-          ctx = min(0x1F, x / max(1, w / min(32, columns[0]))) | ((((abs(W - N) * 16 > W + N) << 1) | (abs(N - NW) > 8)) << 5) |
-                ((W + N) & 0x180);
+          ctx = min(0x1F, x / max(1, w / min(32, columns[0]))) | ((((abs(W - N) * 16 > W + N) << 1U) | (abs(N - NW) > 8)) << 5U) |
+                ((W + N) & 0x180U);
 
         res = clamp4(W + N - NW, W, NW, N, NE) - px;
       }
@@ -411,24 +408,23 @@ void Image8BitModel::mix(Mixer &m) {
       stats->Image.ctx = ctx >> gray;
     }
   }
-  INJECT_SHARED_c0
-  uint8_t b = (c0 << (8 - bpos));
+  uint8_t b = (shared->c0 << (8 - shared->bitPosition));
   if( x || !isPNG ) {
     if( gray ) {
       int i = 0;
       map[i++].setDirect(0);
-      map[i++].setDirect(
-              (((uint8_t) (clip(W + N - NW) - px - b)) * 8 + bpos) | (logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) << 11));
+      map[i++].setDirect((((uint8_t) (clip(W + N - NW) - px - b)) * 8 + shared->bitPosition) |
+                         (logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) << 11U));
 
       for( int j = 0; j < nSM1; i++, j++ )
-        map[i].setDirect((mapCtxs[j] - px - b) * 8 + bpos);
+        map[i].setDirect((mapCtxs[j] - px - b) * 8 + shared->bitPosition);
 
       for( int j = 0; i < nSM; i++, j++ )
-        map[i].setDirect((pOLS[j] - px - b) * 8 + bpos);
+        map[i].setDirect((pOLS[j] - px - b) * 8 + shared->bitPosition);
     }
-    sceneMap[2].setDirect(finalize64(hash(x, line), 19) * 8 + bpos);
-    sceneMap[3].setDirect((prvFrmPx - b) * 8 + bpos);
-    sceneMap[4].setDirect((prvFrmPrediction - b) * 8 + bpos);
+    sceneMap[2].setDirect(finalize64(hash(x, line), 19) * 8 + shared->bitPosition);
+    sceneMap[3].setDirect((prvFrmPx - b) * 8 + shared->bitPosition);
+    sceneMap[4].setDirect((prvFrmPrediction - b) * 8 + shared->bitPosition);
   }
 
   // predict next bit
@@ -440,7 +436,7 @@ void Image8BitModel::mix(Mixer &m) {
       }
     } else {
       for( int i = 0; i < nPltMaps; i++ ) {
-        pltMap[i].set((bpos << 8) | iCtx[i]());
+        pltMap[i].set((shared->bitPosition << 8U) | iCtx[i]());
         pltMap[i].mix(m);
       }
     }
@@ -450,18 +446,19 @@ void Image8BitModel::mix(Mixer &m) {
       sceneMap[i].mix(m);
     }
 
-    col = (col + 1) & 7;
+    col = (col + 1) & 7U;
     m.set(5 + ctx, 2048 + 5);
-    m.set(col * 2 + (isPNG && c0 == ((0x100 | res) >> (8 - bpos))) + min(5, filterOn ? filter + 1 : 0) * 16, 6 * 16);
-    m.set(((isPNG ? px : N + W) >> 4) + min(5, filterOn ? filter + 1 : 0) * 32, 6 * 32);
-    m.set(c0, 256);
-    m.set(((abs((int) (W - N)) > 4) << 9) | ((abs((int) (N - NE)) > 4) << 8) | ((abs((int) (W - NW)) > 4) << 7) | ((W > N) << 6) |
-          ((N > NE) << 5) | ((W > NW) << 4) | ((W > WW) << 3) | ((N > NN) << 2) | ((NW > NNWW) << 1) | (NE > NNEE), 1024);
+    m.set(col * 2 + (isPNG && shared->c0 == ((0x100U | res) >> (8 - shared->bitPosition))) + min(5, filterOn ? filter + 1 : 0) * 16,
+          6 * 16);
+    m.set(((isPNG ? px : N + W) >> 4U) + min(5, filterOn ? filter + 1 : 0) * 32, 6 * 32);
+    m.set(shared->c0, 256);
+    m.set(((abs((int) (W - N)) > 4) << 9U) | ((abs((int) (N - NE)) > 4) << 8U) | ((abs((int) (W - NW)) > 4) << 7U) | ((W > N) << 6U) |
+          ((N > NE) << 5U) | ((W > NW) << 4U) | ((W > WW) << 3U) | ((N > NN) << 2U) | ((NW > NNWW) << 1U) | (NE > NNEE), 1024);
     m.set(min(63, column[0]), 64);
     m.set(min(127, column[1]), 128);
     m.set(min(255, (x + line) / 32), 256);
   } else {
-    m.add(-2048 + ((filter >> (7 - bpos)) & 1) * 4096);
+    m.add(-2048 + ((filter >> (7 - shared->bitPosition)) & 1U) * 4096);
     m.set(min(4, filter), MIXERINPUTS);
   }
 }

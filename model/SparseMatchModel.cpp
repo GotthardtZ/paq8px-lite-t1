@@ -45,23 +45,19 @@ void SparseMatchModel::update() {
     }
   }
   // update position information in hashtable
-  INJECT_SHARED_pos
   for( uint32_t i = 0; i < numHashes; i++ )
-    table[hashes[i]] = pos;
+    table[hashes[i]] = shared->buf.getpos();
 
   expectedByte = length != 0 ? buf[index] : 0;
-  INJECT_SHARED_c1
   if( valid ) {
     INJECT_SHARED_y
     iCtx8 += y;
-    iCtx16 += c1;
+    iCtx16 += shared->c1;
   }
   valid = length > 1; // only predict after at least one byte following the match
   if( valid ) {
-    INJECT_SHARED_c0
-    INJECT_SHARED_c4
-    maps[0].set(hash(expectedByte, c0, c1, (c4 >> 8U) & 0xffu, ilog2(length + 1) * numHashes + hashIndex));
-    const uint32_t c1ExpectedByte = (c1 << 8U) | expectedByte;
+    maps[0].set(hash(expectedByte, shared->c0, shared->c1, (shared->c4 >> 8U) & 0xffu, ilog2(length + 1) * numHashes + hashIndex));
+    const uint32_t c1ExpectedByte = (shared->c1 << 8U) | expectedByte;
     maps[1].setDirect(c1ExpectedByte);
     iCtx8 = c1ExpectedByte;
     iCtx16 = c1ExpectedByte;
@@ -71,34 +67,30 @@ void SparseMatchModel::update() {
 }
 
 void SparseMatchModel::mix(Mixer &m) {
-  INJECT_SHARED_bpos
-  INJECT_SHARED_c0
-  const uint8_t b = c0 << (8 - bpos);
-  if( bpos == 0 )
+  const uint8_t b = shared->c0 << (8 - shared->bitPosition);
+  if( shared->bitPosition == 0 )
     update();
   else if( valid ) {
-    INJECT_SHARED_c1
-    INJECT_SHARED_c4
-    maps[0].set(hash(expectedByte, c0, c1, (c4 >> 8) & 0xff, ilog2(length + 1) * numHashes + hashIndex));
-    if( bpos == 4 )
-      maps[1].setDirect(0x10000 | ((expectedByte ^ uint8_t(c0 << 4)) << 8) | c1);
+    maps[0].set(hash(expectedByte, shared->c0, shared->c1, (shared->c4 >> 8U) & 0xffU, ilog2(length + 1) * numHashes + hashIndex));
+    if( shared->bitPosition == 4 )
+      maps[1].setDirect(0x10000U | ((expectedByte ^ uint8_t(shared->c0 << 4U)) << 8U) | shared->c1);
     INJECT_SHARED_y
     iCtx8 += y;
-    iCtx8 = (bpos << 16) | (c1 << 8) | (expectedByte ^ b);
+    iCtx8 = (shared->bitPosition << 16U) | (shared->c1 << 8U) | (expectedByte ^ b);
     maps[2].setDirect(iCtx8());
-    maps[3].setDirect((bpos << 16) | (iCtx16() ^ uint32_t(b | (b << 8))));
+    maps[3].setDirect((shared->bitPosition << 16U) | (iCtx16() ^ uint32_t(b | (b << 8U))));
   }
 
   // check if next bit matches the prediction, accounting for the required bitmask
-  if( length > 0 && (((expectedByte ^ b) & sparse[hashIndex].bitMask) >> (8 - bpos)) != 0 )
+  if( length > 0 && (((expectedByte ^ b) & sparse[hashIndex].bitMask) >> (8 - shared->bitPosition)) != 0 )
     length = 0;
 
   if( valid ) {
-    if( length > 1 && ((sparse[hashIndex].bitMask >> (7 - bpos)) & 1) > 0 ) {
-      const int expectedBit = (expectedByte >> (7 - bpos)) & 1;
+    if( length > 1 && ((sparse[hashIndex].bitMask >> (7 - shared->bitPosition)) & 1U) > 0 ) {
+      const int expectedBit = (expectedByte >> (7 - shared->bitPosition)) & 1U;
       const int sign = 2 * expectedBit - 1;
-      m.add(sign * (min(length - 1, 64) << 4)); // +/- 16..1024
-      m.add(sign * (1 << min(length - 2, 3)) * min(length - 1, 8) << 4); // +/- 16..1024
+      m.add(sign * (min(length - 1, 64) << 4U)); // +/- 16..1024
+      m.add(sign * (1U << min(length - 2, 3)) * min(length - 1, 8) << 4U); // +/- 16..1024
       m.add(sign * 512);
     } else {
       m.add(0);
@@ -112,6 +104,7 @@ void SparseMatchModel::mix(Mixer &m) {
     for( int i = 0; i < MIXERINPUTS; i++ )
       m.add(0);
 
-  m.set((hashIndex << 6) | (bpos << 3) | min(7, length), numHashes * 64);
-  m.set((hashIndex << 11) | (min(7, ilog2(length + 1)) << 8) | (c0 ^ (expectedByte >> (8 - bpos))), numHashes * 2048);
+  m.set((hashIndex << 6U) | (shared->bitPosition << 3) | min(7, length), numHashes * 64);
+  m.set((hashIndex << 11U) | (min(7, ilog2(length + 1)) << 8) | (shared->c0 ^ (expectedByte >> (8 - shared->bitPosition))),
+        numHashes * 2048);
 }

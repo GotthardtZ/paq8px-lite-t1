@@ -5,7 +5,7 @@
 #include "ecc.hpp"
 
 /**
- * TODO: Large file support
+ * @todo Large file support
  */
 class CdFilter : Filter {
 public:
@@ -53,7 +53,7 @@ public:
           d2[i] = data[i]; //data bytes
         uint32_t edc = edcCompute(d2 + 16 * static_cast<int>(fMode == 2), 2064 - 8 * static_cast<int>(fMode == 2));
         for( int i = 0; i < 4; i++ )
-          d2[2064 + 8 * static_cast<int>(fMode == 2) + i] = (edc >> (8 * i)) & 0xff;
+          d2[2064 + 8 * static_cast<int>(fMode == 2) + i] = (edc >> (8 * i)) & 0xffU;
         eccCompute(d2 + 12, 86, 24, 2, 86, d2 + 2076);
         eccCompute(d2 + 12, 52, 43, 86, 88, d2 + 2248);
         if( fMode == 2 ) {
@@ -105,8 +105,16 @@ public:
       }
     }
 
+    /**
+     * @todo Large file support
+     * @param in
+     * @param out
+     * @param fMode
+     * @param size
+     * @param diffFound
+     * @return
+     */
     uint64_t decode(File *in, File *out, FMode fMode, uint64_t size, uint64_t &diffFound) override {
-      //TODO: Large file support
       const int block = 2352;
       uint8_t blk[block];
       uint64_t i = 0; //*in position

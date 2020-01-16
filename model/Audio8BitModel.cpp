@@ -20,9 +20,7 @@ Audio8BitModel::Audio8BitModel(ModelStats *st) : AudioModel(st), sMap1B {
                       {{11, 1, 6, 86},  {11, 1, 9, 86},  {11, 1, 7, 86}}} {}
 
 void Audio8BitModel::setParam(int info) {
-  INJECT_STATS_blpos
-  INJECT_SHARED_bpos
-  if( blPos == 0 && bpos == 0 ) {
+  if( stats->blPos == 0 && shared->bitPosition == 0 ) {
     assert((info & 2) == 0);
     stereo = (info & 1U);
     mask = 0;
@@ -34,13 +32,9 @@ void Audio8BitModel::setParam(int info) {
 }
 
 void Audio8BitModel::mix(Mixer &m) {
-  INJECT_SHARED_bpos
-  INJECT_SHARED_c0
-  INJECT_SHARED_c1
-  if( bpos == 0 ) {
-    INJECT_STATS_blpos
-    ch = (stereo) ? blPos & 1U : 0;
-    const int8_t s = int(((wMode & 4U) > 0) ? c1 ^ 128U : c1) - 128U;
+  if( shared->bitPosition == 0 ) {
+    ch = (stereo) ? stats->blPos & 1U : 0;
+    const int8_t s = int(((wMode & 4U) > 0) ? shared->c1 ^ 128U : shared->c1) - 128U;
     const int pCh = ch ^stereo;
     int i = 0;
     for( errLog = 0; i < nOLS; i++ ) {
@@ -109,19 +103,19 @@ void Audio8BitModel::mix(Mixer &m) {
     for( i = 0; i < nSSM; i++ )
       prd[i][ch][1] = signedClip8(prd[i][ch][0] + residuals[i][pCh]);
   }
-  const int8_t b = c0 << (8U - bpos);
+  const int8_t b = shared->c0 << (8U - shared->bitPosition);
   for( int i = 0; i < nSSM; i++ ) {
-    const uint32_t ctx = (prd[i][ch][0] - b) * 8 + bpos;
+    const uint32_t ctx = (prd[i][ch][0] - b) * 8 + shared->bitPosition;
     sMap1B[i][0].set(ctx);
     sMap1B[i][1].set(ctx);
-    sMap1B[i][2].set((prd[i][ch][1] - b) * 8 + bpos);
+    sMap1B[i][2].set((prd[i][ch][1] - b) * 8 + shared->bitPosition);
     sMap1B[i][0].mix(m);
     sMap1B[i][1].mix(m);
     sMap1B[i][2].mix(m);
   }
-  m.set((errLog << 8U) | c0, 4096);
-  m.set((uint8_t(mask) << 3U) | (ch << 2U) | (bpos >> 1U), 2048);
-  m.set((mxCtx << 7U) | (c1 >> 1U), 1280);
-  m.set((errLog << 4U) | (ch << 3U) | bpos, 256);
+  m.set((errLog << 8U) | shared->c0, 4096);
+  m.set((uint8_t(mask) << 3U) | (ch << 2U) | (shared->bitPosition >> 1U), 2048);
+  m.set((mxCtx << 7U) | (shared->c1 >> 1U), 1280);
+  m.set((errLog << 4U) | (ch << 3U) | shared->bitPosition, 256);
   m.set(mxCtx, 10);
 }

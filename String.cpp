@@ -12,7 +12,9 @@ void String::appendIntRecursive(uint64_t x) {
   }
 }
 
-auto String::c_str() const -> const char * { return &(*this)[0]; }
+auto String::c_str() const -> const char * {
+  return &(*this)[0];
+}
 
 auto String::strsize() const -> uint64_t {
   chk_consistency();
