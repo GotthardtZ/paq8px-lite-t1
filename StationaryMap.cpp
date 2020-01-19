@@ -6,6 +6,7 @@ StationaryMap::StationaryMap(const int bitsOfContext, const int inputBits, const
   assert(inputBits > 0 && inputBits <= 8);
   assert(bitsOfContext + inputBits <= 24);
   dt = DivisionTable::getDT();
+  printf("Created StationaryMap with bitsOfContext = %d, inputBits = %d, scale = %d, limit = %d\n", bitsOfContext, inputBits, scale, limit);
   reset(0);
   set(0);
 }
@@ -38,7 +39,7 @@ void StationaryMap::update() {
 }
 
 void StationaryMap::mix(Mixer &m) {
-  updater->subscribe(this);
+  shared->updateBroadcaster->subscribe(this);
   cp = &data[context + b];
   int prediction = (*cp) >> 20U;
   m.add((stretch(prediction) * scale) >> 8U);

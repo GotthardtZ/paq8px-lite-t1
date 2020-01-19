@@ -7,13 +7,9 @@
 #include "Stretch.hpp"
 
 /**
- * map for modelling contexts of (nearly-)stationary data.
+ * Map for modelling contexts of (nearly-)stationary data.
  * The context is looked up directly. For each bit modelled, a 16bit prediction is stored.
- * The adaptation rate is controlled by the caller, see mix().
- *
- * - BitsOfContext: How many bits to use for each context. Higher bits are discarded.
- * - InputBits: How many bits [1..8] of input are to be modelled for each context.
- * New contexts must be set at those intervals.
+ * The adaptation rate is controlled by the caller, see @ref SmallStationaryContextMap::mix().
  *
  * Uses (2^(BitsOfContext+1))*((2^InputBits)-1) bytes of memory.
  */
@@ -33,14 +29,19 @@ private:
     uint16_t *cp {};
     const int rate;
     int scale;
-    UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 
 public:
+    /**
+     * Construct using (2^(BitsOfContext+1))*((2^InputBits)-1) bytes of memory.
+     * @param bitsOfContext How many bits to use for each context. Higher bits are discarded.
+     * @param inputBits How many bits [1..8] of input are to be modelled for each context. New contexts must be set at those intervals.
+     * @param rate
+     * @param scale
+     */
     SmallStationaryContextMap(int bitsOfContext, int inputBits, int rate, int scale);
     void set(uint32_t ctx);
     void reset();
     void update() override;
-    void setScale(int Scale);
     void mix(Mixer &m);
 };
 

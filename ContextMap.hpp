@@ -100,7 +100,6 @@ private:
     const int hashBits;
     uint64_t validFlags;
     Ilog *ilog = Ilog::getInstance();
-    UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 
 public:
     /**

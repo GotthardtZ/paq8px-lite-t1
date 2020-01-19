@@ -9,8 +9,6 @@
 #include <cmath>
 #include <cstdint>
 
-#ifdef USE_AUDIOMODEL
-
 class Audio8BitModel : AudioModel {
 private:
     static constexpr int nOLS = 8;
@@ -42,10 +40,9 @@ public:
     static constexpr int MIXERCONTEXTS = 4096 + 2048 + 2048 + 256 + 10; //8458
     static constexpr int MIXERCONTEXTSETS = 5;
 
-    Audio8BitModel(ModelStats *st);
+    explicit Audio8BitModel(ModelStats *st);
     void setParam(int info);
     void mix(Mixer &m);
 };
 
-#endif //USE_AUDIOMODEL
 #endif //PAQ8PX_AUDIO8BITMODEL_HPP

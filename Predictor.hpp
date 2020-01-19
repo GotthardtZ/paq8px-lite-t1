@@ -24,7 +24,6 @@ class Predictor {
     ContextModel contextModel;
     SSE sse;
     int pr; // next prediction, scaled by 12 bits (0-4095)
-    UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
     Shared *shared = Shared::getInstance();
     void trainText(const char *dictionary, int iterations);
     void trainExe();

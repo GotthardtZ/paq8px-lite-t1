@@ -30,7 +30,6 @@ mapped to predictions.
 #include "Stretch.hpp"
 #include "Bucket.hpp"
 
-#define CM_USE_NONE 0U
 #define CM_USE_RUN_STATS 1U
 #define CM_USE_BYTE_HISTORY 2U
 
@@ -51,19 +50,21 @@ private:
     Array<uint8_t *> byteHistory; // c pointers to run stats plus byte history, 4 bytes, [RunStats,1..3]
     Array<uint32_t> contexts; // c whole byte context hashes
     Array<uint16_t> checksums; // c whole byte context checksums
-    StateMap runMap, stateMap, bhMap8B, bhMap12B;
+    StateMap runMap;
+    StateMap stateMap;
+    StateMap bhMap8B;
+    StateMap bhMap12B;
     uint32_t index; // next context to set by set()
     const uint32_t mask;
     const int hashBits;
     uint64_t validFlags;
     int scale;
     uint32_t useWhat;
-    UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 
 public:
     int order = 0; // is set after mix()
     /**
-     * Construct using size bytes of memory for count contexts.
+     * Construct using @ref size bytes of memory for @ref count contexts.
      * @param size bytes of memory to use
      * @param count number of contexts
      * @param scale
@@ -72,7 +73,7 @@ public:
     ContextMap2(uint64_t size, uint32_t count, int scale, uint32_t uw);
 
     /**
-     * Set next whole byte context to ctx.
+     * Set next whole byte context to @ref ctx.
      * @param ctx
      */
     void set(uint64_t ctx);

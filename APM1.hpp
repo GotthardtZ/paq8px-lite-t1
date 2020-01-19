@@ -20,7 +20,6 @@ private:
     const int n; // number of contexts
     Array<uint16_t> t; // [n][33]:  p, context -> p
     const int rate;
-    UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 
 public:
     /**

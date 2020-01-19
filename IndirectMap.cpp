@@ -4,6 +4,7 @@
 IndirectMap::IndirectMap(const int bitsOfContext, const int inputBits, const int scale, const int limit) : data(
         (1ULL << bitsOfContext) * ((1ULL << inputBits) - 1)), sm {1, 256, 1023, StateMap::BitHistory}, mask((1U << bitsOfContext) - 1),
         maskBits(bitsOfContext), stride((1U << inputBits) - 1), bTotal(inputBits), scale(scale) {
+  printf("Created IndirectMap with bitsOfContext = %d, inputBits = %d, scale = %d, limit = %d\n", bitsOfContext, inputBits, scale, limit);
   assert(inputBits > 0 && inputBits <= 8);
   assert(bitsOfContext + inputBits <= 24);
   cp = &data[0];
@@ -30,7 +31,7 @@ void IndirectMap::update() {
 void IndirectMap::setScale(const int Scale) { this->scale = Scale; }
 
 void IndirectMap::mix(Mixer &m) {
-  updater->subscribe(this);
+  shared->updateBroadcaster->subscribe(this);
   cp = &data[context + b];
   const uint8_t state = *cp;
   const int p1 = sm.p1(state);

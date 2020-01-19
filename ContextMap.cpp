@@ -2,6 +2,7 @@
 
 ContextMap::ContextMap(uint64_t m, const int c) : c(c), t(m >> 6U), cp(c), cp0(c), cxt(c), chk(c), runP(c),
         sm(c, 256, 1023, StateMap::BitHistory), cn(0), mask(uint32_t(t.size() - 1)), hashBits(ilog2(mask + 1)), validFlags(0) {
+  printf("Created ContextMap with m = %llu, c = %d\n", m, c);
   assert(m >= 64 && isPowerOf2(m));
   assert(sizeof(E) == 64);
   assert(c <= (int) sizeof(validFlags) * 8); // validFlags is 64 bits - it can't support more than 64 contexts
@@ -92,7 +93,7 @@ void ContextMap::update() {
 }
 
 void ContextMap::mix(Mixer &m) {
-  updater->subscribe(this);
+  shared->updateBroadcaster->subscribe(this);
   sm.subscribe();
   for( int i = 0; i < cn; ++i ) {
     if(((validFlags >> (cn - 1 - i)) & 1U) != 0 ) {

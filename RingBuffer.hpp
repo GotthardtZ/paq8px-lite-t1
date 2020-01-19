@@ -15,9 +15,10 @@ private:
 public:
     /**
      * RingBuffer(size) buf; creates an array of size bytes (must be a power of 2).
-     * @param size
+     * @param size number of bytes in array
      */
     RingBuffer(const uint32_t size = 0) : b(size), offset(0), mask(size - 1) {
+      printf("Created RingBuffer with size = %d\n", size);
       assert(isPowerOf2(size));
     }
 

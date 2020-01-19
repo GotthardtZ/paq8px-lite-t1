@@ -5,7 +5,7 @@
 #include "Mixer.hpp"
 
 /**
- * for training NormalModel, WordModel and ExeModel
+ * For training @ref NormalModel, @ref WordModel and @erf ExeModel
  */
 class DummyMixer : public Mixer {
 private:

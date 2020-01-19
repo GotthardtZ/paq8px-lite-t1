@@ -7,6 +7,7 @@ MatchModel::MatchModel(ModelStats *st, const uint64_t size) : stats(st), table(s
         maps {{23, 1, 64, 1023},
               {15, 1, 64, 1023}}, iCtx {15, 1}, mask(uint32_t(size / sizeof(uint32_t) - 1)), hashBits(ilog2(mask + 1)) {
   assert(isPowerOf2(size));
+  printf("Created MatchModel with size = %llu\n", size);
 }
 
 void MatchModel::update() {

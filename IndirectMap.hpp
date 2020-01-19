@@ -28,7 +28,6 @@ private:
     uint32_t context {};
     uint8_t *cp;
     int scale;
-    UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 
 public:
     IndirectMap(int bitsOfContext, int inputBits, int scale, int limit);

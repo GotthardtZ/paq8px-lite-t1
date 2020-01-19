@@ -8,21 +8,24 @@
 template<SIMD simd>
 class SIMDMixer : public Mixer {
 private:
-    //define padding requirements
-    [[nodiscard]] constexpr inline int simdWidth() const {
-      if( simd == SIMD_AVX2 )
-        return 32 / sizeof(short); //256 bit (32 byte) data size
-      if( simd == SIMD_SSE2 )
-        return 16 / sizeof(short); //128 bit (16 byte) data size
-      if( simd == SIMD_NONE )
-        return 4 / sizeof(short); //processes 2 shorts at once -> width is 4 bytes
-      assert(false);
-    }
-
     SIMDMixer *mp; // points to a Mixer to combine results
     UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
+
+    /**
+     * Define padding requirements.
+     */
+    [[nodiscard]] constexpr inline int simdWidth() const {
+      if( simd == SIMD_AVX2 )
+        return 32 / sizeof(short); // 256 bit (32 byte) data size
+      if( simd == SIMD_SSE2 )
+        return 16 / sizeof(short); // 128 bit (16 byte) data size
+      if( simd == SIMD_NONE )
+        return 4 / sizeof(short); // Processes 2 shorts at once -> width is 4 bytes
+      assert(false);
+    }
 public:
     SIMDMixer(const int n, const int m, const int s) : Mixer(((n + (simdWidth() - 1)) & -(simdWidth())), m, s) {
+      printf("Created SIMDMixer with n = %d, m = %d, s = %d\n", n, m, s);
       assert(n > 0);
       // TODO: This assertion fails
 //      assert((n & simdWidth() - 1) == 0);

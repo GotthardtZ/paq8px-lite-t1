@@ -11,6 +11,7 @@ ContextMap2::ContextMap2(const uint64_t size, const uint32_t count, const int sc
         bhMap12B(count, (1U << 12U), 511, StateMap::Generic),
         /* StateMap : s, n, lim, init */ // 255-1023
         index(0), mask(uint32_t(table.size() - 1)), hashBits(ilog2(mask + 1)), validFlags(0), scale(scale), useWhat(uw) {
+  printf("Created ContextMap2 with size = %llu, count = %d, scale = %d, uw = %d\n", size, count, scale, uw);
   assert(size >= 64 && isPowerOf2(size));
   assert(sizeof(Bucket) == 64);
   assert(c <= (int) sizeof(validFlags) * 8); // validFlags is 64 bits - it can't support more than 64 contexts
@@ -120,7 +121,7 @@ void ContextMap2::update() {
 void ContextMap2::setScale(const int Scale) { scale = Scale; }
 
 void ContextMap2::mix(Mixer &m) {
-  updater->subscribe(this);
+  shared->updateBroadcaster->subscribe(this);
   stateMap.subscribe();
   if((useWhat & CM_USE_RUN_STATS) != 0U ) {
     runMap.subscribe();

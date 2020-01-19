@@ -1,9 +1,10 @@
 #include "SmallStationaryContextMap.hpp"
 
 SmallStationaryContextMap::SmallStationaryContextMap(const int bitsOfContext, const int inputBits, const int rate, const int scale) : data(
-        (UINT64_C(1) << bitsOfContext) * ((UINT64_C(1) << inputBits) - 1)), mask((1U << bitsOfContext) - 1), stride((1U << inputBits) - 1),
+        (1ULL << bitsOfContext) * ((1ULL << inputBits) - 1)), mask((1U << bitsOfContext) - 1), stride((1U << inputBits) - 1),
         bTotal(inputBits), rate(rate), scale(scale) {
   assert(inputBits > 0 && inputBits <= 8);
+  printf("Created SmallStationaryContextMap with bitsOfContext = %d, inputBits = %d, rate = %d, scale = %d\n", bitsOfContext, inputBits, rate, scale);
   reset();
   set(0);
 }
@@ -25,10 +26,8 @@ void SmallStationaryContextMap::update() {
   b += static_cast<unsigned int>((y != 0U) && b > 0);
 }
 
-void SmallStationaryContextMap::setScale(const int Scale) { scale = Scale; }
-
 void SmallStationaryContextMap::mix(Mixer &m) {
-  updater->subscribe(this);
+  shared->updateBroadcaster->subscribe(this);
   cp = &data[context + b];
   const int prediction = (*cp) >> 4U;
   m.add((stretch(prediction) * scale) >> 8);

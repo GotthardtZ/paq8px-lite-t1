@@ -9,13 +9,10 @@
 #include "Hash.hpp"
 
 /**
- * map for modelling contexts of (nearly-)stationary data.
+ * Map for modelling contexts of (nearly-)stationary data.
  * The context is looked up directly. For each bit modelled, a 32bit element stores
  * a 22 bit prediction and a 10 bit adaptation rate offset.
  *
- * - BitsOfContext: How many bits to use for each context. Higher bits are discarded.
- * - InputBits: How many bits [1..8] of input are to be modelled for each context.
- * New contexts must be set at those intervals.
  * - Rate: Initial adaptation rate offset [0..1023]. Lower offsets mean faster adaptation.
  * Will be increased on every occurrence until the higher bound is reached.
  *
@@ -36,9 +33,15 @@ private:
     int scale;
     const uint16_t limit;
     int *dt;
-    UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 
 public:
+    /**
+     * Construct using (2^(BitsOfContext+2))*((2^InputBits)-1) bytes of memory.
+     * @param bitsOfContext How many bits to use for each context. Higher bits are discarded.
+     * @param inputBits How many bits [1..8] of input are to be modelled for each context. New contexts must be set at those intervals.
+     * @param scale
+     * @param limit
+     */
     StationaryMap(int bitsOfContext, int inputBits, int scale, uint16_t limit);
 
     /**

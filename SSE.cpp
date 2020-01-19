@@ -36,7 +36,7 @@ auto SSE::p(int pr0) -> int {
     }
     case IMAGE24:
     case IMAGE32: {
-      int limit = 0x3FFU >> (static_cast<int>(stats->blPos < 0xFFF) * 4);
+      int limit = 0x3FFU >> (static_cast<int>(stats->blPos < 0xFFFU) * 4);
       pr = Image.Color.APMs[0].p(pr0, (c0 << 4U) | (stats->misses & 0xFU), limit);
       pr1 = Image.Color.APMs[1].p(pr0, finalize64(hash(c0, stats->Image.pixels.W, stats->Image.pixels.WW), 16), limit);
       pr2 = Image.Color.APMs[2].p(pr0, finalize64(hash(c0, stats->Image.pixels.N, stats->Image.pixels.NN), 16), limit);
@@ -65,18 +65,18 @@ auto SSE::p(int pr0) -> int {
       break;
     }
     case IMAGE8: {
-      int limit = 0x3FFU >> (static_cast<int>(stats->blPos < 0xFFF) * 4);
-      pr = Image.Palette.APMs[0].p(pr0, (c0 << 4) | (stats->misses & 0xF), limit);
-      pr1 = Image.Palette.APMs[1].p(pr0, finalize64(hash(c0 | stats->Image.pixels.W << 8 | stats->Image.pixels.N << 16), 16), limit);
-      pr2 = Image.Palette.APMs[2].p(pr0, finalize64(hash(c0 | stats->Image.pixels.N << 8 | stats->Image.pixels.NN << 16), 16), limit);
-      pr3 = Image.Palette.APMs[3].p(pr0, finalize64(hash(c0 | stats->Image.pixels.W << 8 | stats->Image.pixels.WW << 16), 16), limit);
+      int limit = 0x3FFU >> (static_cast<int>(stats->blPos < 0xFFFU) * 4);
+      pr = Image.Palette.APMs[0].p(pr0, (c0 << 4U) | (stats->misses & 0xFU), limit);
+      pr1 = Image.Palette.APMs[1].p(pr0, finalize64(hash(c0 | stats->Image.pixels.W << 8U | stats->Image.pixels.N << 16U), 16), limit);
+      pr2 = Image.Palette.APMs[2].p(pr0, finalize64(hash(c0 | stats->Image.pixels.N << 8U | stats->Image.pixels.NN << 16U), 16), limit);
+      pr3 = Image.Palette.APMs[3].p(pr0, finalize64(hash(c0 | stats->Image.pixels.W << 8U | stats->Image.pixels.WW << 16U), 16), limit);
 
-      pr0 = (pr0 + pr1 + pr2 + pr3 + 2) >> 2;
-      pr1 = Image.Palette.APM1s[0].p(pr0, finalize64(hash(c0 | stats->Match.expectedByte << 8 | stats->Image.pixels.N << 16), 16));
-      pr2 = Image.Palette.APM1s[1].p(pr, finalize64(hash(c0 | stats->Image.pixels.W << 8 | stats->Image.pixels.N << 16), 16));
+      pr0 = (pr0 + pr1 + pr2 + pr3 + 2) >> 2U;
+      pr1 = Image.Palette.APM1s[0].p(pr0, finalize64(hash(c0 | stats->Match.expectedByte << 8U | stats->Image.pixels.N << 16U), 16));
+      pr2 = Image.Palette.APM1s[1].p(pr, finalize64(hash(c0 | stats->Image.pixels.W << 8U | stats->Image.pixels.N << 16U), 16));
 
-      pr = (pr * 2 + pr1 + pr2 + 2) >> 2;
-      pr = (pr + pr0 + 1) >> 1;
+      pr = (pr * 2 + pr1 + pr2 + 2) >> 2U;
+      pr = (pr + pr0 + 1) >> 1U;
       break;
     }
     case JPEG: {

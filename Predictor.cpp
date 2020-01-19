@@ -28,7 +28,7 @@ void Predictor::trainText(const char *const dictionary, int iterations) {
           mDummy.p();
           shared->y = (c1 >> (7 - bitPosition)) & 1U;
           shared->update();
-          updater->broadcastUpdate();
+          shared->updateBroadcaster->broadcastUpdate();
         }
       }
       // emulate a space before and after each word/expression
@@ -46,7 +46,7 @@ void Predictor::trainText(const char *const dictionary, int iterations) {
           mDummy.p();
           shared->y = (c1 >> (7 - bitPosition)) & 1U;
           shared->update();
-          updater->broadcastUpdate();
+          shared->updateBroadcaster->broadcastUpdate();
         }
       }
     } while((c = f.getchar()) != EOF);
@@ -77,7 +77,7 @@ void Predictor::trainExe() {
       dummyM.p();
       shared->y = (c >> (7 - bitPosition)) & 1U;
       shared->update();
-      updater->broadcastUpdate();
+      shared->updateBroadcaster->broadcastUpdate();
     }
   } while((c = f.getchar()) != EOF);
   printf(" done [%d bytes]\n", trainingByteCount);
@@ -108,7 +108,7 @@ void Predictor::update(uint8_t y) {
   shared->y = y;
   shared->update();
   // Broadcast to all current subscribers: y (and c0, c1, c4, etc) is known
-  updater->broadcastUpdate();
+  shared->updateBroadcaster->broadcastUpdate();
 
   const uint8_t bitPosition = shared->bitPosition;
   const uint8_t c0 = shared->c0;

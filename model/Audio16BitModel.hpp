@@ -8,8 +8,6 @@
 #include "../utils.hpp"
 #include <cstdint>
 
-#ifdef USE_AUDIOMODEL
-
 class Audio16BitModel : AudioModel {
 private:
     static constexpr int nOLS = 8;
@@ -42,10 +40,9 @@ public:
     static constexpr int MIXERINPUTS = nCtx * nSSM * SmallStationaryContextMap::MIXERINPUTS;
     static constexpr int MIXERCONTEXTS = 8192 + 4096 + 2560 + 256 + 20; //15124
     static constexpr int MIXERCONTEXTSETS = 5;
-    Audio16BitModel(ModelStats *st);
+    explicit Audio16BitModel(ModelStats *st);
     void setParam(int info);
     void mix(Mixer &m);
 };
 
-#endif // USE_AUDIOMODEL
 #endif //PAQ8PX_AUDIO16BITMODEL_HPP

@@ -852,8 +852,8 @@ paq8px_v121_fixed2
 
 paq8px_v121_fixed3
 2017.12.09
-- Fixed im24bitModel: put back scm10 and Map[29] contextmaps (erroneously removed in paq8px_v121_fixed2).
-- Clip, Climp4, LogMeanDiffQt: modified code to be more intuitive (hopefully)
+- Fixed im24bitModel: put back scm10 and Map[29] contextMaps (erroneously removed in paq8px_v121_fixed2).
+- Clip, Clim4, LogMeanDiffQt: modified code to be more intuitive (hopefully)
 - No model or compression improvements
 
 
@@ -919,7 +919,7 @@ paq8px_v129_fix1
 - Fixed "error: use of deleted function" in gcc in Array class (v114-129) reported by Mauro
 - Sanity check in makeDir function
 - Changed "rb+" to "rb" in FileDisk.open() to enable compressing read-only files
-- Assert failed in FileTmp.blockWrite() during zlib decompression when count was 0 and asserts were on (it caused no problems otherwise in release mode); fixed in both blockRead() and blockwrite()
+- Assert failed in FileTmp.blockWrite() during zlib decompression when count was 0 and asserts were on (it caused no problems otherwise in release mode); fixed in both blockRead() and blockWrite()
 - Assert failed in FileTmp.setpos() when IMAGE8 bmp detection calculated a "detd" value larger than the actual block. Fixed in setpos(); will try to isolate it to let it fix in detect() as well.
 - Minor fixes in doc and/or code (Buf, IntBuf, Mixer, ContextMap, matchModel, ContextModel)
 - im24bitModel: reverted undesired Visual Studio autoformatting

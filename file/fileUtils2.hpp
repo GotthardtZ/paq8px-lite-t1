@@ -5,6 +5,7 @@
 
 /**
  * Verify that the specified file exists and is readable, determine file size
+ * @todo large file support
  * @param filename
  * @return
  */

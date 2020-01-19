@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include "RingBuffer.hpp"
+#include "UpdateBroadcaster.hpp"
 
 // helper #defines to access shared variables
 #define INJECT_SHARED_buf const RingBuffer<uint8_t> &buf = shared->buf;
@@ -25,6 +26,7 @@ public:
     uint8_t level = 0;
     uint64_t mem = 0;
     bool toScreen = true;
+    UpdateBroadcaster *updateBroadcaster = UpdateBroadcaster::getInstance();;
 
     static Shared *getInstance();
     void update();
