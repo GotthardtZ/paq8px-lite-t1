@@ -1137,8 +1137,11 @@ decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File 
     return e->decode(tmp, out, mode, len, diffFound);
   } else if( type == EXE )
     return decodeExe(en, len, out, mode, diffFound);
-  else if( type == TEXT_EOL )
-    return decodeEol(en, len, out, mode, diffFound);
+  else if( type == TEXT_EOL ) {
+    auto d = new EolFilter();
+    d->setEncoder(en);
+    return d->decode(tmp, out, mode, len, diffFound);
+  }
   else if( type == CD ) {
     auto c = new CdFilter();
     c->decode(tmp, out, mode, len, diffFound);
@@ -1173,8 +1176,10 @@ static auto encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int in
     e->encode(in, tmp, len, info, hdrsize);
   } else if( type == EXE )
     encodeExe(in, tmp, len, info);
-  else if( type == TEXT_EOL )
-    encodeEol(in, tmp, len);
+  else if( type == TEXT_EOL ) {
+    auto e = new EolFilter();
+    e ->encode(in, tmp, len, info, hdrsize);
+  }
   else if( type == CD ) {
     auto c = new CdFilter();
     c->encode(in, tmp, len, info, hdrsize);

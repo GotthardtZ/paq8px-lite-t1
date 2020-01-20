@@ -6,8 +6,11 @@
 #include <cassert>
 #include "Ilog.hpp"
 
-///////////////// Least Mean Squares predictor /////////////////
-
+/**
+ * Least Mean Squares predictor
+ * @tparam F
+ * @tparam T
+ */
 template<typename F, typename T>
 class LMS {
 private:

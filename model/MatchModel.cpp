@@ -6,8 +6,11 @@ MatchModel::MatchModel(ModelStats *st, const uint64_t size) : stats(st), table(s
                    {1, 256 * 256,         1023, StateMap::Generic}}, cm(shared->mem / 32, nCM, 74, CM_USE_RUN_STATS), SCM {6, 1, 6, 64},
         maps {{23, 1, 64, 1023},
               {15, 1, 64, 1023}}, iCtx {15, 1}, mask(uint32_t(size / sizeof(uint32_t) - 1)), hashBits(ilog2(mask + 1)) {
-  assert(isPowerOf2(size));
+#ifndef NDEBUG
   printf("Created MatchModel with size = %llu\n", size);
+#endif
+  assert(isPowerOf2(size));
+
 }
 
 void MatchModel::update() {

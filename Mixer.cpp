@@ -2,7 +2,9 @@
 #include "utils.hpp"
 
 Mixer::Mixer(const int n, const int m, const int s) : n(n), m(m), s(s), scaleFactor(0), tx(n), wx(n * m), cxt(s), info(s), rates(s), pr(s) {
+#ifndef NDEBUG
   printf("Created Mixer with n = %d, m = %d, s = %d\n", n, m, s);
+#endif
   for( uint64_t i = 0; i < s; ++i ) {
     pr[i] = 2048; //initial p=0.5
     rates[i] = DEFAULT_LEARNING_RATE;

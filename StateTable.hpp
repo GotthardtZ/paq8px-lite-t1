@@ -5,7 +5,7 @@
 #include "Random.hpp"
 
 /**
- * state table:
+ * State table:
  *   nex(state, 0) = next state if bit y is 0, 0 <= state < 256
  *   nex(state, 1) = next state if bit y is 1
  *   nex(state, 2) = number of zeros in bit history represented by state

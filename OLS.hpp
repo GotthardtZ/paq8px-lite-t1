@@ -6,6 +6,12 @@
 #include <cmath>
 #include "Shared.hpp"
 
+/**
+ * Ordinary Least Squares predictor
+ * @tparam F
+ * @tparam T
+ * @tparam hasZeroMean
+ */
 template<typename F, typename T, const bool hasZeroMean = true>
 class OLS {
     static constexpr F ftol = 1E-8;

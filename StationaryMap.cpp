@@ -3,10 +3,12 @@
 StationaryMap::StationaryMap(const int bitsOfContext, const int inputBits, const int scale, const uint16_t limit) : data(
         (1ULL << bitsOfContext) * ((1ULL << inputBits) - 1)), mask((1U << bitsOfContext) - 1), maskBits(bitsOfContext),
         stride((1U << inputBits) - 1), bTotal(inputBits), scale(scale), limit(limit) {
+#ifndef NDEBUG
+  printf("Created StationaryMap with bitsOfContext = %d, inputBits = %d, scale = %d, limit = %d\n", bitsOfContext, inputBits, scale, limit);
+#endif
   assert(inputBits > 0 && inputBits <= 8);
   assert(bitsOfContext + inputBits <= 24);
   dt = DivisionTable::getDT();
-  printf("Created StationaryMap with bitsOfContext = %d, inputBits = %d, scale = %d, limit = %d\n", bitsOfContext, inputBits, scale, limit);
   reset(0);
   set(0);
 }

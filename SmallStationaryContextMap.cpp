@@ -3,8 +3,10 @@
 SmallStationaryContextMap::SmallStationaryContextMap(const int bitsOfContext, const int inputBits, const int rate, const int scale) : data(
         (1ULL << bitsOfContext) * ((1ULL << inputBits) - 1)), mask((1U << bitsOfContext) - 1), stride((1U << inputBits) - 1),
         bTotal(inputBits), rate(rate), scale(scale) {
-  assert(inputBits > 0 && inputBits <= 8);
+#ifndef NDEBUG
   printf("Created SmallStationaryContextMap with bitsOfContext = %d, inputBits = %d, rate = %d, scale = %d\n", bitsOfContext, inputBits, rate, scale);
+#endif
+  assert(inputBits > 0 && inputBits <= 8);
   reset();
   set(0);
 }

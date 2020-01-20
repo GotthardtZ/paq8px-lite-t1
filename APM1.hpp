@@ -23,15 +23,15 @@ private:
 
 public:
     /**
-     * APM1 a(sh, n, r) creates an getInstance with n contexts and learning rate r.
-     * rate determines the learning rate. smaller = faster, must be in the range (0, 32).
+     * Creates an instance with @ref n contexts and learning rate @ref r.
+     * rate determines the learning rate. Smaller = faster, must be in the range (0, 32).
      * Uses 66*n bytes memory.
      * @param n the number of contexts
      * @param r the learning rate
      */
     APM1(int n, int r);
     /**
-     * a.p(pr, cx) returns adjusted probability in context cx (0 to n-1).
+     * a.p(pr, cx) returns adjusted probability in context @ref cx (0 to n-1).
      * @param pr initial (pre-adjusted) probability
      * @param cxt the context
      * @return adjusted probability

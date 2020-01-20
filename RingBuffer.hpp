@@ -18,7 +18,9 @@ public:
      * @param size number of bytes in array
      */
     RingBuffer(const uint32_t size = 0) : b(size), offset(0), mask(size - 1) {
+#ifndef NDEBUG
       printf("Created RingBuffer with size = %d\n", size);
+#endif
       assert(isPowerOf2(size));
     }
 

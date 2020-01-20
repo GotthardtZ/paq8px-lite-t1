@@ -11,7 +11,9 @@ ContextMap2::ContextMap2(const uint64_t size, const uint32_t count, const int sc
         bhMap12B(count, (1U << 12U), 511, StateMap::Generic),
         /* StateMap : s, n, lim, init */ // 255-1023
         index(0), mask(uint32_t(table.size() - 1)), hashBits(ilog2(mask + 1)), validFlags(0), scale(scale), useWhat(uw) {
+#ifndef NDEBUG
   printf("Created ContextMap2 with size = %llu, count = %d, scale = %d, uw = %d\n", size, count, scale, uw);
+#endif
   assert(size >= 64 && isPowerOf2(size));
   assert(sizeof(Bucket) == 64);
   assert(c <= (int) sizeof(validFlags) * 8); // validFlags is 64 bits - it can't support more than 64 contexts

@@ -2,7 +2,9 @@
 
 ContextMap::ContextMap(uint64_t m, const int c) : c(c), t(m >> 6U), cp(c), cp0(c), cxt(c), chk(c), runP(c),
         sm(c, 256, 1023, StateMap::BitHistory), cn(0), mask(uint32_t(t.size() - 1)), hashBits(ilog2(mask + 1)), validFlags(0) {
+#ifndef NDEBUG
   printf("Created ContextMap with m = %llu, c = %d\n", m, c);
+#endif
   assert(m >= 64 && isPowerOf2(m));
   assert(sizeof(E) == 64);
   assert(c <= (int) sizeof(validFlags) * 8); // validFlags is 64 bits - it can't support more than 64 contexts

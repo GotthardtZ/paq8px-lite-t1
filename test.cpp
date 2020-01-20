@@ -113,22 +113,22 @@ auto main(int argc, char *argv[]) -> int {
       ++position;
       updateBroadcaster->broadcastUpdate();
     }
-    constexpr int printInterval = 1024 * 100;
-    if( position % printInterval == 0 ) {
-      uint64_t sum = 0;
-      for( uint64_t i = position - printInterval; i < position; ++i ) {
-        y = ys[i];
-        uint16_t target = y << 12U;
-        sum += abs(target - results[i]);
-      }
-      printf("(%llu - %llu) %f\n", position - printInterval, position, double(sum) / double(printInterval));
-    }
+//    constexpr int printInterval = 1024 * 100;
+//    if( position % printInterval == 0 ) {
+//      uint64_t sum = 0;
+//      for( uint64_t i = position - printInterval; i < position; ++i ) {
+//        y = ys[i];
+//        uint16_t target = y << 12U;
+//        sum += abs(target - results[i]);
+//      }
+//      printf("(%llu - %llu) %f\n", position - printInterval, position, double(sum) / double(printInterval));
+//    }
   }
 
   uint64_t sum = 0;
   for( uint64_t i = 0; i < position; ++i ) {
     y = ys[i];
-    uint16_t target = y << 12U;
+    uint16_t target = y == 0 ? 0 : 4095;
     sum += abs(target - results[i]);
     printf("%d, %d\n", y, results[i]);
   }

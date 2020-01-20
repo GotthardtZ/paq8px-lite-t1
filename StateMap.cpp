@@ -2,7 +2,9 @@
 
 StateMap::StateMap(const int s, const int n, const int lim, const StateMap::MAPTYPE mapType) : AdaptiveMap(n * s, lim), numContextSets(s), numContextsPerSet(n),
         numContexts(0), cxt(s) {
+#ifndef NDEBUG
   printf("Created StateMap with s = %d, n = %d, lim = %d, maptype = %d\n", s, n, lim, mapType);
+#endif
   assert(numContextSets > 0 && numContextsPerSet > 0);
   assert(limit > 0 && limit < 1024);
   if( mapType == BitHistory ) { // when the context is a bit history byte, we have a-priory for p

@@ -5,11 +5,12 @@
 #include "../file/File.hpp"
 #include <cstdint>
 
-// 24-bit image data transforms, controlled by OPTION_SKIPRGB:
-// - simple color transform (b, g, r) -> (g, g-r, g-b)
-// - channel reorder only (b, g, r) -> (g, r, b)
-// Detects RGB565 to RGB888 conversions
-
+/**
+ * 24-bit image data transforms, controlled by OPTION_SKIPRGB:
+ *   - simple color transform (b, g, r) -> (g, g-r, g-b)
+ *   - channel reorder only (b, g, r) -> (g, r, b)
+ * Detects RGB565 to RGB888 conversions.
+ */
 class BmpFilter : public Filter {
 private:
     int width = 0;

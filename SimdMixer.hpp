@@ -8,7 +8,7 @@
 template<SIMD simd>
 class SIMDMixer : public Mixer {
 private:
-    SIMDMixer *mp; // points to a Mixer to combine results
+    SIMDMixer *mp; /**< points to a Mixer to combine results */
     UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 
     /**
@@ -25,7 +25,9 @@ private:
     }
 public:
     SIMDMixer(const int n, const int m, const int s) : Mixer(((n + (simdWidth() - 1)) & -(simdWidth())), m, s) {
+#ifndef NDEBUG
       printf("Created SIMDMixer with n = %d, m = %d, s = %d\n", n, m, s);
+#endif
       assert(n > 0);
       // TODO: This assertion fails
 //      assert((n & simdWidth() - 1) == 0);
@@ -88,7 +90,7 @@ public:
 
     /**
      * Predict next bit
-     * @return
+     * @return prediction
      */
     int p() override {
       updater->subscribe(this);

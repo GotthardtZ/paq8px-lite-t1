@@ -5,7 +5,7 @@
 
 /**
  * Verify that the specified file exists and is readable, determine file size
- * @todo large file support
+ * @todo Large file support
  * @param filename
  * @return
  */
@@ -23,7 +23,7 @@ static auto getFileSize(const char *filename) -> uint64_t {
 static void appendToFile(const char *filename, const char *s) {
   FILE *f = openFile(filename, APPEND);
   if( f == nullptr )
-    printf("Warning: could not log compression results to %s\n", filename);
+    printf("Warning: Could not log compression results to %s\n", filename);
   else {
     fprintf(f, "%s", s);
     fclose(f);

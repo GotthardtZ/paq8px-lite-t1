@@ -1,6 +1,9 @@
 #include "MTFList.hpp"
 
 MTFList::MTFList(const uint16_t n) : root(0), Index(0), previous(n), next(n) {
+#ifndef NDEBUG
+  printf("Created MTFList with n = %d\n", n);
+#endif
   assert(n > 0);
   for( int i = 0; i < n; i++ ) {
     previous[i] = i - 1;
