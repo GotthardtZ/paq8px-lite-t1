@@ -30,9 +30,9 @@ void RecordModel::mix(Mixer &m) {
       rCount[0] = rCount[1] = 0;
     } else {
       // detect dBASE tables
-      if( stats->blPos == 0 || (dbase.version > 0 && stats->blPos >= dbase.end))
+      if( stats->blPos == 0 || (dbase.version > 0 && stats->blPos >= dbase.end)) {
         dbase.version = 0;
-      else if( dbase.version == 0 && stats->blockType == DEFAULT && stats->blPos >= 31 ) {
+      } else if( dbase.version == 0 && stats->blockType == DEFAULT && stats->blPos >= 31 ) {
         uint8_t b = buf(32);
         if(((b & 7U) == 3 || (b & 7U) == 4 || (b >> 4U) == 3 || b == 0xF5) && ((b = buf(30)) > 0 && b < 13) &&
            ((b = buf(29)) > 0 && b < 32) &&
@@ -57,25 +57,27 @@ void RecordModel::mix(Mixer &m) {
       uint32_t r = shared->buf.getpos() - cPos1[c];
       if( r > 1 && r == cPos1[c] - cPos2[c] && r == cPos2[c] - cPos3[c] && (r > 32 || r == cPos3[c] - cPos4[c]) &&
           (r > 10 || ((c == buf(r * 5 + 1)) && c == buf(r * 6 + 1)))) {
-        if( r == runLength[1] )
+        if( r == runLength[1] ) {
           ++rCount[0];
-        else if( r == runLength[2] )
+        } else if( r == runLength[2] ) {
           ++rCount[1];
-        else if( rCount[0] > rCount[1] )
+        } else if( rCount[0] > rCount[1] ) {
           runLength[2] = r, rCount[1] = 1;
-        else
+        } else {
           runLength[1] = r, rCount[0] = 1;
+        }
       }
 
       // check candidate lengths
       for( int i = 0; i < 2; i++ ) {
-        if((int) rCount[i] > max(0, 12 - (int) ilog2(runLength[i + 1]))) {
+        if( static_cast<int>(rCount[i]) > max(0, 12 - static_cast<int>(ilog2(runLength[i + 1])))) {
           if( runLength[0] != runLength[i + 1] ) {
             if( mayBeImg24B && runLength[i + 1] == 3 ) {
               rCount[0] >>= 1U;
               rCount[1] >>= 1U;
               continue;
-            } else if((runLength[i + 1] > runLength[0]) && (runLength[i + 1] % runLength[0] == 0)) {
+            }
+            if((runLength[i + 1] > runLength[0]) && (runLength[i + 1] % runLength[0] == 0)) {
               // maybe we found a multiple of the real record size..?
               // in that case, it is probably an immediate multiple (2x).
               // that is probably more likely the bigger the length, so
@@ -91,10 +93,11 @@ void RecordModel::mix(Mixer &m) {
             rCount[i] = 0;
             mayBeImg24B = (runLength[0] > 30 && (runLength[0] % 3) == 0);
             nTransition = 0;
-          } else
+          } else {
             // we found the same length again, that's shared->buf.getpos()itive reinforcement that
             // this really is the correct record size, so give it a little boost
             rCount[i] >>= 2U;
+          }
 
           // if the other candidate record length is orders of
           // magnitude larger, it will probably never have enough time
@@ -102,8 +105,9 @@ void RecordModel::mix(Mixer &m) {
           // this length is not a multiple of the other, than it might
           // really be worthwhile to investigate it, so we won't set its
           // counter to 0
-          if( runLength[i + 1] << 4U > runLength[1 + (i ^ 1U)] )
+          if( runLength[i + 1] << 4U > runLength[1 + (i ^ 1U)] ) {
             rCount[i ^ 1U] = 0;
+          }
         }
       }
     }
@@ -115,7 +119,8 @@ void RecordModel::mix(Mixer &m) {
     NN = buf(runLength[0] * 2);
     NNN = buf(runLength[0] * 3);
     NNNN = buf(runLength[0] * 4);
-    for( int i = 0; i < nIndContexts - 1; iCtx[i] += c, i++ );
+    for( int i = 0; i < nIndContexts - 1; iCtx[i] += c, i++ ) { ;
+    }
     iCtx[0] = (c << 8U) | N;
     iCtx[1] = (buf(runLength[0] - 1) << 8U) | N;
     iCtx[2] = (c << 8U) | buf(runLength[0] - 1);
@@ -140,13 +145,14 @@ void RecordModel::mix(Mixer &m) {
     anyway
     */
 
-    if( !col )
+    if( col == 0u ) {
       nTransition = 0;
+    }
     if((((shared->c4 >> 8U) == SPACE * 0x010101) && (c != SPACE)) ||
-       (!(shared->c4 >> 8U) && c && ((padding != SPACE) || (shared->buf.getpos() - prevTransition > runLength[0])))) {
+       (((shared->c4 >> 8U) == 0u) && (c != 0) && ((padding != SPACE) || (shared->buf.getpos() - prevTransition > runLength[0])))) {
       prevTransition = shared->buf.getpos();
-      nTransition += (nTransition < 31);
-      padding = (uint8_t) d;
+      nTransition += static_cast<unsigned int>(nTransition < 31);
+      padding = static_cast<uint8_t>(d);
     }
 
     uint64_t i = 0;
@@ -171,10 +177,11 @@ void RecordModel::mix(Mixer &m) {
 
     if( runLength[0] > 8 ) {
       cp.set(hash(++i, min(min(0xFF, runLength[0]), shared->buf.getpos() - prevTransition), min(0x3FF, col),
-                  (w & 0xF0F0U) | (w == ((padding << 8U) | padding)), nTransition));
-      cp.set(hash(++i, w, (buf(runLength[0] + 1) == padding && N == padding), col / max(1, runLength[0] / 32)));
-    } else
+                  (w & 0xF0F0U) | static_cast<unsigned int>(w == ((padding << 8U) | padding)), nTransition));
+      cp.set(hash(++i, w, static_cast<uint64_t>(buf(runLength[0] + 1) == padding && N == padding), col / max(1, runLength[0] / 32)));
+    } else {
       cp.set(0), cp.set(0);
+    }
 
     cp.set(hash(++i,
                 N | ((NN & 0xF0U) << 4U) | ((NNN & 0xE0U) << 7U) | ((NNNN & 0xE0U) << 10U) | ((col / max(1, runLength[0] / 16)) << 18U)));
@@ -190,14 +197,15 @@ void RecordModel::mix(Mixer &m) {
     cp.set(hash(++i, iCtx[1]() & 0xFFU, iCtx[3]() & 0xFFU));
 
     cp.set(hash(++i, N, (WxNW = c ^ buf(runLength[0] + 1))));
-    cp.set(hash(++i, (stats->Match.length3 != 0) << 8U | stats->Match.expectedByte, uint8_t(iCtx[1]()), N, WxNW));
+    cp.set(hash(++i, static_cast<int>(stats->Match.length3 != 0) << 8U | stats->Match.expectedByte, uint8_t(iCtx[1]()), N, WxNW));
 
     int k = 0x300;
     if( mayBeImg24B ) {
       k = (col % 3) << 8U;
-      maps[0].setDirect(clip(((uint8_t) (shared->c4 >> 16U)) + c - (shared->c4 >> 24U)) | k);
-    } else
+      maps[0].setDirect(clip((static_cast<uint8_t>(shared->c4 >> 16U)) + c - (shared->c4 >> 24U)) | k);
+    } else {
       maps[0].setDirect(clip(c * 2 - d) | k);
+    }
     maps[1].setDirect(clip(c + N - buf(runLength[0] + 1)) | k);
     maps[2].setDirect(clip(N + NN - NNN));
     maps[3].setDirect(clip(N * 2 - NN));
@@ -232,14 +240,17 @@ void RecordModel::mix(Mixer &m) {
   cn.mix(m);
   co.mix(m);
   cp.mix(m);
-  for( int i = 0; i < nSM; i++ )
+  for( int i = 0; i < nSM; i++ ) {
     maps[i].mix(m);
-  for( int i = 0; i < nIM; i++ )
+  }
+  for( int i = 0; i < nIM; i++ ) {
     iMap[i].mix(m);
-  for( int i = 0; i < nSSM; i++ )
+  }
+  for( int i = 0; i < nSSM; i++ ) {
     sMap[i].mix(m);
+  }
 
-  m.set((runLength[0] > 2) * ((shared->bitPosition << 7U) | mxCtx), 1024);
+  m.set(static_cast<unsigned int>(runLength[0] > 2) * ((shared->bitPosition << 7U) | mxCtx), 1024);
   m.set(((N ^ B) >> 4U) | (x << 4U), 512);
   m.set(((stats->Text.characterGroup) << 5U) | x, 11 * 32);
 

@@ -7,7 +7,7 @@ void LZWDictionary::reset() {
   memset(&dictionary, 0xFF, sizeof(dictionary));
   memset(&table, 0xFF, sizeof(table));
   for( int i = 0; i < 256; i++ ) {
-    table[-findEntry(-1, i) - 1] = (short) i;
+    table[-findEntry(-1, i) - 1] = static_cast<short>(i);
     dictionary[i].suffix = i;
   }
   index = 258; //2 extra codes, one for resetting the dictionary and one for signaling EOF
@@ -17,19 +17,23 @@ auto LZWDictionary::findEntry(const int prefix, const int suffix) -> int {
   int i = finalize64(hash(prefix, suffix), 13);
   int offset = (i > 0) ? hashSize - i : 1;
   while( true ) {
-    if( table[i] < 0 ) //free slot?
+    if( table[i] < 0 ) { //free slot?
       return -i - 1;
-    if( dictionary[table[i]].prefix == prefix && dictionary[table[i]].suffix == suffix ) //is it the entry we want?
+    }
+    if( dictionary[table[i]].prefix == prefix && dictionary[table[i]].suffix == suffix ) { //is it the entry we want?
       return table[i];
+    }
     i -= offset;
-    if( i < 0 )
+    if( i < 0 ) {
       i += hashSize;
+    }
   }
 }
 
 void LZWDictionary::addEntry(const int prefix, const int suffix, const int offset) {
-  if( prefix == -1 || prefix >= index || index > 4095 || offset >= 0 )
+  if( prefix == -1 || prefix >= index || index > 4095 || offset >= 0 ) {
     return;
+  }
   dictionary[index].prefix = prefix;
   dictionary[index].suffix = suffix;
   table[-offset - 1] = index;

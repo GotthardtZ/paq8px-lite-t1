@@ -1,7 +1,6 @@
 #include "DmcModel.hpp"
 
-uint32_t DmcModel::incrementCounter(const uint32_t x,
-                                    const uint32_t increment) const { // x is a fixed point number as c0,c1 ; "increment"  is 0 or 1
+auto DmcModel::incrementCounter(const uint32_t x, const uint32_t increment) const -> uint32_t {
   return (((x << 6U) - x) >> 6U) + (increment << 10U); // x * (1-1/64) + increment
 }
 
@@ -68,40 +67,44 @@ void DmcModel::update() {
         t[top].setNx0(t[next].getNx0());
         t[top].setNx1(t[next].getNx1());
         t[top].setState(t[next].getState());
-        if( y == 0 )
+        if( y == 0 ) {
           t[curr].setNx0(top);
-        else
+        } else {
           t[curr].setNx1(top);
+        }
 
         ++top;
 
-        if( threshold < 8 * 1024 )
+        if( threshold < 8 * 1024 ) {
           threshold = (++thresholdFine) >> 11U;
-      } else // state graph was full
+        }
+      } else { // state graph was full
         extra += nn >> 10U;
+      }
     }
   }
 
-  if( y == 0 )
+  if( y == 0 ) {
     curr = t[curr].getNx0();
-  else
+  } else {
     curr = t[curr].getNx1();
+  }
 }
 
-bool DmcModel::isFull() const { return extra >> 7U > uint32_t(t.size()); }
+auto DmcModel::isFull() const -> bool { return extra >> 7U > uint32_t(t.size()); }
 
-int DmcModel::pr1() const {
+auto DmcModel::pr1() const -> int {
   const uint32_t n0 = t[curr].c0 + 1;
   const uint32_t n1 = t[curr].c1 + 1;
   return (n1 << 12U) / (n0 + n1);
 }
 
-int DmcModel::pr2() {
+auto DmcModel::pr2() -> int {
   const uint8_t state = t[curr].getState();
   return sm.p1(state);
 }
 
-int DmcModel::st() {
+auto DmcModel::st() -> int {
   update();
   return stretch(pr1()) + stretch(pr2()); // average the predictions for stability
 }

@@ -20,11 +20,11 @@ public:
       width = w;
     }
 
-    void encode(File *in, File *out, uint64_t size, int width, int &headerSize) override {
+    void encode(File *in, File *out, uint64_t size, int width, int & /*headerSize*/) override {
       Shared *shared = Shared::getInstance();
       uint32_t r, g, b, total = 0;
       auto isPossibleRgb565 = true;
-      for( int i = 0; i < (int) (size / width); i++ ) {
+      for( int i = 0; i < static_cast<int>(size / width); i++ ) {
         for( int j = 0; j < width / 3; j++ ) {
           b = in->getchar();
           g = in->getchar();
@@ -45,25 +45,28 @@ public:
           out->putChar((shared->options & OPTION_SKIPRGB) != 0u ? r : g - r);
           out->putChar((shared->options & OPTION_SKIPRGB) != 0u ? b : g - b);
         }
-        for( int j = 0; j < width % 3; j++ )
+        for( int j = 0; j < width % 3; j++ ) {
           out->putChar(in->getchar());
+        }
       }
-      for( int i = size % width; i > 0; i-- )
+      for( int i = size % width; i > 0; i-- ) {
         out->putChar(in->getchar());
+      }
     }
 
-    uint64_t decode(File *in, File *out, FMode fMode, uint64_t size, uint64_t &diffFound) override {
+    auto decode(File * /*in*/, File *out, FMode fMode, uint64_t size, uint64_t &diffFound) -> uint64_t override {
       Shared *shared = Shared::getInstance();
       uint32_t r, g, b, p, total = 0;
       bool isPossibleRGB565 = true;
-      for( int i = 0; i < (int) (size / width); i++ ) {
+      for( int i = 0; i < static_cast<int>(size / width); i++ ) {
         p = i * width;
         for( int j = 0; j < width / 3; j++ ) {
           g = encoder->decompress();
           r = encoder->decompress();
           b = encoder->decompress();
-          if((shared->options & OPTION_SKIPRGB) == 0u )
+          if((shared->options & OPTION_SKIPRGB) == 0u ) {
             r = g - r, b = g - b;
+          }
           if( isPossibleRGB565 ) {
             if( total >= rgb565MinRun ) {
               b ^= (b & 8U) - ((b >> 3U) & 1U);
@@ -79,15 +82,19 @@ public:
             out->putChar(b);
             out->putChar(g);
             out->putChar(r);
-            if((j == 0) && ((i & 0xfu) == 0))
+            if((j == 0) && ((i & 0xfu) == 0)) {
               encoder->printStatus();
+            }
           } else if( fMode == FCOMPARE ) {
-            if((b & 255) != out->getchar() && (diffFound == 0u))
+            if((b & 255) != out->getchar() && (diffFound == 0u)) {
               diffFound = p + 1;
-            if( g != out->getchar() && (diffFound == 0u))
+            }
+            if( g != out->getchar() && (diffFound == 0u)) {
               diffFound = p + 2;
-            if((r & 255) != out->getchar() && (diffFound == 0u))
+            }
+            if((r & 255) != out->getchar() && (diffFound == 0u)) {
               diffFound = p + 3;
+            }
             p += 3;
           }
         }
@@ -95,8 +102,9 @@ public:
           if( fMode == FDECOMPRESS ) {
             out->putChar(encoder->decompress());
           } else if( fMode == FCOMPARE ) {
-            if( encoder->decompress() != out->getchar() && (diffFound == 0U))
+            if( encoder->decompress() != out->getchar() && (diffFound == 0U)) {
               diffFound = p + j + 1;
+            }
           }
         }
       }

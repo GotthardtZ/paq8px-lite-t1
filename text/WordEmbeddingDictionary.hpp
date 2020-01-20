@@ -6,6 +6,10 @@
 #include "Entry.hpp"
 #include "Word.hpp"
 
+#ifndef NVERBOSE
+#include "../Shared.hpp"
+#endif
+
 class WordEmbeddingDictionary {
 private:
     static constexpr int hashSize = 81929;
@@ -13,7 +17,9 @@ private:
     Array<short> table;
     int index;
 #ifndef NVERBOSE
-    uint32_t requests, hits;
+    uint32_t requests{};
+    uint32_t hits{};
+    Shared *shared = Shared::getInstance();
 #endif
     auto findEntry(short prefix, uint8_t suffix) -> int;
     void addEntry(short prefix, uint8_t suffix, int offset);

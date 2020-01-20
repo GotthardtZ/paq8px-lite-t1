@@ -29,22 +29,28 @@
  * - The threshold for cloning a state increases gradually as memory is used up.
  * - For probability estimation each state maintains both a 0,1 count ("c0" and "c1")
  *   and a bit history ("state"). The 0,1 counts are updated adaptively favoring newer events.
- *   The bit history state is mapped to a probability adaptively using a StateMap.
- * - The predictions of multiple "DmcModel"s are combined and stabilized in "dmcForest". See below.
+ *   The bit history state is mapped to a probability adaptively using a @ref StateMap.
+ * - The predictions of multiple "DmcModel"s are combined and stabilized in a @ref DmcForest.
  */
 class DmcModel {
 private:
     Shared *shared = Shared::getInstance();
     Random rnd;
-    Array<DMCNode> t; // state graph
-    StateMap sm; // stateMap for bit history states
-    uint32_t top, curr; // index of first unallocated node (i.e. number of allocated nodes); index of current node
-    uint32_t threshold; // cloning threshold parameter: fixed point number like c0,c1
-    uint32_t thresholdFine; // "threshold" scaled by 11 bits used for increasing the threshold in finer steps
-    uint32_t extra; // this value is used for approximating state graph maturity level when the state graph is already full
-    // this is the number of skipped cloning events when the counts were already large enough (>1.0)
+    Array<DMCNode> t; /**< state graph */
+    StateMap sm; /**< stateMap for bit history states */
+    uint32_t top {}; /**< index of first unallocated node (i.e. number of allocated nodes);  */
+    uint32_t curr {}; /**< index of current node */
+    uint32_t threshold {}; /**< cloning threshold parameter: fixed point number like c0,c1 */
+    uint32_t thresholdFine {}; /**< "threshold" scaled by 11 bits used for increasing the threshold in finer steps */
+    uint32_t extra {}; /**< this value is used for approximating state graph maturity level when the state graph is already full */
+    // this is the number of skipped cloning events when the counts were already large enough (>1.0) */
 
-    // helper function: adaptively increment a counter
+    /**
+     * Helper function: adaptively increment a counter
+     * @param x a fixed point number as c0, c1.
+     * @param increment either 0 or 1.
+     * @return
+     */
     [[nodiscard]] auto incrementCounter(uint32_t x, uint32_t increment) const -> uint32_t;
 public:
     DmcModel(uint64_t dmcNodes, uint32_t thStart);
@@ -58,7 +64,7 @@ public:
     void resetStateGraph(uint32_t thStart);
 
     /**
-     * update state graph
+     * Update state graph.
      */
     void update();
     [[nodiscard]] auto isFull() const -> bool;

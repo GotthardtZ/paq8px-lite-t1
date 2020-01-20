@@ -17,12 +17,12 @@ protected:
     int s = 0;
     int wMode = 0;
     explicit AudioModel(ModelStats *st);
-    int s2(int i);
-    int t2(int i);
-    int x1(int i);
-    int x2(int i);
-    static int signedClip8(int i);
-    static int signedClip16(int i);
+    auto s2(int i) -> int;
+    auto t2(int i) -> int;
+    auto x1(int i) -> int;
+    auto x2(int i) -> int;
+    static auto signedClip8(int i) -> int;
+    static auto signedClip16(int i) -> int;
 };
 
 #endif //PAQ8PX_AUDIOMODEL_HPP

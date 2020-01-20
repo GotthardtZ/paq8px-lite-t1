@@ -8,17 +8,18 @@
 
 class EndiannessFilter : public Filter {
 public:
-    void encode(File *in, File *out, uint64_t size, int info, int &headerSize) override {
+    void encode(File *in, File *out, uint64_t size, int  /*info*/, int & /*headerSize*/) override {
       for( uint64_t i = 0, l = size >> 1U; i < l; i++ ) {
         uint8_t b = in->getchar();
         out->putChar(in->getchar());
         out->putChar(b);
       }
-      if((size & 1U) > 0 )
+      if((size & 1U) > 0 ) {
         out->putChar(in->getchar());
+      }
     }
 
-    uint64_t decode(File *in, File *out, FMode fMode, uint64_t size, uint64_t &diffFound) override {
+    auto decode(File * /*in*/, File *out, FMode fMode, uint64_t size, uint64_t &diffFound) -> uint64_t override {
       for( uint64_t i = 0, l = size >> 1U; i < l; i++ ) {
         uint8_t b1 = encoder->decompress();
         uint8_t b2 = encoder->decompress();
@@ -33,15 +34,17 @@ public:
             break;
           }
         }
-        if( fMode == FDECOMPRESS && ((i & 0x7FFU) == 0u))
+        if( fMode == FDECOMPRESS && ((i & 0x7FFU) == 0u)) {
           encoder->printStatus();
+        }
       }
       if((diffFound == 0u) && (size & 1U) > 0 ) {
-        if( fMode == FDECOMPRESS )
+        if( fMode == FDECOMPRESS ) {
           out->putChar(encoder->decompress());
-        else if( fMode == FCOMPARE ) {
-          if( out->getchar() != encoder->decompress())
+        } else if( fMode == FCOMPARE ) {
+          if( out->getchar() != encoder->decompress()) {
             diffFound = size - 1;
+          }
         }
       }
       return size;

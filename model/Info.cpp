@@ -76,8 +76,9 @@ void Info::processChar(const bool isExtendedChar) {
       } else {
         wordGap = lastLetter;
         gapToken1 = gapToken0;
-        if( pC == QUOTE || (pC == APOSTROPHE && !isLetterPpC))
+        if( pC == QUOTE || (pC == APOSTROPHE && !isLetterPpC)) {
           opened = pC;
+        }
       }
       gapToken0 = 0;
       mask2 = 0;
@@ -90,59 +91,65 @@ void Info::processChar(const bool isExtendedChar) {
     wordLen0 = min(wordLen0 + 1, maxWordLen);
     //last letter types
     if( isLetter ) {
-      if( c == 'e' )
+      if( c == 'e' ) {
         mask2 |= c; // vowel/e // separating 'a' is also ok
-      else if( c == 'a' || c == 'i' || c == 'o' || c == 'u' )
+      } else if( c == 'a' || c == 'i' || c == 'o' || c == 'u' ) {
         mask2 |= 'a'; // vowel
-      else if( c >= 'b' && c <= 'z' ) {
-        if( c == 'y' )
+      } else if( c >= 'b' && c <= 'z' ) {
+        if( c == 'y' ) {
           mask2 |= 'y'; // y
-        else if( pC == 't' && c == 'h' ) {
+        } else if( pC == 't' && c == 'h' ) {
           mask2 = ((mask2 >> 8U) & 0x00ffff00u) | 't';
         } // consonant/th
-        else
+        else {
           mask2 |= 'b'; // consonant
-      } else
+        }
+      } else {
         mask2 |= 128u; // extended_char: c>=128
+      }
     } else { // isNumber
-      if( c == '.' )
+      if( c == '.' ) {
         mask2 |= '.'; // decimal point or thousand separator
-      else
+      } else {
         mask2 |= c == '0' ? '0' : '1'; // number
+      }
     }
   } else { //it's not a letter/number
     gapToken0 = combine64(gapToken0, isNewline ? ' ' : shared->c1);
     if( isNewline && pC == '+' && isLetterPpC ) {
     } //calgary/book1 hyphenation - don't shift again
-    else if( c == '?' || pC == '!' || pC == '.' )
+    else if( c == '?' || pC == '!' || pC == '.' ) {
       killWords(); //end of sentence (probably)
-    else if( c == pC ) {
+    } else if( c == pC ) {
     } //don't shift when anything repeats
     else if((c == SPACE || isNewline) && (pC == SPACE || isNewlinePC)) {
     } //ignore repeating whitespace
-    else
+    else {
       shiftWords();
+    }
     if( wordLen0 != 0 ) { //beginning of a new non-word token
       wordPositions[w] = shared->buf.getpos();
       checksums[w] = chk;
       w = 0;
       chk = 0;
 
-      if( c == ':' || c == '=' )
+      if( c == ':' || c == '=' ) {
         keyword0 = word0; // enwik, world95.txt, html/xml
-      if( firstWord == 0 )
+      }
+      if( firstWord == 0 ) {
         firstWord = word0;
+      }
 
       word0 = 0;
       wordLen0 = 0;
       mask2 = 0;
     }
 
-    if( shared->c1 == '.' || shared->c1 == '!' || shared->c1 == '?' )
+    if( shared->c1 == '.' || shared->c1 == '!' || shared->c1 == '?' ) {
       mask2 |= '!';
-    else if( shared->c1 == ',' || shared->c1 == ';' || shared->c1 == ':' )
+    } else if( shared->c1 == ',' || shared->c1 == ';' || shared->c1 == ':' ) {
       mask2 |= ',';
-    else if( shared->c1 == '(' || shared->c1 == '{' || shared->c1 == '[' || shared->c1 == '<' ) {
+    } else if( shared->c1 == '(' || shared->c1 == '{' || shared->c1 == '[' || shared->c1 == '<' ) {
       mask2 |= '(';
       opened = shared->c1;
     } else if( shared->c1 == ')' || shared->c1 == '}' || shared->c1 == ']' || shared->c1 == '>' ) {
@@ -151,35 +158,38 @@ void Info::processChar(const bool isExtendedChar) {
     } else if( shared->c1 == QUOTE || shared->c1 == APOSTROPHE ) {
       mask2 |= shared->c1;
       opened = 0;
-    } else
+    } else {
       mask2 |= shared->c1; //0, SPACE, NEW_LINE, /\+=%$- etc.
+    }
   }
 
   //const uint8_t characterGroup = stats->Text.characterGroup;
   uint8_t g = shared->c1;
   if( g >= 128 ) {
     //utf8 code points (weak context)
-    if((g & 0xf8u) == 0xf0 )
+    if((g & 0xf8u) == 0xf0 ) {
       g = 1;
-    else if((g & 0xf0u) == 0xe0 )
+    } else if((g & 0xf0u) == 0xe0 ) {
       g = 2;
-    else if((g & 0xe0u) == 0xc0 )
+    } else if((g & 0xe0u) == 0xc0 ) {
       g = 3;
-    else if((g & 0xc0u) == 0x80 )
+    } else if((g & 0xc0u) == 0x80 ) {
       g = 4;
       //the rest of the values
-    else if( g == 0xff )
+    } else if( g == 0xff ) {
       g = 5;
-    else
+    } else {
       g = shared->c1 & 0xf0u;
-  } else if( g >= '0' && g <= '9' )
+    }
+  } else if( g >= '0' && g <= '9' ) {
     g = '0';
-  else if( g >= 'a' && g <= 'z' )
+  } else if( g >= 'a' && g <= 'z' ) {
     g = 'a';
-  else if( g >= 'A' && g <= 'Z' )
+  } else if( g >= 'A' && g <= 'Z' ) {
     g = 'A';
-  else if( g < 32 && !isNewline )
+  } else if( g < 32 && !isNewline ) {
     g = 6;
+  }
   groups = groups << 8U | g;
 
   // Expressions (pure words separated by single spaces)
@@ -221,8 +231,9 @@ void Info::lineModelPredict() {
   cm.set(hash(++i, line0));
 
   int col = shared->buf.getpos() - nl1;
-  if( col == 1 )
+  if( col == 1 ) {
     firstChar = groups & 0xffU;
+  }
   INJECT_SHARED_buf
   const uint8_t cAbove = buf[nl2 + col];
   const uint8_t pCAbove = buf[nl2 + col - 1];
@@ -230,17 +241,18 @@ void Info::lineModelPredict() {
   const auto isNewLineStart = col == 0 && nl2 > 0;
   const auto isPrevCharMatchAbove = shared->c1 == pCAbove && col != 0 && nl2 != 0;
   const uint32_t aboveCtx = cAbove << 1U | uint32_t(isPrevCharMatchAbove);
-  if( isNewLineStart )
+  if( isNewLineStart ) {
     lineMatch = 0; //first char not yet known = nothing to match
-  else if( lineMatch >= 0 && isPrevCharMatchAbove )
+  } else if( lineMatch >= 0 && isPrevCharMatchAbove ) {
     lineMatch = min(lineMatch + 1, maxLineMatch); //match continues
-  else
+  } else {
     lineMatch = -1; //match does not continue
+  }
 
   // context: matches with the previous line
-  if( lineMatch >= 0 )
+  if( lineMatch >= 0 ) {
     cm.set(hash(++i, cAbove, lineMatch));
-  else {
+  } else {
     cm.skip();
     i++;
   }
@@ -251,12 +263,12 @@ void Info::lineModelPredict() {
   cm.set(hash(++i, nl1 - nl2, col, aboveCtx, shared->c1)); // english_mc
 
   // modeling line content per column (and NEW_LINE is some extent)
-  cm.set(hash(++i, col, shared->c1 == SPACE)); // after space vs after other char in this column // world95.txt
+  cm.set(hash(++i, col, static_cast<uint64_t>(shared->c1 == SPACE))); // after space vs after other char in this column // world95.txt
   cm.set(hash(++i, col, shared->c1));
   cm.set(hash(++i, col, mask & 0x1ffU));
   cm.set(hash(++i, col, lineLength)); // the length of the previous line may foretell the content of columns
 
-  cm.set(hash(++i, col, firstChar, ((int) lastUpper < col) << 8U | (groups & 0xffu))); // book1 book2 news
+  cm.set(hash(++i, col, firstChar, static_cast<int>(static_cast<int>(lastUpper) < col) << 8U | (groups & 0xffu))); // book1 book2 news
 
   // content of lines, paragraphs
   cm.set(hash(++i, nl1)); //chars occurring in this paragraph (order 0)
@@ -269,18 +281,20 @@ void Info::lineModelPredict() {
 }
 
 void Info::lineModelSkip(ContextMap2 &cm) {
-  for( int i = 0; i < nCM1; i++ )
+  for( int i = 0; i < nCM1; i++ ) {
     cm.skip();
+  }
 }
 
 void Info::predict(const uint8_t pdfTextParserState) {
   const uint32_t lastPos = checksums[w] != chk ? 0 : wordPositions[w]; //last occurrence (position) of a whole word or number
   const uint32_t dist = lastPos == 0 ? 0 : min(llog(shared->buf.getpos() - lastPos + 120) >> 4, 20);
   const bool word0MayEndNow = lastPos != 0;
-  const uint8_t mayBeCaps = uint8_t(c4 >> 8U) >= 'A' && uint8_t(c4 >> 8U) <= 'Z' && uint8_t(c4) >= 'A' && uint8_t(c4) <= 'Z';
+  const uint8_t mayBeCaps = static_cast<const uint8_t>(uint8_t(c4 >> 8U) >= 'A' && uint8_t(c4 >> 8U) <= 'Z' && uint8_t(c4) >= 'A' &&
+                                                       uint8_t(c4) <= 'Z');
   const bool isTextBlock = stats->blockType == TEXT || stats->blockType == TEXT_EOL;
 
-  uint64_t i = 2048 * isTextBlock;
+  uint64_t i = 2048 * static_cast<int>(isTextBlock);
 
   cm.set(hash(++i, text0)); //strong
 
@@ -308,7 +322,7 @@ void Info::predict(const uint8_t pdfTextParserState) {
 
   // Simple word morphology (order 1-4)
 
-  const int wmeMbc = word0MayEndNow << 1U | mayBeCaps;
+  const int wmeMbc = static_cast<int>(word0MayEndNow) << 1U | mayBeCaps;
   const int wl = min(wordLen0, 6);
   const int wlWmeMbc = wl << 2U | wmeMbc;
   cm.set(hash(++i, wlWmeMbc, mask2 /*last 1-4 char types*/));
@@ -381,7 +395,7 @@ void Info::predict(const uint8_t pdfTextParserState) {
 
   const uint8_t g = groups & 0xffu;
   cm.set(hash(++i, opened, wlWmeMbc, g, pdfTextParserState));
-  cm.set(hash(++i, opened, c, dist != 0, pdfTextParserState));
+  cm.set(hash(++i, opened, c, static_cast<uint64_t>(dist != 0), pdfTextParserState));
   cm.set(hash(++i, opened, word0)); // book1, book2, dickens, enwik
 
 
@@ -395,20 +409,21 @@ void Info::predict(const uint8_t pdfTextParserState) {
 
   int fl = 0;
   if( c1 != 0 ) {
-    if( isalpha(c1))
+    if( isalpha(c1) != 0 ) {
       fl = 1;
-    else if( ispunct(c1))
+    } else if( ispunct(c1) != 0 ) {
       fl = 2;
-    else if( isspace(c1))
+    } else if( isspace(c1) != 0 ) {
       fl = 3;
-    else if((c1) == 0xff )
+    } else if((c1) == 0xff ) {
       fl = 4;
-    else if((c1) < 16 )
+    } else if((c1) < 16 ) {
       fl = 5;
-    else if((c1) < 64 )
+    } else if((c1) < 64 ) {
       fl = 6;
-    else
+    } else {
       fl = 7;
+    }
   }
   mask = (mask << 3U) | fl;
 
@@ -419,10 +434,12 @@ void Info::predict(const uint8_t pdfTextParserState) {
 
   if( isTextBlock ) {
     cm.set(hash(++i, word0, c1, llog(wordGap), mask & 0x1FFU,
-                ((wordLen1 > 3) << 2U) | ((lastUpper < lastLetter + wordLen1) << 1U) | (lastUpper < wordLen0 + wordLen1 + wordGap))); //weak
+                (static_cast<int>(wordLen1 > 3) << 2U) | (static_cast<int>(lastUpper < lastLetter + wordLen1) << 1U) |
+                static_cast<int>(lastUpper < wordLen0 + wordLen1 + wordGap))); //weak
   } else {
     cm.skip();
     i++;
   }
-  assert(int(i) == 2048 * isTextBlock + nCM2);
+  // TODO(epsteina): Figure out how to do this
+//  assert(int(i) == 2048 * isTextBlock + nCM2);
 }

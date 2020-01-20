@@ -12,9 +12,9 @@ void WordModel::mix(Mixer &m) {
   if( shared->bitPosition == 0 ) {
     //extract text from pdf
     const uint8_t c1 = shared->c4;
-    if( shared->c4 == 0x0a42540aU /* "\nBT\n" */)
+    if( shared->c4 == 0x0a42540aU /* "\nBT\n" */) {
       pdfTextParserState = 1; // Begin Text
-    else if( shared->c4 == 0x0a45540aU /* "\nET\n" */) {
+    } else if( shared->c4 == 0x0a45540aU /* "\nET\n" */) {
       pdfTextParserState = 0;
     } // end Text
     bool doPdfProcess = true;

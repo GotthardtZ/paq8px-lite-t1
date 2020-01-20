@@ -4,10 +4,13 @@ NestModel::NestModel(const uint64_t size) : cm(size, nCM) {}
 
 void NestModel::mix(Mixer &m) {
   if( shared->bitPosition == 0 ) {
-    int c = shared->c1, matched = 1, vv;
+    int c = shared->c1;
+    int matched = 1;
+    int vv;
     w *= ((vc & 7U) > 0 && (vc & 7U) < 3);
-    if( c & 0x80U )
+    if( c & 0x80U ){
       w = w * 11 * 32 + c;
+    }
     const int lc = (c >= 'A' && c <= 'Z' ? c + 'a' - 'A' : c);
     if( lc == 'a' || lc == 'e' || lc == 'i' || lc == 'o' || lc == 'u' ) {
       vv = 1;
@@ -15,16 +18,17 @@ void NestModel::mix(Mixer &m) {
     } else if( lc >= 'a' && lc <= 'z' ) {
       vv = 2;
       w = w * 271 * 32 + lc - 97;
-    } else if( lc == ' ' || lc == '.' || lc == ',' || lc == '\n' )
+    } else if( lc == ' ' || lc == '.' || lc == ',' || lc == '\n' ) {
       vv = 3;
-    else if( lc >= '0' && lc <= '9' )
+    } else if( lc >= '0' && lc <= '9' ) {
       vv = 4;
-    else if( lc == 'y' )
+    } else if( lc == 'y' ) {
       vv = 5;
-    else if( lc == '\'' )
+    } else if( lc == '\'' ) {
       vv = 6;
-    else
-      vv = (c & 32U) ? 7 : 0;
+    } else {
+      vv = (c & 32U) != 0u ? 7 : 0;
+    }
     vc = (vc << 3U) | vv;
     if( vv != lvc ) {
       wc = (wc << 3U) | vv;
@@ -71,10 +75,11 @@ void NestModel::mix(Mixer &m) {
         break;
       case '\'':
         pc += 0x42;
-        if( c != (uint8_t) (shared->c4 >> 8U))
+        if( c != static_cast<uint8_t>(shared->c4 >> 8U)) {
           sense2 ^= 1;
-        else
+        } else {
           ac += (2 * sense2 - 1);
+        }
         break;
       case '\n':
         pc = qc = 0;
@@ -113,29 +118,34 @@ void NestModel::mix(Mixer &m) {
         break;
       case '/':
         pc += 0x11;
-        if( shared->c1 == '<' )
+        if( shared->c1 == '<' ) {
           qc += 74;
+        }
         break;
       case '=':
         pc += 87;
-        if( c != (uint8_t) (shared->c4 >> 8U))
+        if( c != static_cast<uint8_t>(shared->c4 >> 8U)) {
           sense1 ^= 1U;
-        else
+        } else {
           ec += (2 * sense1 - 1);
+        }
         break;
       default:
         matched = 0;
     }
-    if( shared->c4 == 0x266C743B )
+    if( shared->c4 == 0x266C743B ) {
       uc = min(7, uc + 1); //&lt;
-    else if( shared->c4 == 0x2667743B )
-      uc -= (uc > 0); //&gt;
-    if( matched )
+    } else if( shared->c4 == 0x2667743B ) {
+      uc -= static_cast<int>(uc > 0); //&gt;
+    }
+    if( matched != 0 ) {
       bc = 0;
-    else
+    } else {
       bc += 1;
-    if( bc > 300 )
+    }
+    if( bc > 300 ) {
       bc = ic = pc = qc = uc = 0;
+    }
     uint64_t i = 0;
     cm.set(hash(++i, (vv > 0 && vv < 3) ? 0 : (lc | 0x100U), ic & 0x3FFU, ec & 0x7U, ac & 0x7U, uc));
     cm.set(hash(++i, ic, w, ilog2(bc + 1)));

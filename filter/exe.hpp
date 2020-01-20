@@ -31,13 +31,14 @@ static void encodeExe(File *in, File *out, uint64_t len, uint64_t begin) {
   // Transform
   for( uint64_t offset = 0; offset < len; offset += block ) {
     uint32_t size = min(uint32_t(len - offset), block);
-    int bytesRead = (int) in->blockRead(&blk[0], size);
-    if( bytesRead != (int) size )
+    int bytesRead = static_cast<int>(in->blockRead(&blk[0], size));
+    if( bytesRead != static_cast<int>(size)) {
       quit("encodeExe read error");
+    }
     for( int i = bytesRead - 1; i >= 5; --i ) {
       if((blk[i - 4] == 0xe8 || blk[i - 4] == 0xe9 || (blk[i - 5] == 0x0f && (blk[i - 4] & 0xf0U) == 0x80)) &&
          (blk[i] == 0 || blk[i] == 0xff)) {
-        int a = (blk[i - 3] | blk[i - 2] << 8U | blk[i - 1] << 16U | blk[i] << 24U) + (int) (offset + begin) + i + 1;
+        int a = (blk[i - 3] | blk[i - 2] << 8U | blk[i - 1] << 16U | blk[i] << 24U) + static_cast<int>(offset + begin) + i + 1;
         a <<= 7U;
         a >>= 7U;
         blk[i] = a >> 24U;
@@ -61,20 +62,24 @@ static void encodeExe(File *in, File *out, uint64_t len, uint64_t begin) {
  */
 static auto decodeExe(Encoder &en, uint64_t size, File *out, FMode mode, uint64_t &diffFound) -> uint64_t {
   const int block = 0x10000; // block size
-  int begin, offset = 6, a;
+  int begin;
+  int offset = 6;
+  int a;
   uint8_t c[6];
-  begin = (int) en.decodeBlockSize();
+  begin = static_cast<int>(en.decodeBlockSize());
   size -= VLICost(uint64_t(begin));
-  for( int i = 4; i >= 0; i-- )
+  for( int i = 4; i >= 0; i-- ) {
     c[i] = en.decompress(); // Fill queue
+  }
 
-  while( offset < (int) size + 6 ) {
+  while( offset < static_cast<int>(size) + 6 ) {
     memmove(c + 1, c, 5);
-    if( offset <= (int) size )
+    if( offset <= static_cast<int>(size)) {
       c[0] = en.decompress();
+    }
     // E8E9 transform: E8/E9 xx xx xx 00/FF -> subtract location from x
     if((c[0] == 0x00 || c[0] == 0xFF) && (c[4] == 0xE8 || c[4] == 0xE9 || (c[5] == 0x0F && (c[4] & 0xF0U) == 0x80)) &&
-       (((offset - 1) ^ (offset - 6)) & -block) == 0 && offset <= (int) size ) { // not crossing block boundary
+       (((offset - 1) ^ (offset - 6)) & -block) == 0 && offset <= static_cast<int>(size)) { // not crossing block boundary
       a = ((c[1] ^ 176U) | (c[2] ^ 176U) << 8 | (c[3] ^ 176U) << 16U | c[0] << 24U) - offset - begin;
       a <<= 7U;
       a >>= 7U;
@@ -83,12 +88,14 @@ static auto decodeExe(Encoder &en, uint64_t size, File *out, FMode mode, uint64_
       c[1] = a >> 16U;
       c[0] = a >> 24U;
     }
-    if( mode == FDECOMPRESS )
+    if( mode == FDECOMPRESS ) {
       out->putChar(c[5]);
-    else if( mode == FCOMPARE && c[5] != out->getchar() && (diffFound == 0u))
+    } else if( mode == FCOMPARE && c[5] != out->getchar() && (diffFound == 0u)) {
       diffFound = offset - 6 + 1;
-    if( mode == FDECOMPRESS && ((offset & 0xfffU) == 0u))
+    }
+    if( mode == FDECOMPRESS && ((offset & 0xfffU) == 0u)) {
       en.printStatus();
+    }
     offset++;
   }
   return size;

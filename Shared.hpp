@@ -26,7 +26,7 @@ public:
     uint8_t level = 0;
     uint64_t mem = 0;
     bool toScreen = true;
-    UpdateBroadcaster *updateBroadcaster = UpdateBroadcaster::getInstance();;
+    UpdateBroadcaster *updateBroadcaster = UpdateBroadcaster::getInstance();
 
     static Shared *getInstance();
     void update();

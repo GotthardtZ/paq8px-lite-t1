@@ -20,8 +20,9 @@ void NormalModel::updateHashes() {
 void NormalModel::mix(Mixer &m) {
   if( shared->bitPosition == 0 ) {
     updateHashes();
-    for( int i = 1; i <= 7; ++i )
+    for( int i = 1; i <= 7; ++i ) {
       cm.set(cxt[i]);
+    }
     cm.set(cxt[9]);
     cm.set(cxt[14]);
   }
@@ -40,19 +41,22 @@ void NormalModel::mix(Mixer &m) {
 void NormalModel::mixPost(Mixer &m) {
   uint32_t c2 = (shared->c4 >> 8U) & 0xffU, c3 = (shared->c4 >> 16U) & 0xffU, c;
 
-  m.set(8 + (shared->c1 | (shared->bitPosition > 5) << 8U |
-             (((shared->c0 & ((1U << shared->bitPosition) - 1)) == 0) || (shared->c0 == ((2 << shared->bitPosition) - 1))) << 9U), 8 + 1024);
+  m.set(8 + (shared->c1 | static_cast<int>(shared->bitPosition > 5) << 8U |
+             static_cast<int>(((shared->c0 & ((1U << shared->bitPosition) - 1)) == 0) || (shared->c0 == ((2 << shared->bitPosition) - 1)))
+                     << 9U), 8 + 1024);
   m.set(shared->c0, 256);
-  m.set(stats->order | ((shared->c4 >> 6U) & 3U) << 3U | (shared->bitPosition == 0) << 5U | (shared->c1 == c2) << 6U |
-        (stats->blockType == EXE) << 7U, 256);
+  m.set(stats->order | ((shared->c4 >> 6U) & 3U) << 3U | static_cast<int>(shared->bitPosition == 0) << 5U |
+        static_cast<int>(shared->c1 == c2) << 6U | static_cast<int>(stats->blockType == EXE) << 7U, 256);
   m.set(c2, 256);
   m.set(c3, 256);
   if( shared->bitPosition != 0 ) {
     c = shared->c0 << (8 - shared->bitPosition);
-    if( shared->bitPosition == 1 )
+    if( shared->bitPosition == 1 ) {
       c |= c3 >> 1U;
+    }
     c = min(shared->bitPosition, 5) << 8U | shared->c1 >> 5U | (c2 >> 5U) << 3U | (c & 192U);
-  } else
+  } else {
     c = c3 >> 7 | (shared->c4 >> 31U) << 1U | (c2 >> 6U) << 2U | (shared->c1 & 240U);
+  }
   m.set(c, 1536);
 }

@@ -2,17 +2,17 @@
 
 AudioModel::AudioModel(ModelStats *st) : stats(st) {}
 
-int AudioModel::s2(int i) {
+auto AudioModel::s2(int i) -> int {
   INJECT_SHARED_buf
   return int(short(buf(i) + 256 * buf(i - 1)));
 }
 
-int AudioModel::t2(int i) {
+auto AudioModel::t2(int i) -> int {
   INJECT_SHARED_buf
   return int(short(buf(i - 1) + 256 * buf(i)));
 }
 
-int AudioModel::x1(int i) {
+auto AudioModel::x1(int i) -> int {
   INJECT_SHARED_buf
   switch( wMode ) {
     case 0:
@@ -36,7 +36,7 @@ int AudioModel::x1(int i) {
   }
 }
 
-int AudioModel::x2(int i) {
+auto AudioModel::x2(int i) -> int {
   INJECT_SHARED_buf
   switch( wMode ) {
     case 0:
@@ -60,10 +60,10 @@ int AudioModel::x2(int i) {
   }
 }
 
-int AudioModel::signedClip8(const int i) {
+auto AudioModel::signedClip8(const int i) -> int {
   return max(-128, min(127, i));
 }
 
-int AudioModel::signedClip16(const int i) {
+auto AudioModel::signedClip16(const int i) -> int {
   return max(-32768, min(32767, i));
 }

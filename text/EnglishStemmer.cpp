@@ -1,51 +1,55 @@
 #include "EnglishStemmer.hpp"
 
-bool EnglishStemmer::isConsonant(const char c) {
+auto EnglishStemmer::isConsonant(const char c) -> bool {
   return !isVowel(c);
 }
 
-bool EnglishStemmer::isShortConsonant(const char c) {
+auto EnglishStemmer::isShortConsonant(const char c) -> bool {
   return !charInArray(c, nonShortConsonants, numNonShortConsonants);
 }
 
-bool EnglishStemmer::isDouble(const char c) {
+auto EnglishStemmer::isDouble(const char c) -> bool {
   return charInArray(c, doubles, numDoubles);
 }
 
-bool EnglishStemmer::isLiEnding(const char c) {
+auto EnglishStemmer::isLiEnding(const char c) -> bool {
   return charInArray(c, liEndings, numLiEndings);
 }
 
-uint32_t EnglishStemmer::getRegion1(const Word *w) {
+auto EnglishStemmer::getRegion1(const Word *w) -> uint32_t {
   for( int i = 0; i < numExceptionRegion1; i++ ) {
-    if( w->startsWith(exceptionsRegion1[i]))
+    if( w->startsWith(exceptionsRegion1[i])) {
       return uint32_t(strlen(exceptionsRegion1[i]));
+    }
   }
   return getRegion(w, 0);
 }
 
-bool EnglishStemmer::endsInShortSyllable(const Word *w) {
-  if( w->end == w->start )
+auto EnglishStemmer::endsInShortSyllable(const Word *w) -> bool {
+  if( w->end == w->start ) {
     return false;
-  else if( w->end == w->start + 1 )
+  }
+  if( w->end == w->start + 1 ) {
     return isVowel((*w)(1)) && isConsonant((*w)(0));
-  else
+  } else {
     return (isConsonant((*w)(2)) && isVowel((*w)(1)) && isConsonant((*w)(0)) && isShortConsonant((*w)(0)));
+  }
 }
 
-bool EnglishStemmer::isShortWord(const Word *w) {
+auto EnglishStemmer::isShortWord(const Word *w) -> bool {
   return (endsInShortSyllable(w) && getRegion1(w) == w->length());
 }
 
-bool EnglishStemmer::hasVowels(const Word *w) {
+auto EnglishStemmer::hasVowels(const Word *w) -> bool {
   for( int i = w->start; i <= w->end; i++ ) {
-    if( isVowel(w->letters[i]))
+    if( isVowel(w->letters[i])) {
       return true;
+    }
   }
   return false;
 }
 
-bool EnglishStemmer::trimApostrophes(Word *w) {
+auto EnglishStemmer::trimApostrophes(Word *w) -> bool {
   bool result = false;
   //trim all apostrophes from the beginning
   int cnt = 0;
@@ -56,8 +60,9 @@ bool EnglishStemmer::trimApostrophes(Word *w) {
   }
   //trim the same number of apostrophes from the end (if there are)
   while( w->start != w->end && (*w)(0) == APOSTROPHE ) {
-    if( cnt == 0 )
+    if( cnt == 0 ) {
       break;
+    }
     w->end--;
     cnt--;
   }
@@ -65,42 +70,46 @@ bool EnglishStemmer::trimApostrophes(Word *w) {
 }
 
 void EnglishStemmer::markYsAsConsonants(Word *w) {
-  if((*w)[0] == 'y' )
+  if((*w)[0] == 'y' ) {
     w->letters[w->start] = 'Y';
+  }
   for( int i = w->start + 1; i <= w->end; i++ ) {
-    if( isVowel(w->letters[i - 1]) && w->letters[i] == 'y' )
+    if( isVowel(w->letters[i - 1]) && w->letters[i] == 'y' ) {
       w->letters[i] = 'Y';
+    }
   }
 }
 
-bool EnglishStemmer::processPrefixes(Word *w) {
-  if( w->startsWith("irr") && w->length() > 5 && ((*w)[3] == 'a' || (*w)[3] == 'e'))
+auto EnglishStemmer::processPrefixes(Word *w) -> bool {
+  if( w->startsWith("irr") && w->length() > 5 && ((*w)[3] == 'a' || (*w)[3] == 'e')) {
     w->start += 2, w->type |= English::Negation;
-  else if( w->startsWith("over") && w->length() > 5 )
+  } else if( w->startsWith("over") && w->length() > 5 ) {
     w->start += 4, w->type |= English::PrefixOver;
-  else if( w->startsWith("under") && w->length() > 6 )
+  } else if( w->startsWith("under") && w->length() > 6 ) {
     w->start += 5, w->type |= English::PrefixUnder;
-  else if( w->startsWith("unn") && w->length() > 5 )
+  } else if( w->startsWith("unn") && w->length() > 5 ) {
     w->start += 2, w->type |= English::Negation;
-  else if( w->startsWith("non") && w->length() > (uint32_t) (5 + ((*w)[3] == '-')))
-    w->start += 2 + ((*w)[3] == '-'), w->type |= English::Negation;
-  else
+  } else if( w->startsWith("non") && w->length() > static_cast<uint32_t>(5 + static_cast<int>((*w)[3] == '-'))) {
+    w->start += 2 + static_cast<int>((*w)[3] == '-'), w->type |= English::Negation;
+  } else {
     return false;
+  }
   return true;
 }
 
-bool EnglishStemmer::processSuperlatives(Word *w) {
+auto EnglishStemmer::processSuperlatives(Word *w) -> bool {
   if( w->endsWith("est") && w->length() > 4 ) {
     uint8_t i = w->end;
     w->end -= 3;
     w->type |= English::AdjectiveSuperlative;
 
     if((*w)(0) == (*w)(1) && (*w)(0) != 'r' && !(w->length() >= 4 && memcmp("sugg", &w->letters[w->end - 3], 4) == 0)) {
-      w->end -= (((*w)(0) != 'f' && (*w)(0) != 'l' && (*w)(0) != 's') ||
-                 (w->length() > 4 && (*w)(1) == 'l' && ((*w)(2) == 'u' || (*w)(3) == 'u' || (*w)(3) == 'v'))) &&
-                (!(w->length() == 3 && (*w)(1) == 'd' && (*w)(2) == 'o'));
-      if( w->length() == 2 && ((*w)[0] != 'i' || (*w)[1] != 'n'))
+      w->end -= static_cast<int>((((*w)(0) != 'f' && (*w)(0) != 'l' && (*w)(0) != 's') ||
+                                  (w->length() > 4 && (*w)(1) == 'l' && ((*w)(2) == 'u' || (*w)(3) == 'u' || (*w)(3) == 'v'))) &&
+                                 (!(w->length() == 3 && (*w)(1) == 'd' && (*w)(2) == 'o')));
+      if( w->length() == 2 && ((*w)[0] != 'i' || (*w)[1] != 'n')) {
         w->end = i, w->type &= ~English::AdjectiveSuperlative;
+      }
     } else {
       switch((*w)(0)) {
         case 'd':
@@ -109,10 +118,11 @@ bool EnglishStemmer::processSuperlatives(Word *w) {
         case 'y':
           break;
         case 'g': {
-          if( !(w->length() > 3 && ((*w)(1) == 'n' || (*w)(1) == 'r') && memcmp("cong", &w->letters[w->end - 3], 4) != 0))
+          if( !(w->length() > 3 && ((*w)(1) == 'n' || (*w)(1) == 'r') && memcmp("cong", &w->letters[w->end - 3], 4) != 0)) {
             w->end = i, w->type &= ~English::AdjectiveSuperlative;
-          else
-            w->end += ((*w)(2) == 'a');
+          } else {
+            w->end += static_cast<int>((*w)(2) == 'a');
+          }
           break;
         }
         case 'i': {
@@ -120,22 +130,25 @@ bool EnglishStemmer::processSuperlatives(Word *w) {
           break;
         }
         case 'l': {
-          if( w->end == w->start + 1 || memcmp("mo", &w->letters[w->end - 2], 2) == 0 )
+          if( w->end == w->start + 1 || memcmp("mo", &w->letters[w->end - 2], 2) == 0 ) {
             w->end = i, w->type &= ~English::AdjectiveSuperlative;
-          else
-            w->end += isConsonant((*w)(1));
+          } else {
+            w->end += static_cast<int>(isConsonant((*w)(1)));
+          }
           break;
         }
         case 'n': {
-          if( w->length() < 3 || isConsonant((*w)(1)) || isConsonant((*w)(2)))
+          if( w->length() < 3 || isConsonant((*w)(1)) || isConsonant((*w)(2))) {
             w->end = i, w->type &= ~English::AdjectiveSuperlative;
+          }
           break;
         }
         case 'r': {
-          if( w->length() > 3 && isVowel((*w)(1)) && isVowel((*w)(2)))
-            w->end += ((*w)(2) == 'u') && ((*w)(1) == 'a' || (*w)(1) == 'i');
-          else
+          if( w->length() > 3 && isVowel((*w)(1)) && isVowel((*w)(2))) {
+            w->end += static_cast<int>(((*w)(2) == 'u') && ((*w)(1) == 'a' || (*w)(1) == 'i'));
+          } else {
             w->end = i, w->type &= ~English::AdjectiveSuperlative;
+          }
           break;
         }
         case 's': {
@@ -143,13 +156,15 @@ bool EnglishStemmer::processSuperlatives(Word *w) {
           break;
         }
         case 'w': {
-          if( !(w->length() > 2 && isVowel((*w)(1))))
+          if( !(w->length() > 2 && isVowel((*w)(1)))) {
             w->end = i, w->type &= ~English::AdjectiveSuperlative;
+          }
           break;
         }
         case 'h': {
-          if( !(w->length() > 2 && isConsonant((*w)(1))))
+          if( !(w->length() > 2 && isConsonant((*w)(1)))) {
             w->end = i, w->type &= ~English::AdjectiveSuperlative;
+          }
           break;
         }
         default: {
@@ -162,7 +177,7 @@ bool EnglishStemmer::processSuperlatives(Word *w) {
   return (w->type & English::AdjectiveSuperlative) > 0;
 }
 
-bool EnglishStemmer::step0(Word *w) {
+auto EnglishStemmer::step0(Word *w) -> bool {
   for( int i = 0; i < numSuffixesStep0; i++ ) {
     if( w->endsWith(suffixesStep0[i])) {
       w->end -= uint8_t(strlen(suffixesStep0[i]));
@@ -173,7 +188,7 @@ bool EnglishStemmer::step0(Word *w) {
   return false;
 }
 
-bool EnglishStemmer::step1A(Word *w) {
+auto EnglishStemmer::step1A(Word *w) -> bool {
   //sses -> replace by ss
   if( w->endsWith("sses")) {
     w->end -= 2;
@@ -189,8 +204,9 @@ bool EnglishStemmer::step1A(Word *w) {
   }
 
   //us+ ss -> do nothing
-  if( w->endsWith("us") || w->endsWith("ss"))
+  if( w->endsWith("us") || w->endsWith("ss")) {
     return false;
+  }
 
   //s -> delete if the preceding word part contains a vowel not immediately before the s (so gas and this retain the s, gaps and kiwis lose it)
   if((*w)(0) == 's' && w->length() > 2 ) {
@@ -206,10 +222,11 @@ bool EnglishStemmer::step1A(Word *w) {
   if( w->endsWith("n't") && w->length() > 4 ) {
     switch((*w)(3)) {
       case 'a': {
-        if((*w)(4) == 'c' )
+        if((*w)(4) == 'c' ) {
           w->end -= 2; // can't -> can
-        else
+        } else {
           w->changeSuffix("n't", "ll"); // shan't -> shall
+        }
         break;
       }
       case 'i': {
@@ -217,10 +234,11 @@ bool EnglishStemmer::step1A(Word *w) {
         break;
       } // ain't -> am
       case 'o': {
-        if((*w)(4) == 'w' )
+        if((*w)(4) == 'w' ) {
           w->changeSuffix("on't", "ill"); // won't -> will
-        else
+        } else {
           w->end -= 3; //don't -> do
+        }
         break;
       }
       default:
@@ -237,54 +255,57 @@ bool EnglishStemmer::step1A(Word *w) {
   return false;
 }
 
-bool EnglishStemmer::step1B(Word *w, const uint32_t r1) {
+auto EnglishStemmer::step1B(Word *w, const uint32_t r1) -> bool {
   for( int i = 0; i < numSuffixesStep1B; i++ ) {
     if( w->endsWith(suffixesStep1B[i])) {
       switch( i ) {
         case 0:
         case 1: {
-          if( suffixInRn(w, r1, suffixesStep1B[i]))
+          if( suffixInRn(w, r1, suffixesStep1B[i])) {
             w->end -= 1 + i * 2;
+          }
           break;
         }
         default: {
           uint8_t j = w->end;
           w->end -= uint8_t(strlen(suffixesStep1B[i]));
           if( hasVowels(w)) {
-            if( w->endsWith("at") || w->endsWith("bl") || w->endsWith("iz") || isShortWord(w))
+            if( w->endsWith("at") || w->endsWith("bl") || w->endsWith("iz") || isShortWord(w)) {
               (*w) += 'e';
-            else if( w->length() > 2 ) {
-              if((*w)(0) == (*w)(1) && isDouble((*w)(0)))
+            } else if( w->length() > 2 ) {
+              if((*w)(0) == (*w)(1) && isDouble((*w)(0))) {
                 w->end--;
-              else if( i == 2 || i == 3 ) {
+              } else if( i == 2 || i == 3 ) {
                 switch((*w)(0)) {
                   case 'c':
                   case 's':
                   case 'v': {
-                    w->end += !(w->endsWith("ss") || w->endsWith("ias"));
+                    w->end += static_cast<int>(!(w->endsWith("ss") || w->endsWith("ias")));
                     break;
                   }
                   case 'd': {
                     static constexpr char nAllowed[4] = {'a', 'e', 'i', 'o'};
-                    w->end += isVowel((*w)(1)) && (!charInArray((*w)(2), nAllowed, 4));
+                    w->end += static_cast<int>(isVowel((*w)(1)) && (!charInArray((*w)(2), nAllowed, 4)));
                     break;
                   }
                   case 'k': {
-                    w->end += w->endsWith("uak");
+                    w->end += static_cast<int>(w->endsWith("uak"));
                     break;
                   }
                   case 'l': {
                     static constexpr char allowed1[10] = {'b', 'c', 'd', 'f', 'g', 'k', 'p', 't', 'y', 'z'};
                     static constexpr char allowed2[4] = {'a', 'i', 'o', 'u'};
-                    w->end += charInArray((*w)(1), allowed1, 10) || (charInArray((*w)(1), allowed2, 4) && isConsonant((*w)(2)));
+                    w->end += static_cast<int>(charInArray((*w)(1), allowed1, 10) ||
+                                               (charInArray((*w)(1), allowed2, 4) && isConsonant((*w)(2))));
                     break;
                   }
                 }
               } else if( i >= 4 ) {
                 switch((*w)(0)) {
                   case 'd': {
-                    if( isVowel((*w)(1)) && (*w)(2) != 'a' && (*w)(2) != 'e' && (*w)(2) != 'o' )
+                    if( isVowel((*w)(1)) && (*w)(2) != 'a' && (*w)(2) != 'e' && (*w)(2) != 'o' ) {
                       (*w) += 'e';
+                    }
                     break;
                   }
                   case 'g': {
@@ -292,45 +313,53 @@ bool EnglishStemmer::step1B(Word *w, const uint32_t r1) {
                     if( charInArray((*w)(1), allowed, 7) || ((*w)(1) == 'n' &&
                                                              ((*w)(2) == 'e' || ((*w)(2) == 'u' && (*w)(3) != 'b' && (*w)(3) != 'd') ||
                                                               ((*w)(2) == 'a' && ((*w)(3) == 'r' || ((*w)(3) == 'h' && (*w)(4) == 'c'))) ||
-                                                              (w->endsWith("ring") && ((*w)(4) == 'c' || (*w)(4) == 'f')))))
+                                                              (w->endsWith("ring") && ((*w)(4) == 'c' || (*w)(4) == 'f'))))) {
                       (*w) += 'e';
+                    }
                     break;
                   }
                   case 'l': {
-                    if( !((*w)(1) == 'l' || (*w)(1) == 'r' || (*w)(1) == 'w' || (isVowel((*w)(1)) && isVowel((*w)(2)))))
+                    if( !((*w)(1) == 'l' || (*w)(1) == 'r' || (*w)(1) == 'w' || (isVowel((*w)(1)) && isVowel((*w)(2))))) {
                       (*w) += 'e';
-                    if( w->endsWith("uell") && w->length() > 4 && (*w)(4) != 'q' )
+                    }
+                    if( w->endsWith("uell") && w->length() > 4 && (*w)(4) != 'q' ) {
                       w->end--;
+                    }
                     break;
                   }
                   case 'r': {
                     if((((*w)(1) == 'i' && (*w)(2) != 'a' && (*w)(2) != 'e' && (*w)(2) != 'o') ||
                         ((*w)(1) == 'a' && (!((*w)(2) == 'e' || (*w)(2) == 'o' || ((*w)(2) == 'l' && (*w)(3) == 'l')))) ||
                         ((*w)(1) == 'o' && (!((*w)(2) == 'o' || ((*w)(2) == 't' && (*w)(3) != 's')))) || (*w)(1) == 'c' ||
-                        (*w)(1) == 't') && (!w->endsWith("str")))
+                        (*w)(1) == 't') && (!w->endsWith("str"))) {
                       (*w) += 'e';
+                    }
                     break;
                   }
                   case 't': {
-                    if((*w)(1) == 'o' && (*w)(2) != 'g' && (*w)(2) != 'l' && (*w)(2) != 'i' && (*w)(2) != 'o' )
+                    if((*w)(1) == 'o' && (*w)(2) != 'g' && (*w)(2) != 'l' && (*w)(2) != 'i' && (*w)(2) != 'o' ) {
                       (*w) += 'e';
+                    }
                     break;
                   }
                   case 'u': {
-                    if( !(w->length() > 3 && isVowel((*w)(1)) && isVowel((*w)(2))))
+                    if( !(w->length() > 3 && isVowel((*w)(1)) && isVowel((*w)(2)))) {
                       (*w) += 'e';
+                    }
                     break;
                   }
                   case 'z': {
-                    if( w->endsWith("izz") && w->length() > 3 && ((*w)(3) == 'h' || (*w)(3) == 'u'))
+                    if( w->endsWith("izz") && w->length() > 3 && ((*w)(3) == 'h' || (*w)(3) == 'u')) {
                       w->end--;
-                    else if((*w)(1) != 't' && (*w)(1) != 'z' )
+                    } else if((*w)(1) != 't' && (*w)(1) != 'z' ) {
                       (*w) += 'e';
+                    }
                     break;
                   }
                   case 'k': {
-                    if( w->endsWith("uak"))
+                    if( w->endsWith("uak")) {
                       (*w) += 'e';
+                    }
                     break;
                   }
                   case 'b':
@@ -338,8 +367,9 @@ bool EnglishStemmer::step1B(Word *w, const uint32_t r1) {
                   case 's':
                   case 'v': {
                     if( !(((*w)(0) == 'b' && ((*w)(1) == 'm' || (*w)(1) == 'r')) || w->endsWith("ss") || w->endsWith("ias") ||
-                          (*w) == "zinc"))
+                          (*w) == "zinc")) {
                       (*w) += 'e';
+                    }
                     break;
                   }
                 }
@@ -358,7 +388,7 @@ bool EnglishStemmer::step1B(Word *w, const uint32_t r1) {
   return false;
 }
 
-bool EnglishStemmer::step1C(Word *w) {
+auto EnglishStemmer::step1C(Word *w) -> bool {
   if( w->length() > 2 && tolower((*w)(0)) == 'y' && isConsonant((*w)(1))) {
     w->letters[w->end] = 'i';
     return true;
@@ -366,7 +396,7 @@ bool EnglishStemmer::step1C(Word *w) {
   return false;
 }
 
-bool EnglishStemmer::step2(Word *w, const uint32_t r1) {
+auto EnglishStemmer::step2(Word *w, const uint32_t r1) -> bool {
   for( int i = 0; i < numSuffixesStep2; i++ ) {
     if( w->endsWith(suffixesStep2[i][0]) && suffixInRn(w, r1, suffixesStep2[i][0])) {
       w->changeSuffix(suffixesStep2[i][0], suffixesStep2[i][1]);
@@ -377,12 +407,14 @@ bool EnglishStemmer::step2(Word *w, const uint32_t r1) {
   if( w->endsWith("logi") && suffixInRn(w, r1, "ogi")) {
     w->end--;
     return true;
-  } else if( w->endsWith("li")) {
+  }
+  if( w->endsWith("li")) {
     if( suffixInRn(w, r1, "li") && isLiEnding((*w)(2))) {
       w->end -= 2;
       w->type |= English::AdverbOfManner;
       return true;
-    } else if( w->length() > 3 ) {
+    }
+    if( w->length() > 3 ) {
       switch((*w)(2)) {
         case 'b': {
           w->letters[w->end] = 'e';
@@ -416,7 +448,7 @@ bool EnglishStemmer::step2(Word *w, const uint32_t r1) {
         case 'n':
         case 'r':
         case 'w': {
-          if( w->length() > (uint32_t) (4 + ((*w)(2) == 'r'))) {
+          if( w->length() > static_cast<uint32_t>(4 + static_cast<int>((*w)(2) == 'r'))) {
             w->end -= 2;
             w->type |= English::AdverbOfManner;
             return true;
@@ -428,7 +460,7 @@ bool EnglishStemmer::step2(Word *w, const uint32_t r1) {
   return false;
 }
 
-bool EnglishStemmer::step3(Word *w, const uint32_t r1, const uint32_t r2) {
+auto EnglishStemmer::step3(Word *w, const uint32_t r1, const uint32_t r2) -> bool {
   bool res = false;
   for( int i = 0; i < numSuffixesStep3; i++ ) {
     if( w->endsWith(suffixesStep3[i][0]) && suffixInRn(w, r1, suffixesStep3[i][0])) {
@@ -451,14 +483,15 @@ bool EnglishStemmer::step3(Word *w, const uint32_t r1, const uint32_t r2) {
   return res;
 }
 
-bool EnglishStemmer::step4(Word *w, const uint32_t r2) {
+auto EnglishStemmer::step4(Word *w, const uint32_t r2) -> bool {
   bool res = false;
   for( int i = 0; i < numSuffixesStep4; i++ ) {
     if( w->endsWith(suffixesStep4[i]) && suffixInRn(w, r2, suffixesStep4[i])) {
-      w->end -= uint8_t(strlen(suffixesStep4[i]) - (i >
-                                                    17) /*sion, tion*/); // remove: al   ance   ence   er   ic   able   ible   ant   ement   ment   ent   ism   ate   iti   ous   ive   ize ; ion -> delete if preceded by s or t
-      if( !(i == 10 /* ent */ && (*w)(0) == 'm')) //exception: no typesStep4 should be assigned for 'agreement'
+      w->end -= uint8_t(strlen(suffixesStep4[i]) - static_cast<unsigned long>(i >
+                                                                              17) /*sion, tion*/); // remove: al   ance   ence   er   ic   able   ible   ant   ement   ment   ent   ism   ate   iti   ous   ive   ize ; ion -> delete if preceded by s or t
+      if( !(i == 10 /* ent */ && (*w)(0) == 'm')) { //exception: no typesStep4 should be assigned for 'agreement'
         w->type |= typesStep4[i];
+      }
       if( i == 0 && w->endsWith("nti")) {
         w->end--; // ntial -> nt
         res = true; // process ant+ial, ent+ial
@@ -470,28 +503,30 @@ bool EnglishStemmer::step4(Word *w, const uint32_t r2) {
   return res;
 }
 
-bool EnglishStemmer::step5(Word *w, const uint32_t r1, const uint32_t r2) {
+auto EnglishStemmer::step5(Word *w, const uint32_t r1, const uint32_t r2) -> bool {
   if((*w)(0) == 'e' && (*w) != "here" ) {
-    if( suffixInRn(w, r2, "e"))
+    if( suffixInRn(w, r2, "e")) {
       w->end--; //e -> delete if in r2, or in r1 and not preceded by a short syllable
-    else if( suffixInRn(w, r1, "e")) {
+    } else if( suffixInRn(w, r1, "e")) {
       w->end--; //e -> delete if in r1 and not preceded by a short syllable
-      w->end += endsInShortSyllable(w);
-    } else
+      w->end += static_cast<int>(endsInShortSyllable(w));
+    } else {
       return false;
+    }
     return true;
-  } else if( w->length() > 1 && (*w)(0) == 'l' && suffixInRn(w, r2, "l") && (*w)(1) == 'l' ) {
+  }
+  if( w->length() > 1 && (*w)(0) == 'l' && suffixInRn(w, r2, "l") && (*w)(1) == 'l' ) {
     w->end--; //l -> delete if in r2 and preceded by l
     return true;
   }
   return false;
 }
 
-bool EnglishStemmer::isVowel(const char c) {
+auto EnglishStemmer::isVowel(const char c) -> bool {
   return charInArray(c, vowels, numVowels);
 }
 
-bool EnglishStemmer::stem(Word *w) {
+auto EnglishStemmer::stem(Word *w) -> bool {
   if( w->length() < 2 ) {
     w->calculateStemHash();
     //w->print(); //for debugging
@@ -517,7 +552,8 @@ bool EnglishStemmer::stem(Word *w) {
 
   // start of modified Porter2 Stemmer
   markYsAsConsonants(w);
-  uint32_t r1 = getRegion1(w), r2 = getRegion(w, r1);
+  uint32_t r1 = getRegion1(w);
+  uint32_t r2 = getRegion(w, r1);
   res |= step0(w);
   res |= step1A(w);
   for( int i = 0; i < numExceptions2; i++ ) {
@@ -537,20 +573,24 @@ bool EnglishStemmer::stem(Word *w) {
   res |= step5(w, r1, r2);
 
   for( uint8_t i = w->start; i <= w->end; i++ ) {
-    if( w->letters[i] == 'Y' )
+    if( w->letters[i] == 'Y' ) {
       w->letters[i] = 'y';
+    }
   }
-  if( !w->type || w->type == English::Plural ) {
-    if( w->matchesAny(maleWords, numMaleWords))
+  if((w->type == 0u) || w->type == English::Plural ) {
+    if( w->matchesAny(maleWords, numMaleWords)) {
       res = true, w->type |= English::Male;
-    else if( w->matchesAny(femaleWords, numFemaleWords))
+    } else if( w->matchesAny(femaleWords, numFemaleWords)) {
       res = true, w->type |= English::Female;
+    }
   }
-  if( !res )
+  if( !res ) {
     res = w->matchesAny(commonWords, numCommonWords);
+  }
   w->calculateStemHash();
-  if( res )
+  if( res ) {
     w->language = Language::English;
+  }
   //w->print(); //for debugging
   return res;
 }

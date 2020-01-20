@@ -10,13 +10,15 @@ void Image4BitModel::setParam(int info0) {
 }
 
 void Image4BitModel::mix(Mixer &m) {
-  if( !cp[0] ) {
-    for( int i = 0; i < S; i++ )
+  if( cp[0] == nullptr ) {
+    for( int i = 0; i < S; i++ ) {
       cp[i] = t[263 * i]; //set the initial context to an arbitrary slot in the hashtable
+    }
   }
   INJECT_SHARED_y
-  for( int i = 0; i < S; i++ )
+  for( int i = 0; i < S; i++ ) {
     StateTable::update(cp[i], y, rnd); //update hashtable item priorities using predicted counts
+  }
 
   if( shared->bitPosition == 0 || shared->bitPosition == 4 ) {
     WW = W;
@@ -78,16 +80,17 @@ void Image4BitModel::mix(Mixer &m) {
     INJECT_SHARED_y
     px += px + y;
     int j = (y + 1) << (shared->bitPosition & 3U);
-    for( int i = 0; i < S; i++ )
+    for( int i = 0; i < S; i++ ) {
       cp[i] += j;
+    }
   }
 
   // predict
   sm.subscribe();
   for( int i = 0; i < S; i++ ) {
     const uint8_t s = *cp[i];
-    const int n0 = -!StateTable::next(s, 2);
-    const int n1 = -!StateTable::next(s, 3);
+    const int n0 = -static_cast<int>(StateTable::next(s, 2)) == 0u;
+    const int n1 = -static_cast<int>(StateTable::next(s, 3)) == 0u;
     const int p1 = sm.p2(i, s);
     const int st = stretch(p1) >> 1U;
     m.add(st);

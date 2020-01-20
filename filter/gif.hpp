@@ -36,7 +36,7 @@ static auto encodeGif(File *in, File *out, uint64_t len, int &headerSize) -> int
   int diffPos = 0;
   int clearPos = 0;
   int bsize = 0;
-  int code;
+  int code = 0;
   int offset = 0;
   uint64_t beginIn = in->curPos();
   uint64_t beginOut = out->curPos();
@@ -72,21 +72,23 @@ static auto encodeGif(File *in, File *out, uint64_t len, int &headerSize) -> int
             headerSize += 4;
             out->put32(0);
           }
-          if( bsize == 0 )
+          if( bsize == 0 ) {
             bsize = blockSize;
+          }
           if( code == (1U << codeSize)) {
             if( maxcode > (1U << codeSize) + 1 ) {
-              if((clearPos != 0) && clearPos != 69631 - maxcode )
+              if((clearPos != 0) && clearPos != 69631 - maxcode ) {
                 return 0;
+              }
               clearPos = 69631 - maxcode;
             }
             bits = codeSize + 1, maxcode = (1U << codeSize) + 1, last = -1;
             LZW_RESET
-          } else if( code == (1U << codeSize) + 1 )
+          } else if( code == (1U << codeSize) + 1 ) {
             end = true;
-          else if( code > maxcode + 1 )
+          } else if( code > maxcode + 1 ) {
             return 0;
-          else {
+          } else {
             int j = (code <= maxcode ? code : last);
             int size = 1;
             while( j >= (1 << codeSize)) {
@@ -94,19 +96,22 @@ static auto encodeGif(File *in, File *out, uint64_t len, int &headerSize) -> int
               j = dict[j] >> 8;
             }
             output[4096 - size] = j;
-            if( phase == 1 )
+            if( phase == 1 ) {
               out->blockWrite(&output[4096 - size], size);
-            else
+            } else {
               diffPos += size;
+            }
             if( code == maxcode + 1 ) {
-              if( phase == 1 )
+              if( phase == 1 ) {
                 out->putChar(j);
-              else
+              } else {
                 diffPos++;
+              }
             }
             if( last != -1 ) {
-              if( ++maxcode >= 8191 )
+              if( ++maxcode >= 8191 ) {
                 return 0;
+              }
               if( maxcode <= 4095 ) {
                 int key = (last << 8U) + j;
                 int index = -1;
@@ -120,8 +125,9 @@ static auto encodeGif(File *in, File *out, uint64_t len, int &headerSize) -> int
                   diffPos = size + static_cast<int>(code == maxcode);
                 }
               }
-              if( maxcode >= ((1U << bits) - 1) && bits < 12 )
+              if( maxcode >= ((1U << bits) - 1) && bits < 12 ) {
                 bits++;
+              }
             }
             last = code;
           }
@@ -129,7 +135,7 @@ static auto encodeGif(File *in, File *out, uint64_t len, int &headerSize) -> int
       }
     }
   }
-  diffPos = (int) out->curPos();
+  diffPos = static_cast<int>(out->curPos());
   out->setpos(beginOut);
   out->putChar(headerSize >> 8U);
   out->putChar(headerSize & 255U);
@@ -192,31 +198,36 @@ static auto decodeGif(File *in, uint64_t size, File *out, FMode mode, uint64_t &
     diffPos[i] = (diffPos[i] << 8) + in->getchar();
     diffPos[i] = (diffPos[i] << 8) + in->getchar();
     diffPos[i] = (diffPos[i] << 8) + in->getchar();
-    if( i > 0 )
+    if( i > 0 ) {
       diffPos[i] += diffPos[i - 1];
+    }
   }
   Array<uint8_t> output(256);
   size -= 6 + diffCount * 4;
   int last = in->getchar();
-  int total = (int) size + 1;
+  int total = static_cast<int>(size) + 1;
   int outsize = 1;
-  if( mode == FDECOMPRESS )
+  if( mode == FDECOMPRESS ) {
     out->putChar(codesize);
-  else if( mode == FCOMPARE )
-    if( codesize != out->getchar() && (diffFound == 0u))
+  } else if( mode == FCOMPARE ) {
+    if( codesize != out->getchar() && (diffFound == 0u)) {
       diffFound = 1;
-  if( diffCount == 0 || diffPos[0] != 0 ) GIF_WRITE_CODE(1U << codesize) else
+    }
+  }
+  if( diffCount == 0 || diffPos[0] != 0 ) GIF_WRITE_CODE(1U << codesize) else {
     curDiff++;
+  }
   while( size != 0 && (input = in->getchar()) != EOF) {
     size--;
     int key = (last << 8U) + input;
     int index = (code = -1);
-    if( last < 0 )
+    if( last < 0 ) {
       index = input;
-    else LZW_FIND(key)
+    } else LZW_FIND(key)
     code = index;
-    if( curDiff < diffCount && total - (int) size > diffPos[curDiff] )
+    if( curDiff < diffCount && total - static_cast<int>(size) > diffPos[curDiff] ) {
       curDiff++, code = -1;
+    }
     if( code < 0 ) {
       GIF_WRITE_CODE(last)
       if( maxcode == clearPos ) {
@@ -229,8 +240,9 @@ static auto decodeGif(File *in, uint64_t size, File *out, FMode mode, uint64_t &
           dict[maxcode] = key;
           table[(index < 0) ? -index - 1 : offset] = maxcode;
         }
-        if( maxcode >= (1U << bits) && bits < 12 )
+        if( maxcode >= (1U << bits) && bits < 12 ) {
           bits++;
+        }
       }
       code = input;
     }
@@ -243,11 +255,13 @@ static auto decodeGif(File *in, uint64_t size, File *out, FMode mode, uint64_t &
     if( blockSize == bsize ) GIF_WRITE_BLOCK(bsize)
   }
   if( blockSize > 0 ) GIF_WRITE_BLOCK(blockSize)
-  if( mode == FDECOMPRESS )
+  if( mode == FDECOMPRESS ) {
     out->putChar(0);
-  else if( mode == FCOMPARE )
-    if( 0 != out->getchar() && (diffFound == 0u))
+  } else if( mode == FCOMPARE ) {
+    if( 0 != out->getchar() && (diffFound == 0u)) {
       diffFound = outsize + 1;
+    }
+  }
   return outsize + 1;
 }
 

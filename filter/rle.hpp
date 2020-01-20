@@ -34,8 +34,9 @@ private:
         state = LITERAL_RUN;
         RLE_OUTPUT_RUN
       } else {
-        if( ++(*lastLiteral) == 127 )
+        if( ++(*lastLiteral) == 127 ) {
           state = BASE;
+        }
         *outPtr++ = byte;
       }
     }
@@ -45,8 +46,9 @@ private:
       if( outPtr[-2] == 0x81 && *lastLiteral < (125)) {
         state = (((*lastLiteral) += 2) == 127) ? BASE : LITERAL;
         outPtr[-2] = outPtr[-1];
-      } else
+      } else {
         state = RUN;
+      }
       loop = 1;
       return loop;
     }
@@ -59,15 +61,16 @@ public:
       int maxBlockSize = info & 0xFFFFFFU;
       out->putVLI(maxBlockSize);
       headerSize = VLICost(maxBlockSize);
-      while( i < (int) size ) {
+      while( i < static_cast<int>(size)) {
         b = in->getchar(), i++;
         if( c == 0x80 ) {
           c = b;
           continue;
         }
         if( c > 0x7F ) {
-          for( int j = 0; j <= (c & 0x7FU); j++ )
+          for( int j = 0; j <= (c & 0x7FU); j++ ) {
             out->putChar(b);
+          }
           c = in->getchar(), i++;
         } else {
           for( int j = 0; j <= c; j++, i++ ) {
@@ -82,7 +85,7 @@ public:
       uint8_t inBuffer[0x10000] = {0};
       uint8_t outBuffer[0x10200] = {0};
       uint64_t pos = 0;
-      int maxBlockSize = (int) in->getVLI();
+      int maxBlockSize = static_cast<int>(in->getVLI());
 
       do {
         uint64_t remaining = in->blockRead(&inBuffer[0], maxBlockSize);
@@ -94,7 +97,8 @@ public:
           uint8_t byte = *inPtr++;
           uint8_t loop = 0;
           int run = 1;
-          for( remaining--; remaining > 0 && byte == *inPtr; remaining--, run++, inPtr++ );
+          for( remaining--; remaining > 0 && byte == *inPtr; remaining--, run++, inPtr++ ) {
+          }
           do {
             loop = 0;
             switch( state ) {
@@ -115,10 +119,10 @@ public:
         }
 
         uint64_t length = outPtr - (&outBuffer[0]);
-        if( fMode == FDECOMPRESS )
+        if( fMode == FDECOMPRESS ) {
           out->blockWrite(&outBuffer[0], length);
-        else if( fMode == FCOMPARE ) {
-          for( int j = 0; j < (int) length; ++j ) {
+        } else if( fMode == FCOMPARE ) {
+          for( int j = 0; j < static_cast<int>(length); ++j ) {
             if( outBuffer[j] != out->getchar() && (diffFound == 0u)) {
               diffFound = pos + j + 1;
               break;

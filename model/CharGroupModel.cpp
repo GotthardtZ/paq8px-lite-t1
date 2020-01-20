@@ -5,14 +5,15 @@ CharGroupModel::CharGroupModel(const uint64_t size) : cm(size, nCM, 64, CM_USE_R
 void CharGroupModel::mix(Mixer &m) {
   if( shared->bitPosition == 0 ) {
     uint32_t g = shared->c1; // group identifier
-    if( '0' <= g && g <= '9' )
+    if( '0' <= g && g <= '9' ) {
       g = '0'; //all digits are in one group
-    else if( 'A' <= g && g <= 'Z' )
+    } else if( 'A' <= g && g <= 'Z' ) {
       g = 'A'; //all uppercase letters are in one group
-    else if( 'a' <= g && g <= 'z' )
+    } else if( 'a' <= g && g <= 'z' ) {
       g = 'a'; //all lowercase letters are in one group
-    else if( g >= 128 )
+    } else if( g >= 128 ) {
       g = 128;
+    }
 
     const bool toBeCollapsed = (g == '0' || g == 'A' || g == 'a') && (g == (gAscii1 & 0xffu));
     if( !toBeCollapsed ) {
@@ -24,7 +25,7 @@ void CharGroupModel::mix(Mixer &m) {
       gAscii1 |= g;
     }
 
-    uint64_t i = toBeCollapsed * 8;
+    uint64_t i = static_cast<int>(toBeCollapsed) * 8;
     cm.set(hash((++i), gAscii3, gAscii2, gAscii1)); // last 12 groups
     cm.set(hash((++i), gAscii2, gAscii1)); // last 8 groups
     cm.set(hash((++i), gAscii2 & 0xffffu, gAscii1)); // last 6 groups

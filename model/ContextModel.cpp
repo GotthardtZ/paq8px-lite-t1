@@ -18,14 +18,14 @@ ContextModel::ContextModel(ModelStats *st, Models &models) : stats(st), models(m
                       LinearPredictionModel::MIXERCONTEXTSETS + ExeModel::MIXERCONTEXTSETS);
 }
 
-int ContextModel::p() {
+auto ContextModel::p() -> int {
   uint32_t &blockPosition = stats->blPos;
   // Parse block type and block size
   if( shared->bitPosition == 0 ) {
     --blockSize;
     blockPosition++;
     if( blockSize == -1 ) {
-      nextBlockType = (BlockType) shared->c1; //got blockType but don't switch (we don't have all the info yet)
+      nextBlockType = static_cast<BlockType>(shared->c1); //got blockType but don't switch (we don't have all the info yet)
       bytesRead = 0;
       readSize = true;
     } else if( blockSize < 0 ) {
@@ -35,11 +35,13 @@ int ContextModel::p() {
           readSize = false;
           if( !hasInfo(nextBlockType)) {
             blockSize = bytesRead;
-            if( hasRecursion(nextBlockType))
+            if( hasRecursion(nextBlockType)) {
               blockSize = 0;
+            }
             blockPosition = 0;
-          } else
+          } else {
             blockSize = -1;
+          }
         }
       } else if( blockSize == -5 ) {
         blockSize = bytesRead;
@@ -48,10 +50,12 @@ int ContextModel::p() {
       }
     }
 
-    if( blockPosition == 0 )
+    if( blockPosition == 0 ) {
       blockType = nextBlockType; //got all the info - switch to next blockType
-    if( blockSize == 0 )
+    }
+    if( blockSize == 0 ) {
       blockType = DEFAULT;
+    }
 
     stats->blockType = blockType;
   }
@@ -146,8 +150,9 @@ int ContextModel::p() {
     case JPEG: {
       JpegModel &jpegModel = models.jpegModel();
       m->setScaleFactor(1024, 256);
-      if( jpegModel.mix(*m))
+      if( jpegModel.mix(*m) != 0 ) {
         return m->p();
+      }
     }
     case DEFAULT:
     case HDR:

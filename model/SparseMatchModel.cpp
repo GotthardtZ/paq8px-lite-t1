@@ -13,15 +13,17 @@ void SparseMatchModel::update() {
   // update sparse hashes
   for( uint32_t i = 0; i < numHashes; i++ ) {
     uint64_t hash = 0;
-    for( uint32_t j = 0, k = sparse[i].offset + 1; j < sparse[i].minLen; j++, k += sparse[i].stride )
+    for( uint32_t j = 0, k = sparse[i].offset + 1; j < sparse[i].minLen; j++, k += sparse[i].stride ) {
       hash = combine64(hash, buf(k) & sparse[i].bitMask);
+    }
     hashes[i] = finalize64(hash, hashBits);
   }
   // extend current match, if available
-  if( length ) {
+  if( length != 0u ) {
     index++;
-    if( length < MaxLen )
+    if( length < MaxLen ) {
       length++;
+    }
   }
     // or find a new match
   else {
@@ -45,8 +47,9 @@ void SparseMatchModel::update() {
     }
   }
   // update position information in hashtable
-  for( uint32_t i = 0; i < numHashes; i++ )
+  for( uint32_t i = 0; i < numHashes; i++ ) {
     table[hashes[i]] = shared->buf.getpos();
+  }
 
   expectedByte = length != 0 ? buf[index] : 0;
   if( valid ) {
@@ -68,12 +71,13 @@ void SparseMatchModel::update() {
 
 void SparseMatchModel::mix(Mixer &m) {
   const uint8_t b = shared->c0 << (8 - shared->bitPosition);
-  if( shared->bitPosition == 0 )
+  if( shared->bitPosition == 0 ) {
     update();
-  else if( valid ) {
+  } else if( valid ) {
     maps[0].set(hash(expectedByte, shared->c0, shared->c1, (shared->c4 >> 8U) & 0xffU, ilog2(length + 1) * numHashes + hashIndex));
-    if( shared->bitPosition == 4 )
+    if( shared->bitPosition == 4 ) {
       maps[1].setDirect(0x10000U | ((expectedByte ^ uint8_t(shared->c0 << 4U)) << 8U) | shared->c1);
+    }
     INJECT_SHARED_y
     iCtx8 += y;
     iCtx8 = (shared->bitPosition << 16U) | (shared->c1 << 8U) | (expectedByte ^ b);
@@ -82,8 +86,9 @@ void SparseMatchModel::mix(Mixer &m) {
   }
 
   // check if next bit matches the prediction, accounting for the required bitmask
-  if( length > 0 && (((expectedByte ^ b) & sparse[hashIndex].bitMask) >> (8 - shared->bitPosition)) != 0 )
+  if( length > 0 && (((expectedByte ^ b) & sparse[hashIndex].bitMask) >> (8 - shared->bitPosition)) != 0 ) {
     length = 0;
+  }
 
   if( valid ) {
     if( length > 1 && ((sparse[hashIndex].bitMask >> (7 - shared->bitPosition)) & 1U) > 0 ) {
@@ -100,9 +105,11 @@ void SparseMatchModel::mix(Mixer &m) {
     for( int i = 0; i < nSM; i++ ) {
       maps[i].mix(m);
     }
-  } else
-    for( int i = 0; i < MIXERINPUTS; i++ )
+  } else {
+    for( int i = 0; i < MIXERINPUTS; i++ ) {
       m.add(0);
+    }
+  }
 
   m.set((hashIndex << 6U) | (shared->bitPosition << 3) | min(7, length), numHashes * 64);
   m.set((hashIndex << 11U) | (min(7, ilog2(length + 1)) << 8) | (shared->c0 ^ (expectedByte >> (8 - shared->bitPosition))),

@@ -33,8 +33,9 @@ class Base64Filter : Filter {
 private:
     static auto valueB(char c) -> char {
       const char *p = strchr(base64::table1, c);
-      if( p != nullptr )
-        return (char) (p - base64::table1);
+      if( p != nullptr ) {
+        return static_cast<char>(p - base64::table1);
+      }
       return 0;
     }
 
@@ -43,7 +44,7 @@ private:
     }
 
 public:
-    void encode(File *in, File *out, uint64_t size, int info, int &headerSize) override {
+    void encode(File *in, File *out, uint64_t size, int  /*info*/, int & /*headerSize*/) override {
       uint64_t inLen = 0;
       int i = 0;
       int b = 0;
@@ -103,16 +104,18 @@ public:
       ptr[2] = (size >> 8U) & 255U;
       ptr[3] = (size >> 16U) & 255U;
       if( tlf != 0 ) {
-        if( tlf == 10 )
+        if( tlf == 10 ) {
           ptr[4] = 128;
-        else
+        } else {
           ptr[4] = 64;
-      } else
+        }
+      } else {
         ptr[4] = (size >> 24U) & 63U; //1100 0000
+      }
       out->blockWrite(&ptr[0], olen);
     }
 
-    uint64_t decode(File *in, File *out, FMode fMode, uint64_t size, uint64_t &diffFound) override {
+    auto decode(File *in, File *out, FMode fMode, uint64_t  /*size*/, uint64_t &diffFound) -> uint64_t override {
       uint8_t inn[3];
       int i = 0;
       int len = 0;

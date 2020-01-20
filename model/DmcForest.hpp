@@ -51,7 +51,7 @@ public:
     static constexpr int MIXERCONTEXTSETS = 0;
     explicit DmcForest(uint64_t size);
     ~DmcForest();
-    
+
     /**
      * Update and predict
      * @param m

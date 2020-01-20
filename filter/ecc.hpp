@@ -15,16 +15,18 @@ static uint32_t edcLut[256];
 static bool tablesInit = false;
 
 static void eccedcInit() {
-  if( tablesInit )
+  if( tablesInit ) {
     return;
+  }
   uint32_t i, j, edc;
   for( i = 0; i < 256; i++ ) {
     j = (i << 1U) ^ ((i & 0x80U) != 0u ? 0x11DU : 0U);
     eccFLut[i] = j;
     eccBLut[i ^ j] = i;
     edc = i;
-    for( j = 0; j < 8; j++ )
+    for( j = 0; j < 8; j++ ) {
       edc = (edc >> 1U) ^ ((edc & 1U) != 0u ? 0xD8018001 : 0);
+    }
     edcLut[i] = edc;
   }
   tablesInit = true;
@@ -40,8 +42,9 @@ static void eccCompute(const uint8_t *src, uint32_t majorCount, uint32_t minorCo
     for( minor = 0; minor < minorCount; minor++ ) {
       uint8_t temp = src[index];
       index += minorInc;
-      if( index >= size )
+      if( index >= size ) {
         index -= size;
+      }
       eccA ^= temp;
       eccB ^= temp;
       eccA = eccFLut[eccA];
@@ -54,8 +57,9 @@ static void eccCompute(const uint8_t *src, uint32_t majorCount, uint32_t minorCo
 
 static auto edcCompute(const uint8_t *src, int size) -> uint32_t {
   uint32_t edc = 0;
-  while((size--) != 0 )
+  while((size--) != 0 ) {
     edc = (edc >> 8U) ^ edcLut[(edc ^ (*src++)) & 0xFFU];
+  }
   return edc;
 }
 
