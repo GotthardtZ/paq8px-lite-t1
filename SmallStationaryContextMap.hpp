@@ -2,9 +2,9 @@
 #define PAQ8PX_SMALLSTATIONARYCONTEXTMAP_HPP
 
 #include "IPredictor.hpp"
-#include "UpdateBroadcaster.hpp"
 #include "Mixer.hpp"
 #include "Stretch.hpp"
+#include "UpdateBroadcaster.hpp"
 
 /**
  * Map for modelling contexts of (nearly-)stationary data.

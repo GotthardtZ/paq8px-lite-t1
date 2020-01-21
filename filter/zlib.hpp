@@ -86,8 +86,8 @@ static auto encodeZlib(File *in, File *out, uint64_t len, int &headerSize) -> in
   uint32_t h2 = in->getchar();
   in->setpos(posBackup);
   int zh = parseZlibHeader(h1 * 256 + h2);
-  int memLevel;
-  int cLevel;
+  int memLevel = 0;
+  int cLevel = 0;
   int cType = zh % 4;
   int window = zh == -1 ? 0 : MAX_WBITS + 10 + zh / 4;
   int minCLevel = window == 0 ? 1 : cType == 3 ? 7 : cType == 2 ? 6 : cType == 1 ? 2 : 1;

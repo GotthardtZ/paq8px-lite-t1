@@ -62,9 +62,9 @@ static void encodeExe(File *in, File *out, uint64_t len, uint64_t begin) {
  */
 static auto decodeExe(Encoder &en, uint64_t size, File *out, FMode mode, uint64_t &diffFound) -> uint64_t {
   const int block = 0x10000; // block size
-  int begin;
+  int begin = 0;
   int offset = 6;
-  int a;
+  int a = 0;
   uint8_t c[6];
   begin = static_cast<int>(en.decodeBlockSize());
   size -= VLICost(uint64_t(begin));

@@ -6,13 +6,15 @@ APM1::APM1(const int n, const int r) : index(0), n(n), t(n * 33), rate(r) {
 #endif
   assert(n > 0 && rate > 0 && rate < 32);
   // maps p, cxt -> p initially
-  for( int i = 0; i < n; ++i )
-    for( int j = 0; j < 33; ++j )
+  for( int i = 0; i < n; ++i ) {
+    for( int j = 0; j < 33; ++j ) {
       if( i == 0 ) {
         t[i * 33 + j] = squash((j - 16) * 128) * 16;
       } else {
         t[i * 33 + j] = t[j];
       }
+    }
+  }
 }
 
 auto APM1::p(int pr, const int cxt) -> int {

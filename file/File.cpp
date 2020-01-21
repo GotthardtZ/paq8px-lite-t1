@@ -1,8 +1,9 @@
 #include "File.hpp"
 
 void File::append(const char *s) {
-  for( int i = 0; s[i] != 0; i++ )
-    putChar((uint8_t) s[i]);
+  for( int i = 0; s[i] != 0; i++ ) {
+    putChar(static_cast<uint8_t>(s[i]));
+  }
 }
 
 auto File::get32() -> uint32_t { return (getchar() << 24U) | (getchar() << 16U) | (getchar() << 8U) | (getchar()); }

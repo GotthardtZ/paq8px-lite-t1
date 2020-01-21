@@ -17,21 +17,25 @@ auto MTFList::getFirst() -> int {
 }
 
 auto MTFList::getNext() -> int {
-  if( Index >= 0 )
+  if( Index >= 0 ) {
     Index = next[Index];
+  }
   return Index;
 }
 
 void MTFList::moveToFront(const int i) {
   assert(uint32_t(i) < previous.size());
-  if((Index = i) == root )
+  if((Index = i) == root ) {
     return;
+  }
   const int p = previous[Index];
   const int n = next[Index];
-  if( p >= 0 )
+  if( p >= 0 ) {
     next[p] = next[Index];
-  if( n >= 0 )
+  }
+  if( n >= 0 ) {
     previous[n] = previous[Index];
+  }
   previous[root] = Index;
   next[Index] = root;
   root = Index;

@@ -2,12 +2,12 @@
 #define PAQ8PX_FILEUTILS_HPP
 
 #include "../String.hpp"
+#include <cerrno>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <cerrno>
 
 //////////////////// IO functions and classes ///////////////////
 // Wrappers to utf8 vs. wchar functions
@@ -129,21 +129,25 @@ static auto examinePath(const char *path) -> int {
   const bool success = static_cast<int>(statPath(path, status)) == 0;
   if( !success ) {
     if( errno == ENOENT ) { //no such file or directory
-      const int len = (int) strlen(path);
-      if( len == 0 )
+      const int len = static_cast<int>(strlen(path));
+      if( len == 0 ) {
         return 0; //error: path is an empty string
+      }
       const char lastChar = path[len - 1];
-      if( lastChar != '/' && lastChar != '\\' )
+      if( lastChar != '/' && lastChar != '\\' ) {
         return 3; //looks like a file
+      }
 
       return 4; //looks like a directory
     }
     return 0; //error
   }
-  if((status.st_mode & S_IFREG) != 0 )
+  if((status.st_mode & S_IFREG) != 0 ) {
     return 1; //existing file
-  if((status.st_mode & S_IFDIR) != 0 )
+  }
+  if((status.st_mode & S_IFDIR) != 0 ) {
     return 2; //existing directory
+  }
   return 0; //error: "path" may be a socket, symlink, named pipe, etc.
 }
 
@@ -153,8 +157,9 @@ static auto examinePath(const char *path) -> int {
  * @return
  */
 static auto makeDir(const char *dir) -> int {
-  if( examinePath(dir) == 2 ) //existing directory
+  if( examinePath(dir) == 2 ) { //existing directory
     return 2; //2: directory already exists, no need to create
+  }
 #ifdef WINDOWS
   const bool created = (CreateDirectoryW(WcharStr(dir).wchar_str, nullptr) == TRUE);
 #else
@@ -173,10 +178,12 @@ static auto makeDir(const char *dir) -> int {
 static void makeDirectories(const char *filename) {
   String path(filename);
   uint64_t start = 0;
-  if( path[1] == ':' )
+  if( path[1] == ':' ) {
     start = 2; //skip drive letter (c:)
-  if( path[start] == '/' || path[start] == '\\' )
+  }
+  if( path[start] == '/' || path[start] == '\\' ) {
     start++; //skip leading slashes (root dir)
+  }
   for( uint64_t i = start; path[i] != 0; ++i ) {
     if( path[i] == '/' || path[i] == '\\' ) {
       char saveChar = path[i];
@@ -187,8 +194,9 @@ static void makeDirectories(const char *filename) {
         printf("Unable to create directory %s", dirName);
         quit();
       }
-      if( created == 1 )
+      if( created == 1 ) {
         printf("Created directory %s\n", dirName);
+      }
       path[i] = saveChar;
     }
   }

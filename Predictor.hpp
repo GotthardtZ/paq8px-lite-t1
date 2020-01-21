@@ -2,17 +2,17 @@
 #define PAQ8PX_PREDICTOR_HPP
 
 #include "file/FileDisk.hpp"
-#include "Shared.hpp"
+#include "DummyMixer.hpp"
 #include "ModelStats.hpp"
 #include "Models.hpp"
-#include "model/ContextModel.hpp"
 #include "SSE.hpp"
+#include "Shared.hpp"
+#include "UpdateBroadcaster.hpp"
+#include "file/OpenFromMyFolder.hpp"
+#include "model/ContextModel.hpp"
+#include "model/ExeModel.hpp"
 #include "model/NormalModel.hpp"
 #include "model/WordModel.hpp"
-#include "DummyMixer.hpp"
-#include "file/OpenFromMyFolder.hpp"
-#include "UpdateBroadcaster.hpp"
-#include "model/ExeModel.hpp"
 #include "utils.hpp"
 
 /**
@@ -36,10 +36,10 @@ public:
     Predictor();
 
     /**
-     * returns P(1) as a 12 bit number (0-4095).
+     * Returns P(1) as a 12 bit number (0-4095).
      * @return the prediction
      */
-    [[nodiscard]] int p() const;
+    [[nodiscard]] auto p() const -> int;
 
     /**
      * Trains the models with the actual bit (0 or 1).

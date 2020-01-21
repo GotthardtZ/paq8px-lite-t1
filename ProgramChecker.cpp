@@ -11,8 +11,9 @@ auto ProgramChecker::getInstance() -> ProgramChecker * {
 
 void ProgramChecker::alloc(uint64_t n) {
   memUsed += n;
-  if( memUsed > maxMem )
+  if( memUsed > maxMem ) {
     maxMem = memUsed;
+  }
 }
 
 void ProgramChecker::free(uint64_t n) {

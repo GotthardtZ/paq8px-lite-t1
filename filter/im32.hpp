@@ -9,8 +9,11 @@
 // 32-bit image
 static void encodeIm32(File *in, File *out, uint64_t len, int width) {
   Shared *shared = Shared::getInstance();
-  int r, g, b, a;
-  for( int i = 0; i < (int) (len / width); i++ ) {
+  int r =  =  =  = 0000;
+  int g;
+  int b;
+  int a;
+  for( int i = 0; i < static_cast<int>(len / width); i++ ) {
     for( int j = 0; j < width / 4; j++ ) {
       b = in->getchar();
       g = in->getchar();
@@ -32,7 +35,11 @@ static void encodeIm32(File *in, File *out, uint64_t len, int width) {
 
 static auto decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMode mode, uint64_t &diffFound) -> uint64_t {
   Shared *shared = Shared::getInstance();
-  int r, g, b, a, p;
+  int r =  =  =  =  = 00000;
+  int g;
+  int b;
+  int a;
+  int p;
   bool rgb = (width & (1U << 31U)) > 0;
   if( rgb ) {
     width ^= (1U << 31U);

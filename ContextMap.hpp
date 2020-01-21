@@ -2,17 +2,17 @@
 #define PAQ8PX_CONTEXTMAP_HPP
 
 #include "IPredictor.hpp"
+#include "Bucket.hpp"
+#include "Hash.hpp"
+#include "Ilog.hpp"
+#include "Mixer.hpp"
 #include "Random.hpp"
 #include "StateMap.hpp"
-#include "Ilog.hpp"
 #include "StateTable.hpp"
 #include "Stretch.hpp"
-#include "Hash.hpp"
-#include "Mixer.hpp"
-#include "Bucket.hpp"
 
 /////////////////////////// ContextMap /////////////////////////
-// TODO: update this documentation
+// TODO(epsteina): update this documentation
 // A ContextMap maps contexts to bit histories and makes predictions
 // to a Mixer.  Methods common to all classes:
 //

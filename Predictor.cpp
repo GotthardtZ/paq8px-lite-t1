@@ -9,8 +9,9 @@ Predictor::Predictor() : models(&stats), contextModel(&stats, models), sse(&stat
     trainText("english.dic", 3);
     trainText("english.exp", 1);
   }
-  if((shared->options & OPTION_TRAINEXE) != 0U )
+  if((shared->options & OPTION_TRAINEXE) != 0U ) {
     trainExe();
+  }
 }
 
 auto Predictor::p() const -> int { return pr; }

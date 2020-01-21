@@ -44,12 +44,12 @@ auto Models::indirectModel() -> IndirectModel & {
 
 #ifdef USE_TEXTMODEL
 
-TextModel &Models::textModel() {
+auto Models::textModel() -> TextModel & {
   static TextModel instance {stats, shared->mem * 16};
   return instance;
 }
 
-WordModel &Models::wordModel() {
+auto Models::wordModel() -> WordModel & {
   static WordModel instance {stats, shared->mem * 16};
   return instance;
 }
@@ -110,12 +110,12 @@ auto Models::image1BitModel() -> Image1BitModel & {
 
 #ifdef USE_AUDIOMODEL
 
-Audio8BitModel &Models::audio8BitModel() {
+auto Models::audio8BitModel() -> Audio8BitModel & {
   static Audio8BitModel instance {stats};
   return instance;
 }
 
-Audio16BitModel &Models::audio16BitModel() {
+auto Models::audio16BitModel() -> Audio16BitModel & {
   static Audio16BitModel instance {stats};
   return instance;
 }

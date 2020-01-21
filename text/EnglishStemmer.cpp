@@ -31,9 +31,9 @@ auto EnglishStemmer::endsInShortSyllable(const Word *w) -> bool {
   }
   if( w->end == w->start + 1 ) {
     return isVowel((*w)(1)) && isConsonant((*w)(0));
-  } else {
+  } 
     return (isConsonant((*w)(2)) && isVowel((*w)(1)) && isConsonant((*w)(0)) && isShortConsonant((*w)(0)));
-  }
+  
 }
 
 auto EnglishStemmer::isShortWord(const Word *w) -> bool {

@@ -1,12 +1,12 @@
 #include "Mixer.hpp"
+#include "3rd/cxxopts.hpp"
 #include "MixerFactory.hpp"
 #include "ModelStats.hpp"
+#include "file/FileDisk.hpp"
+#include "file/FileName.hpp"
+#include "file/fileUtils2.hpp"
 #include "model/ContextModel.hpp"
 #include <cstdint>
-#include "3rd/cxxopts.hpp"
-#include "file/FileName.hpp"
-#include "file/FileDisk.hpp"
-#include "file/fileUtils2.hpp"
 #include <iostream>
 
 using std::cout;
@@ -40,7 +40,7 @@ auto main(int argc, char *argv[]) -> int {
 
   auto result = options.parse(argc, argv);
 
-  if( result.count("help")) {
+  if( result.count("help") != 0u ) {
     cout << options.help({"", "Switches"}) << endl;
     exit(0);
   }
@@ -89,10 +89,10 @@ auto main(int argc, char *argv[]) -> int {
 
   shared->reset();
   shared->buf.setSize(shared->mem * 8);
-  int c;
-  uint8_t y;
-  auto results = (uint16_t *) malloc(8 * fSize * sizeof(uint16_t));
-  auto ys = (uint8_t *) malloc(8 * fSize * sizeof(uint8_t));
+  int c = 0;
+  uint8_t y = 0;
+  auto results = static_cast<uint16_t *>(malloc(8 * fSize * sizeof(uint16_t)));
+  auto ys = static_cast<uint8_t *>(malloc(8 * fSize * sizeof(uint8_t)));
   uint64_t position = 0;
   for( int j = 0; j < fSize; ++j ) {
     c = f.getchar();

@@ -1,20 +1,20 @@
 #ifndef PAQ8PX_PROGRAMCHECKER_HPP
 #define PAQ8PX_PROGRAMCHECKER_HPP
 
-#include <chrono>
-#include <cstdint>
-#include <cinttypes>
 #include <cassert>
+#include <chrono>
+#include <cinttypes>
+#include <cstdint>
 #include <cstdio>
 
 /**
- * Track time and memory used
- * \remark: only Array<T> reports its memory usage, we don't know about other types
+ * Track time and memory used.
+ * @remark: only @ref Array<T> reports its memory usage, we don't know about other types
  */
 class ProgramChecker {
 private:
-    uint64_t memUsed {};  // Bytes currently in use (all allocated minus all freed)
-    uint64_t maxMem {};   // Most bytes allocated ever
+    uint64_t memUsed {};  /**< Bytes currently in use (all allocated minus all freed) */
+    uint64_t maxMem {};   /**< Most bytes allocated ever */
     std::chrono::time_point<std::chrono::high_resolution_clock> startTime;
 
     /**
@@ -27,19 +27,19 @@ private:
     /**
      * Copy constructor is private so that it cannot be called
      */
-    ProgramChecker(ProgramChecker const &) {}
+    ProgramChecker(ProgramChecker const & /*unused*/) {}
 
     /**
      * Assignment operator is private so that it cannot be called
      */
-    ProgramChecker &operator=(ProgramChecker const &) { return *this; }
+    auto operator=(ProgramChecker const & /*unused*/) -> ProgramChecker & { return *this; }
 
     static ProgramChecker *instance;
 public:
-    static ProgramChecker *getInstance();
+    static auto getInstance() -> ProgramChecker *;
     void alloc(uint64_t n);
     void free(uint64_t n);
-    [[nodiscard]] double getRuntime() const;
+    [[nodiscard]] auto getRuntime() const -> double;
 
     /**
      * Print elapsed time and used memory

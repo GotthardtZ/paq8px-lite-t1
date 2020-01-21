@@ -22,7 +22,10 @@ public:
 
     void encode(File *in, File *out, uint64_t size, int width, int & /*headerSize*/) override {
       Shared *shared = Shared::getInstance();
-      uint32_t r, g, b, total = 0;
+      uint32_t r =  =  = 000;
+      uint32_t g;
+      uint32_t b;
+      uint32_t total = 0;
       auto isPossibleRgb565 = true;
       for( int i = 0; i < static_cast<int>(size / width); i++ ) {
         for( int j = 0; j < width / 3; j++ ) {
@@ -56,7 +59,11 @@ public:
 
     auto decode(File * /*in*/, File *out, FMode fMode, uint64_t size, uint64_t &diffFound) -> uint64_t override {
       Shared *shared = Shared::getInstance();
-      uint32_t r, g, b, p, total = 0;
+      uint32_t r =  =  =  = 0000;
+      uint32_t g;
+      uint32_t b;
+      uint32_t p;
+      uint32_t total = 0;
       bool isPossibleRGB565 = true;
       for( int i = 0; i < static_cast<int>(size / width); i++ ) {
         p = i * width;

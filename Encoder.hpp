@@ -1,11 +1,11 @@
 #ifndef PAQ8PX_ENCODER_HPP
 #define PAQ8PX_ENCODER_HPP
 
-#include <cstdint>
-#include <cstdio>
-#include <cassert>
 #include "Predictor.hpp"
 #include "Shared.hpp"
+#include <cassert>
+#include <cstdint>
+#include <cstdio>
 
 typedef enum {
     COMPRESS, DECOMPRESS
@@ -33,7 +33,7 @@ private:
      * @param i the bit to be compressed
      * @return
      */
-    int code(int i = 0);
+    auto code(int i = 0) -> int;
 public:
     /**
      * Encoder(COMPRESS, f) creates encoder for compression to archive f, which
@@ -44,12 +44,12 @@ public:
      * @param f the file to read from or write to
      */
     Encoder(Mode m, File *f);
-    [[nodiscard]] Mode getMode() const;
+    [[nodiscard]] auto getMode() const -> Mode;
     /**
      * size() returns current length of archive
      * @return length of archive so far
      */
-    [[nodiscard]] uint64_t size() const;
+    [[nodiscard]] auto size() const -> uint64_t;
     /**
      * flush() should be called exactly once after compression is done and
      * before closing f. It does nothing in DECOMPRESS mode.
@@ -70,7 +70,7 @@ public:
      * decompress() in DECOMPRESS mode decompresses and returns one byte.
      * @return the decompressed byte
      */
-    int decompress();
+    auto decompress() -> int;
     /**
      * @todo Large file support
      * @param blockSize
@@ -80,10 +80,10 @@ public:
      * @todo Large file support
      * @return
      */
-    uint64_t decodeBlockSize();
+    auto decodeBlockSize() -> uint64_t;
     void setStatusRange(float perc1, float perc2);
-    void printStatus(uint64_t n, uint64_t size);
-    void printStatus();
+    void printStatus(uint64_t n, uint64_t size) const;
+    void printStatus() const;
 };
 
 

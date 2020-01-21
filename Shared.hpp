@@ -1,9 +1,9 @@
 #ifndef PAQ8PX_SHARED_HPP
 #define PAQ8PX_SHARED_HPP
 
-#include <cstdint>
 #include "RingBuffer.hpp"
 #include "UpdateBroadcaster.hpp"
+#include <cstdint>
 
 // helper #defines to access shared variables
 #define INJECT_SHARED_buf const RingBuffer<uint8_t> &buf = shared->buf;
@@ -28,7 +28,7 @@ public:
     bool toScreen = true;
     UpdateBroadcaster *updateBroadcaster = UpdateBroadcaster::getInstance();
 
-    static Shared *getInstance();
+    static auto getInstance() -> Shared *;
     void update();
     void reset();
     void setLevel(uint8_t l);
@@ -38,18 +38,18 @@ private:
     /**
      * Copy constructor is private so that it cannot be called
      */
-    Shared(Shared const &) {}
+    Shared(Shared const & /*unused*/) {}
 
     /**
      * Assignment operator is private so that it cannot be called
      */
-    Shared &operator=(Shared const &) { return *this; }
+    auto operator=(Shared const & /*unused*/) -> Shared & { return *this; }
 
     /**
      * Determine if output is redirected
      * @return
      */
-    static bool isOutputDirected();
+    static auto isOutputDirected() -> bool;
 
     static Shared *mPInstance;
 };

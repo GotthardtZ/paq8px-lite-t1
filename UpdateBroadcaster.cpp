@@ -3,8 +3,9 @@
 UpdateBroadcaster *UpdateBroadcaster::mPInstance = nullptr;
 
 auto UpdateBroadcaster::getInstance() -> UpdateBroadcaster * {
-  if( mPInstance == nullptr )
+  if( mPInstance == nullptr ) {
     mPInstance = new UpdateBroadcaster();
+  }
 
   return mPInstance;
 }

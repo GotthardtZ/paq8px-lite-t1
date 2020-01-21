@@ -2,13 +2,14 @@
 #define PAQ8PX_BUCKET_HPP
 
 #include <cstdint>
-#include <emmintrin.h>
+#include <cstring>
+#include <immintrin.h>
 
-static uint32_t inline clz(uint32_t value) {
+static inline auto clz(uint32_t value) -> uint32_t {
   return __builtin_clz(value);
 }
 
-static uint32_t inline ctz(uint32_t value) {
+static inline auto ctz(uint32_t value) -> uint32_t {
   return __builtin_ctz(value);
 }
 
@@ -29,7 +30,7 @@ public:
      * @param checksum
      * @return
      */
-    inline uint8_t *find(const uint16_t checksum) {
+    inline auto find(const uint16_t checksum) -> uint8_t * {
 //      if( checksums[mostRecentlyUsed & 15U] == checksum )
 //        return &bitState[mostRecentlyUsed & 15U][0];
 //      int worst = 0xFFFF, idx = 0;
@@ -46,25 +47,26 @@ public:
 //      mostRecentlyUsed = 0xF0U | idx;
 //      checksums[idx] = checksum;
 //      return (uint8_t *) memset(&bitState[idx][0], 0, 7);
-      if( checksums[mostRecentlyUsed & 15U] == checksum )
+      if( checksums[mostRecentlyUsed & 15U] == checksum ) {
         return &bitState[mostRecentlyUsed & 15U][0];
+      }
       int worst = 0xFFFF;
       int idx = 0;
       const __m128i xmmChecksum = _mm_set1_epi16(short(checksum)); //fill 8 ch values
       // load 8 values, discard last one as only 7 are needed.
       // reverse order and compare 7 checksums values to @ref checksum
       // get mask is set get first index and return value
-      __m128i tmp = _mm_load_si128((__m128i *) &checksums[0]); //load 8 values (8th will be discarded)
+      __m128i tmp = _mm_load_si128(reinterpret_cast<__m128i *>(&checksums[0])); //load 8 values (8th will be discarded)
 
       tmp = _mm_shuffle_epi8(tmp, _mm_setr_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1));
       tmp = _mm_cmpeq_epi16(tmp, xmmChecksum); // compare ch values
       tmp = _mm_packs_epi16(tmp, _mm_setzero_si128()); // pack result
       uint32_t t = (_mm_movemask_epi8(tmp)) >> 1; // get mask of comparison, bit is set if eq, discard 8th bit
-      uint32_t a;    // index into bitState or 7 if not found
-      if( t ) {
+      uint32_t a = 0;    // index into bitState or 7 if not found
+      if( t != 0u ) {
         a = (clz(t) - 1) & 7U;
         mostRecentlyUsed = mostRecentlyUsed << 4U | a;
-        return (uint8_t *) &bitState[a][0];
+        return &bitState[a][0];
       }
 
       __m128i lastL = _mm_set1_epi8((mostRecentlyUsed & 15U));
@@ -92,7 +94,7 @@ public:
       }
       mostRecentlyUsed = 0xF0U | idx;
       checksums[idx] = checksum;
-      return (uint8_t *) memset(&bitState[idx][0], 0, 7);
+      return static_cast<uint8_t *>(memset(&bitState[idx][0], 0, 7));
     }
 };
 

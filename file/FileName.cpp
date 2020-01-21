@@ -4,8 +4,9 @@ FileName::FileName(const char *s) : String(s) {}
 
 auto FileName::lastSlashPos() const -> int {
   int pos = findLast('/');
-  if( pos < 0 )
+  if( pos < 0 ) {
     pos = findLast('\\');
+  }
   return pos; //has no path when -1
 }
 
@@ -21,8 +22,10 @@ void FileName::keepPath() {
 
 void FileName::replaceSlashes() { //
   const uint64_t sSize = strsize();
-  for( uint64_t i = 0; i < sSize; i++ )
-    if((*this)[i] == BADSLASH )
+  for( uint64_t i = 0; i < sSize; i++ ) {
+    if((*this)[i] == BADSLASH ) {
       (*this)[i] = GOODSLASH;
+    }
+  }
   chk_consistency();
 }

@@ -25,8 +25,9 @@ THE SOFTWARE.
 #ifndef CXXOPTS_HPP_INCLUDED
 #define CXXOPTS_HPP_INCLUDED
 
-#include <cstring>
+#include "../utils.hpp"
 #include <cctype>
+#include <cstring>
 #include <exception>
 #include <iostream>
 #include <limits>
@@ -38,7 +39,6 @@ THE SOFTWARE.
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include "../utils.hpp"
 
 #ifdef __cpp_lib_optional
 
@@ -79,36 +79,36 @@ namespace cxxopts {
     using std::initializer_list;
 
     template<typename T>
-    T toLocalString(T &&t) {
+    auto toLocalString(T &&t) -> T {
       return forward<T>(t);
     }
 
-    inline size_t stringLength(const string &s) {
+    inline auto stringLength(const string &s) -> size_t {
       return s.length();
     }
 
-    inline string &stringAppend(string &s, const string &a) {
+    inline auto stringAppend(string &s, const string &a) -> string & {
       return s.append(a);
     }
 
-    inline string &stringAppend(string &s, size_t n, char c) {
+    inline auto stringAppend(string &s, size_t n, char c) -> string & {
       return s.append(n, c);
     }
 
     template<typename Iterator>
-    string &stringAppend(string &s, Iterator begin, Iterator end) {
+    auto stringAppend(string &s, Iterator begin, Iterator end) -> string & {
       return s.append(begin, end);
     }
 
     template<typename T>
-    string toUtf8String(T &&t) {
+    auto toUtf8String(T &&t) -> string {
       return forward<T>(t);
     }
 
-    inline bool empty(const string &s) {
+    inline auto empty(const string &s) -> bool {
       return s.empty();
     }
-}
+}  // namespace cxxopts
 
 namespace cxxopts {
     namespace {
@@ -119,43 +119,26 @@ namespace cxxopts {
         const string leftQuote("‘");
         const string rightQuote("’");
 #endif
-    }
+    } // namespace
 
     class Value : public enable_shared_from_this<Value> {
     public:
-
         virtual ~Value() = default;
-
-        virtual shared_ptr<Value> clone() const = 0;
-
+        virtual auto clone() const -> shared_ptr<Value> = 0;
         virtual void parse(const string &text) const = 0;
-
         virtual void parse() const = 0;
-
-        virtual bool hasDefault() const = 0;
-
-        virtual bool isContainer() const = 0;
-
-        virtual bool hasImplicit() const = 0;
-
-        virtual string getDefaultValue() const = 0;
-
-        virtual string getImplicitValue() const = 0;
-
-        virtual shared_ptr<Value> defaultValue(const string &value) = 0;
-
-        virtual shared_ptr<Value> implicitValue(const string &value) = 0;
-
-        virtual shared_ptr<Value> noImplicitValue() = 0;
-
-        virtual bool isBoolean() const = 0;
+        virtual auto hasDefault() const -> bool = 0;
+        virtual auto isContainer() const -> bool = 0;
+        virtual auto getDefaultValue() const -> string = 0;
+        virtual auto defaultValue(const string &value) -> shared_ptr<Value> = 0;
+        virtual auto isBoolean() const -> bool = 0;
     };
 
     class OptionException : public exception {
     public:
         explicit OptionException(string message);
 
-        [[nodiscard]] const char *what() const noexcept override;
+        [[nodiscard]] auto what() const noexcept -> const char * override;
 
     private:
         string mMessage;
@@ -214,7 +197,7 @@ namespace cxxopts {
     template<typename T>
     void throwOrMimic(const string &text) {
       static_assert(is_base_of<exception, T>::value, "throwOrMimic only works on exception and "
-                                                               "deriving classes");
+                                                     "deriving classes");
 
 #ifndef CXXOPTS_NO_EXCEPTIONS
       // If CXXOPTS_NO_EXCEPTIONS is not defined, just throw
@@ -234,7 +217,7 @@ namespace cxxopts {
             basic_regex<char> integerPattern("(-)?(0x)?([0-9a-zA-Z]+)|((0x)?0)");
             basic_regex<char> truthyPattern("(t|T)(rue)?|1");
             basic_regex<char> falsyPattern("(f|F)(alse)?|0");
-        }
+        } // namespace
 
         namespace detail {
             template<typename T, bool B>
@@ -259,17 +242,17 @@ namespace cxxopts {
             template<typename T>
             struct SignedCheck<T, false> {
                 template<typename U>
-                void operator()(bool, U, const string &) {}
+                void operator()(bool /*unused*/, U /*unused*/, const string & /*unused*/) {}
             };
 
             template<typename T, typename U>
             void checkSignedRange(bool negative, U value, const string &text) {
               SignedCheck<T, numeric_limits<T>::is_signed>()(negative, value, text);
             }
-        }
+        }  // namespace detail
 
         template<typename R, typename T>
-        R checkedNegate(T &&t, const string &, true_type) {
+        auto checkedNegate(T &&t, const string & /*unused*/, true_type /*unused*/) -> R {
           // if we got to here, then `t` is a positive number that fits into
           // `R`. So to avoid MSVC C4146, we first cast it to `R`.
           // See https://github.com/jarro2783/cxxopts/issues/62 for more details.
@@ -277,7 +260,7 @@ namespace cxxopts {
         }
 
         template<typename R, typename T>
-        T checkedNegate(T &&t, const string &text, false_type) {
+        auto checkedNegate(T &&t, const string &text, false_type /*unused*/) -> T {
           throwOrMimic<ArgumentIncorrectType>(text);
           return t;
         }
@@ -480,16 +463,14 @@ namespace cxxopts {
               }
 
               mDefault = rhs.mDefault;
-              mImplicit = rhs.mImplicit;
               mDefaultValue = rhs.mDefaultValue;
-              mImplicitValue = rhs.mImplicitValue;
             }
 
             void parse(const string &text) const override {
               parseValue(text, *mStore);
             }
 
-            bool isContainer() const override {
+            auto isContainer() const -> bool override {
               return TypeIsContainer<T>::value;
             }
 
@@ -497,60 +478,37 @@ namespace cxxopts {
               parseValue(mDefaultValue, *mStore);
             }
 
-            bool hasDefault() const override {
+            auto hasDefault() const -> bool override {
               return mDefault;
             }
 
-            bool hasImplicit() const override {
-              return mImplicit;
-            }
-
-            shared_ptr<Value> defaultValue(const string &value) override {
+            auto defaultValue(const string &value) -> shared_ptr<Value> override {
               mDefault = true;
               mDefaultValue = value;
               return shared_from_this();
             }
 
-            shared_ptr<Value> implicitValue(const string &value) override {
-              mImplicit = true;
-              mImplicitValue = value;
-              return shared_from_this();
-            }
-
-            shared_ptr<Value> noImplicitValue() override {
-              mImplicit = false;
-              return shared_from_this();
-            }
-
-            string getDefaultValue() const override {
+            auto getDefaultValue() const -> string override {
               return mDefaultValue;
             }
 
-            string getImplicitValue() const override {
-              return mImplicitValue;
-            }
-
-            bool isBoolean() const override {
+            auto isBoolean() const -> bool override {
               return is_same<T, bool>::value;
             }
 
-            const T &get() const {
+            auto get() const -> const T & {
               if( mStore == nullptr ) {
                 return *mResult;
-              } else {
-                return *mStore;
               }
+              return *mStore;
+
             }
 
         protected:
             shared_ptr<T> mResult;
             T *mStore;
-
             bool mDefault = false;
-            bool mImplicit = false;
-
             string mDefaultValue;
-            string mImplicitValue;
         };
 
         template<typename T>
@@ -558,7 +516,7 @@ namespace cxxopts {
         public:
             using AbstractValue<T>::AbstractValue;
 
-            [[nodiscard]] shared_ptr<Value> clone() const {
+            [[nodiscard]] auto clone() const -> shared_ptr<Value> {
               return make_shared<StandardValue<T>>(*this);
             }
         };
@@ -569,35 +527,33 @@ namespace cxxopts {
             ~StandardValue() override = default;
 
             StandardValue() {
-              setDefaultAndImplicit();
+              setDefault();
             }
 
             explicit StandardValue(bool *b) : AbstractValue(b) {
-              setDefaultAndImplicit();
+              setDefault();
             }
 
-            shared_ptr<Value> clone() const override {
+            auto clone() const -> shared_ptr<Value> override {
               return make_shared<StandardValue<bool>>(*this);
             }
 
         private:
 
-            void setDefaultAndImplicit() {
+            void setDefault() {
               mDefault = true;
               mDefaultValue = "false";
-              mImplicit = true;
-              mImplicitValue = "true";
             }
         };
-    }
+    }  // namespace values
 
     template<typename T>
-    shared_ptr<Value> value() {
+    auto value() -> shared_ptr<Value> {
       return make_shared<values::StandardValue<T>>();
     }
 
     template<typename T>
-    shared_ptr<Value> value(T &t) {
+    auto value(T &t) -> shared_ptr<Value> {
       return make_shared<values::StandardValue<T>>(&t);
     }
 
@@ -608,11 +564,11 @@ namespace cxxopts {
         OptionDetails(string s, string l, string desc, shared_ptr<const Value> val);
         OptionDetails(const OptionDetails &rhs);
         OptionDetails(OptionDetails &&rhs) = default;
-        [[nodiscard]] const string &description() const;
-        [[nodiscard]] const Value &value() const;
-        [[nodiscard]] shared_ptr<Value> makeStorage() const;
-        [[nodiscard]] const string &shortName() const;
-        [[nodiscard]] const string &longName() const;
+        [[nodiscard]] auto description() const -> const string &;
+        [[nodiscard]] auto value() const -> const Value &;
+        [[nodiscard]] auto makeStorage() const -> shared_ptr<Value>;
+        [[nodiscard]] auto shortName() const -> const string &;
+        [[nodiscard]] auto longName() const -> const string &;
 
     private:
         string mShort;
@@ -628,8 +584,6 @@ namespace cxxopts {
         string desc;
         bool hasDefault;
         string defaultValue;
-        bool hasImplicit;
-        string implicitValue;
         string argHelp;
         bool isContainer;
         bool isBoolean;
@@ -647,13 +601,13 @@ namespace cxxopts {
 
         void parseDefault(const shared_ptr<const OptionDetails> &details);
 
-        [[nodiscard]] size_t count() const noexcept;
+        [[nodiscard]] auto count() const noexcept -> size_t;
 
-        // TODO: maybe default options should count towards the number of arguments
-        [[nodiscard]] bool hasDefault() const noexcept;
+        // TODO(epsteina): maybe default options should count towards the number of arguments
+        [[nodiscard]] auto hasDefault() const noexcept -> bool;
 
         template<typename T>
-        const T &as() const {
+        auto as() const -> const T & {
           if( mValue == nullptr ) {
             throwOrMimic<domain_error>("No value");
           }
@@ -677,12 +631,12 @@ namespace cxxopts {
     public:
         KeyValue(string key, string value);
 
-        [[nodiscard]] const string &key() const;
+        [[nodiscard]] auto key() const -> const string &;
 
-        [[nodiscard]] const string &value() const;
+        [[nodiscard]] auto value() const -> const string &;
 
         template<typename T>
-        T as() const {
+        auto as() const -> T {
           T result;
           values::parseValue(mValue, result);
           return result;
@@ -696,10 +650,9 @@ namespace cxxopts {
     class ParseResult {
     public:
 
-        ParseResult(shared_ptr<unordered_map<string, shared_ptr<OptionDetails>>>, vector<string>,
-                    bool allowUnrecognised, int &, char **&);
+        ParseResult(shared_ptr<unordered_map<string, shared_ptr<OptionDetails>>>, vector<string>, bool allowUnrecognised, int &, char **&);
 
-        [[nodiscard]] size_t count(const string &o) const {
+        [[nodiscard]] auto count(const string &o) const -> size_t {
           auto iter = mOptions->find(o);
           if( iter == mOptions->end()) {
             return 0;
@@ -710,7 +663,7 @@ namespace cxxopts {
           return rIter->second.count();
         }
 
-        const OptionValue &operator[](const string &option) const {
+        auto operator[](const string &option) const -> const OptionValue & {
           auto iter = mOptions->find(option);
 
           if( iter == mOptions->end()) {
@@ -722,7 +675,7 @@ namespace cxxopts {
           return rIter->second;
         }
 
-        [[nodiscard]] const vector<KeyValue> &arguments() const {
+        [[nodiscard]] auto arguments() const -> const vector<KeyValue> & {
           return mSequential;
         }
 
@@ -732,7 +685,7 @@ namespace cxxopts {
 
         void addToOption(const string &option, const string &arg);
 
-        bool consumePositional(const string &a);
+        auto consumePositional(const string &a) -> bool;
 
         void parseOption(const shared_ptr<OptionDetails> &value, const string &, const string &arg = "");
 
@@ -761,45 +714,44 @@ namespace cxxopts {
     };
 
     class Options {
-        typedef unordered_map<string, shared_ptr<OptionDetails>> optionMap;
+        using optionMap = unordered_map<string, shared_ptr<OptionDetails> >;
     public:
 
-        explicit Options(string program, string helpString = "") : mProgram(move(program)),
-                mHelpString(toLocalString(move(helpString))), mCustomHelp("[OPTION...]"), mPositionalHelp("positional parameters"),
-                mShowPositional(false), mAllowUnrecognised(false), mOptions(make_shared<optionMap>()),
-                mNextPositional(mPositional.end()) {
+        explicit Options(string program, string helpString = "") : mProgram(move(program)), mHelpString(toLocalString(move(helpString))),
+                mCustomHelp("[OPTION...]"), mPositionalHelp("positional parameters"), mShowPositional(false), mAllowUnrecognised(false),
+                mOptions(make_shared<optionMap>()), mNextPositional(mPositional.end()) {
         }
 
-        Options &positionalHelp(string helpText) {
+        auto positionalHelp(string helpText) -> Options & {
           mPositionalHelp = move(helpText);
           return *this;
         }
 
-        Options &customHelp(string helpText) {
+        auto customHelp(string helpText) -> Options & {
           mCustomHelp = move(helpText);
           return *this;
         }
 
-        Options &showPositionalHelp() {
+        auto showPositionalHelp() -> Options & {
           mShowPositional = true;
           return *this;
         }
 
-        Options &allowUnrecognisedOptions() {
+        auto allowUnrecognisedOptions() -> Options & {
           mAllowUnrecognised = true;
           return *this;
         }
 
-        ParseResult parse(int &argc, char **&argv);
+        auto parse(int &argc, char **&argv) -> ParseResult;
 
-        OptionAdder addOptions(string group = "");
+        auto addOptions(string group = "") -> OptionAdder;
 
         void addOptions(const string &group, initializer_list<Option> options);
 
         void addOption(const string &group, const Option &option);
 
-        void addOption(const string &group, const string &s, const string &l, string desc,
-                       const shared_ptr<const Value> &value, string argHelp);
+        void
+        addOption(const string &group, const string &s, const string &l, string desc, const shared_ptr<const Value> &value, string argHelp);
 
         //parse positional arguments into the given option
         void parsePositional(string option);
@@ -813,20 +765,16 @@ namespace cxxopts {
           parsePositional(vector<string> {begin, end});
         }
 
-        [[nodiscard]] string help(const vector<string> &helpGroups = {}) const;
+        [[nodiscard]] auto help(const vector<string> &helpGroups = {}) const -> string;
 
-        [[nodiscard]] vector<string> groups() const;
+        [[nodiscard]] auto groups() const -> vector<string>;
 
-        [[nodiscard]] const HelpGroupDetails &groupHelp(const string &group) const;
+        [[nodiscard]] auto groupHelp(const string &group) const -> const HelpGroupDetails &;
 
     private:
-
         void addOneOption(const string &option, const shared_ptr<OptionDetails> &details);
-
-        [[nodiscard]] string helpOneGroup(const string &g) const;
-
+        [[nodiscard]] auto helpOneGroup(const string &g) const -> string;
         void generateGroupHelp(string &result, const vector<string> &printGroups) const;
-
         void generateAllGroupsHelp(string &result) const;
 
         string mProgram;
@@ -840,9 +788,7 @@ namespace cxxopts {
         vector<string> mPositional;
         vector<string>::iterator mNextPositional;
         unordered_set<string> mPositionalSet;
-
-        //mapping from groups to help options
-        map<string, HelpGroupDetails> mHelp;
+        map<string, HelpGroupDetails> mHelp; /**< mapping from groups to help options */
     };
 
     class OptionAdder {
@@ -851,9 +797,8 @@ namespace cxxopts {
         OptionAdder(Options &options, string group) : mOptions(options), mGroup(move(group)) {
         }
 
-        OptionAdder &
-        operator()(const string &opts, const string &desc, const shared_ptr<const Value> &value = ::cxxopts::value<bool>(),
-                   string argHelp = "");
+        auto operator()(const string &opts, const string &desc, const shared_ptr<const Value> &value = ::cxxopts::value<bool>(),
+                        string argHelp = "") -> OptionAdder &;
 
     private:
         Options &mOptions;
@@ -868,7 +813,7 @@ namespace cxxopts {
 
         basic_regex<char> optionSpecifier("(([[:alnum:]]),)?[ ]*([[:alnum:]][-_[:alnum:]]*)?");
 
-        string formatOption(const HelpOptionDetails &o) {
+        inline auto formatOption(const HelpOptionDetails &o) -> string {
           auto &s = o.s;
           auto &l = o.l;
 
@@ -887,17 +832,13 @@ namespace cxxopts {
           auto arg = !o.argHelp.empty() ? toLocalString(o.argHelp) : "arg";
 
           if( !o.isBoolean ) {
-            if( o.hasImplicit ) {
-              result += " [=" + arg + "(=" + toLocalString(o.implicitValue) + ")]";
-            } else {
               result += " " + arg;
-            }
           }
 
           return result;
         }
 
-        string formatDescription(const HelpOptionDetails &o, size_t start, size_t width) {
+        inline auto formatDescription(const HelpOptionDetails &o, size_t start, size_t width) -> string {
           auto desc = o.desc;
 
           if( o.hasDefault && (!o.isBoolean || o.defaultValue != "false")) {
@@ -951,7 +892,7 @@ namespace cxxopts {
 
           return result;
         }
-    }
-}
+    }  // namespace
+}  // namespace cxxopts
 
 #endif //CXXOPTS_HPP_INCLUDED

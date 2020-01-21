@@ -1,8 +1,8 @@
 #ifndef PAQ8PX_MTFLIST_HPP
 #define PAQ8PX_MTFLIST_HPP
 
-#include <cstdint>
 #include "Array.hpp"
+#include <cstdint>
 
 /**
  * Move To Front List
@@ -13,9 +13,9 @@ private:
     Array<int, 16> previous;
     Array<int, 16> next;
 public:
-    MTFList(uint16_t n);
-    int getFirst();
-    int getNext();
+    explicit MTFList(uint16_t n);
+    auto getFirst() -> int;
+    auto getNext() -> int;
     void moveToFront(int i);
 };
 

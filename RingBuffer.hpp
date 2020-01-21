@@ -1,23 +1,23 @@
 #ifndef PAQ8PX_RINGBUFFER_HPP
 #define PAQ8PX_RINGBUFFER_HPP
 
-#include <cstdint>
-#include <cassert>
 #include "Array.hpp"
+#include <cassert>
+#include <cstdint>
 
 template<class T>
 class RingBuffer {
 private:
     Array<T> b;
-    uint32_t offset; /**< Number of input bytes in buffer (not wrapped), will be masked when used for indexing */
+    uint32_t offset {0}; /**< Number of input bytes in buffer (not wrapped), will be masked when used for indexing */
     uint32_t mask;
 
 public:
     /**
-     * RingBuffer(size) buf; creates an array of size bytes (must be a power of 2).
+     * Creates an array of @ref size bytes (must be a power of 2).
      * @param size number of bytes in array
      */
-    explicit RingBuffer(const uint32_t size = 0) : b(size), offset(0), mask(size - 1) {
+    explicit RingBuffer(const uint32_t size = 0) : b(size), mask(size - 1) {
 #ifndef NDEBUG
       printf("Created RingBuffer with size = %d\n", size);
 #endif
@@ -31,14 +31,15 @@ public:
       mask = newSize - 1;
     }
 
-    [[nodiscard]] uint32_t getpos() const {
+    [[nodiscard]] auto getpos() const -> uint32_t {
       return offset;
     }
 
     void fill(const T B) {
       const auto n = (uint32_t) b.size();
-      for( uint32_t i = 0; i < n; i++ )
+      for( uint32_t i = 0; i < n; i++ ) {
         b[i] = B;
+      }
     }
 
     void add(const T B) {
@@ -51,7 +52,7 @@ public:
      * @param i
      * @return
      */
-    T operator[](const uint32_t i) const {
+    auto operator[](const uint32_t i) const -> T {
       return b[i & mask];
     }
 
@@ -64,7 +65,7 @@ public:
      * @param i
      * @return
      */
-    T operator()(const uint32_t i) const {
+    auto operator()(const uint32_t i) const -> T {
       //assert(i!=0);
       return b[(offset - i) & mask];
     }
@@ -77,7 +78,7 @@ public:
     /**
      * @return the size of the RingBuffer
      */
-    uint32_t size() {
+    auto size() -> uint32_t {
       return (uint32_t) b.size();
     }
 
@@ -85,8 +86,9 @@ public:
       dst.setSize(size());
       dst.offset = offset;
       auto n = (uint32_t) b.size();
-      for( uint32_t i = 0; i < n; i++ )
+      for( uint32_t i = 0; i < n; i++ ) {
         dst.b[i] = b[i];
+      }
     }
 };
 

@@ -46,8 +46,9 @@ void FileDisk::createTmp() {
 }
 
 void FileDisk::close() {
-  if( file != nullptr )
+  if( file != nullptr ) {
     fclose(file);
+  }
   file = nullptr;
 }
 

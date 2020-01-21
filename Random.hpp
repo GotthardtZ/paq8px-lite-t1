@@ -1,8 +1,8 @@
 #ifndef PAQ8PX_RANDOM_HPP
 #define PAQ8PX_RANDOM_HPP
 
-#include <cstdint>
 #include "Array.hpp"
+#include <cstdint>
 
 /**
  * 32-bit pseudo random number generator
@@ -13,7 +13,7 @@ class Random {
 
 public:
     Random();
-    uint32_t operator()();
+    auto operator()() -> uint32_t;
 };
 
 #endif //PAQ8PX_RANDOM_HPP

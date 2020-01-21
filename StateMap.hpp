@@ -40,7 +40,7 @@ public:
      * @param cx
      * @return
      */
-    int p1(uint32_t cx);
+    auto p1(uint32_t cx) -> int;
 
     /**
      * Call @ref p2() for each context when there is more context sets and call @ref subscribe() once.
@@ -52,7 +52,7 @@ public:
      * @param cx
      * @return
      */
-    int p2(uint32_t s, uint32_t cx);
+    auto p2(uint32_t s, uint32_t cx) -> int;
     void subscribe();
 
     /**

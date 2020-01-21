@@ -11,7 +11,7 @@ namespace cxxopts {
     cxxopts::OptionException::OptionException(string message) : mMessage(move(message)) {
     }
 
-    const char *cxxopts::OptionException::what() const noexcept {
+    auto cxxopts::OptionException::what() const noexcept -> const char * {
       return mMessage.c_str();
     }
 
@@ -61,23 +61,23 @@ namespace cxxopts {
       mValue = rhs.mValue->clone();
     }
 
-    const cxxopts::string &cxxopts::OptionDetails::description() const {
+    auto cxxopts::OptionDetails::description() const -> const cxxopts::string & {
       return mDesc;
     }
 
-    const cxxopts::Value &cxxopts::OptionDetails::value() const {
+    auto cxxopts::OptionDetails::value() const -> const cxxopts::Value & {
       return *mValue;
     }
 
-    shared_ptr<cxxopts::Value> cxxopts::OptionDetails::makeStorage() const {
+    auto cxxopts::OptionDetails::makeStorage() const -> shared_ptr<cxxopts::Value> {
       return mValue->clone();
     }
 
-    const string &cxxopts::OptionDetails::shortName() const {
+    auto cxxopts::OptionDetails::shortName() const -> const string & {
       return mShort;
     }
 
-    const string &cxxopts::OptionDetails::longName() const {
+    auto cxxopts::OptionDetails::longName() const -> const string & {
       return mLong;
     }
 
@@ -93,11 +93,11 @@ namespace cxxopts {
       mValue->parse();
     }
 
-    size_t cxxopts::OptionValue::count() const noexcept {
+    auto cxxopts::OptionValue::count() const noexcept -> size_t {
       return mCount;
     }
 
-    bool cxxopts::OptionValue::hasDefault() const noexcept {
+    auto cxxopts::OptionValue::hasDefault() const noexcept -> bool {
       return mDefault;
     }
 
@@ -110,11 +110,11 @@ namespace cxxopts {
     cxxopts::KeyValue::KeyValue(string key, string value) : mKey(move(key)), mValue(move(value)) {
     }
 
-    const string &cxxopts::KeyValue::key() const {
+    auto cxxopts::KeyValue::key() const -> const string & {
       return mKey;
     }
 
-    const string &cxxopts::KeyValue::value() const {
+    auto cxxopts::KeyValue::value() const -> const string & {
       return mValue;
     }
 
@@ -135,12 +135,12 @@ namespace cxxopts {
       }
     }
 
-    cxxopts::OptionAdder cxxopts::Options::addOptions(string group) {
+    auto cxxopts::Options::addOptions(string group) -> cxxopts::OptionAdder {
       return OptionAdder(*this, move(group));
     }
 
-    cxxopts::OptionAdder &
-    cxxopts::OptionAdder::operator()(const string &opts, const string &desc, const shared_ptr<const Value> &value, string argHelp) {
+    auto cxxopts::OptionAdder::operator()(const string &opts, const string &desc, const shared_ptr<const Value> &value,
+                                          string argHelp) -> cxxopts::OptionAdder & {
       match_results<const char *> result;
       regex_match(opts.c_str(), result, optionSpecifier);
 
@@ -151,18 +151,18 @@ namespace cxxopts {
       const auto &shortMatch = result[2];
       const auto &longMatch = result[3];
 
-      if( !shortMatch.length() && !longMatch.length()) {
+      if((shortMatch.length() == 0) && (longMatch.length() == 0)) {
         throwOrMimic<InvalidOptionFormatError>(opts);
-      } else if( longMatch.length() == 1 && shortMatch.length()) {
+      } else if( longMatch.length() == 1 && (shortMatch.length() != 0)) {
         throwOrMimic<InvalidOptionFormatError>(opts);
       }
 
       auto optionNames = [](const sub_match<const char *> &short_, const sub_match<const char *> &long_) {
           if( long_.length() == 1 ) {
             return make_tuple(long_.str(), short_.str());
-          } else {
-            return make_tuple(short_.str(), long_.str());
           }
+          return make_tuple(short_.str(), long_.str());
+
       }(shortMatch, longMatch);
 
       mOptions.addOption(mGroup, get<0>(optionNames), get<1>(optionNames), desc, value, move(argHelp));
@@ -184,18 +184,10 @@ namespace cxxopts {
     void
     cxxopts::ParseResult::checkedParseArg(int argc, char **argv, int &current, const shared_ptr<OptionDetails> &value, const string &name) {
       if( current + 1 >= argc ) {
-        if( value->value().hasImplicit()) {
-          parseOption(value, name, value->value().getImplicitValue());
-        } else {
-          throwOrMimic<MissingArgumentException>(name);
-        }
+        throwOrMimic<MissingArgumentException>(name);
       } else {
-        if( value->value().hasImplicit()) {
-          parseOption(value, name, value->value().getImplicitValue());
-        } else {
-          parseOption(value, name, argv[current + 1]);
-          ++current;
-        }
+        parseOption(value, name, argv[current + 1]);
+        ++current;
       }
     }
 
@@ -209,7 +201,7 @@ namespace cxxopts {
       parseOption(iter->second, option, arg);
     }
 
-    bool cxxopts::ParseResult::consumePositional(const string &a) {
+    auto cxxopts::ParseResult::consumePositional(const string &a) -> bool {
       while( mNextPositional != mPositional.end()) {
         auto iter = mOptions->find(*mNextPositional);
         if( iter != mOptions->end()) {
@@ -219,14 +211,14 @@ namespace cxxopts {
               addToOption(*mNextPositional, a);
               ++mNextPositional;
               return true;
-            } else {
-              ++mNextPositional;
-              continue;
             }
-          } else {
+            ++mNextPositional;
+            continue;
+
+          } 
             addToOption(*mNextPositional, a);
             return true;
-          }
+          
         } else {
           throwOrMimic<OptionNotExistsException>(*mNextPositional);
         }
@@ -250,7 +242,7 @@ namespace cxxopts {
       parsePositional(vector<string>(options));
     }
 
-    cxxopts::ParseResult cxxopts::Options::parse(int &argc, char **&argv) {
+    auto cxxopts::Options::parse(int &argc, char **&argv) -> cxxopts::ParseResult {
       ParseResult result(mOptions, mPositional, mAllowUnrecognised, argc, argv);
       return result;
     }
@@ -302,10 +294,10 @@ namespace cxxopts {
               if( iter == mOptions->end()) {
                 if( mAllowUnrecognised ) {
                   continue;
-                } else {
-                  //error
-                  throwOrMimic<OptionNotExistsException>(name);
                 }
+                //error
+                throwOrMimic<OptionNotExistsException>(name);
+
               }
 
               auto value = iter->second;
@@ -313,8 +305,6 @@ namespace cxxopts {
               if( i + 1 == s.size()) {
                 //it must be the last argument
                 checkedParseArg(argc, argv, current, value, name);
-              } else if( value->value().hasImplicit()) {
-                parseOption(value, name, value->value().getImplicitValue());
               } else {
                 //error
                 throwOrMimic<OptionRequiresArgumentException>(name);
@@ -332,10 +322,10 @@ namespace cxxopts {
                 ++nextKeep;
                 ++current;
                 continue;
-              } else {
-                //error
-                throwOrMimic<OptionNotExistsException>(name);
               }
+              //error
+              throwOrMimic<OptionNotExistsException>(name);
+
             }
 
             auto opt = iter->second;
@@ -362,7 +352,7 @@ namespace cxxopts {
 
         auto &store = mResults[detail];
 
-        if( value.hasDefault() && !store.count() && !store.hasDefault()) {
+        if( value.hasDefault() && (store.count() == 0u) && !store.hasDefault()) {
           parseDefault(detail);
         }
       }
@@ -408,8 +398,9 @@ namespace cxxopts {
       //add the help details
       auto &options = mHelp[group];
 
-      options.options.emplace_back(HelpOptionDetails {s, l, stringDesc, value->hasDefault(), value->getDefaultValue(), value->hasImplicit(),
-                                                      value->getImplicitValue(), move(argHelp), value->isContainer(), value->isBoolean()});
+      options.options.emplace_back(
+              HelpOptionDetails {s, l, stringDesc, value->hasDefault(), value->getDefaultValue(), move(argHelp), value->isContainer(),
+                                 value->isBoolean()});
     }
 
     void cxxopts::Options::addOneOption(const string &option, const shared_ptr<OptionDetails> &details) {
@@ -420,9 +411,8 @@ namespace cxxopts {
       }
     }
 
-    cxxopts::string cxxopts::Options::helpOneGroup(const string &g) const {
-      typedef vector<pair < string, string>>
-      optionHelp;
+    auto cxxopts::Options::helpOneGroup(const string &g) const -> cxxopts::string {
+      using optionHelp = vector<pair<string, string> >;
 
       auto group = mHelp.find(g);
       if( group == mHelp.end()) {
@@ -502,7 +492,7 @@ namespace cxxopts {
       generateGroupHelp(result, allGroups);
     }
 
-    string cxxopts::Options::help(const vector<string> &helpGroups) const {
+    auto cxxopts::Options::help(const vector<string> &helpGroups) const -> string {
       string result = mHelpString + "\nUsage:\n  " + toLocalString(mProgram) + " " + toLocalString(mCustomHelp);
 
       if( !mPositional.empty() && !mPositionalHelp.empty()) {
@@ -520,7 +510,7 @@ namespace cxxopts {
       return toUtf8String(result);
     }
 
-    vector<string> cxxopts::Options::groups() const {
+    auto cxxopts::Options::groups() const -> vector<string> {
       vector<string> g;
 
       transform(mHelp.begin(), mHelp.end(), back_inserter(g), [](const map<string, HelpGroupDetails>::value_type &pair) {
@@ -530,7 +520,7 @@ namespace cxxopts {
       return g;
     }
 
-    const cxxopts::HelpGroupDetails &cxxopts::Options::groupHelp(const string &group) const {
+    auto cxxopts::Options::groupHelp(const string &group) const -> const cxxopts::HelpGroupDetails & {
       return mHelp.at(group);
     }
-}
+}  // namespace cxxopts

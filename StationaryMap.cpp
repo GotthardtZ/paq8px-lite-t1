@@ -24,8 +24,9 @@ void StationaryMap::set(uint64_t ctx) {
 }
 
 void StationaryMap::reset(const int rate) {
-  for( uint32_t i = 0; i < data.size(); ++i )
+  for( uint32_t i = 0; i < data.size(); ++i ) {
     data[i] = (0x7FFU << 20U) | min(1023, rate);
+  }
   cp = &data[0];
 }
 

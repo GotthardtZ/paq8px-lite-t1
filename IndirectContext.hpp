@@ -1,6 +1,7 @@
 #ifndef PAQ8PX_INDIRECTCONTEXT_HPP
 #define PAQ8PX_INDIRECTCONTEXT_HPP
 
+#include "Array.hpp"
 #include <cassert>
 #include <cstdint>
 
@@ -15,7 +16,7 @@ public:
     IndirectContext(int bitsPerContext, int inputBits);
     void operator+=(uint32_t i);
     void operator=(uint32_t i);
-    T &operator()();
+    auto operator()() -> T &;
 };
 
 template<typename T>
@@ -28,6 +29,9 @@ void IndirectContext<T>::operator+=(const uint32_t i) {
 template<typename T>
 IndirectContext<T>::IndirectContext(const int bitsPerContext, const int inputBits): data(UINT64_C(1) << bitsPerContext), ctx(&data[0]),
         ctxMask((UINT32_C(1) << bitsPerContext) - 1), inputMask((UINT32_C(1) << inputBits) - 1), inputBits(inputBits) {
+#ifndef NDEBUG
+  printf("Created IndirectContext with bitsPerContext = %d, inputBits = %d\n", bitsPerContext, inputBits);
+#endif
   assert(bitsPerContext > 0 && bitsPerContext <= 20);
   assert(inputBits > 0 && inputBits <= 8);
 }
@@ -38,7 +42,7 @@ void IndirectContext<T>::operator=(const uint32_t i) {
 }
 
 template<typename T>
-T &IndirectContext<T>::operator()() {
+auto IndirectContext<T>::operator()() -> T & {
   return *ctx;
 }
 

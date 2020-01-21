@@ -2,9 +2,9 @@
 #define PAQ8PX_OLS_HPP
 
 #include "Mixer.hpp"
-#include <cstdint>
-#include <cmath>
 #include "Shared.hpp"
+#include <cmath>
+#include <cstdint>
 
 /**
  * Ordinary Least Squares predictor
@@ -38,18 +38,20 @@ private:
       for( int i = 0; i < n; i++ ) {
         for( int j = 0; j < i; j++ ) {
           F sum = mCholesky[i][j];
-          for( int k = 0; k < j; k++ )
+          for( int k = 0; k < j; k++ ) {
             sum -= (mCholesky[i][k] * mCholesky[j][k]);
+          }
           mCholesky[i][j] = sum / mCholesky[j][j];
         }
         F sum = mCholesky[i][i];
         for( int k = 0; k < i; k++ ) {
           sum -= (mCholesky[i][k] * mCholesky[i][k]);
         }
-        if( sum > ftol )
+        if( sum > ftol ) {
           mCholesky[i][i] = sqrt(sum);
-        else
+        } else {
           return 1;
+        }
       }
       return 0;
     }
@@ -57,14 +59,16 @@ private:
     void solve() {
       for( int i = 0; i < n; i++ ) {
         F sum = b[i];
-        for( int j = 0; j < i; j++ )
+        for( int j = 0; j < i; j++ ) {
           sum -= (mCholesky[i][j] * w[j]);
+        }
         w[i] = sum / mCholesky[i][i];
       }
       for( int i = n - 1; i >= 0; i-- ) {
         F sum = w[i];
-        for( int j = i + 1; j < n; j++ )
+        for( int j = i + 1; j < n; j++ ) {
           sum -= (mCholesky[j][i] * w[j]);
+        }
         w[i] = sum / mCholesky[i][i];
       }
     }
@@ -77,8 +81,9 @@ public:
       for( int i = 0; i < n; i++ ) {
         x[i] = w[i] = b[i] = 0.;
         mCovariance[i] = new F[n], mCholesky[i] = new F[n];
-        for( int j = 0; j < n; j++ )
+        for( int j = 0; j < n; j++ ) {
           mCovariance[i][j] = mCholesky[i][j] = 0.;
+        }
       }
     }
 
@@ -101,29 +106,32 @@ public:
       x[index++] = val - sub;
     }
 
-    F predict(const T **p) {
+    auto predict(const T **p) -> F {
       F sum = 0.;
-      for( int i = 0; i < n; i++ )
+      for( int i = 0; i < n; i++ ) {
         sum += w[i] * (x[i] = F(*p[i]) - sub);
+      }
       return sum + sub;
     }
 
-    F predict() {
+    auto predict() -> F {
       assert(index == n);
       index = 0;
       F sum = 0.;
-      for( int i = 0; i < n; i++ )
+      for( int i = 0; i < n; i++ ) {
         sum += w[i] * x[i];
+      }
       return sum + sub;
     }
 
     inline void update(const T val) {
 #ifdef __GNUC__
-      if( shared->chosenSimd == SIMD_AVX2 )
+      if( shared->chosenSimd == SIMD_AVX2 ) {
         updateAVX2(val);
-      else
+      } else {
 #endif
         updateUnrolled(val);
+      }
     }
 
 #ifdef __GNUC__
@@ -132,23 +140,28 @@ public:
 #endif
     void updateAVX2(const T val) {
       F mul = 1.0 - lambda;
-      for( int j = 0; j < n; j++ )
-        for( int i = 0; i < n; i++ )
+      for( int j = 0; j < n; j++ ) {
+        for( int i = 0; i < n; i++ ) {
           mCovariance[j][i] = lambda * mCovariance[j][i] + mul * (x[j] * x[i]);
+        }
+      }
       mul *= (F(val) - sub);
-      for( int i = 0; i < n; i++ )
+      for( int i = 0; i < n; i++ ) {
         b[i] = lambda * b[i] + mul * x[i];
+      }
       km++;
       if( km >= kMax ) {
-        if( !factor())
+        if( !factor()) {
           solve();
+        }
         km = 0;
       }
     }
 
     void updateUnrolled(const T val) {
       F mul = 1.0 - lambda;
-      int l = n - (n & 3), i = 0;
+      int l = n - (n & 3);
+      int i = 0;
       for( int j = 0; j < n; j++ ) {
         for( i = 0; i < l; i += 4 ) {
           mCovariance[j][i] = lambda * mCovariance[j][i] + mul * (x[j] * x[i]);
@@ -156,8 +169,9 @@ public:
           mCovariance[j][i + 2] = lambda * mCovariance[j][i + 2] + mul * (x[j] * x[i + 2]);
           mCovariance[j][i + 3] = lambda * mCovariance[j][i + 3] + mul * (x[j] * x[i + 3]);
         }
-        for( ; i < n; i++ )
+        for( ; i < n; i++ ) {
           mCovariance[j][i] = lambda * mCovariance[j][i] + mul * (x[j] * x[i]);
+        }
       }
       mul *= (F(val) - sub);
       for( i = 0; i < l; i += 4 ) {
@@ -166,12 +180,14 @@ public:
         b[i + 2] = lambda * b[i + 2] + mul * x[i + 2];
         b[i + 3] = lambda * b[i + 3] + mul * x[i + 3];
       }
-      for( ; i < n; i++ )
+      for( ; i < n; i++ ) {
         b[i] = lambda * b[i] + mul * x[i];
+      }
       km++;
       if( km >= kMax ) {
-        if( !factor())
+        if( !factor()) {
           solve();
+        }
         km = 0;
       }
     }

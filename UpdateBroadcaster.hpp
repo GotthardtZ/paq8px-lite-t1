@@ -10,25 +10,25 @@
  */
 class UpdateBroadcaster {
 public:
-    static UpdateBroadcaster *getInstance();
+    static auto getInstance() -> UpdateBroadcaster *;
     void subscribe(IPredictor *subscriber);
     void broadcastUpdate();
 private:
     static UpdateBroadcaster *mPInstance;
-    int n; /**< number of subscribed predictors, (number of items in "subscribers" array)*/
-    IPredictor *subscribers[1024];
+    int n {0}; /**< number of subscribed predictors, (number of items in "subscribers" array) */
+    IPredictor *subscribers[1024] {};
 
-    UpdateBroadcaster() : n(0) {}
+    UpdateBroadcaster() = default;
 
     /**
      * Copy constructor is private so that it cannot be called
      */
-    UpdateBroadcaster(UpdateBroadcaster const &) {}
+    UpdateBroadcaster(UpdateBroadcaster const & /*unused*/) {}
 
     /**
      * Assignment operator is private so that it cannot be called
      */
-    UpdateBroadcaster &operator=(UpdateBroadcaster const &) { return *this; }
+    auto operator=(UpdateBroadcaster const & /*unused*/) -> UpdateBroadcaster & { return *this; }
 };
 
 #endif //PAQ8PX_UPDATEBROADCASTER_HPP

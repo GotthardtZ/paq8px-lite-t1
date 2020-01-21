@@ -17,8 +17,9 @@ void SmallStationaryContextMap::set(uint32_t ctx) {
 }
 
 void SmallStationaryContextMap::reset() {
-  for( uint32_t i = 0; i < data.size(); ++i )
+  for( uint32_t i = 0; i < data.size(); ++i ) {
     data[i] = 0x7FFF;
+  }
   cp = &data[0];
 }
 

@@ -55,10 +55,10 @@ static_assert(sizeof(int) == 4, "sizeof(int)");
 // Platform-specific includes
 #ifdef UNIX
 
-#include <cstring> //strlen(), strcpy(), strcat(), strerror(), memset(), memcpy(), memmove()
-#include <climits> //PATH_MAX (for OSX)
-#include <unistd.h> //isatty()
 #include <cerrno>  //errno
+#include <climits> //PATH_MAX (for OSX)
+#include <cstring> //strlen(), strcpy(), strcat(), strerror(), memset(), memcpy(), memmove()
+#include <unistd.h> //isatty()
 
 #else
 #ifndef NOMINMAX
@@ -85,18 +85,18 @@ struct ErrorInfo {
     }
 };
 
-static inline uint32_t square(uint32_t x) {
+static inline auto square(uint32_t x) -> uint32_t {
   return x * x;
 }
 
-static inline int min(int a, int b) { return std::min<int>(a, b); }
+static inline auto min(int a, int b) -> int { return std::min<int>(a, b); }
 
-static inline uint64_t min(uint64_t a, uint64_t b) { return std::min<uint64_t>(a, b); }
+static inline auto min(uint64_t a, uint64_t b) -> uint64_t { return std::min<uint64_t>(a, b); }
 
-static inline int max(int a, int b) { return std::max<int>(a, b); }
+static inline auto max(int a, int b) -> int { return std::max<int>(a, b); }
 
 template<typename T>
-constexpr bool isPowerOf2(T x) {
+constexpr auto isPowerOf2(T x) -> bool {
   return ((x & (x - 1)) == 0);
 }
 
@@ -128,8 +128,9 @@ class IntentionalException : public std::exception {};
 
 // Error handler: print message if any, and exit
 [[noreturn]] static void quit(const char *const message = nullptr) {
-  if( message )
+  if( message != nullptr ) {
     printf("\n%s", message);
+  }
   printf("\n");
   throw IntentionalException();
 }
@@ -164,21 +165,21 @@ typedef enum {
     LZW
 } BlockType;
 
-static inline bool hasRecursion(BlockType ft) {
+static inline auto hasRecursion(BlockType ft) -> bool {
   return ft == CD || ft == ZLIB || ft == BASE64 || ft == GIF || ft == RLE || ft == LZW || ft == FILECONTAINER;
 }
 
-static inline bool hasInfo(BlockType ft) {
+static inline auto hasInfo(BlockType ft) -> bool {
   return ft == IMAGE1 || ft == IMAGE4 || ft == IMAGE8 || ft == IMAGE8GRAY || ft == IMAGE24 || ft == IMAGE32 || ft == AUDIO ||
          ft == AUDIO_LE || ft == PNG8 || ft == PNG8GRAY || ft == PNG24 || ft == PNG32;
 }
 
-static inline bool hasTransform(BlockType ft) {
+static inline auto hasTransform(BlockType ft) -> bool {
   return ft == IMAGE24 || ft == IMAGE32 || ft == AUDIO_LE || ft == EXE || ft == CD || ft == ZLIB || ft == BASE64 || ft == GIF ||
          ft == TEXT_EOL || ft == RLE || ft == LZW;
 }
 
-static inline bool isPNG(BlockType ft) { return ft == PNG8 || ft == PNG8GRAY || ft == PNG24 || ft == PNG32; }
+static inline auto isPNG(BlockType ft) -> bool { return ft == PNG8 || ft == PNG8GRAY || ft == PNG24 || ft == PNG32; }
 
 #define OPTION_MULTIPLE_FILE_MODE 1U
 #define OPTION_BRUTE 2U
@@ -243,33 +244,43 @@ static inline bool isPNG(BlockType ft) { return ft == PNG8 || ft == PNG8GRAY || 
 #define APOSTROPHE 0x27
 
 
-static inline uint8_t clip(int const px) {
-  if( px > 255 )
+static inline auto clip(int const px) -> uint8_t {
+  if( px > 255 ) {
     return 255;
-  if( px < 0 )
+  }
+  if( px < 0 ) {
     return 0;
+  }
   return px;
 }
 
-static inline uint8_t clamp4(const int px, const uint8_t n1, const uint8_t n2, const uint8_t n3, const uint8_t n4) {
+static inline auto clamp4(const int px, const uint8_t n1, const uint8_t n2, const uint8_t n3, const uint8_t n4) -> uint8_t {
   int maximum = n1;
-  if( maximum < n2 )
+  if( maximum < n2 ) {
     maximum = n2;
-  if( maximum < n3 )
+  }
+  if( maximum < n3 ) {
     maximum = n3;
-  if( maximum < n4 )
+  }
+  if( maximum < n4 ) {
     maximum = n4;
+  }
   int minimum = n1;
-  if( minimum > n2 )
+  if( minimum > n2 ) {
     minimum = n2;
-  if( minimum > n3 )
+  }
+  if( minimum > n3 ) {
     minimum = n3;
-  if( minimum > n4 )
+  }
+  if( minimum > n4 ) {
     minimum = n4;
-  if( px < minimum )
+  }
+  if( px < minimum ) {
     return minimum;
-  if( px > maximum )
+  }
+  if( px > maximum ) {
     return maximum;
+  }
   return px;
 }
 
@@ -279,15 +290,16 @@ static inline uint8_t clamp4(const int px, const uint8_t n1, const uint8_t n2, c
  * @param x
  * @return floor(log2(x))
  */
-static uint32_t ilog2(uint32_t x) {
+static auto ilog2(uint32_t x) -> uint32_t {
 #ifdef _MSC_VER
 #include <intrin.h>
   DWORD tmp = 0;
   if (x != 0) _BitScanReverse(&tmp, x);
   return tmp;
 #elif __GNUC__
-  if( x != 0 )
+  if( x != 0 ) {
     x = 31 - __builtin_clz(x);
+  }
   return x;
 #else
   //copy the leading "1" bit to its left (0x03000000 -> 0x03ffffff)
@@ -301,15 +313,16 @@ static uint32_t ilog2(uint32_t x) {
 #endif
 }
 
-static inline uint8_t logMeanDiffQt(const uint8_t a, const uint8_t b, const uint8_t limit = 7) {
-  if( a == b )
+static inline auto logMeanDiffQt(const uint8_t a, const uint8_t b, const uint8_t limit = 7) -> uint8_t {
+  if( a == b ) {
     return 0;
+  }
   uint8_t sign = a > b ? 8 : 0;
   return sign | min(limit, ilog2((a + b) / max(2, abs(a - b) * 2) + 1));
 }
 
-static inline uint32_t logQt(const uint8_t px, const uint8_t bits) {
-  return (uint32_t(0x100 | px)) >> max(0, (int) (ilog2(px) - bits));
+static inline auto logQt(const uint8_t px, const uint8_t bits) -> uint32_t {
+  return (uint32_t(0x100 | px)) >> max(0, static_cast<int>(ilog2(px) - bits));
 }
 
 #endif //PAQ8PX_UTILS_HPP

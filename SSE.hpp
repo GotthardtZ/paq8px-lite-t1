@@ -3,8 +3,8 @@
 
 #include "APM.hpp"
 #include "APM1.hpp"
-#include "ModelStats.hpp"
 #include "Hash.hpp"
+#include "ModelStats.hpp"
 
 /**
  * Filter the context model with APMs
@@ -31,8 +31,8 @@ private:
     } Generic;
 
 public:
-    SSE(ModelStats *st);
-    int p(int pr0);
+    explicit  SSE(ModelStats *st);
+    auto p(int pr0) -> int;
 };
 
 #endif //PAQ8PX_SSE_HPP

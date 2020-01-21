@@ -16,15 +16,16 @@ Mixer::Mixer(const int n, const int m, const int s) : n(n), m(m), s(s), scaleFac
 void Mixer::add(const int x) {
   assert(nx < n);
   assert(x == short(x));
-  tx[nx++] = (short) x;
+  tx[nx++] = static_cast<short>(x);
 }
 
 void Mixer::set(const uint32_t cx, const uint32_t range, const int rate) {
   assert(numContexts < s);
   assert(cx < range);
   assert(base + range <= m);
-  if((shared->options & OPTION_ADAPTIVE) == 0U )
+  if((shared->options & OPTION_ADAPTIVE) == 0U ) {
     rates[numContexts] = rate;
+  }
   cxt[numContexts++] = base + cx;
   base += range;
 //#ifndef DNDEBUG

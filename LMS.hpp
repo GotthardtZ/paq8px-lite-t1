@@ -1,10 +1,10 @@
 #ifndef PAQ8PX_LMS_HPP
 #define PAQ8PX_LMS_HPP
 
+#include "Ilog.hpp"
+#include <cassert>
 #include <cstdint>
 #include <cstdio>
-#include <cassert>
-#include "Ilog.hpp"
 
 /**
  * Least Mean Squares predictor
@@ -14,9 +14,14 @@
 template<typename F, typename T>
 class LMS {
 private:
-    F *weights, *eg, *buffer;
+    F *weights;
+    F *eg;
+    F *buffer;
     F rates[2];
-    F rho, complement, eps, prediction;
+    F rho;
+    F complement;
+    F eps;
+    F prediction;
     int s, d;
 
 public:
@@ -31,12 +36,13 @@ public:
       delete weights, delete eg, delete buffer;
     }
 
-    F predict(const T sample) {
+    auto predict(const T sample) -> F {
       memmove(&buffer[s + 1], &buffer[s], (d - 1) * sizeof(F));
       buffer[s] = sample;
       prediction = 0.;
-      for( int i = 0; i < s + d; i++ )
+      for( int i = 0; i < s + d; i++ ) {
         prediction += weights[i] * buffer[i];
+      }
       return prediction;
     }
 
@@ -58,8 +64,9 @@ public:
     }
 
     void reset() {
-      for( int i = 0; i < s + d; i++ )
+      for( int i = 0; i < s + d; i++ ) {
         weights[i] = eg[i] = buffer[i] = 0.;
+      }
     }
 };
 

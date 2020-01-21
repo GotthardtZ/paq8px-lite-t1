@@ -6,14 +6,14 @@ ContextMap::ContextMap(uint64_t m, const int c) : c(c), t(m >> 6U), cp(c), cp0(c
   printf("Created ContextMap with m = %llu, c = %d\n", m, c);
 #endif
   assert(m >= 64 && isPowerOf2(m));
-  assert(sizeof(E) == 64);
+  static_assert(sizeof(Bucket) == 64, "Size of Bucket should be 64!");
   assert(c <= (int) sizeof(validFlags) * 8); // validFlags is 64 bits - it can't support more than 64 contexts
 }
 
 void ContextMap::set(const uint64_t cx) {
   assert(cn >= 0 && cn < c);
   const uint32_t ctx = cxt[cn] = finalize64(cx, hashBits);
-  const uint16_t checksum = chk[cn] = (uint16_t) checksum64(cx, hashBits, 16);
+  const uint16_t checksum = chk[cn] = static_cast<uint16_t>(checksum64(cx, hashBits, 16));
   uint8_t *base = cp0[cn] = cp[cn] = t[ctx & mask].find(checksum);
   runP[cn] = base + 3;
   // update pending bit histories for bits 2-7
@@ -44,15 +44,15 @@ void ContextMap::update() {
     if(((validFlags >> (cn - 1 - i)) & 1) != 0 ) {
       // update bit history state byte
       if( cp[i] != nullptr ) {
-        assert(cp[i] >= &t[0].bh[0][0] && cp[i] <= &t[t.size() - 1].bh[6][6]);
+        assert(cp[i] >= &t[0].bitState[0][0] && cp[i] <= &t[t.size() - 1].bitState[6][6]);
         assert((uintptr_t(cp[i]) & 63) >= 15);
         StateTable::update(cp[i], y, rnd);
       }
 
       // update context pointers
-      if( shared->bitPosition > 1 && runP[i][0] == 0 )
+      if( shared->bitPosition > 1 && runP[i][0] == 0 ) {
         cp[i] = nullptr;
-      else {
+      } else {
         switch( shared->bitPosition ) {
           case 1:
           case 3:
@@ -72,14 +72,15 @@ void ContextMap::update() {
           }
           case 0: {
             // update run count of previous context
-            if( runP[i][0] == 0 ) // new context
+            if( runP[i][0] == 0 ) { // new context
               runP[i][0] = 2, runP[i][1] = shared->c1;
-            else if( runP[i][1] != shared->c1 ) // different byte in context
+            } else if( runP[i][1] != shared->c1 ) { // different byte in context
               runP[i][0] = 1, runP[i][1] = shared->c1;
-            else if( runP[i][0] < 254 ) // same byte in context
+            } else if( runP[i][0] < 254 ) { // same byte in context
               runP[i][0] += 2;
-            else if( runP[i][0] == 255 )
+            } else if( runP[i][0] == 255 ) {
               runP[i][0] = 128;
+            }
             break;
           }
           default:
@@ -105,8 +106,9 @@ void ContextMap::mix(Mixer &m) {
         int sign = (runP[i][1] >> (7 - shared->bitPosition) & 1U) * 2 - 1; // predicted bit + for 1, - for 0
         int c = ilog->log(rc + 1) << (2 + (~rc & 1U));
         m.add(sign * c);
-      } else
+      } else {
         m.add(0); //p=0.5
+      }
 
       // predict from bit context
       const int s = cp[i] != nullptr ? *cp[i] : 0;

@@ -21,8 +21,9 @@ void FileTmp::ramToDisk() {
   assert(fileOnDisk == nullptr);
   fileOnDisk = new FileDisk();
   fileOnDisk->createTmp();
-  if( fileSize > 0 )
+  if( fileSize > 0 ) {
     fileOnDisk->blockWrite(&((*contentInRam)[0]), fileSize);
+  }
   fileOnDisk->setpos(filePos);
   forgetContentInRam();
 }
@@ -50,15 +51,18 @@ void FileTmp::close() {
 
 auto FileTmp::getchar() -> int {
   if( contentInRam != nullptr ) {
-    if( filePos >= fileSize )
+    if( filePos >= fileSize ) {
       return EOF;
+    }
 
     const uint8_t c = (*contentInRam)[filePos];
     filePos++;
     return c;
 
-  } else
+  }
+  {
     return fileOnDisk->getchar();
+  }
 }
 
 void FileTmp::putChar(uint8_t c) {
@@ -67,8 +71,9 @@ void FileTmp::putChar(uint8_t c) {
       if( filePos == fileSize ) {
         contentInRam->pushBack(c);
         fileSize++;
-      } else
+      } else {
         (*contentInRam)[filePos] = c;
+      }
       filePos++;
       return;
     }
@@ -80,10 +85,12 @@ void FileTmp::putChar(uint8_t c) {
 auto FileTmp::blockRead(uint8_t *ptr, uint64_t count) -> uint64_t {
   if( contentInRam != nullptr ) {
     const uint64_t available = fileSize - filePos;
-    if( available < count )
+    if( available < count ) {
       count = available;
-    if( count > 0 )
+    }
+    if( count > 0 ) {
       memcpy(ptr, &((*contentInRam)[filePos]), count);
+    }
     filePos += count;
     return count;
   }
@@ -94,8 +101,9 @@ void FileTmp::blockWrite(uint8_t *ptr, uint64_t count) {
   if( contentInRam != nullptr ) {
     if( filePos + count <= MAX_RAM_FOR_TMP_CONTENT ) {
       contentInRam->resize((filePos + count));
-      if( count > 0 )
+      if( count > 0 ) {
         memcpy(&((*contentInRam)[filePos]), ptr, count);
+      }
       fileSize += count;
       filePos += count;
       return;
@@ -107,9 +115,9 @@ void FileTmp::blockWrite(uint8_t *ptr, uint64_t count) {
 
 void FileTmp::setpos(uint64_t newPos) {
   if( contentInRam != nullptr ) {
-    if( newPos > fileSize )
+    if( newPos > fileSize ) {
       ramToDisk(); //panic: we don't support seeking past end of file (but stdio does) - let's switch to disk
-    else {
+    } else {
       filePos = newPos;
       return;
     }
@@ -118,22 +126,25 @@ void FileTmp::setpos(uint64_t newPos) {
 }
 
 void FileTmp::setEnd() {
-  if( contentInRam != nullptr )
+  if( contentInRam != nullptr ) {
     filePos = fileSize;
-  else
+  } else {
     fileOnDisk->setEnd();
+  }
 }
 
 auto FileTmp::curPos() -> uint64_t {
-  if( contentInRam != nullptr )
+  if( contentInRam != nullptr ) {
     return filePos;
+  }
 
   return fileOnDisk->curPos();
 }
 
 auto FileTmp::eof() -> bool {
-  if( contentInRam != nullptr )
+  if( contentInRam != nullptr ) {
     return filePos >= fileSize;
+  }
 
   return fileOnDisk->eof();
 }

@@ -1,11 +1,11 @@
 #ifndef PAQ8PX_HASHTABLE_HPP
 #define PAQ8PX_HASHTABLE_HPP
 
-#include <cstdint>
-#include <cassert>
-#include <cstring>
-#include "Ilog.hpp"
 #include "Hash.hpp"
+#include "Ilog.hpp"
+#include <cassert>
+#include <cstdint>
+#include <cstring>
 
 /**
  * A HashTable is an array of n items representing n contexts. Each item is a storage area of b bytes.
@@ -28,10 +28,10 @@ private:
 
 public:
     /**
-     * Creates a hashtable with n slots where n and b must be powers of 2 with n >= b*4, and b >= 2.
+     * Creates a hashtable with @ref n slots where n and b must be powers of 2 with n >= b*4, and b >= 2.
      * @param n the number of storage areas
      */
-    HashTable(uint64_t n) : t(n), mask((int) n - 1), hashBits(ilog2(mask + 1)) {
+    explicit HashTable(uint64_t n) : t(n), mask(static_cast<int>(n) - 1), hashBits(ilog2(mask + 1)) {
       assert(B >= 2 && isPowerOf2(B));
       assert(n >= B * 4 && isPowerOf2(n));
       assert(n < (UINT64_C(1) << 31));
@@ -43,26 +43,31 @@ public:
      * @param i
      * @return
      */
-    uint8_t *operator[](uint64_t i);
+    auto operator[](uint64_t i) -> uint8_t *;
 };
 
 template<int B>
-inline uint8_t *HashTable<B>::operator[](uint64_t i) { //i: context selector
+inline auto HashTable<B>::operator[](uint64_t i) -> uint8_t * { //i: context selector
   auto chk = (uint8_t) checksum64(i, hashBits, 8); // 8-bit checksum
   i = finalize64(i, hashBits) * B & mask; // index: force bounds
   //search for the checksum in t
   uint8_t *p = &t[0];
-  if( p[i] == chk )
+  if( p[i] == chk ) {
     return p + i + 1;
-  if( p[i ^ B] == chk )
+  }
+  if( p[i ^ B] == chk ) {
     return p + (i ^ B) + 1;
-  if( p[i ^ (B * 2)] == chk )
+  }
+  if( p[i ^ (B * 2)] == chk ) {
     return p + (i ^ (B * 2)) + 1;
+  }
   //not found, let's overwrite the lowest priority element
-  if( p[i + 1] > p[(i + 1) ^ B] || p[i + 1] > p[(i + 1) ^ (B * 2)] )
+  if( p[i + 1] > p[(i + 1) ^ B] || p[i + 1] > p[(i + 1) ^ (B * 2)] ) {
     i ^= B;
-  if( p[i + 1] > p[(i + 1) ^ B ^ (B * 2)] )
+  }
+  if( p[i + 1] > p[(i + 1) ^ B ^ (B * 2)] ) {
     i ^= B ^ (B * 2);
+  }
   memset(p + i, 0, B);
   p[i] = chk;
   return p + i + 1;

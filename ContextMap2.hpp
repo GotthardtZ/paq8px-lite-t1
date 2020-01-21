@@ -1,7 +1,7 @@
 #ifndef PAQ8PX_CONTEXTMAP2_HPP
 #define PAQ8PX_CONTEXTMAP2_HPP
 
-//TODO: update this documentation
+// TODO(epsteina): update this documentation
 /**
 context map for large contexts.
 maps to a bit history state, a 3 mostRecentlyUsed byte history, and 1 byte RunStats.
@@ -20,15 +20,15 @@ mapped to predictions.
 */
 
 #include "IPredictor.hpp"
+#include "Bucket.hpp"
+#include "Hash.hpp"
+#include "Ilog.hpp"
+#include "Mixer.hpp"
 #include "Random.hpp"
 #include "StateMap.hpp"
-#include "Ilog.hpp"
-#include "Hash.hpp"
 #include "StateTable.hpp"
-#include "Mixer.hpp"
-#include "UpdateBroadcaster.hpp"
 #include "Stretch.hpp"
-#include "Bucket.hpp"
+#include "UpdateBroadcaster.hpp"
 
 #define CM_USE_RUN_STATS 1U
 #define CM_USE_BYTE_HISTORY 2U

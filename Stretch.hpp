@@ -2,15 +2,15 @@
 #define PAQ8PX_STRETCH_HPP
 
 #include "Squash.hpp"
-#include <cstdint>
 #include <cassert>
+#include <cstdint>
 
 /**
- * Inverse of squash. d = ln(p/(1-p)), d scaled by 8 bits, p by 12 bits.
- * d has range -2047 to 2047 representing -8 to 8.  p has range 0 to 4095.
+ * Inverse of @ref squash. d = ln(p/(1-p)), d scaled by 8 bits, p by 12 bits.
+ * d has range -2047 to 2047 representing -8 to 8. p has range 0 to 4095.
  */
 struct Stretch {
-    constexpr Stretch() : t() {
+    constexpr Stretch() {
       int pi = 0;
       for( int x = -2047; x <= 2047; ++x ) {
         int i = squash(x);
@@ -22,7 +22,7 @@ struct Stretch {
       t[4095] = 2047;
     }
 
-    short t[4096];
+    short t[4096] {};
 };
 
 constexpr auto stretch = Stretch();

@@ -1,16 +1,16 @@
 #ifndef PAQ8PX_MIXER_HPP
 #define PAQ8PX_MIXER_HPP
 
-#include <immintrin.h>
-#include "utils.hpp"
 #include "IPredictor.hpp"
 #include "Shared.hpp"
+#include "utils.hpp"
+#include <immintrin.h>
 
 #ifdef __GNUC__
 
 __attribute__((target("avx2")))
 #endif
-static int dotProductSimdAvx2(const short *const t, const short *const w, int n) {
+static auto dotProductSimdAvx2(const short *const t, const short *const w, int n) -> int {
   __m256i sum = _mm256_setzero_si256();
 
   while((n -= 16) >= 0 ) {
@@ -41,8 +41,8 @@ static void trainSimdAvx2(const short *const t, short *const w, int n, const int
     tmp = _mm256_mulhi_epi16(tmp, err);
     tmp = _mm256_adds_epi16(tmp, one);
     tmp = _mm256_srai_epi16(tmp, 1);
-    tmp = _mm256_adds_epi16(tmp, *(__m256i *) &w[n]);
-    *(__m256i *) &w[n] = tmp;
+    tmp = _mm256_adds_epi16(tmp, *reinterpret_cast<__m256i *>(&w[n]));
+    *reinterpret_cast<__m256i *>(&w[n]) = tmp;
   }
 }
 
@@ -50,7 +50,7 @@ static void trainSimdAvx2(const short *const t, short *const w, int n, const int
 
 __attribute__((target("sse2")))
 #endif
-static int dotProductSimdSse2(const short *const t, const short *const w, int n) {
+static auto dotProductSimdSse2(const short *const t, const short *const w, int n) -> int {
   __m128i sum = _mm_setzero_si128();
 
   while((n -= 8) >= 0 ) {
@@ -77,12 +77,12 @@ static void trainSimdSse2(const short *const t, short *const w, int n, const int
     tmp = _mm_mulhi_epi16(tmp, err);
     tmp = _mm_adds_epi16(tmp, one);
     tmp = _mm_srai_epi16(tmp, 1);
-    tmp = _mm_adds_epi16(tmp, *(__m128i *) &w[n]);
-    *(__m128i *) &w[n] = tmp;
+    tmp = _mm_adds_epi16(tmp, *reinterpret_cast<__m128i *>(&w[n]));
+    *reinterpret_cast<__m128i *>(&w[n]) = tmp;
   }
 }
 
-static int dotProductSimdNone(const short *const t, const short *const w, int n) {
+static auto dotProductSimdNone(const short *const t, const short *const w, int n) -> int {
   int sum = 0;
   while((n -= 2) >= 0 ) {
     sum += (t[n] * w[n] + t[n + 1] * w[n + 1]) >> 8U;
@@ -93,35 +93,38 @@ static int dotProductSimdNone(const short *const t, const short *const w, int n)
 static void trainSimdNone(const short *const t, short *const w, int n, const int err) {
   while((n -= 1) >= 0 ) {
     int wt = w[n] + ((((t[n] * err * 2) >> 16U) + 1) >> 1U);
-    if( wt < -32768 )
+    if( wt < -32768 ) {
       wt = -32768;
-    else if( wt > 32767 )
+    } else if( wt > 32767 ) {
       wt = 32767;
-    w[n] = (short) wt;
+    }
+    w[n] = static_cast<short>(wt);
   }
 }
 
 class Mixer : protected IPredictor {
 protected:
     Shared *shared = Shared::getInstance();
-    const uint32_t n, m, s; // max inputs, max contexts, max context sets
-    int scaleFactor; // scale factor for dot product
-    Array<short, 32> tx; // n inputs from add()
-    Array<short, 32> wx; // n*m weights
-    Array<uint32_t> cxt; // s contexts
-    Array<ErrorInfo> info; // stats for the adaptive learning rates
-    Array<int> rates; // learning rates
-    uint32_t numContexts {}; // number of contexts (0 to s)
-    uint32_t base {}; // offset of next context
-    uint32_t nx {}; // number of inputs in tx, 0 to n
-    Array<int> pr; // last result (scaled 12 bits)
+    const uint32_t n; /**< max inputs */
+    const uint32_t m; /**< max contexts */
+    const uint32_t s; /**< max context sets */
+    int scaleFactor; /**< scale factor for dot product */
+    Array<short, 32> tx; /**< n inputs from add() */
+    Array<short, 32> wx; /**< n*m weights */
+    Array<uint32_t> cxt; /**< s contexts */
+    Array<ErrorInfo> info; /**< stats for the adaptive learning rates  */
+    Array<int> rates; /**< learning rates */
+    uint32_t numContexts {}; /**< number of contexts (0 to s)  */
+    uint32_t base {}; /**< offset of next context */
+    uint32_t nx {}; /**< number of inputs in tx, 0 to n */
+    Array<int> pr; /**< last result (scaled 12 bits) */
 public:
     /**
-     * Mixer m(n, m, s=1, w=0) combines models using m neural networks with
-     * n inputs each, of which up to s may be selected.  If s > 1 then
+     * Mixer m(n, m, s) combines models using @ref m neural networks with
+     * @ref n inputs each, of which up to @ref s may be selected.  If s > 1 then
      * the outputs of these neural networks are combined using another
-     * neural network (with arguments s, 1, 1).  If s = 1 then the
-     * output is direct.  The weights are initially w (+-32K).
+     * neural network (with arguments s, 1, 1). If s = 1 then the
+     * output is direct. The weights are initially w (+-32K).
      * @param n
      * @param m
      * @param s
@@ -133,7 +136,7 @@ public:
      * Returns the output prediction that the next bit is 1 as a 12 bit number (0 to 4095).
      * @return the prediction
      */
-    virtual int p() = 0;
+    virtual auto p() -> int = 0;
     virtual void setScaleFactor(int sf0, int sf1) = 0;
 
     /**

@@ -15,31 +15,34 @@ protected:
 #else
 
     void chk_consistency() const {
-      for( uint32_t i = 0; i < size() - 1; i++ )
-        if((*this)[i] == 0 )
+      for( uint32_t i = 0; i < size() - 1; i++ ) {
+        if((*this)[i] == 0 ) {
           quit("Internal error - string consistency check failed (1).");
-      if(((*this)[size() - 1]) != 0 )
+}
+}
+      if(((*this)[size() - 1]) != 0 ) {
         quit("Internal error - string consistency check failed (2).");
+}
     }
 
 #endif
 public:
-    [[nodiscard]] const char *c_str() const;
+    [[nodiscard]] auto c_str() const -> const char *;
     /**
      * Does not include the NUL terminator
      * @return length of the string
      */
-    [[nodiscard]] uint64_t strsize() const;
+    [[nodiscard]] auto strsize() const -> uint64_t;
     void operator=(const char *s);
     void operator+=(const char *s);
     void operator+=(char c);
     void operator+=(uint64_t x);
-    bool endsWith(const char *ending) const;
+    auto endsWith(const char *ending) const -> bool;
     void stripEnd(uint64_t count);
-    bool beginsWith(const char *beginning) const;
+    auto beginsWith(const char *beginning) const -> bool;
     void stripStart(uint64_t count);
-    [[nodiscard]] int findLast(char c) const;
-    String(const char *s = "");
+    [[nodiscard]] auto findLast(char c) const -> int;
+    explicit String(const char *s = "");
 };
 
 #endif //PAQ8PX_STRING_HPP

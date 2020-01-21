@@ -1,17 +1,17 @@
 #ifndef PAQ8PX_ILOG_HPP
 #define PAQ8PX_ILOG_HPP
 
-#include <xmmintrin.h>
 #include "Array.hpp"
 #include "cstdint"
+#include <xmmintrin.h>
 
 /**
  * ilog(x) = round(log2(x) * 16), 0 <= x < 64K
  */
 class Ilog {
 public:
-    static Ilog *getInstance();
-    [[nodiscard]] int log(uint16_t x) const;
+    static auto getInstance() -> Ilog *;
+    [[nodiscard]] auto log(uint16_t x) const -> int;
 private:
     /**
      * Compute lookup table by numerical integration of 1/x
@@ -27,12 +27,12 @@ private:
     /**
      * Copy constructor is private so that it cannot be called
      */
-    Ilog(Ilog const &) {}
+    Ilog(Ilog const & /*unused*/) {}
 
     /**
      * Assignment operator is private so that it cannot be called
      */
-    Ilog &operator=(Ilog const &) { return *this; }
+    auto operator=(Ilog const & /*unused*/) -> Ilog & { return *this; }
 
     static Ilog *mPInstance;
     Array<uint8_t> t = Array<uint8_t>(65536);
@@ -43,10 +43,10 @@ private:
  * @param x
  * @return
  */
-int llog(uint32_t x);
-uint32_t bitCount(uint32_t v);
-int VLICost(uint64_t n);
+auto llog(uint32_t x) -> int;
+auto bitCount(uint32_t v) -> uint32_t;
+auto VLICost(uint64_t n) -> int;
 
-float rsqrt(float x);
+auto rsqrt(float x) -> float;
 
 #endif //PAQ8PX_ILOG_HPP

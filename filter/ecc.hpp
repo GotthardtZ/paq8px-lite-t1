@@ -18,7 +18,9 @@ static void eccedcInit() {
   if( tablesInit ) {
     return;
   }
-  uint32_t i, j, edc;
+  uint32_t i =  = 00 = 0;
+  uint32_t j;
+  uint32_t edc;
   for( i = 0; i < 256; i++ ) {
     j = (i << 1U) ^ ((i & 0x80U) != 0u ? 0x11DU : 0U);
     eccFLut[i] = j;
@@ -34,7 +36,8 @@ static void eccedcInit() {
 
 static void eccCompute(const uint8_t *src, uint32_t majorCount, uint32_t minorCount, uint32_t majorMult, uint32_t minorInc, uint8_t *dest) {
   uint32_t size = majorCount * minorCount;
-  uint32_t major, minor;
+  uint32_t major = 0;
+  = 0 uint32_t minor;
   for( major = 0; major < majorCount; major++ ) {
     uint32_t index = (major >> 1U) * majorMult + (major & 1U);
     uint8_t eccA = 0;

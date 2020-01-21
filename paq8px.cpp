@@ -159,33 +159,40 @@ static void printModules() {
 
 static void printSimdInfo(int simdIset, int detectedSimdIset) {
   printf("\nHighest SIMD vectorization support on this system: ");
-  if( detectedSimdIset < 0 || detectedSimdIset > 9 )
+  if( detectedSimdIset < 0 || detectedSimdIset > 9 ) {
     quit("Oops, sorry. Unexpected result.");
+  }
   static const char *vectorizationString[10] = {"none", "MMX", "SSE", "SSE2", "SSE3", "SSSE3", "SSE4.1", "SSE4.2", "AVX", "AVX2"};
   printf("%s.\n", vectorizationString[detectedSimdIset]);
 
   printf("Using ");
-  if( simdIset >= 9 )
+  if( simdIset >= 9 ) {
     printf("AVX2");
-  else if( simdIset >= 3 )
+  } else if( simdIset >= 3 ) {
     printf("SSE2");
-  else
+  } else {
     printf("non-vectorized");
+  }
   printf(" neural network functions.\n");
 }
 
 static void printCommand(const WHATTODO &whattodo) {
   printf(" To do          = ");
-  if( whattodo == DoNone )
+  if( whattodo == DoNone ) {
     printf("-");
-  if( whattodo == DoCompress )
+  }
+  if( whattodo == DoCompress ) {
     printf("Compress");
-  if( whattodo == DoExtract )
+  }
+  if( whattodo == DoExtract ) {
     printf("Extract");
-  if( whattodo == DoCompare )
+  }
+  if( whattodo == DoCompare ) {
     printf("Compare");
-  if( whattodo == DoList )
+  }
+  if( whattodo == DoList ) {
     printf("List");
+  }
   printf("\n");
 }
 
@@ -208,8 +215,9 @@ auto main_utf8(int argc, char **argv) -> int {
   Shared *shared = Shared::getInstance();
   try {
 
-    if( !shared->toScreen ) //we need a minimal feedback when redirected
+    if( !shared->toScreen ) { //we need a minimal feedback when redirected
       fprintf(stderr, PROGNAME " archiver v" PROGVERSION " (c) " PROGYEAR ", Matt Mahoney et al.\n");
+    }
     printf(PROGNAME " archiver v" PROGVERSION " (c) " PROGYEAR ", Matt Mahoney et al.\n");
 
     // Print help message
@@ -233,13 +241,15 @@ auto main_utf8(int argc, char **argv) -> int {
     String hashConfig;
 
     for( int i = 1; i < argc; i++ ) {
-      int argLen = (int) strlen(argv[i]);
+      int argLen = static_cast<int>(strlen(argv[i]));
       if( argv[i][0] == '-' ) {
-        if( argLen == 1 )
+        if( argLen == 1 ) {
           quit("Empty command.");
+        }
         if( argv[i][1] >= '0' && argv[i][1] <= '9' ) {
-          if( whattodo != DoNone )
+          if( whattodo != DoNone ) {
             quit("Only one command may be specified.");
+          }
           whattodo = DoCompress;
           shared->setLevel(argv[i][1] - '0');
           //process optional compression switches
@@ -267,24 +277,29 @@ auto main_utf8(int argc, char **argv) -> int {
             }
           }
         } else if( strcasecmp(argv[i], "-d") == 0 ) {
-          if( whattodo != DoNone )
+          if( whattodo != DoNone ) {
             quit("Only one command may be specified.");
+          }
           whattodo = DoExtract;
         } else if( strcasecmp(argv[i], "-t") == 0 ) {
-          if( whattodo != DoNone )
+          if( whattodo != DoNone ) {
             quit("Only one command may be specified.");
+          }
           whattodo = DoCompare;
         } else if( strcasecmp(argv[i], "-l") == 0 ) {
-          if( whattodo != DoNone )
+          if( whattodo != DoNone ) {
             quit("Only one command may be specified.");
+          }
           whattodo = DoList;
         } else if( strcasecmp(argv[i], "-v") == 0 ) {
           verbose = true;
         } else if( strcasecmp(argv[i], "-log") == 0 ) {
-          if( logfile.strsize() != 0 )
+          if( logfile.strsize() != 0 ) {
             quit("Only one logfile may be specified.");
-          if( ++i == argc )
+          }
+          if( ++i == argc ) {
             quit("The -log switch requires a filename.");
+          }
           logfile += argv[i];
         }
 #ifndef NHASHCONFIG
@@ -296,16 +311,18 @@ auto main_utf8(int argc, char **argv) -> int {
           }
 #endif
         else if( strcasecmp(argv[i], "-simd") == 0 ) {
-          if( ++i == argc )
+          if( ++i == argc ) {
             quit("The -simd switch requires an instruction set name (NONE,SSE2,AVX2).");
-          if( strcasecmp(argv[i], "NONE") == 0 )
+          }
+          if( strcasecmp(argv[i], "NONE") == 0 ) {
             simdIset = 0;
-          else if( strcasecmp(argv[i], "SSE2") == 0 )
+          } else if( strcasecmp(argv[i], "SSE2") == 0 ) {
             simdIset = 3;
-          else if( strcasecmp(argv[i], "AVX2") == 0 )
+          } else if( strcasecmp(argv[i], "AVX2") == 0 ) {
             simdIset = 9;
-          else
+          } else {
             quit("Invalid -simd option. Use -simd NONE, -simd SSE2 or -simd AVX2.");
+          }
         } else {
           printf("Invalid command: %s", argv[i]);
           quit();
@@ -317,8 +334,9 @@ auto main_utf8(int argc, char **argv) -> int {
         } else if( output.strsize() == 0 ) {
           output += argv[i];
           output.replaceSlashes();
-        } else
+        } else {
           quit("More than two file names specified. Only an input and an output is needed.");
+        }
       }
     }
 
@@ -328,10 +346,12 @@ auto main_utf8(int argc, char **argv) -> int {
 
     // Determine CPU's (and OS) support for SIMD vectorization instruction set
     int detectedSimdIset = simdDetect();
-    if( simdIset == -1 )
+    if( simdIset == -1 ) {
       simdIset = detectedSimdIset;
-    if( simdIset > detectedSimdIset )
+    }
+    if( simdIset > detectedSimdIset ) {
       printf("\nOverriding system highest vectorization support. Expect a crash.");
+    }
 
     // Print anything only if the user wants/needs to know
     if( verbose || simdIset != detectedSimdIset ) {
@@ -350,15 +370,17 @@ auto main_utf8(int argc, char **argv) -> int {
     if( verbose ) {
       printf("\n");
       printf(" Command line   =");
-      for( int i = 0; i < argc; i++ )
+      for( int i = 0; i < argc; i++ ) {
         printf(" %s", argv[i]);
+      }
       printf("\n");
     }
 
     // Successfully parsed command line arguments
     // Let's check their validity
-    if( whattodo == DoNone )
+    if( whattodo == DoNone ) {
       quit("A command switch is required: -0..-9 to compress, -d to decompress, -t to test, -l to list.");
+    }
     if( input.strsize() == 0 ) {
       printf("\nAn %s is required %s.\n", whattodo == DoCompress ? "input file or filelist" : "archive filename",
              whattodo == DoCompress ? "for compressing" : whattodo == DoExtract ? "for decompressing" : whattodo == DoCompare
@@ -367,27 +389,31 @@ auto main_utf8(int argc, char **argv) -> int {
                                                                                                                           : "");
       quit();
     }
-    if( whattodo == DoList && output.strsize() != 0 )
+    if( whattodo == DoList && output.strsize() != 0 ) {
       quit("The list command needs only one file parameter.");
+    }
 
     // File list supplied?
     if( input.beginsWith("@")) {
       if( whattodo == DoCompress ) {
         shared->options |= OPTION_MULTIPLE_FILE_MODE;
         input.stripStart(1);
-      } else
+      } else {
         quit("A file list (a file name prefixed by '@') may only be specified when compressing.");
+      }
     }
 
     int pathType = 0;
 
     //Logfile supplied?
     if( logfile.strsize() != 0 ) {
-      if( whattodo != DoCompress )
+      if( whattodo != DoCompress ) {
         quit("A log file may only be specified for compression.");
+      }
       pathType = examinePath(logfile.c_str());
-      if( pathType == 2 || pathType == 4 )
+      if( pathType == 2 || pathType == 4 ) {
         quit("Specified log file should be a file, not a directory.");
+      }
       if( pathType == 0 ) {
         printf("\nThere is a problem with the log file: %s", logfile.c_str());
         quit();
@@ -425,8 +451,9 @@ auto main_utf8(int argc, char **argv) -> int {
         }
       } else if( pathType == 2 || pathType == 4 ) {//is an existing directory, or looks like a directory
         outputPath += output.c_str();
-        if( !outputPath.endsWith("/") && !outputPath.endsWith("\\"))
+        if( !outputPath.endsWith("/") && !outputPath.endsWith("\\")) {
           outputPath += GOODSLASH;
+        }
         //output file is not specified
         output.resize(0);
         output.pushBack(0);
@@ -442,8 +469,9 @@ auto main_utf8(int argc, char **argv) -> int {
       if( output.strsize() == 0 ) { // If no archive name is provided, construct it from input (append PROGNAME extension to input filename)
         archiveName += input.c_str();
         archiveName += "." PROGNAME PROGVERSION;
-      } else
+      } else {
         archiveName += output.c_str();
+      }
     } else { // extract/compare/list: archivename is simply the input
       archiveName += inputPath.c_str();
       archiveName += input.c_str();
@@ -472,13 +500,15 @@ auto main_utf8(int argc, char **argv) -> int {
       while( true ) {
         c = f.getchar();
         listoffiles.addChar(c);
-        if( c == EOF)
+        if( c == EOF) {
           break;
+        }
       }
       f.close();
       //Verify input files
-      for( int i = 0; i < listoffiles.getCount(); i++ )
+      for( int i = 0; i < listoffiles.getCount(); i++ ) {
         getFileSize(listoffiles.getfilename(i)); // Does file exist? Is it readable? (we don't actually need the file size now)
+      }
     } else { //single file mode or extract/compare/list
       FileName fn(inputPath.c_str());
       fn += input.c_str();
@@ -490,17 +520,19 @@ auto main_utf8(int argc, char **argv) -> int {
     if( mode == DECOMPRESS ) {
       archive.open(archiveName.c_str(), true);
       // Verify archive header, get level and options
-      int len = (int) strlen(PROGNAME);
-      for( int i = 0; i < len; i++ )
+      int len = static_cast<int>(strlen(PROGNAME));
+      for( int i = 0; i < len; i++ ) {
         if( archive.getchar() != PROGNAME[i] ) {
           printf("%s: not a valid %s file.", archiveName.c_str(), PROGNAME);
           quit();
         }
+      }
       shared->setLevel(archive.getchar());
       c = archive.getchar();
-      if( c == EOF)
+      if( c == EOF) {
         printf("Unexpected end of archive file.\n");
-      shared->options = (uint8_t) c;
+      }
+      shared->options = static_cast<uint8_t>(c);
     }
 
     if( verbose ) {
@@ -517,8 +549,9 @@ auto main_utf8(int argc, char **argv) -> int {
         numberOfFiles = listoffiles.getCount();
         printf("Creating archive %s in multiple file mode with %d file%s...\n", archiveName.c_str(), numberOfFiles,
                numberOfFiles > 1 ? "s" : "");
-      } else //single file mode
+      } else { //single file mode
         printf("Creating archive %s in single file mode...\n", archiveName.c_str());
+      }
       archive.create(archiveName.c_str());
       archive.append(PROGNAME);
       archive.putChar(shared->level);
@@ -530,9 +563,9 @@ auto main_utf8(int argc, char **argv) -> int {
       if((whattodo == DoExtract || whattodo == DoCompare) && output.strsize() == 0 ) {
         output += input.c_str();
         const char *fileExtension = "." PROGNAME PROGVERSION;
-        if( output.endsWith(fileExtension))
-          output.stripEnd((int) strlen(fileExtension));
-        else {
+        if( output.endsWith(fileExtension)) {
+          output.stripEnd(static_cast<int>(strlen(fileExtension)));
+        } else {
           printf("Can't construct output filename from archive filename.\nArchive file extension must be: '%s'", fileExtension);
           quit();
         }
@@ -548,8 +581,9 @@ auto main_utf8(int argc, char **argv) -> int {
     // Compress list of files
     if( mode == COMPRESS ) {
       uint64_t start = en.size(); //header size (=8)
-      if( verbose )
+      if( verbose ) {
         printf("Writing header : %" PRIu64 " bytes\n", start);
+      }
       totalSize += start;
       if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
 
@@ -559,10 +593,12 @@ auto main_utf8(int argc, char **argv) -> int {
         uint64_t len2 = s->size(); //ASCIIZ filenames of files to compress - with ending zero
         en.encodeBlockSize(len1 + len2);
 
-        for( uint64_t i = 0; i < len1; i++ )
+        for( uint64_t i = 0; i < len1; i++ ) {
           en.compress(input[i]); //ASCIIZ filename of listfile
-        for( uint64_t i = 0; i < len2; i++ )
+        }
+        for( uint64_t i = 0; i < len2; i++ ) {
           en.compress((*s)[i]); //ASCIIZ filenames of files to compress
+        }
 
         printf("1/2 - Filename of listfile : %" PRIu64 " bytes\n", len1);
         printf("2/2 - Content of listfile  : %" PRIu64 " bytes\n", len2);
@@ -576,61 +612,72 @@ auto main_utf8(int argc, char **argv) -> int {
       const char *errmsgInvalidChar = "Invalid character or unexpected end of archive file.";
       // name of listfile
       FileName listFilename(outputPath.c_str());
-      if( output.strsize() != 0 )
+      if( output.strsize() != 0 ) {
         quit("Output filename must not be specified when extracting multiple files.");
-      if((c = en.decompress()) != TEXT )
+      }
+      if((c = en.decompress()) != TEXT ) {
         quit(errmsgInvalidChar);
+      }
       en.decodeBlockSize(); //we don't really need it
       while((c = en.decompress()) != 0 ) {
-        if( c == 255 )
+        if( c == 255 ) {
           quit(errmsgInvalidChar);
-        listFilename += (char) c;
+        }
+        listFilename += static_cast<char>(c);
       }
       while((c = en.decompress()) != 0 ) {
-        if( c == 255 )
+        if( c == 255 ) {
           quit(errmsgInvalidChar);
-        listoffiles.addChar((char) c);
+        }
+        listoffiles.addChar(static_cast<char>(c));
       }
-      if( whattodo == DoList )
+      if( whattodo == DoList ) {
         printf("File list of %s archive:\n", archiveName.c_str());
+      }
 
       numberOfFiles = listoffiles.getCount();
 
       //write filenames to screen or listfile or verify (compare) contents
-      if( whattodo == DoList )
+      if( whattodo == DoList ) {
         printf("%s\n", listoffiles.getString()->c_str());
-      else if( whattodo == DoExtract ) {
+      } else if( whattodo == DoExtract ) {
         FileDisk f;
         f.create(listFilename.c_str());
         String *s = listoffiles.getString();
-        f.blockWrite((uint8_t *) (&(*s)[0]), s->strsize());
+        f.blockWrite(reinterpret_cast<uint8_t *>(&(*s)[0]), s->strsize());
         f.close();
       } else if( whattodo == DoCompare ) {
         FileDisk f;
         f.open(listFilename.c_str(), true);
         String *s = listoffiles.getString();
-        for( uint64_t i = 0; i < s->strsize(); i++ )
-          if( f.getchar() != (uint8_t) (*s)[i] )
+        for( uint64_t i = 0; i < s->strsize(); i++ ) {
+          if( f.getchar() != static_cast<uint8_t>((*s)[i])) {
             quit("Mismatch in list of files.");
-        if( f.getchar() != EOF)
+          }
+        }
+        if( f.getchar() != EOF) {
           printf("Filelist on disk is larger than in archive.\n");
+        }
         f.close();
       }
     }
 
-    if( whattodo == DoList && (shared->options & OPTION_MULTIPLE_FILE_MODE) == 0 )
+    if( whattodo == DoList && (shared->options & OPTION_MULTIPLE_FILE_MODE) == 0 ) {
       quit("Can't list. Filenames are not stored in single file mode.\n");
+    }
 
     // Compress or decompress files
     if( mode == COMPRESS ) {
-      if( !shared->toScreen ) //we need a minimal feedback when redirected
+      if( !shared->toScreen ) { //we need a minimal feedback when redirected
         fprintf(stderr, "Output is redirected - only minimal feedback is on screen\n");
+      }
       if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
         for( int i = 0; i < numberOfFiles; i++ ) {
           const char *fName = listoffiles.getfilename(i);
           uint64_t fSize = getFileSize(fName);
-          if( !shared->toScreen ) //we need a minimal feedback when redirected
+          if( !shared->toScreen ) { //we need a minimal feedback when redirected
             fprintf(stderr, "\n%d/%d - Filename: %s (%" PRIu64 " bytes)\n", i + 1, numberOfFiles, fName, fSize);
+          }
           printf("\n%d/%d - Filename: %s (%" PRIu64 " bytes)\n", i + 1, numberOfFiles, fName, fSize);
           compressfile(fName, fSize, en, verbose);
           totalSize += fSize + 4; //4: file size information
@@ -642,8 +689,9 @@ auto main_utf8(int argc, char **argv) -> int {
         fn += input.c_str();
         const char *fName = fn.c_str();
         uint64_t fSize = getFileSize(fName);
-        if( !shared->toScreen ) //we need a minimal feedback when redirected
+        if( !shared->toScreen ) { //we need a minimal feedback when redirected
           fprintf(stderr, "\nFilename: %s (%" PRIu64 " bytes)\n", fName, fSize);
+        }
         printf("\nFilename: %s (%" PRIu64 " bytes)\n", fName, fSize);
         compressfile(fName, fSize, en, verbose);
         totalSize += fSize + 4; //4: file size information
@@ -655,8 +703,9 @@ auto main_utf8(int argc, char **argv) -> int {
       totalSize += en.size() - preFlush; //we consider padding bytes as auxiliary bytes
       printf("-----------------------\n");
       printf("Total input size     : %" PRIu64 "\n", contentSize);
-      if( verbose )
+      if( verbose ) {
         printf("Total metadata bytes : %" PRIu64 "\n", totalSize - contentSize);
+      }
       printf("Total archive size   : %" PRIu64 "\n", en.size());
       printf("\n");
       // Log compression results
@@ -665,13 +714,15 @@ auto main_utf8(int argc, char **argv) -> int {
         pathType = examinePath(logfile.c_str());
         //Write header if needed
         if( pathType == 3 /*does not exist*/ ||
-            (pathType == 1 && getFileSize(logfile.c_str()) == 0)/*exists but does not contain a header*/)
+            (pathType == 1 && getFileSize(logfile.c_str()) == 0)/*exists but does not contain a header*/) {
           results += "PROG_NAME\tPROG_VERSION\tCOMMAND_LINE\tLEVEL\tINPUT_FILENAME\tORIGINAL_SIZE_BYTES\tCOMPRESSED_SIZE_BYTES\tRUNTIME_MS\n";
+        }
         //Write results to logfile
         results += PROGNAME "\t" PROGVERSION "\t";
         for( int i = 1; i < argc; i++ ) {
-          if( i != 0 )
+          if( i != 0 ) {
             results += ' ';
+          }
           results += argv[i];
         }
         results += "\t";
@@ -709,8 +760,9 @@ auto main_utf8(int argc, char **argv) -> int {
     }
 
     archive.close();
-    if( whattodo != DoList )
+    if( whattodo != DoList ) {
       programChecker->print();
+    }
   }
     // we catch only the intentional exceptions from quit() to exit gracefully
     // any other exception should result in a crash and must be investigated

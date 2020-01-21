@@ -1,10 +1,10 @@
 #ifndef PAQ8PX_HASH_HPP
 #define PAQ8PX_HASH_HPP
 
-#include <cstdint>
-#include <cstdio>
 #include "utils.hpp"
 #include <cassert>
+#include <cstdint>
+#include <cstdio>
 
 //////////////////////// Hash functions //////////////////////////
 //
@@ -34,20 +34,23 @@ static HASHEXPR uint64_t hashes[14] = {UINT64_C(0x9E3779B97F4A7C15), UINT64_C(0x
 #ifndef NHASHCONFIG
 
 static void loadHashesFromCmd(const char *hashesFromCommandline) {
-  if( strlen(hashesFromCommandline) != 16 * 14 + 13 /*237*/)
+  if( strlen(hashesFromCommandline) != 16 * 14 + 13 /*237*/) {
     quit("Bad hash config.");
+  }
   for( int i = 0; i < 14; i++ ) { // for each specified hash value
     uint64_t hashVal = 0;
     for( int j = 0; j < 16; j++ ) { // for each hex char
       uint8_t c = hashesFromCommandline[i * 17 + j];
-      if( c >= 'a' && c <= 'f' )
+      if( c >= 'a' && c <= 'f' ) {
         c = c + 'A' - 'a';
-      if( c >= '0' && c <= '9' )
+      }
+      if( c >= '0' && c <= '9' ) {
         c -= '0';
-      else if( c >= 'A' && c <= 'F' )
+      } else if( c >= 'A' && c <= 'F' ) {
         c = c - 'A' + 10;
-      else
+      } else {
         quit("Bad hash config.");
+      }
       hashVal = hashVal << 4U | c;
     }
     hashes[i] = hashVal;
@@ -79,7 +82,7 @@ static void loadHashesFromCmd(const char *hashesFromCommandline) {
 //   (combination of) multiplicative hash(es)
 
 static ALWAYS_INLINE
-uint32_t finalize64(const uint64_t hash, const int hashBits) {
+auto finalize64(const uint64_t hash, const int hashBits) -> uint32_t {
   assert(uint32_t(hashBits) <= 32); // just a reasonable upper limit
   return uint32_t(hash >> (64 - hashBits));
 }
@@ -116,7 +119,7 @@ uint64_t checksum64(const uint64_t hash, const int hashBits, const int checksumB
 //};
 
 static ALWAYS_INLINE
-uint64_t hash(const uint64_t x0) {
+auto hash(const uint64_t x0) -> uint64_t {
   return (x0 + 1) * PHI64;
 }
 
@@ -136,12 +139,12 @@ uint64_t hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uin
 }
 
 static ALWAYS_INLINE
-uint64_t hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4) {
+auto hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4) -> uint64_t {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4;
 }
 
 static ALWAYS_INLINE
-uint64_t hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5) {
+auto hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5) -> uint64_t {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5;
 }
 
@@ -169,9 +172,9 @@ hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3,
 }
 
 static ALWAYS_INLINE
-uint64_t
+auto
 hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
-     const uint64_t x7, const uint64_t x8, const uint64_t x9) {
+     const uint64_t x7, const uint64_t x8, const uint64_t x9) -> uint64_t {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5 +
          (x6 + 1) * MUL64_6 + (x7 + 1) * MUL64_7 + (x8 + 1) * MUL64_8 + (x9 + 1) * MUL64_9;
 }
@@ -193,9 +196,9 @@ hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3,
 }
 
 static ALWAYS_INLINE
-uint64_t
+auto
 hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
-     const uint64_t x7, const uint64_t x8, const uint64_t x9, const uint64_t x10, const uint64_t x11, const uint64_t x12) {
+     const uint64_t x7, const uint64_t x8, const uint64_t x9, const uint64_t x10, const uint64_t x11, const uint64_t x12) -> uint64_t {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5 +
          (x6 + 1) * MUL64_6 + (x7 + 1) * MUL64_7 + (x8 + 1) * MUL64_8 + (x9 + 1) * MUL64_9 + (x10 + 1) * MUL64_10 + (x11 + 1) * MUL64_11 +
          (x12 + 1) * MUL64_12;

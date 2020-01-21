@@ -2,13 +2,13 @@
 #define PAQ8PX_INDIRECTMAP_HPP
 
 #include "IPredictor.hpp"
-#include <cstdint>
-#include <cassert>
+#include "Hash.hpp"
+#include "Mixer.hpp"
+#include "Shared.hpp"
 #include "StateMap.hpp"
 #include "UpdateBroadcaster.hpp"
-#include "Shared.hpp"
-#include "Mixer.hpp"
-#include "Hash.hpp"
+#include <cassert>
+#include <cstdint>
 
 class IndirectMap : IPredictor {
 public:

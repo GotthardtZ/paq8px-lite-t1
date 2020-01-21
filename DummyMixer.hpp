@@ -13,9 +13,9 @@ private:
 public:
     DummyMixer(int n, int m, int s);
     void update() override;
-    int p() override;
+    auto p() -> int override;
 
-    void setScaleFactor(const int, const int) override {}
+    void setScaleFactor(const int /*sf0*/, const int /*sf1*/) override {}
 };
 
 #endif //PAQ8PX_DUMMYMIXER_HPP

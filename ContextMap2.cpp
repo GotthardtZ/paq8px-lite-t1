@@ -15,7 +15,7 @@ ContextMap2::ContextMap2(const uint64_t size, const uint32_t count, const int sc
   printf("Created ContextMap2 with size = %llu, count = %d, scale = %d, uw = %d\n", size, count, scale, uw);
 #endif
   assert(size >= 64 && isPowerOf2(size));
-  assert(sizeof(Bucket) == 64);
+  static_assert(sizeof(Bucket) == 64, "Size of Bucket should be 64!");
   assert(c <= (int) sizeof(validFlags) * 8); // validFlags is 64 bits - it can't support more than 64 contexts
   for( uint32_t i = 0; i < c; i++ ) {
     bitState[i] = bitState0[i] = &table[i].bitState[0][0];
@@ -26,7 +26,7 @@ ContextMap2::ContextMap2(const uint64_t size, const uint32_t count, const int sc
 void ContextMap2::set(const uint64_t ctx) {
   assert(index >= 0 && index < c);
   const uint32_t ctx0 = contexts[index] = finalize64(ctx, hashBits);
-  const uint16_t chk0 = checksums[index] = (uint16_t) checksum64(ctx, hashBits, 16);
+  const uint16_t chk0 = checksums[index] = static_cast<uint16_t>(checksum64(ctx, hashBits, 16));
   uint8_t *base = bitState[index] = bitState0[index] = table[ctx0 & mask].find(chk0);
   byteHistory[index] = &base[3];
   const uint8_t runCount = base[3];
@@ -45,8 +45,9 @@ void ContextMap2::set(const uint64_t ctx) {
     base[3] = 1; // runCount: flag for having completed storing all the 8 bits of the first byte
   } else {
     const uint8_t byteState = base[0];
-    if( byteState == 0 ) // empty slot, new context
+    if( byteState == 0 ) { // empty slot, new context
       base[3] = 255; // runCount: flag for skipping updating bits 2..7
+    }
   }
   index++;
   validFlags = (validFlags << 1U) + 1;
@@ -62,15 +63,16 @@ void ContextMap2::update() {
   INJECT_SHARED_y
   for( uint32_t i = 0; i < index; i++ ) {
     if(((validFlags >> (index - 1 - i)) & 1U) != 0 ) {
-      if( bitState[i] != nullptr )
+      if( bitState[i] != nullptr ) {
         StateTable::update(bitState[i], y, rnd);
+      }
 
       auto byteHistoryPtr = byteHistory[i];
       const auto runCount = byteHistoryPtr[0];
 
-      if( runCount == 255 && shared->bitPosition >= 2 )
+      if( runCount == 255 && shared->bitPosition >= 2 ) {
         bitState[i] = nullptr; // shadow non-reserved slots for bits 2..7 and skip update temporarily
-      else {
+      } else {
         switch( shared->bitPosition ) {
           case 0: {
             // update byte history
@@ -80,8 +82,9 @@ void ContextMap2::update() {
             } else { // 2nd byte is known
               const auto isMatch = byteHistoryPtr[1] == shared->c1;
               if( isMatch ) {
-                if( runCount < 253 )
+                if( runCount < 253 ) {
                   byteHistoryPtr[0] = runCount + 1;
+                }
               } else {
                 byteHistoryPtr[0] = 1; //runCount
                 // scroll byte candidates
@@ -196,12 +199,13 @@ void ContextMap2::mix(Mixer &m) {
                            (((byte3 >> (7 - shared->bitPosition)) & 1) << 2);
 
         int bhState = 0; // 4 bit
-        if( complete3 )
+        if( complete3 ) {
           bhState = 8U | (bhBits); //we have seen 3 bytes (at least)
-        else if( complete2 )
+        } else if( complete2 ) {
           bhState = 4U | (bhBits & 3U); //we have seen 2 bytes
-        else if( complete1 )
+        } else if( complete1 ) {
           bhState = 2U | (bhBits & 1U); //we have seen 1 byte only
+        }
         //else new context (bhState=0)
 
         const uint8_t stateGroup = StateTable::group(state); //0..31

@@ -3,14 +3,14 @@
 
 #include "utils.hpp"
 #include "Mixer.hpp"
-#include "SimdMixer.hpp"
 #include "Shared.hpp"
+#include "SimdMixer.hpp"
 
 class MixerFactory {
 private:
     Shared *shared = Shared::getInstance();
 public:
-    Mixer *createMixer(int n, int m, int s);
+    auto createMixer(int n, int m, int s) -> Mixer *;
 };
 
 #endif //PAQ8PX_MIXERFACTORY_HPP
