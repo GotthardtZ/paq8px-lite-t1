@@ -6,9 +6,9 @@ void NestModel::mix(Mixer &m) {
   if( shared->bitPosition == 0 ) {
     int c = shared->c1;
     int matched = 1;
-    int vv;
-    w *= ((vc & 7U) > 0 && (vc & 7U) < 3);
-    if( c & 0x80U ){
+    int vv = 0;
+    w *= static_cast<int>((vc & 7U) > 0 && (vc & 7U) < 3);
+    if((c & 0x80U) != 0u ) {
       w = w * 11 * 32 + c;
     }
     const int lc = (c >= 'A' && c <= 'Z' ? c + 'a' - 'A' : c);

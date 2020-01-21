@@ -24,9 +24,9 @@ void IndirectModel::mix(Mixer &m) {
     const uint8_t pc = tolower(uint8_t(shared->c4 >> 8U));
     iCtx += (c = tolower(c)), iCtx = (pc << 8U) | c;
     const uint32_t ctx0 = iCtx();
-    const uint32_t mask =
-            (uint8_t(t1[c]) == uint8_t(t2[d])) | ((uint8_t(t1[c]) == uint8_t(t3[d2])) << 1U) | ((uint8_t(t1[c]) == uint8_t(t4[d3])) << 2U) |
-            ((uint8_t(t1[c]) == uint8_t(ctx0)) << 3U);
+    const uint32_t mask = static_cast<int>(uint8_t(t1[c]) == uint8_t(t2[d])) | (static_cast<int>(uint8_t(t1[c]) == uint8_t(t3[d2])) << 1U) |
+                          (static_cast<int>(uint8_t(t1[c]) == uint8_t(t4[d3])) << 2U) |
+                          (static_cast<int>(uint8_t(t1[c]) == uint8_t(ctx0)) << 3U);
     uint64_t i = 0;
     cm.set(hash(++i, t));
     cm.set(hash(++i, t0));

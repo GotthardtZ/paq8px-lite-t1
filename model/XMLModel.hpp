@@ -50,8 +50,8 @@ enum XMLState {
 class XMLModel {
 private:
     static constexpr int nCM = 4;
-    static_assert((cacheSize & (cacheSize - 1)) == 0, "");
-    static_assert(cacheSize > 8, "");
+    static_assert((cacheSize & (cacheSize - 1)) == 0);
+    static_assert(cacheSize > 8);
     Shared *shared = Shared::getInstance();
     ContextMap cm;
     XMLTagCache cache {};

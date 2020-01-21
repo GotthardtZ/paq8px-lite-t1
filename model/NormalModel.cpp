@@ -39,7 +39,9 @@ void NormalModel::mix(Mixer &m) {
 }
 
 void NormalModel::mixPost(Mixer &m) {
-  uint32_t c2 = (shared->c4 >> 8U) & 0xffU, c3 = (shared->c4 >> 16U) & 0xffU, c;
+  uint32_t c2 = (shared->c4 >> 8U) & 0xffU;
+  uint32_t c3 = (shared->c4 >> 16U) & 0xffU;
+  uint32_t c;
 
   m.set(8 + (shared->c1 | static_cast<int>(shared->bitPosition > 5) << 8U |
              static_cast<int>(((shared->c0 & ((1U << shared->bitPosition) - 1)) == 0) || (shared->c0 == ((2 << shared->bitPosition) - 1)))
@@ -56,7 +58,7 @@ void NormalModel::mixPost(Mixer &m) {
     }
     c = min(shared->bitPosition, 5) << 8U | shared->c1 >> 5U | (c2 >> 5U) << 3U | (c & 192U);
   } else {
-    c = c3 >> 7 | (shared->c4 >> 31U) << 1U | (c2 >> 6U) << 2U | (shared->c1 & 240U);
+    c = c3 >> 7U | (shared->c4 >> 31U) << 1U | (c2 >> 6U) << 2U | (shared->c1 & 240U);
   }
   m.set(c, 1536);
 }

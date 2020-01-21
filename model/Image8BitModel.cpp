@@ -178,7 +178,7 @@ void Image8BitModel::mix(Mixer &m) {
           uint32_t pMask = bMask * 0x01010101u;
           uint32_t left = 0;
           uint32_t right = 0;
-          int l = min(w, (int) jumps.size());
+          int l = min(w, static_cast<int>(jumps.size()));
           int end = l - 4;
           do {
             left = ((buffer(l - x) << 24U) | (buffer(l - x - 1) << 16U) | (buffer(l - x - 2) << 8U) | buffer(l - x - 3)) & pMask;

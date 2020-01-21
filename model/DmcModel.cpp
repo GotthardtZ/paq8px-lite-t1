@@ -1,6 +1,6 @@
 #include "DmcModel.hpp"
 
-auto DmcModel::incrementCounter(const uint32_t x, const uint32_t increment) const -> uint32_t {
+auto DmcModel::incrementCounter(const uint32_t x, const uint32_t increment) -> uint32_t {
   return (((x << 6U) - x) >> 6U) + (increment << 10U); // x * (1-1/64) + increment
 }
 
@@ -10,8 +10,8 @@ DmcModel::DmcModel(const uint64_t dmcNodes, const uint32_t thStart) : t(min(dmcN
 }
 
 void DmcModel::resetStateGraph(const uint32_t thStart) {
-  assert(((t.size() - 1) >> 28) ==
-         0); // the top 4 bits must be unused by nx0 and nx1 for storing the 4+4 bits of the bit history state byte
+  // the top 4 bits must be unused by nx0 and nx1 for storing the 4+4 bits of the bit history state byte
+  assert(((t.size() - 1) >> 28) == 0);
   top = curr = extra = 0;
   threshold = thStart;
   thresholdFine = thStart << 11U;

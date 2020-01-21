@@ -89,8 +89,8 @@ void Image4BitModel::mix(Mixer &m) {
   sm.subscribe();
   for( int i = 0; i < S; i++ ) {
     const uint8_t s = *cp[i];
-    const int n0 = -static_cast<int>(StateTable::next(s, 2)) == 0u;
-    const int n1 = -static_cast<int>(StateTable::next(s, 3)) == 0u;
+    const int n0 = static_cast<const int>(-static_cast<int>(StateTable::next(s, 2)) == 0u);
+    const int n1 = static_cast<const int>(-static_cast<int>(StateTable::next(s, 3)) == 0u);
     const int p1 = sm.p2(i, s);
     const int st = stretch(p1) >> 1U;
     m.add(st);

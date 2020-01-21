@@ -149,12 +149,12 @@ public:
             len++;
           } else {
             inn[i] = 0;
-}
+          }
         }
         if( len != 0 ) {
-          uint8_t in0 = 0; = 0
- = 0          uint8_t in1;
-          uint8_t in2;
+          uint8_t in0 = 0;
+          uint8_t in1 = 0;
+          uint8_t in2 = 0;
           in0 = inn[0], in1 = inn[1], in2 = inn[2];
           ptr[fle++] = (base64::table1[in0 >> 2U]);
           ptr[fle++] = (base64::table1[((in0 & 0x03U) << 4U) | ((in1 & 0xf0U) >> 4U)]);
@@ -168,7 +168,7 @@ public:
               ptr[fle++] = (tlf);
             } else {
               ptr[fle++] = 13, ptr[fle++] = 10;
-}
+            }
           }
           blocksOut = 0;
         }
@@ -181,7 +181,7 @@ public:
           uint8_t b = ptr[i];
           if( b != out->getchar() && (diffFound == 0u)) {
             diffFound = static_cast<int>(out->curPos());
-}
+          }
         }
       }
       return outLen;

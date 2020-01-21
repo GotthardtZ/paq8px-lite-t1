@@ -51,7 +51,7 @@ private:
      * @param increment either 0 or 1.
      * @return
      */
-    [[nodiscard]] auto incrementCounter(uint32_t x, uint32_t increment) const -> uint32_t;
+    [[nodiscard]] static auto incrementCounter(uint32_t x, uint32_t increment) -> uint32_t;
 public:
     DmcModel(uint64_t dmcNodes, uint32_t thStart);
 

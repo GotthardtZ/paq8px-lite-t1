@@ -139,12 +139,12 @@ auto ContextModel::p() -> int {
         audio8BitModel.setParam(blockInfo);
         m->setScaleFactor(1024, 128);
         return audio8BitModel.mix(*m), m->p();
-      } else {
-        Audio16BitModel &audio16BitModel = models.audio16BitModel();
-        audio16BitModel.setParam(blockInfo);
-        m->setScaleFactor(1024, 128);
-        return audio16BitModel.mix(*m), m->p();
       }
+      Audio16BitModel &audio16BitModel = models.audio16BitModel();
+      audio16BitModel.setParam(blockInfo);
+      m->setScaleFactor(1024, 128);
+      return audio16BitModel.mix(*m), m->p();
+
     }
 #endif //USE_AUDIOMODEL
     case JPEG: {

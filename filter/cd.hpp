@@ -86,9 +86,8 @@ public:
       for( int i = 0; i < 2352; i++ ) {
         if( d2[i] != data[i] && (test != 0)) {
           return 0;
-        } 
-          data[i] = d2[i];
-        
+        }
+        data[i] = d2[i];
       }
       return fMode + form - 1;
     }

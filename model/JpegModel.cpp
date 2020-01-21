@@ -528,10 +528,11 @@ auto JpegModel::mix(Mixer &m) -> int {
             advPred[3] = (ex < 0 ? -1 : +1) * ilog->log(abs(ex) + 1);
 
             for( int i = 0; i < 4; ++i ) {
-              const int a = (i & 1 ? zzv[zz] : zzu[zz]), b = (i & 2U ? 2 : 1);
-              if( a < b )
+              const int a = (i & 1 ? zzv[zz] : zzu[zz]);
+              const int b = (i & 2U ? 2 : 1);
+              if( a < b ) {
                 ex = 65535;
-              else {
+              } else {
                 const int zz2 = zPos[zzu[zz] + 8 * zzv[zz] - (i & 1U ? 8 : 1) * b];
                 ex = (images[idx].qTable[q + zz2] + 1) * cBuf2[cposDc + zz2] / (images[idx].qTable[q + zz] + 1);
                 ex = (ex < 0 ? -1 : +1) * (ilog->log(abs(ex) + 1) + (ex != 0 ? 17 : 0));

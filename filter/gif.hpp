@@ -189,10 +189,10 @@ static auto decodeGif(File *in, uint64_t size, File *out, FMode mode, uint64_t &
   int blockSize = 0;
   if( diffCount > 4096 || clearPos <= (1U << codesize) + 2 ) {
     return 1;
-}
+  }
   int maxcode = (1U << codesize) + 1;
-  int = 0 i = 0nput;
-  int code;
+  int input = 0;
+  int code = 0;
   int offset = 0;
   Array<int> dict(4096);
   Array<int> table(LZW_TABLE_SIZE);

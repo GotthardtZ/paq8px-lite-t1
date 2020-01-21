@@ -179,7 +179,8 @@ auto FrenchStemmer::step1(Word *w, const uint32_t rv, const uint32_t r1, const u
     w->end--, w->letters[w->end] = 'l';
     w->type |= French::Plural;
     return true;
-  } if( w->endsWith("amment") && suffixInRn(w, rv, "amment")) {
+  }
+  if( w->endsWith("amment") && suffixInRn(w, rv, "amment")) {
     w->changeSuffix("amment", "ant");
     (*forceStep2A) = true;
     return true;

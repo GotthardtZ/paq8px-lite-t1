@@ -84,7 +84,8 @@
 static auto isGrayscalePalette(File *in, int n = 256, int isRGBA = 0) -> bool {
   uint64_t offset = in->curPos();
   int stride = 3 + isRGBA;
-  int static_cast<int>res = (n > 0) << 8U;
+  int
+  static_cast<int>res = (n > 0) << 8U;
   int order = 1;
   for( int i = 0; (i < n * stride) && ((res >> 8U) != 0); i++ ) {
     int b = in->getchar();
@@ -996,7 +997,8 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
           }
           if( tgat == 3 ) {
             IMG_DET(IMAGE8GRAY, tga - 7, 18 + tgaid, tgax, tgay);
-          } if( tgat == 9 || tgat == 11 ) {
+          }
+          if( tgat == 9 || tgat == 11 ) {
             const uint64_t savedPos = in->curPos();
             in->setpos(start + tga + 11 + tgaid);
             if( tgat == 9 ) {
@@ -1260,7 +1262,8 @@ decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File 
   }
   if( type == IMAGE32 ) {
     return decodeIm32(en, len, info, out, mode, diffFound);
-  } if( type == AUDIO_LE ) {
+  }
+  if( type == AUDIO_LE ) {
     auto e = new EndiannessFilter();
     e->setEncoder(en);
     return e->decode(tmp, out, mode, len, diffFound);
