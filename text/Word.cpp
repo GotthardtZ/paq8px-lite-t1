@@ -11,7 +11,7 @@ auto Word::calculateHash() -> uint64_t {
 Word::Word() { reset(); }
 
 void Word::reset() {
-  memset(&letters[0], 0, sizeof(uint8_t) * MAX_WORD_SIZE);
+  memset(&letters[0], 0, sizeof(uint8_t) * maxWordSize);
   start = end = 0;
   Hash[0] = Hash[1] = 0;
   type = language = embedding = 0;
@@ -27,7 +27,7 @@ auto Word::operator!=(const char *s) const -> bool {
 }
 
 void Word::operator+=(const char c) {
-  if( end < MAX_WORD_SIZE - 1 ) {
+  if( end < maxWordSize - 1 ) {
     end += static_cast<int>(letters[end] > 0);
     letters[end] = tolower(c);
   }
@@ -35,7 +35,7 @@ void Word::operator+=(const char c) {
 
 auto Word::operator-(const Word w) const -> uint32_t {
   uint32_t res = 0;
-  for( int i = 0, j = 0; i < WORD_EMBEDDING_SIZE; i++, j += 8 ) {
+  for( int i = 0, j = 0; i < wordEmbeddingSize; i++, j += 8 ) {
     res = (res << 8U) | uint8_t(uint8_t(embedding >> j) - uint8_t(w.embedding >> j));
   }
   return res;
@@ -43,7 +43,7 @@ auto Word::operator-(const Word w) const -> uint32_t {
 
 auto Word::operator+(const Word w) const -> uint32_t {
   uint32_t res = 0;
-  for( int i = 0, j = 0; i < WORD_EMBEDDING_SIZE; i++, j += 8 ) {
+  for( int i = 0, j = 0; i < wordEmbeddingSize; i++, j += 8 ) {
     res = (res << 8U) | uint8_t(uint8_t(embedding >> j) + uint8_t(w.embedding >> j));
   }
   return res;
@@ -66,7 +66,7 @@ auto Word::length() const -> uint32_t {
 
 auto Word::distanceTo(const Word w) const -> uint32_t {
   uint32_t res = 0;
-  for( int i = 0, j = 0; i < WORD_EMBEDDING_SIZE; i++, j += 8 ) {
+  for( int i = 0, j = 0; i < wordEmbeddingSize; i++, j += 8 ) {
     res += square(abs(int(uint8_t(embedding >> j) - uint8_t(w.embedding >> j))));
   }
   return static_cast<uint32_t>(sqrt(res));
@@ -85,8 +85,8 @@ auto Word::changeSuffix(const char *oldSuffix, const char *newSuffix) -> bool {
   if( length() > len && memcmp(&letters[end - len + 1], oldSuffix, len) == 0 ) {
     size_t n = strlen(newSuffix);
     if( n > 0 ) {
-      memcpy(&letters[end - int(len) + 1], newSuffix, min(MAX_WORD_SIZE - 1, end + int(n)) - end);
-      end = min(MAX_WORD_SIZE - 1, end - int(len) + int(n));
+      memcpy(&letters[end - int(len) + 1], newSuffix, min(maxWordSize - 1, end + int(n)) - end);
+      end = min(maxWordSize - 1, end - int(len) + int(n));
     } else {
       end -= uint8_t(len);
     }

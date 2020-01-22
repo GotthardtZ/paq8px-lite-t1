@@ -6,14 +6,13 @@
 #include <cmath>
 #include <cstdio>
 
-#define MAX_WORD_SIZE 64
-#define WORD_EMBEDDING_SIZE 3
-
 class Word {
 private:
     auto calculateHash() -> uint64_t;
 public:
-    uint8_t letters[MAX_WORD_SIZE] {};
+    constexpr static int maxWordSize = 64;
+    constexpr static int wordEmbeddingSize = 3;
+    uint8_t letters[maxWordSize] {};
     uint8_t start {};
     uint8_t end {};
     uint64_t Hash[2] {};

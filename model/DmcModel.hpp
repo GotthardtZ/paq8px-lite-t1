@@ -13,9 +13,6 @@
 #include <cassert>
 #include <cstdint>
 
-#define DMC_NODES_BASE (255 * 256) // = 65280
-#define DMC_NODES_MAX ((uint64_t(1) << 31) / sizeof(DMCNode)) // = 178 956 970
-
 /**
  * Model using DMC (Dynamic Markov Compression).
  *
@@ -34,6 +31,8 @@
  */
 class DmcModel {
 private:
+    constexpr static uint64_t dmcNodesBase = (255 * 256); /**< 65280 */
+    constexpr static uint64_t dmcNodesMax = ((1ULL << 31U) / sizeof(DMCNode)); /**< 178 956 970 */
     Shared *shared = Shared::getInstance();
     Random rnd;
     Array<DMCNode> t; /**< state graph */

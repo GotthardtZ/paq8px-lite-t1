@@ -111,7 +111,7 @@ void WordEmbeddingDictionary::loadFromFile(const char *filename) {
   int embedding = 0;
   int total = 0;
   do {
-    if( f.blockRead(reinterpret_cast<uint8_t *>(&embedding), WORD_EMBEDDING_SIZE) != WORD_EMBEDDING_SIZE ) {
+    if( f.blockRead(reinterpret_cast<uint8_t *>(&embedding), Word::wordEmbeddingSize) != Word::wordEmbeddingSize ) {
       break;
     }
     w.reset();

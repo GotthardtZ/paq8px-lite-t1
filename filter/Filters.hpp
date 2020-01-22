@@ -1132,7 +1132,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
       relPos[r] = i;
     }
     if( i - e8e9last > 0x4000 ) {
-      // TODO(epsteina): Large file support
+      // TODO: Large file support
       if( type == EXE ) {
         info = static_cast<int>(start);
         in->setpos(start + e8e9last);
@@ -1229,7 +1229,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
 //////////////////// Compress, Decompress ////////////////////////////
 
 static void directEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int info = -1) {
-  // TODO(epsteina): Large file support
+  // TODO: Large file support
   en.compress(type);
   en.encodeBlockSize(len);
   if( info != -1 ) {
@@ -1266,7 +1266,9 @@ decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File 
     e->setEncoder(en);
     return e->decode(tmp, out, mode, len, diffFound);
   } else if( type == EXE ) {
-    return decodeExe(en, len, out, mode, diffFound);
+    auto e = new ExeFilter();
+    e->setEncoder(en);
+    return e->decode(tmp, out, mode, len, diffFound);
   } else if( type == TEXT_EOL ) {
     auto d = new EolFilter();
     d->setEncoder(en);
@@ -1305,7 +1307,8 @@ static auto encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int in
     auto e = new EndiannessFilter();
     e->encode(in, tmp, len, info, hdrsize);
   } else if( type == EXE ) {
-    encodeExe(in, tmp, len, info);
+    auto e = new ExeFilter();
+    e->encode(in, tmp, len, info, hdrsize);
   } else if( type == TEXT_EOL ) {
     auto e = new EolFilter();
     e->encode(in, tmp, len, info, hdrsize);

@@ -1,5 +1,4 @@
 #include "Mixer.hpp"
-#include "3rd/cxxopts.hpp"
 #include "MixerFactory.hpp"
 #include "ModelStats.hpp"
 #include "file/FileDisk.hpp"

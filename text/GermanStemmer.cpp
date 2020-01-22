@@ -17,10 +17,10 @@ void GermanStemmer::replaceSharpS(Word *w) {
   for( int i = w->start; i <= w->end; i++ ) {
     if( w->letters[i] == 0xDF ) {
       w->letters[i] = 's';
-      if( i < MAX_WORD_SIZE - 1 ) {
-        memmove(&w->letters[i + 2], &w->letters[i + 1], MAX_WORD_SIZE - i - 2);
+      if( i < Word::maxWordSize - 1 ) {
+        memmove(&w->letters[i + 2], &w->letters[i + 1], Word::maxWordSize - i - 2);
         w->letters[i + 1] = 's';
-        w->end += static_cast<int>(w->end < MAX_WORD_SIZE - 1);
+        w->end += static_cast<int>(w->end < Word::maxWordSize - 1);
       }
     }
   }
