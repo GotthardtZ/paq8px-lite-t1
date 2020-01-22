@@ -37,7 +37,7 @@ public:
     SmallStationaryContextMap pltMap[nPltMaps];
     IndirectMap sceneMap[5];
     IndirectContext<uint8_t> iCtx[nPltMaps];
-    RingBuffer<uint8_t> buffer {0x100000}; // internal rotating buffer for (PNG unfiltered) pixel data
+    RingBuffer<uint8_t> buffer {0x100000}; /**< internal rotating buffer for (PNG unfiltered) pixel data */
     Array<short> jumps {0x8000};
     //pixel neighborhood
     uint8_t WWWWWW = 0, WWWWW = 0, WWWW = 0, WWW = 0, WW = 0, W = 0;
@@ -48,13 +48,25 @@ public:
     uint8_t NNNNN = 0;
     uint8_t NNNNNN = 0;
     uint8_t px = 0, res = 0, prvFrmPx = 0, prvFrmPrediction = 0; // current PNG filter prediction, expected residual, corresponding pixel in previous frame
-    uint32_t lastPos = 0, lastWasPNG = 0;
-    uint32_t gray = 0, isPNG = 0;
-    int w = 0, ctx = 0, col = 0, line = 0, x = 0, filter = 0, jump = 0;
-    int framePos = 0, prevFramePos = 0, frameWidth = 0, prevFrameWidth = 0;
+    uint32_t lastPos = 0;
+    uint32_t lastWasPNG = 0;
+    uint32_t gray = 0;
+    uint32_t isPNG = 0;
+    int w = 0;
+    int ctx = 0;
+    int col = 0;
+    int line = 0;
+    int x = 0;
+    int filter = 0;
+    int jump = 0;
+    int framePos = 0;
+    int prevFramePos = 0;
+    int frameWidth = 0;
+    int prevFrameWidth = 0;
     bool filterOn = false;
     int columns[2] = {1, 1}, column[2] {};
-    uint8_t mapCtxs[nSM1] = {0}, pOLS[nOLS] = {0};
+    uint8_t mapContexts[nSM1] = {0};
+    uint8_t pOLS[nOLS] = {0};
     static constexpr double lambda[nOLS] = {0.996, 0.87, 0.93, 0.8, 0.9};
     static constexpr int num[nOLS] = {32, 12, 15, 10, 14};
     OLS<double, uint8_t> ols[nOLS] = {{num[0], 1, lambda[0]},

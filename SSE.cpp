@@ -9,7 +9,7 @@ SSE::SSE(ModelStats *st) : stats(st), Text {{{0x10000, 24}, {0x10000, 24}, {0x10
 
 auto SSE::p(int pr0) -> int {
   const uint8_t c0 = shared->c0;
-  const uint8_t bpos = shared->bitPosition;
+  const uint8_t bitPosition = shared->bitPosition;
   const uint32_t c4 = shared->c4;
   int pr = 0;
   int pr1 = 0;
@@ -20,7 +20,7 @@ auto SSE::p(int pr0) -> int {
     case TEXT_EOL: {
       int limit = 0x3FFU >> (static_cast<int>(stats->blPos < 0xFFF) * 2);
       pr = Text.APMs[0].p(pr0, (c0 << 8U) | (stats->Text.mask & 0xFU) | ((stats->misses & 0xFU) << 4U), limit);
-      pr1 = Text.APMs[1].p(pr0, finalize64(hash(bpos, stats->misses & 3U, c4 & 0xffffU, stats->Text.mask >> 4U), 16), limit);
+      pr1 = Text.APMs[1].p(pr0, finalize64(hash(bitPosition, stats->misses & 3U, c4 & 0xffffU, stats->Text.mask >> 4U), 16), limit);
       pr2 = Text.APMs[2].p(pr0, finalize64(hash(c0, stats->Match.expectedByte, stats->Match.length3), 16), limit);
       pr3 = Text.APMs[3].p(pr0, finalize64(hash(c0, c4 & 0xffffU, stats->Text.firstLetter), 16), limit);
 
@@ -58,7 +58,7 @@ auto SSE::p(int pr0) -> int {
       int limit = 0x3FFU >> (static_cast<int>(stats->blPos < 0xFFF) * 4);
       pr = Image.Gray.APMs[0].p(pr0, (c0 << 4) | (stats->misses & 0xFU), limit);
       pr1 = Image.Gray.APMs[1].p(pr, (c0 << 8) | stats->Image.ctx, limit);
-      pr2 = Image.Gray.APMs[2].p(pr0, bpos | (stats->Image.ctx & 0xF8U) | (stats->Match.expectedByte << 8U), limit);
+      pr2 = Image.Gray.APMs[2].p(pr0, bitPosition | (stats->Image.ctx & 0xF8U) | (stats->Match.expectedByte << 8U), limit);
 
       pr0 = (2 * pr0 + pr1 + pr2 + 2) >> 2U;
       pr = (pr + pr0 + 1) >> 1U;

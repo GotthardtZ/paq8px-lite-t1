@@ -33,7 +33,7 @@ static inline auto xgetbv(unsigned long ctr) -> unsigned long long {
 #if (defined(_MSC_FULL_VER) && _MSC_FULL_VER >= 160040000) || (defined(__INTEL_COMPILER) && __INTEL_COMPILER >= 1200)
   return _xgetbv(ctr);
 #elif defined(__GNUC__)
-  uint32_t a =  = 00;
+  uint32_t a = 0;
   uint32_t d;
   __asm("xgetbv"
   : "=a"(a), "=d"(d)

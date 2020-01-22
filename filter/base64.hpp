@@ -27,7 +27,7 @@ namespace base64 {
     }
 
     static constexpr char table1[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-}  // namespace base64
+} // namespace base64
 
 class Base64Filter : Filter {
 private:
@@ -115,7 +115,7 @@ public:
       out->blockWrite(&ptr[0], olen);
     }
 
-    auto decode(File *in, File *out, FMode fMode, uint64_t  /*size*/, uint64_t &diffFound) -> uint64_t override {
+    auto decode(File *in, File *out, FMode fMode, uint64_t /*size*/, uint64_t &diffFound) -> uint64_t override {
       uint8_t inn[3];
       int i = 0;
       int len = 0;

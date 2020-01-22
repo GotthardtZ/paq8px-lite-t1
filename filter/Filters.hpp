@@ -84,8 +84,7 @@
 static auto isGrayscalePalette(File *in, int n = 256, int isRGBA = 0) -> bool {
   uint64_t offset = in->curPos();
   int stride = 3 + isRGBA;
-  int
-  static_cast<int>res = (n > 0) << 8U;
+  int res = (n > 0) << 8U;
   int order = 1;
   for( int i = 0; (i < n * stride) && ((res >> 8U) != 0); i++ ) {
     int b = in->getchar();
@@ -128,12 +127,11 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
   uint64_t start = in->curPos();
 
   // For EXE detection
-  Array<int> absPos(256);
-  Array<int> // CALL/JMP abs. addr. low byte -> last offset
-          relPos(256); // CALL/JMP relative addr. low byte -> last offset
-  int e8e9count = 0; // number of consecutive CALL/JMPs
-  int e8e9pos = 0; // offset of first CALL or JMP instruction
-  int e8e9last = 0; // offset of most recent CALL or JMP
+  Array<int> absPos(256); /**< CALL/JMP abs. address. low byte -> last offset */
+  Array<int> relPos(256); /**< CALL/JMP relative address. low byte -> last offset */
+  int e8e9count = 0; /**< number of consecutive CALL/JMPs */
+  int e8e9pos = 0; /**< offset of first CALL or JMP instruction */
+  int e8e9last = 0; /**< offset of most recent CALL or JMP */
 
   int soi = 0;
   int sof = 0;
@@ -1411,7 +1409,7 @@ static void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, S
   uint64_t nextBlockStart = 0;
   uint64_t textStart = 0;
   uint64_t textEnd = 0;
-  BlockType nextBlockType = 0;
+  BlockType nextBlockType;
   BlockType nextBlockTypeBak = DEFAULT; //initialized only to suppress a compiler warning, will be overwritten
   uint64_t bytesToGo = blockSize;
   TextParserStateInfo *textParser = new TextParserStateInfo();
@@ -1519,7 +1517,7 @@ static void compressfile(const char *filename, uint64_t fileSize, Encoder &en, b
 }
 
 static auto decompressRecursive(File *out, uint64_t blockSize, Encoder &en, FMode mode, int recursionLevel) -> uint64_t {
-  BlockType type = 0;
+  BlockType type;
   uint64_t len = 0;
   uint64_t i = 0;
   uint64_t diffFound = 0;

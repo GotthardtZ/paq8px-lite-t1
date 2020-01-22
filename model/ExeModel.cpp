@@ -68,23 +68,23 @@ void ExeModel::update() {
       }
 
       if((op.o16 = (op.code == OP_OSIZE))) {
-        state = Pref_Op_Size;
+        state = PrefOpSize;
       } else if( op.code == OP_2BYTE ) {
-        state = Pref_MultiByte_Op;
+        state = PrefMultiByteOp;
       } else {
         readFlags(op, state);
       }
       brkCtx = hash(2, state, op.code, (opCategoryMask & categoryMask), opN(cache, 1) & ((ModRM_mod | ModRM_reg | ModRM_rm) << ModRMShift));
       break;
     }
-    case Pref_Op_Size: {
+    case PrefOpSize: {
       op.code = shared->c1;
       applyCodeAndSetFlag(op, operandSizeOverride);
       readFlags(op, state);
       brkCtx = hash(3, state);
       break;
     }
-    case Pref_MultiByte_Op: {
+    case PrefMultiByteOp: {
       op.code = shared->c1;
       op.data |= multiByteOpcode;
 
@@ -171,12 +171,12 @@ void ExeModel::update() {
                     ((op.bytesRead > 1) ? (buf(op.bytesRead) << 8U) : 0) | ((op.bytesRead) != 0u ? shared->c1 : 0));
       break;
     }
-    case Read8_ModRM: {
+    case Read8ModRm: {
       processMode(op, state);
       brkCtx = hash(13, state);
       break;
     }
-    case Read16_f: {
+    case Read16F: {
       if( ++op.bytesRead == 2 ) {
         op.bytesRead = 0;
         processFlags2(op, state);
@@ -184,7 +184,7 @@ void ExeModel::update() {
       brkCtx = hash(14, state);
       break;
     }
-    case Read32_ModRM: {
+    case Read32ModRm: {
       op.data |= regDWordDisplacement;
       if( ++op.bytesRead == 4 ) {
         op.bytesRead = 0;
@@ -364,7 +364,7 @@ void ExeModel::processFlags2(ExeModel::Instruction &op, ExeModel::ExeState &stat
 void ExeModel::processFlags(ExeModel::Instruction &op, ExeModel::ExeState &state) {
   if( op.code == OP_CALLF || op.code == OP_JMPF || op.code == OP_ENTER ) {
     op.bytesRead = 0;
-    state = Read16_f;
+    state = Read16F;
     return; //must exit, ENTER has ModRM too
   }
   processFlags2(op, state);
@@ -390,10 +390,10 @@ void ExeModel::readFlags(ExeModel::Instruction &op, ExeModel::ExeState &state) {
 
 void ExeModel::processModRm(ExeModel::Instruction &op, ExeModel::ExeState &state) {
   if((op.ModRM & ModRM_mod) == 0x40 ) {
-    state = Read8_ModRM; //register+byte displacement
+    state = Read8ModRm; //register+byte displacement
   } else if((op.ModRM & ModRM_mod) == 0x80 || (op.ModRM & (ModRM_mod | ModRM_rm)) == 0x05 ||
             (op.ModRM < 0x40 && (op.SIB & SIB_base) == 0x05)) {
-    state = Read32_ModRM; //register+dword displacement
+    state = Read32ModRm; //register+dword displacement
     op.bytesRead = 0;
   } else {
     processMode(op, state);

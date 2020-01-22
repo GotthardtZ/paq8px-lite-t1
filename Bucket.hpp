@@ -77,7 +77,7 @@ public:
       __m128i lastX = _mm_unpacklo_epi64(lastL, lastH); // mostRecentlyUsed&15 mostRecentlyUsed>>4
       __m128i eq0 = _mm_cmpeq_epi8(lastX, vm); // compare values
 
-      eq0 = _mm_or_si128(eq0, _mm_srli_si128 (eq0, 8));    //or low values with high
+      eq0 = _mm_or_si128(eq0, _mm_srli_si128 (eq0, 8));    // or low values with high
 
       lastX = _mm_and_si128(one1, eq0);                //set to 1 if eq
       __m128i sum1 = _mm_sad_epu8(lastX, _mm_setzero_si128());        // count values, abs(a0 - b0) + abs(a1 - b1) .... up to b8

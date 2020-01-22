@@ -55,7 +55,7 @@ static auto encodeGif(File *in, File *out, uint64_t len, int &headerSize) -> int
     int shift = 0;
     int buffer = 0;
     int blockSize = 0;
-    int maxcode = (1 << codeSize) + 1;
+    int maxcode = (1U << codeSize) + 1;
     int last = -1;
     Array<int> dict(4096);
     LZW_RESET
@@ -91,9 +91,9 @@ static auto encodeGif(File *in, File *out, uint64_t len, int &headerSize) -> int
           } else {
             int j = (code <= maxcode ? code : last);
             int size = 1;
-            while( j >= (1 << codeSize)) {
-              output[4096 - (size++)] = dict[j] & 255;
-              j = dict[j] >> 8;
+            while( j >= (1U << codeSize)) {
+              output[4096 - (size++)] = dict[j] & 255U;
+              j = dict[j] >> 8U;
             }
             output[4096 - size] = j;
             if( phase == 1 ) {

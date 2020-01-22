@@ -94,7 +94,7 @@ void RecordModel::mix(Mixer &m) {
             mayBeImg24B = (runLength[0] > 30 && (runLength[0] % 3) == 0);
             nTransition = 0;
           } else {
-            // we found the same length again, that's shared->buf.getpos()itive reinforcement that
+            // we found the same length again, that's positive reinforcement that
             // this really is the correct record size, so give it a little boost
             rCount[i] >>= 2U;
           }
@@ -132,7 +132,7 @@ void RecordModel::mix(Mixer &m) {
     depending on whether they're to be trimmed or they're null-terminated.
     That means we can guess the length of the string field by looking
     for small repetitions of one of these padding bytes followed by a
-    different byte. By storing the last shared->buf.getpos()ition where this transition
+    different byte. By storing the last position where this transition
     occurred, and what was the padding byte, we are able to model these
     runs of padding bytes.
     Special care is taken to skip record structures of less than 9 bytes,
@@ -142,7 +142,7 @@ void RecordModel::mix(Mixer &m) {
     to be the general case. But with integers, we can't be reasonably sure
     that a number won't have 3 or more 0's just before a final non-zero MSB.
     And with such simple structures, there's probably no need to be fancy
-    anyway
+    anyway.
     */
 
     if( col == 0u ) {

@@ -33,7 +33,7 @@ void ListOfFiles::addChar(char c) {
       if( c == '/' || c == '\\' ) {
         quit("For security reasons absolute paths are not allowed in the file list.");
       }
-      // TODO(epsteina): prohibit parent folder references in path ('/../')
+      // TODO: prohibit parent folder references in path ('/../')
     }
     if( c == 0 || c == ':' || c == '?' || c == '*' ) {
       printf("\nIllegal character ('%c') in file list.", c);

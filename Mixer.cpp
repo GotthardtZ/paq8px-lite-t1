@@ -28,7 +28,7 @@ void Mixer::set(const uint32_t cx, const uint32_t range, const int rate) {
   }
   cxt[numContexts++] = base + cx;
   base += range;
-//#ifndef DNDEBUG
+//#ifndef NDEBUG
 //  printf("numContexts: %d base: %d\n", numContexts, range); //for debugging: how many input sets do we have?
 //#endif
 }

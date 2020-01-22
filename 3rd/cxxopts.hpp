@@ -603,7 +603,6 @@ namespace cxxopts {
 
         [[nodiscard]] auto count() const noexcept -> size_t;
 
-        // TODO(epsteina): maybe default options should count towards the number of arguments
         [[nodiscard]] auto hasDefault() const noexcept -> bool;
 
         template<typename T>

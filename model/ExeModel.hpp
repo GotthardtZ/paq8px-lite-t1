@@ -511,18 +511,20 @@ class ExeModel {
         REP_STR = 0xF3,
     };
 
+    /**
+     * 1-byte opcodes of special interest (for one reason or another)
+     */
     enum Opcodes {
-        // 1-byte opcodes of special interest (for one reason or another)
-                OP_2BYTE = 0x0f, // start of 2-byte opcode
-        OP_OSIZE = 0x66, // operand size prefix
-        OP_CALLF = 0x9a, OP_RETNI = 0xc2, // ret near+immediate
+        OP_2BYTE = 0x0f, /**< start of 2-byte opcode */
+        OP_OSIZE = 0x66, /**< operand size prefix */
+        OP_CALLF = 0x9a, OP_RETNI = 0xc2, /**< ret near+immediate */
         OP_RETN = 0xc3, OP_ENTER = 0xc8, OP_INT3 = 0xcc, OP_INTO = 0xce, OP_CALLN = 0xe8, OP_JMPF = 0xea, OP_ICEBP = 0xf1,
     };
 
     enum ExeState {
         Start = 0,
-        Pref_Op_Size = 1,
-        Pref_MultiByte_Op = 2,
+        PrefOpSize = 1,
+        PrefMultiByteOp = 2,
         ParseFlags = 3,
         ExtraFlags = 4,
         ReadModRM = 5,
@@ -532,9 +534,9 @@ class ExeModel {
         Read8 = 9,
         Read16 = 10,
         Read32 = 11,
-        Read8_ModRM = 12,
-        Read16_f = 13,
-        Read32_ModRM = 14,
+        Read8ModRm = 12,
+        Read16F = 13,
+        Read32ModRm = 14,
         Error = 15,
     };
 

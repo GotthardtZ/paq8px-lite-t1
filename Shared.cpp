@@ -34,7 +34,6 @@ void Shared::reset() {
 }
 
 void Shared::setLevel(uint8_t l) {
-  printf("Level = %d\n", l);
   level = l;
   mem = 65536ULL << level;
 }
