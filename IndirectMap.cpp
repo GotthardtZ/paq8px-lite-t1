@@ -1,0 +1,45 @@
+#include "IndirectMap.hpp"
+#include "Stretch.hpp"
+
+IndirectMap::IndirectMap(const int bitsOfContext, const int inputBits, const int scale, const int limit) : data(
+        (1ULL << bitsOfContext) * ((1ULL << inputBits) - 1)), sm {1, 256, 1023, StateMap::BitHistory}, mask((1U << bitsOfContext) - 1),
+        maskBits(bitsOfContext), stride((1U << inputBits) - 1), bTotal(inputBits), scale(scale) {
+#ifndef NDEBUG
+  printf("Created IndirectMap with bitsOfContext = %d, inputBits = %d, scale = %d, limit = %d\n", bitsOfContext, inputBits, scale, limit);
+#endif
+  assert(inputBits > 0 && inputBits <= 8);
+  assert(bitsOfContext + inputBits <= 24);
+  cp = &data[0];
+  setDirect(0);
+  sm.setLimit(limit);
+}
+
+void IndirectMap::setDirect(const uint32_t ctx) {
+  context = (ctx & mask) * stride;
+  bCount = b = 0;
+}
+
+void IndirectMap::set(const uint64_t ctx) {
+  context = (finalize64(ctx, maskBits)) * stride;
+  bCount = b = 0;
+}
+
+void IndirectMap::update() {
+  INJECT_SHARED_y
+  StateTable::update(cp, y, rnd);
+  b += static_cast<unsigned int>((y != 0U) && b > 0);
+}
+
+void IndirectMap::setScale(const int Scale) { this->scale = Scale; }
+
+void IndirectMap::mix(Mixer &m) {
+  shared->updateBroadcaster->subscribe(this);
+  cp = &data[context + b];
+  const uint8_t state = *cp;
+  const int p1 = sm.p1(state);
+  m.add((stretch(p1) * scale) >> 8U);
+  m.add(((p1 - 2048) * scale) >> 9U);
+  bCount++;
+  b += b + 1;
+  assert(bCount <= bTotal);
+}
