@@ -24,9 +24,9 @@ private:
     Shared *shared = Shared::getInstance();
     ModelStats *stats;
     enum Parameters : uint32_t {
-        MaxExtend = 0, // longest allowed match expansion // warning: larger value -> slowdown
-        MinLen = 5, // minimum required match length
-        StepSize = 2, // additional minimum length increase per higher order hash
+        MaxExtend = 0, /**< longest allowed match expansion // warning: larger value -> slowdown */
+        MinLen = 5, /**< minimum required match length */
+        StepSize = 2, /**< additional minimum length increase per higher order hash */
     };
     Array<uint32_t> table;
     StateMap stateMaps[nST];

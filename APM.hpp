@@ -11,13 +11,13 @@
  */
 class APM : public AdaptiveMap {
 private:
-    const int N; // Number of contexts
+    const int N; /**< Number of contexts */
     const int steps;
-    int cxt; // context index of last prediction
+    int cxt; /**< context index of last prediction */
     UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 public:
     /**
-     * APM a(n,STEPS) creates with n contexts using 4*STEPS*n bytes memory.
+     * Creates with @ref n contexts using 4*s*n bytes memory.
      * @param n the number of contexts
      * @param s the number of steps
      */
@@ -29,12 +29,12 @@ public:
     void update() override;
 
     /**
-     * a.p(pr, cx, limit) returns a new probability (0..4095) like with StateMap.
+     * Returns a new probability (0..4095) like with @ref StateMap.
      * cx=(0..n-1) is the context.
      * pr=(0..4095) is considered part of the context.
-     * The output is computed by interpolating pr into STEPS ranges nonlinearly
-     * with smaller ranges near the ends.  The initial output is pr.
-     * limit=(0..1023): set a lower limit (like 255) for faster adaptation.
+     * The output is computed by interpolating @ref pr into @ref steps ranges nonlinearly
+     * with smaller ranges near the ends. The initial output is pr.
+     * lim=(0..1023): set a lower limit (like 255) for faster adaptation.
      * @param pr the initial probability. Considered part of the context.
      * @param cx the context
      * @param lim limit; lower limit means faster adaptation

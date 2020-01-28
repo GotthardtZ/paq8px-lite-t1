@@ -42,7 +42,6 @@ private:
     uint32_t threshold {}; /**< cloning threshold parameter: fixed point number like c0,c1 */
     uint32_t thresholdFine {}; /**< "threshold" scaled by 11 bits used for increasing the threshold in finer steps */
     uint32_t extra {}; /**< this value is used for approximating state graph maturity level when the state graph is already full */
-    // this is the number of skipped cloning events when the counts were already large enough (>1.0) */
 
     /**
      * Helper function: adaptively increment a counter
@@ -66,6 +65,10 @@ public:
      * Update state graph.
      */
     void update();
+    /**
+     * Determine if the state graph is full or not.
+     * @return
+     */
     [[nodiscard]] auto isFull() const -> bool;
     [[nodiscard]] auto pr1() const -> int;
     auto pr2() -> int;

@@ -4,7 +4,6 @@
 #include "../Array.hpp"
 #include "../Encoder.hpp"
 #include "../Shared.hpp"
-#include "../UTF8.hpp"
 #include "../file/File.hpp"
 #include "../file/FileDisk.hpp"
 #include "../file/FileTmp.hpp"
@@ -118,12 +117,13 @@ static auto isGrayscalePalette(File *in, int n = 256, int isRGBA = 0) -> bool {
 static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> BlockType {
   Shared *shared = Shared::getInstance();
   TextParserStateInfo *textParser = new TextParserStateInfo();
-  // TODO(epsteina): Large file support
+  // TODO: Large file support
   int n = static_cast<int>(blockSize);
+  // last 16 bytes
   uint32_t buf3 = 0;
   uint32_t buf2 = 0;
   uint32_t buf1 = 0;
-  uint32_t buf0 = 0; // last 16 bytes
+  uint32_t buf0 = 0;
   uint64_t start = in->curPos();
 
   // For EXE detection
@@ -1188,9 +1188,9 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
 
     // Detect text
     // This is different from the above detection routines: it's a negative detection (it detects a failure)
-    uint32_t t = utf8StateTable[c];
-    textParser->UTF8State = utf8StateTable[256 + textParser->UTF8State + t];
-    if( textParser->UTF8State == UTF_8_ACCEPT ) { // proper end of a valid utf8 sequence
+    uint32_t t = TextParserStateInfo::utf8StateTable[c];
+    textParser->UTF8State = TextParserStateInfo::utf8StateTable[256 + textParser->UTF8State + t];
+    if( textParser->UTF8State == TextParserStateInfo::utf8Accept ) { // proper end of a valid utf8 sequence
       if( c == NEW_LINE ) {
         if(((buf0 >> 8) & 0xff) != CARRIAGE_RETURN ) {
           textParser->setEolType(2); // mixed or LF-only
@@ -1202,9 +1202,9 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
       if( textParser->invalidCount == 0 ) {
         textParser->setEnd(i); // a possible end of block position
       }
-    } else if( textParser->UTF8State == UTF_8_REJECT ) { // illegal state
+    } else if( textParser->UTF8State == TextParserStateInfo::utf8Reject ) { // illegal state
       textParser->invalidCount = textParser->invalidCount * (TEXT_ADAPT_RATE - 1) / TEXT_ADAPT_RATE + TEXT_ADAPT_RATE;
-      textParser->UTF8State = UTF_8_ACCEPT; // reset state
+      textParser->UTF8State = TextParserStateInfo::utf8Accept; // reset state
       if( textParser->validLength() < TEXT_MIN_SIZE ) {
         textParser->reset(i + 1); // it's not text (or not long enough) - start over
       } else if( textParser->invalidCount >= TEXT_MAX_MISSES * TEXT_ADAPT_RATE ) {

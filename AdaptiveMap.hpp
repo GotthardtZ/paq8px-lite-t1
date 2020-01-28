@@ -13,9 +13,9 @@
 class AdaptiveMap : protected IPredictor {
 protected:
     Shared *shared = Shared::getInstance();
-    Array<uint32_t> t; // cxt -> prediction in high 22 bits, count in low 10 bits
+    Array<uint32_t> t; /**< cxt -> prediction in high 22 bits, count in low 10 bits */
     int limit;
-    int *dt; // Pointer to division table
+    int *dt; /**< Pointer to division table */
     AdaptiveMap(int n, int lim);
     ~AdaptiveMap() override = default;
     void update(uint32_t *p);

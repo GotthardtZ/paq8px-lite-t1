@@ -91,6 +91,7 @@ static auto dotProductSimdNone(const short *const t, const short *const w, int n
 }
 
 static void trainSimdNone(const short *const t, short *const w, int n, const int err) {
+//  printf("t = %llu, w = %llu, n = %d, err = %d\n", t, w, n, err);
   while((n -= 1) >= 0 ) {
     int wt = w[n] + ((((t[n] * err * 2) >> 16U) + 1) >> 1U);
     if( wt < -32768 ) {

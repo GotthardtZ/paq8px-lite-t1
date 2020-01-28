@@ -16,22 +16,22 @@
 class APM1 : IPredictor {
 private:
     Shared *shared = Shared::getInstance();
-    int index; // last p, context
-    const int n; // number of contexts
-    Array<uint16_t> t; // [n][33]:  p, context -> p
+    int index; /**< last p, context */
+    const int n; /**< number of contexts */
+    Array<uint16_t> t; /**< [n][33]:  p, context -> p */
     const int rate;
 
 public:
     /**
      * Creates an instance with @ref n contexts and learning rate @ref r.
-     * rate determines the learning rate. Smaller = faster, must be in the range (0, 32).
+     * @ref r determines the learning rate. Smaller = faster, must be in the range (0, 32).
      * Uses 66*n bytes memory.
      * @param n the number of contexts
      * @param r the learning rate
      */
     APM1(int n, int r);
     /**
-     * a.p(pr, cx) returns adjusted probability in context @ref cx (0 to n-1).
+     * Returns adjusted probability in context @ref cx (0 to n-1).
      * @param pr initial (pre-adjusted) probability
      * @param cxt the context
      * @return adjusted probability
