@@ -769,14 +769,14 @@ auto main_utf8(int argc, char **argv) -> int {
   return 0;
 }
 
-auto main(int argc, char **argv) -> int {
-#ifdef WINDOWS
-  // On Windows, argv is encoded in the effective codepage, therefore unsuitable for acquiring command line arguments (file names
 #ifdef WINDOWS
 #include "shellapi.h"
 #pragma comment(lib,"shell32.lib")
 #endif
 
+auto main(int argc, char **argv) -> int {
+#ifdef WINDOWS
+  // On Windows, argv is encoded in the effective codepage, therefore unsuitable for acquiring command line arguments (file names
   // in our case) not representable in that particular codepage.
   // -> We will recreate argv as UTF8 (like in Linux)
   uint32_t oldcp = GetConsoleOutputCP();
