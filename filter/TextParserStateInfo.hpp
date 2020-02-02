@@ -9,6 +9,7 @@
 #define TEXT_ADAPT_RATE 256 /**< smaller (like 32) = illegal sequences are allowed to come more often, larger (like 1024) = more rigorous detection */
 
 struct TextParserStateInfo {
+public:
     Array<uint64_t> _start;
     Array<uint64_t> _end; /**< position of last char with a valid UTF8 state: marks the end of the detected TEXT block */
     Array<uint32_t> _EOLType; /**< 0: none or CR-only;   1: CRLF-only (applicable to EOL transform);   2: mixed or LF-only */
@@ -45,7 +46,7 @@ struct TextParserStateInfo {
             12, 36, 12, 12, 12, 12, 12, 36, 12, 36, 12, 12, // state 84-95
             12, 36, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12 // state 96-108
     };
-    TextParserStateInfo();
+    static TextParserStateInfo *getInstance();
     void reset(uint64_t startPos);
     auto start() -> uint64_t;
     auto end() -> uint64_t;
@@ -55,6 +56,20 @@ struct TextParserStateInfo {
     auto validLength() -> uint64_t;
     void next(uint64_t startPos);
     void removeFirst();
+private:
+    TextParserStateInfo() : _start(1), _end(1), _EOLType(1) {}
+
+    /**
+     * Copy constructor is private so that it cannot be called
+     */
+    TextParserStateInfo(TextParserStateInfo const &) : _start(1), _end(1), _EOLType(1) {}
+
+    /**
+     * Assignment operator is private so that it cannot be called
+     */
+    TextParserStateInfo &operator=(TextParserStateInfo const &) { return *this; }
+
+    static TextParserStateInfo *mPInstance;
 };
 
 #endif //PAQ8PX_TEXTPARSERSTATEINFO_HPP

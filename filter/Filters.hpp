@@ -116,7 +116,7 @@ static auto isGrayscalePalette(File *in, int n = 256, int isRGBA = 0) -> bool {
 // Detect blocks
 static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> BlockType {
   Shared *shared = Shared::getInstance();
-  TextParserStateInfo *textParser = new TextParserStateInfo();
+  TextParserStateInfo *textParser = TextParserStateInfo::getInstance();
   // TODO: Large file support
   int n = static_cast<int>(blockSize);
   // last 16 bytes
@@ -1415,7 +1415,7 @@ static void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, S
   BlockType nextBlockType;
   BlockType nextBlockTypeBak = DEFAULT; //initialized only to suppress a compiler warning, will be overwritten
   uint64_t bytesToGo = blockSize;
-  TextParserStateInfo *textParser = new TextParserStateInfo();
+  TextParserStateInfo *textParser = TextParserStateInfo::getInstance();
   while( bytesToGo > 0 ) {
     if( type == TEXT || type == TEXT_EOL ) { // it was a split block in the previous iteration: TEXT -> DEFAULT -> ...
       nextBlockType = nextBlockTypeBak;
