@@ -128,8 +128,9 @@ public:
 #ifdef __GNUC__
       if( shared->chosenSimd == SIMD_AVX2 ) {
         updateAVX2(val);
-      } else {
+      } else
 #endif
+      {
         updateUnrolled(val);
       }
     }

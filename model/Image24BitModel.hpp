@@ -92,7 +92,7 @@ public:
     void update();
 
     /**
-     * New image
+     * New image.
      */
     void init();
     void setParam(int info0, uint32_t alpha0, uint32_t isPNG0);

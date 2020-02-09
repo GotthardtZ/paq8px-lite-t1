@@ -12,11 +12,9 @@
  */
 class FileTmp : public File {
 private:
-    //file content in ram
-    Array<uint8_t> *contentInRam; //content of file
+    Array<uint8_t> *contentInRam; /**< content of file */
     uint64_t filePos;
     uint64_t fileSize;
-    //file on disk
     FileDisk *fileOnDisk;
 
     void forgetContentInRam();

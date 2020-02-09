@@ -22,9 +22,19 @@ private:
     F complement;
     F eps;
     F prediction;
-    int s, d;
+    int s;
+    int d;
 
 public:
+    /**
+     *
+     * @param s
+     * @param d
+     * @param lRate
+     * @param rRate
+     * @param rho
+     * @param eps
+     */
     LMS(const int s, const int d, const F lRate, const F rRate, const F rho = (F) 0.95, const F eps = (F) 1e-3) : rates {lRate, rRate},
             rho(rho), complement(1.0f - rho), eps(eps), prediction(0.0f), s(s), d(d) {
       assert(s > 0 && d > 0);
@@ -32,10 +42,18 @@ public:
       reset();
     }
 
+    /**
+     *
+     */
     ~LMS() {
       delete weights, delete eg, delete buffer;
     }
 
+    /**
+     *
+     * @param sample
+     * @return
+     */
     auto predict(const T sample) -> F {
       memmove(&buffer[s + 1], &buffer[s], (d - 1) * sizeof(F));
       buffer[s] = sample;
@@ -46,6 +64,10 @@ public:
       return prediction;
     }
 
+    /**
+     *
+     * @param sample
+     */
     void update(const T sample) {
       const F error = sample - prediction;
       int i = 0;
@@ -63,6 +85,9 @@ public:
       buffer[0] = sample;
     }
 
+    /**
+     *
+     */
     void reset() {
       for( int i = 0; i < s + d; i++ ) {
         weights[i] = eg[i] = buffer[i] = 0.;

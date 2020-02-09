@@ -37,15 +37,14 @@ private:
     Random rnd;
     Array<DMCNode> t; /**< state graph */
     StateMap sm; /**< stateMap for bit history states */
-    uint32_t top {}; /**< index of first unallocated node (i.e. number of allocated nodes);  */
+    uint32_t top {}; /**< index of first unallocated node (i.e. number of allocated nodes) */
     uint32_t curr {}; /**< index of current node */
     uint32_t threshold {}; /**< cloning threshold parameter: fixed point number like c0,c1 */
     uint32_t thresholdFine {}; /**< "threshold" scaled by 11 bits used for increasing the threshold in finer steps */
     uint32_t extra {}; /**< this value is used for approximating state graph maturity level when the state graph is already full */
-    // this is the number of skipped cloning events when the counts were already large enough (>1.0) */
 
     /**
-     * Helper function: adaptively increment a counter
+     * Helper function: adaptively increment a counter.
      * @param x a fixed point number as c0, c1.
      * @param increment either 0 or 1.
      * @return
@@ -55,7 +54,7 @@ public:
     DmcModel(uint64_t dmcNodes, uint32_t thStart);
 
     /**
-     * Initialize the state graph to a bytewise order 1 model
+     * Initialize the state graph to a bytewise order 1 model.
      * See an explanation of the initial structure in:
      * http://wing.comp.nus.edu.sg/~junping/docs/njp-icita2005.pdf
      * @param thStart
@@ -66,6 +65,10 @@ public:
      * Update state graph.
      */
     void update();
+    /**
+     * Determine if the state graph is full or not.
+     * @return
+     */
     [[nodiscard]] auto isFull() const -> bool;
     [[nodiscard]] auto pr1() const -> int;
     auto pr2() -> int;

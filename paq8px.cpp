@@ -8,12 +8,10 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "184"  //update version here before publishing your changes
+#define PROGVERSION  "185"  //update version here before publishing your changes
 #define PROGYEAR     "2020"
 
 // TODO: make more models "optional"
-
-#define NHASHCONFIG  //Remove (comment out) this line to enable hash configuration from the command line (somewhat slower compression)
 
 #include "utils.hpp"
 
@@ -26,7 +24,6 @@
 #include "ProgramChecker.hpp"
 #include "Shared.hpp"
 #include "String.hpp"
-#include "UpdateBroadcaster.hpp"
 #include "file/FileName.hpp"
 #include "file/ListOfFiles.hpp"
 #include "file/fileUtils2.hpp"
@@ -771,6 +768,11 @@ auto main_utf8(int argc, char **argv) -> int {
 
   return 0;
 }
+
+#ifdef WINDOWS
+#include "shellapi.h"
+#pragma comment(lib,"shell32.lib")
+#endif
 
 auto main(int argc, char **argv) -> int {
 #ifdef WINDOWS

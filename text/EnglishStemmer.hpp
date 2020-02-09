@@ -176,7 +176,7 @@ private:
     auto step5(Word *w, uint32_t r1, uint32_t r2) -> bool;
 
 public:
-    inline auto isVowel(char c) -> bool final;
+    auto isVowel(char c) -> bool final;
     auto stem(Word *w) -> bool override;
 };
 

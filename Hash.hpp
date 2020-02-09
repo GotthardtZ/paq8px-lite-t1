@@ -77,17 +77,39 @@ static void loadHashesFromCmd(const char *hashesFromCommandline) {
 #define MUL64_12 hashes[12]
 #define MUL64_13 hashes[13]
 
-// Finalizers (range reduction)
-// - Keep the necessary number of bits after performing a
-//   (combination of) multiplicative hash(es)
+/**
+ * @todo Is it okay that this function hashes values in reverse order? If so, we can replace the below functions.
+ */
+template<uint64_t first = 0, uint64_t... rest>
+constexpr uint64_t hash() {
+  if( sizeof...(rest) == 0 ) {
+    return (first + 1) * hashes[0];
+  } else {
+    return ((first + 1) * hashes[sizeof...(rest)]) + hash<rest...>();
+  }
+}
 
+/**
+ * Finalizers (range reduction).
+ * Keep the necessary number of bits after performing a
+ * (combination of) multiplicative hash(es).
+ * @param hash
+ * @param hashBits
+ * @return
+ */
 static ALWAYS_INLINE
 auto finalize64(const uint64_t hash, const int hashBits) -> uint32_t {
   assert(uint32_t(hashBits) <= 32); // just a reasonable upper limit
   return uint32_t(hash >> (64 - hashBits));
 }
 
-// Get the next 8 or 16 bits following "hashBits" for checksum
+/**
+ * Get the next 8 or 16 bits following "hashBits" for checksum
+ * @param hash
+ * @param hashBits
+ * @param checksumBits
+ * @return
+ */
 static ALWAYS_INLINE
 uint64_t checksum64(const uint64_t hash, const int hashBits, const int checksumBits) {
   assert(0 < checksumBits && uint32_t(checksumBits) <= 32); //32 is just a reasonable upper limit
@@ -100,23 +122,6 @@ uint64_t checksum64(const uint64_t hash, const int hashBits, const int checksumB
 // - Hash 1-13 64-bit (usually small) integers
 //
 
-
-//template<int size, int idx = size, class dummy = void>
-//struct MM{
-//    static constexpr unsigned int hash(const char * str, unsigned int prev_crc = 0xFFFFFFFF)
-//    {
-//      return MM<size, idx+1>::crc32(str, (prev_crc >> 8) ^ crc_table[(prev_crc ^ str[idx]) & 0xFF] );
-//    }
-//};
-//
-//// This is the stop-recursion function
-//template<int size, class dummy>
-//struct MM<size, 0, dummy>{
-//    static constexpr unsigned int hash(const uint64_t x0)
-//    {
-//      return (x0 + 1) * PHI64;
-//    }
-//};
 
 static ALWAYS_INLINE
 auto hash(const uint64_t x0) -> uint64_t {
@@ -148,55 +153,48 @@ auto hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5;
 }
 
-static ALWAYS_INLINE
-uint64_t
+static ALWAYS_INLINE uint64_t
 hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6) {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5 +
          (x6 + 1) * MUL64_6;
 }
 
-static ALWAYS_INLINE
-uint64_t
+static ALWAYS_INLINE uint64_t
 hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
      const uint64_t x7) {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5 +
          (x6 + 1) * MUL64_6 + (x7 + 1) * MUL64_7;
 }
 
-static ALWAYS_INLINE
-uint64_t
+static ALWAYS_INLINE uint64_t
 hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
      const uint64_t x7, const uint64_t x8) {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5 +
          (x6 + 1) * MUL64_6 + (x7 + 1) * MUL64_7 + (x8 + 1) * MUL64_8;
 }
 
-static ALWAYS_INLINE
-auto
+static ALWAYS_INLINE auto
 hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
      const uint64_t x7, const uint64_t x8, const uint64_t x9) -> uint64_t {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5 +
          (x6 + 1) * MUL64_6 + (x7 + 1) * MUL64_7 + (x8 + 1) * MUL64_8 + (x9 + 1) * MUL64_9;
 }
 
-static ALWAYS_INLINE
-uint64_t
+static ALWAYS_INLINE uint64_t
 hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
      const uint64_t x7, const uint64_t x8, const uint64_t x9, const uint64_t x10) {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5 +
          (x6 + 1) * MUL64_6 + (x7 + 1) * MUL64_7 + (x8 + 1) * MUL64_8 + (x9 + 1) * MUL64_9 + (x10 + 1) * MUL64_10;
 }
 
-static ALWAYS_INLINE
-uint64_t
+static ALWAYS_INLINE uint64_t
 hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
      const uint64_t x7, const uint64_t x8, const uint64_t x9, const uint64_t x10, const uint64_t x11) {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5 +
          (x6 + 1) * MUL64_6 + (x7 + 1) * MUL64_7 + (x8 + 1) * MUL64_8 + (x9 + 1) * MUL64_9 + (x10 + 1) * MUL64_10 + (x11 + 1) * MUL64_11;
 }
 
-static ALWAYS_INLINE
-auto
+static ALWAYS_INLINE auto
 hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
      const uint64_t x7, const uint64_t x8, const uint64_t x9, const uint64_t x10, const uint64_t x11, const uint64_t x12) -> uint64_t {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5 +
@@ -204,12 +202,12 @@ hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3,
          (x12 + 1) * MUL64_12;
 }
 
-//
-// String hashing
-//
-
-// Call this function repeatedly for string hashing, or to combine
-// a hash value and a (non-hash) value, or two hash values
+/**
+ * Call this function repeatedly for string hashing, or to combine a hash value and a (non-hash) value, or two hash values.
+ * @param seed
+ * @param x
+ * @return
+ */
 static ALWAYS_INLINE
 uint64_t combine64(const uint64_t seed, const uint64_t x) {
   return hash(seed + x);

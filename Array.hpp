@@ -37,8 +37,8 @@ class Array {
 private:
     uint64_t usedSize {};
     uint64_t reservedSize {};
-    char *ptr {}; // Address of allocated memory (may not be aligned)
-    T *data;   // Aligned base address of the elements, (ptr <= T)
+    char *ptr {}; /**< Address of allocated memory (may not be aligned) */
+    T *data;   /**< Aligned base address of the elements, (ptr <= T) */
     ProgramChecker *programChecker = ProgramChecker::getInstance();
     void create(uint64_t requestedSize);
 
@@ -87,12 +87,24 @@ public:
      * @param x the element to append
      */
     void pushBack(const T &x);
-    Array(const Array &); //prevent copying
-    Array &operator=(const Array &); //prevent assignment
+
+    /**
+     * Prevent copying
+     */
+    Array(const Array &) { assert(false); }
+
+    /**
+     * Prevent assignment
+     * @return
+     */
+    Array &operator=(const Array &) { assert(false); }; // NOLINT(bugprone-unhandled-self-assignment,cert-oop54-cpp)
 };
 
 template<class T, const int Align>
 void Array<T, Align>::create(uint64_t requestedSize) {
+#ifndef NDEBUG
+  printf("Created Array of size %llu\n", requestedSize);
+#endif
   assert(isPowerOf2(Align));
   usedSize = reservedSize = requestedSize;
   if( requestedSize == 0 ) {
@@ -102,8 +114,9 @@ void Array<T, Align>::create(uint64_t requestedSize) {
   }
   const uint64_t bytesToAllocate = allocatedBytes();
   ptr = (char *) calloc(bytesToAllocate, 1);
-  if( ptr == nullptr )
+  if( ptr == nullptr ) {
     quit("Out of memory.");
+  }
   uint64_t pad = padding();
   data = (T *) (((uintptr_t) ptr + pad) & ~(uintptr_t) pad);
   assert(ptr <= (char *) data && (char *) data <= ptr + Align);

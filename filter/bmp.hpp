@@ -89,17 +89,17 @@ public:
             out->putChar(b);
             out->putChar(g);
             out->putChar(r);
-            if((j == 0) && ((i & 0xfu) == 0)) {
+            if((j == 0) && ((i & 0xFU) == 0)) {
               encoder->printStatus();
             }
           } else if( fMode == FCOMPARE ) {
-            if((b & 255) != out->getchar() && (diffFound == 0u)) {
+            if((b & 255U) != out->getchar() && (diffFound == 0u)) {
               diffFound = p + 1;
             }
             if( g != out->getchar() && (diffFound == 0u)) {
               diffFound = p + 2;
             }
-            if((r & 255) != out->getchar() && (diffFound == 0u)) {
+            if((r & 255U) != out->getchar() && (diffFound == 0u)) {
               diffFound = p + 3;
             }
             p += 3;

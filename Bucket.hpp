@@ -3,7 +3,15 @@
 
 #include <cstdint>
 #include <cstring>
+#include "utils.hpp"
+
+#ifdef WINDOWS
+#include <intrin.h>
+#else
+
 #include <immintrin.h>
+
+#endif
 
 static inline auto clz(uint32_t value) -> uint32_t {
   return __builtin_clz(value);
@@ -31,22 +39,7 @@ public:
      * @return
      */
     inline auto find(const uint16_t checksum) -> uint8_t * {
-//      if( checksums[mostRecentlyUsed & 15U] == checksum )
-//        return &bitState[mostRecentlyUsed & 15U][0];
-//      int worst = 0xFFFF, idx = 0;
-//      for( int i = 0; i < 7; ++i ) {
-//        if( checksums[i] == checksum ) {
-//          mostRecentlyUsed = mostRecentlyUsed << 4U | i;
-//          return &bitState[i][0];
-//        }
-//        if( bitState[i][0] < worst && (mostRecentlyUsed & 15U) != i && mostRecentlyUsed >> 4U != i ) {
-//          worst = bitState[i][0];
-//          idx = i;
-//        }
-//      }
-//      mostRecentlyUsed = 0xF0U | idx;
-//      checksums[idx] = checksum;
-//      return (uint8_t *) memset(&bitState[idx][0], 0, 7);
+#if defined(__SSSE3__)
       if( checksums[mostRecentlyUsed & 15U] == checksum ) {
         return &bitState[mostRecentlyUsed & 15U][0];
       }
@@ -95,6 +88,25 @@ public:
       mostRecentlyUsed = 0xF0U | idx;
       checksums[idx] = checksum;
       return static_cast<uint8_t *>(memset(&bitState[idx][0], 0, 7));
+#else
+      if( checksums[mostRecentlyUsed & 15U] == checksum ) {
+        return &bitState[mostRecentlyUsed & 15U][0];
+      }
+      int worst = 0xFFFF, idx = 0;
+      for( int i = 0; i < 7; ++i ) {
+        if( checksums[i] == checksum ) {
+          mostRecentlyUsed = mostRecentlyUsed << 4U | i;
+          return &bitState[i][0];
+        }
+        if( bitState[i][0] < worst && (mostRecentlyUsed & 15U) != i && mostRecentlyUsed >> 4U != i ) {
+          worst = bitState[i][0];
+          idx = i;
+        }
+      }
+      mostRecentlyUsed = 0xF0U | idx;
+      checksums[idx] = checksum;
+      return (uint8_t *) memset(&bitState[idx][0], 0, 7);
+#endif
     }
 };
 

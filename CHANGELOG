@@ -1605,9 +1605,17 @@ paq8px_v183:
   - hashed contexts were: 0-6, 8, 14; now: 1-7, 9, 14 (same in number, but generally longer)
 - Updated memory usage information displayed on help screen
 
-paq8px_v184:
+paq8px_v184: (
 2020.01.05
 - Split out most classes into individual .hpp files
 - Many (minor) code cleanup changes, e.g. initializing variables, removing signed bitwise operations, correcting typos, etc
 - Applied consistent code format
 - Began switching documentation to Doxygen format
+
+paq8px_v185:
+2020.02.09
+- Fixed requirement for AVX2. Now compiles regardless of supported vectorization level.
+- Fixed compilation on Windows.
+- Fixed compression regression with TextParserStateInfo.
+- Fixed compression regression caused by a clang-tidy "fix".
+

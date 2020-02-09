@@ -42,19 +42,18 @@ public:
 private:
     Shared *shared = Shared::getInstance();
     Random rnd;
-    const uint32_t c; // max number of contexts
-    Array<Bucket, 64> table; // bit histories for bits 0-1, 2-4, 5-7
-    // For 0-1, also contains run stats in bitState[][3] and byte history in bitState[][4..6]
-    Array<uint8_t *> bitState; // c pointers to current bit history states
-    Array<uint8_t *> bitState0; // First element of 7 element array containing bitState[i]
-    Array<uint8_t *> byteHistory; // c pointers to run stats plus byte history, 4 bytes, [RunStats,1..3]
-    Array<uint32_t> contexts; // c whole byte context hashes
-    Array<uint16_t> checksums; // c whole byte context checksums
+    const uint32_t c; /**< max number of contexts */
+    Array<Bucket, 64> table; /**< bit histories for bits 0-1, 2-4, 5-7. For 0-1, also contains run stats in bitState[][3] and byte history in bitState[][4..6] */
+    Array<uint8_t *> bitState; /**< @ref c pointers to current bit history states */
+    Array<uint8_t *> bitState0; /**< First element of 7 element array containing bitState[i] */
+    Array<uint8_t *> byteHistory; /**< @ref c pointers to run stats plus byte history, 4 bytes, [RunStats,1..3] */
+    Array<uint32_t> contexts; /**< @ref c whole byte context hashes */
+    Array<uint16_t> checksums; /**< @ref c whole byte context checksums */
     StateMap runMap;
     StateMap stateMap;
     StateMap bhMap8B;
     StateMap bhMap12B;
-    uint32_t index; // next context to set by set()
+    uint32_t index; /**< next context to set by @ref ContextMap2::set() */
     const uint32_t mask;
     const int hashBits;
     uint64_t validFlags;

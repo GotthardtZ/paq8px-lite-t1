@@ -52,8 +52,8 @@ public:
     }
 
     /**
-     * Adjust weights to minimize coding cost of last prediction
-     * m.update() trains the network where the expected output is the last bit (in the global variable y).
+     * Adjust weights to minimize coding cost of last prediction.
+     * Trains the network where the expected output is the last bit (in the global variable y).
      */
     void update() override {
       INJECT_SHARED_y

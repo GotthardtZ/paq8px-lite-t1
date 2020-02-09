@@ -14,6 +14,9 @@ Mixer::Mixer(const int n, const int m, const int s) : n(n), m(m), s(s), scaleFac
 }
 
 void Mixer::add(const int x) {
+#ifndef NDEBUG
+  printf("Mixer::add(%d)\n", x);
+#endif
   assert(nx < n);
   assert(x == short(x));
   tx[nx++] = static_cast<short>(x);
@@ -34,5 +37,7 @@ void Mixer::set(const uint32_t cx, const uint32_t range, const int rate) {
 }
 
 void Mixer::reset() {
-  nx = base = numContexts = 0;
+  nx = 0;
+  base = 0;
+  numContexts = 0;
 }

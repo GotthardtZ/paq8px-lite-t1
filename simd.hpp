@@ -16,14 +16,12 @@
 //#include <zmmintrin.h> //AVX512
 
 //define CPUID
-#ifdef _MSC_VER
+#if defined(__GNUC__)||defined(__clang__)
+#include <cpuid.h>
+#define cpuid(info, x) __cpuid_count(x, 0, (info)[0], (info)[1], (info)[2], (info)[3])
+#elif defined(_MSC_VER)
 #include <intrin.h>
 #define cpuid(info, x) __cpuidex(info, x, 0)
-#elif defined(__GNUC__)
-
-#include <cpuid.h>
-
-#define cpuid(info, x) __cpuid_count(x, 0, (info)[0], (info)[1], (info)[2], (info)[3])
 #else
 #error Unknown compiler
 #endif

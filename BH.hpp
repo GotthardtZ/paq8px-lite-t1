@@ -24,13 +24,13 @@
 template<uint64_t B>
 class BH {
     uint32_t searchLimit = 8;
-    Array<uint8_t> t; // elements
-    const uint32_t mask; // size-1
+    Array<uint8_t> t; /**< elements */
+    const uint32_t mask; /**< size-1 */
     const int hashBits;
 
 public:
     /**
-     * BH bh(n); creates n element table with b bytes each. n must be a power of 2.
+     * Creates @ref n element table with @ref b bytes each. @ref n must be a power of 2.
      * The first byte of each element is reserved for a checksum to detect collisions.
      * The remaining b-1 bytes are values, prioritized by the first value. This byte is 0 to mark an unused element.
      * @param n number of elements in the table
@@ -40,8 +40,8 @@ public:
     }
 
     /**
-     * bh[ctx] returns a pointer to the ctx'th element, such that
-     * bh[ctx][0] is a checksum of ctx, bh[ctx][1] is the priority, and
+     * Returns a pointer to the ctx'th element, such that
+     * bh[ctx][0] is a checksum of @ref ctx, bh[ctx][1] is the priority, and
      * bh[ctx][2..b-1] are other values (0-255).
      * @tparam B number of bytes
      * @param ctx index

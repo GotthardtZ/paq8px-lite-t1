@@ -1,6 +1,14 @@
 #include "TextParserStateInfo.hpp"
 
-TextParserStateInfo::TextParserStateInfo() : _start(1), _end(1), _EOLType(1) {}
+TextParserStateInfo *TextParserStateInfo::mPInstance = nullptr;
+
+TextParserStateInfo *TextParserStateInfo::getInstance() {
+  if( !mPInstance ) {
+    mPInstance = new TextParserStateInfo();
+  }
+
+  return mPInstance;
+}
 
 void TextParserStateInfo::reset(uint64_t startPos) {
   _start.resize(1);

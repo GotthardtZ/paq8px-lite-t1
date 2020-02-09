@@ -85,17 +85,15 @@ public:
 private:
     Shared *shared = Shared::getInstance();
     Random rnd;
-    const int c; // max number of contexts
-    Array<Bucket, 64> t; // bit histories for bits 0-1, 2-4, 5-7
-    // For 0-1, also contains a run count in bh[][4] and value in bh[][5]
-    // and pending update count in bh[7]
-    Array<uint8_t *> cp; // c pointers to current bit history
-    Array<uint8_t *> cp0; // First element of 7 element array containing cp[i]
-    Array<uint32_t> cxt; // c whole byte context hashes
-    Array<uint16_t> chk; // c whole byte context checksums
-    Array<uint8_t *> runP; // c [0..3] = count, value, unused, unused
-    StateMap sm; // c maps of state -> p
-    int cn; // next context to set by set()
+    const int c; /**< max number of contexts */
+    Array<Bucket, 64> t; /**< bit histories for bits 0-1, 2-4, 5-7. For 0-1, also contains a run count in bh[][4] and value in bh[][5] and pending update count in bh[7] */
+    Array<uint8_t *> cp; /**< c pointers to current bit history */
+    Array<uint8_t *> cp0; /**< First element of 7 element array containing cp[i] */
+    Array<uint32_t> cxt; /**< c whole byte context hashes */
+    Array<uint16_t> chk; /**< c whole byte context checksums */
+    Array<uint8_t *> runP; /**< c [0..3] = count, value, unused, unused */
+    StateMap sm; /**< c maps of state -> p */
+    int cn; /**< next context to set by set() */
     const uint32_t mask;
     const int hashBits;
     uint64_t validFlags;
@@ -103,14 +101,14 @@ private:
 
 public:
     /**
-     * Construct using m bytes of memory for c contexts
+     * Construct using @ref m bytes of memory for @ref c contexts
      * @param m bytes of memory to use
      * @param c number of contexts
      */
     ContextMap(uint64_t m, int c);
 
     /**
-     * Set next whole byte context to cx.
+     * Set next whole byte context to @ref cx.
      * @param cx
      */
     void set(uint64_t cx);

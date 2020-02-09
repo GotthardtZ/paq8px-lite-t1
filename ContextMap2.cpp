@@ -190,7 +190,7 @@ void ContextMap2::mix(Mixer &m) {
         m.add(((p1 - 2048) * scale) >> 9U);
         m.add((bitIsUncertain - 1) & st); // when both counts are nonzero add(0) otherwise add(st)
         const int p0 = 4095 - p1;
-        m.add((((p1 & static_cast<int>(-static_cast<int>(n0) == 0)) - (p0 & static_cast<int>(-static_cast<int>(n1) == 0))) * scale) >> 10U);
+        m.add((((p1 & (-!n0)) - (p0 & (-!n1))) * scale) >> 10U);
         order++;
       }
 

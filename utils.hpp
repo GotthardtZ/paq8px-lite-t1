@@ -284,6 +284,27 @@ static inline auto clamp4(const int px, const uint8_t n1, const uint8_t n2, cons
   return px;
 }
 
+#ifdef _MSC_VER
+#include <intrin.h>
+#ifndef __GNUC__
+
+inline int __builtin_clz( unsigned long v ) {
+  unsigned long r = 0;
+  if (_BitScanReverse(&r, v)) {
+    return 31 - r;
+  }
+  return 31;
+}
+
+inline int __builtin_ctz( unsigned long v ) {
+  unsigned long r = 0;
+  _BitScanForward(&r, v);
+  return (int) r;
+}
+#endif
+
+#endif
+
 /**
  * Returns floor(log2(x)).
  * 0/1->0, 2->1, 3->1, 4->2 ..., 30->4,  31->4, 32->5,  33->5
@@ -292,7 +313,6 @@ static inline auto clamp4(const int px, const uint8_t n1, const uint8_t n2, cons
  */
 static auto ilog2(uint32_t x) -> uint32_t {
 #ifdef _MSC_VER
-#include <intrin.h>
   DWORD tmp = 0;
   if (x != 0) _BitScanReverse(&tmp, x);
   return tmp;

@@ -12,7 +12,7 @@
  */
 struct DMCNode { // 12 bytes
 private:
-    uint32_t _nx0, _nx1; // packed: their higher 28 bits are nx0, nx1; the lower 4+4 bits give the bit history state byte
+    uint32_t _nx0, _nx1; /**< packed: their higher 28 bits are nx0, nx1; the lower 4+4 bits give the bit history state byte */
 
 public:
     uint16_t c0, c1;

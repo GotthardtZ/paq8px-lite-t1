@@ -37,7 +37,7 @@ private:
 
 public:
     static constexpr int MIXERINPUTS = nCtx * nSSM * SmallStationaryContextMap::MIXERINPUTS;
-    static constexpr int MIXERCONTEXTS = 4096 + 2048 + 2048 + 256 + 10; //8458
+    static constexpr int MIXERCONTEXTS = 4096 + 2048 + 2048 + 256 + 10; // 8458
     static constexpr int MIXERCONTEXTSETS = 5;
 
     explicit Audio8BitModel(ModelStats *st);

@@ -34,9 +34,9 @@ public:
 
       // Transform
       for( uint64_t offset = 0; offset < size; offset += block ) {
-        uint32_t size = min(uint32_t(size - offset), block);
-        int bytesRead = static_cast<int>(in->blockRead(&blk[0], size));
-        if( bytesRead != static_cast<int>(size)) {
+        uint32_t size1 = min(uint32_t(size - offset), block);
+        int bytesRead = static_cast<int>(in->blockRead(&blk[0], size1));
+        if( bytesRead != static_cast<int>(size1)) {
           quit("encodeExe read error");
         }
         for( int i = bytesRead - 1; i >= 5; --i ) {

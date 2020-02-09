@@ -6,15 +6,18 @@
 #include "utils.hpp"
 #include <immintrin.h>
 
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__clang__)
 
 __attribute__((target("avx2")))
 #endif
 static auto dotProductSimdAvx2(const short *const t, const short *const w, int n) -> int {
+#ifndef __AVX2__
+  return 0;
+#else
   __m256i sum = _mm256_setzero_si256();
 
   while((n -= 16) >= 0 ) {
-    __m256i tmp = _mm256_madd_epi16(*(__m256i *) &t[n], *(__m256i *) &w[n]);
+    __m256i tmp = _mm256_madd_epi16(*(__m256i * ) & t[n], *(__m256i * ) & w[n]);
     tmp = _mm256_srai_epi32(tmp, 8);
     sum = _mm256_add_epi32(sum, tmp);
   }
@@ -26,35 +29,43 @@ static auto dotProductSimdAvx2(const short *const t, const short *const w, int n
   newSum = _mm_add_epi32(newSum, _mm_srli_si128(newSum, 8));
   newSum = _mm_add_epi32(newSum, _mm_srli_si128(newSum, 4));
   return _mm_cvtsi128_si32(newSum);
+#endif
 }
 
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__clang__)
 
 __attribute__((target("avx2")))
 #endif
 static void trainSimdAvx2(const short *const t, short *const w, int n, const int e) {
+#ifndef __AVX2__
+  return;
+#else
   const __m256i one = _mm256_set1_epi16(1);
   const __m256i err = _mm256_set1_epi16(short(e));
 
   while((n -= 16) >= 0 ) {
-    __m256i tmp = _mm256_adds_epi16(*(__m256i *) &t[n], *(__m256i *) &t[n]);
+    __m256i tmp = _mm256_adds_epi16(*(__m256i * ) & t[n], *(__m256i * ) & t[n]);
     tmp = _mm256_mulhi_epi16(tmp, err);
     tmp = _mm256_adds_epi16(tmp, one);
     tmp = _mm256_srai_epi16(tmp, 1);
     tmp = _mm256_adds_epi16(tmp, *reinterpret_cast<__m256i *>(&w[n]));
     *reinterpret_cast<__m256i *>(&w[n]) = tmp;
   }
+#endif
 }
 
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__clang__)
 
 __attribute__((target("sse2")))
 #endif
 static auto dotProductSimdSse2(const short *const t, const short *const w, int n) -> int {
+#ifndef __SSE2__
+  return 0;
+#else
   __m128i sum = _mm_setzero_si128();
 
   while((n -= 8) >= 0 ) {
-    __m128i tmp = _mm_madd_epi16(*(__m128i *) &t[n], *(__m128i *) &w[n]);
+    __m128i tmp = _mm_madd_epi16(*(__m128i * ) & t[n], *(__m128i * ) & w[n]);
     tmp = _mm_srai_epi32(tmp, 8);
     sum = _mm_add_epi32(sum, tmp);
   }
@@ -62,24 +73,29 @@ static auto dotProductSimdSse2(const short *const t, const short *const w, int n
   sum = _mm_add_epi32(sum, _mm_srli_si128(sum, 8));
   sum = _mm_add_epi32(sum, _mm_srli_si128(sum, 4));
   return _mm_cvtsi128_si32(sum);
+#endif
 }
 
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__clang__)
 
 __attribute__((target("sse2")))
 #endif
 static void trainSimdSse2(const short *const t, short *const w, int n, const int e) {
+#ifndef __SSE2__
+  return 0;
+#else
   const __m128i one = _mm_set1_epi16(1);
   const __m128i err = _mm_set1_epi16(short(e));
 
   while((n -= 8) >= 0 ) {
-    __m128i tmp = _mm_adds_epi16(*(__m128i *) &t[n], *(__m128i *) &t[n]);
+    __m128i tmp = _mm_adds_epi16(*(__m128i * ) & t[n], *(__m128i * ) & t[n]);
     tmp = _mm_mulhi_epi16(tmp, err);
     tmp = _mm_adds_epi16(tmp, one);
     tmp = _mm_srai_epi16(tmp, 1);
     tmp = _mm_adds_epi16(tmp, *reinterpret_cast<__m128i *>(&w[n]));
     *reinterpret_cast<__m128i *>(&w[n]) = tmp;
   }
+#endif
 }
 
 static auto dotProductSimdNone(const short *const t, const short *const w, int n) -> int {
@@ -150,9 +166,9 @@ public:
     void add(int x);
 
     /**
-     *  m.set(cx, range) selects cx as one of range neural networks to
-     *  use.  0 <= cx < range. Should be called up to s times such
-     *  that the total of the ranges is <= m.
+     *  Selects @ref cx as one of @ref range neural networks to
+     *  use. 0 <= cx < range. Should be called up to @ref s times such
+     *  that the total of the ranges is <= @ref m.
      * @param cx
      * @param range
      * @param rate

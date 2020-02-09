@@ -18,7 +18,7 @@ private:
     static constexpr int numCommonWords = 10;
     const char *commonWords[numCommonWords] = {"der", "die", "das", "und", "sie", "ich", "mit", "sich", "auf", "nicht"};
     static constexpr int numEndings = 10;
-    static constexpr char endings[numEndings] = {'b', 'd', 'f', 'g', 'h', 'k', 'l', 'm', 'n', 't'}; //plus 'r' for words ending in 's'
+    static constexpr char endings[numEndings] = {'b', 'd', 'f', 'g', 'h', 'k', 'l', 'm', 'n', 't'}; /**< plus 'r' for words ending in 's' */
     static constexpr int numSuffixesStep1 = 6;
     const char *suffixesStep1[numSuffixesStep1] = {"em", "ern", "er", "e", "en", "es"};
     static constexpr int numSuffixesStep2 = 3;
@@ -35,7 +35,7 @@ private:
     auto step3(Word *w, uint32_t r1, uint32_t r2) -> bool;
 
 public:
-    inline auto isVowel(char c) -> bool final;
+    auto isVowel(char c) -> bool final;
     auto stem(Word *w) -> bool override;
 };
 
