@@ -20,7 +20,7 @@ auto LZWDictionary::findEntry(const int prefix, const int suffix) -> int {
     if( table[i] < 0 ) { //free slot?
       return -i - 1;
     }
-    if( dictionary[table[i]].prefix == prefix && dictionary[table[i]].suffix == suffix ) { //is it the entry we want?
+    if( dictionary[table[i]].prefix == prefix && dictionary[table[i]].suffix == suffix ) { // is it the entry we want?
       return table[i];
     }
     i -= offset;

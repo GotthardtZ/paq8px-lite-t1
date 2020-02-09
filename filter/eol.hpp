@@ -7,11 +7,11 @@
 #include <cstdint>
 
 /**
- * EOL transform
+ * End of line transform
  */
 class EolFilter : public Filter {
 public:
-    void encode(File *in, File *out, uint64_t size, int  /*info*/, int & /*headerSize*/) override {
+    void encode(File *in, File *out, uint64_t size, int /*info*/, int & /*headerSize*/) override {
       uint8_t b = 0;
       uint8_t pB = 0;
       for( int i = 0; i < static_cast<int>(size); i++ ) {

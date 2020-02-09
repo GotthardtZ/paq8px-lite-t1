@@ -64,9 +64,7 @@ static auto zlibInflateInit(z_streamp strm, int zh) -> int {
   if( zh == -1 ) {
     return inflateInit2(strm, -MAX_WBITS);
   }
-  {
-    return inflateInit(strm);
-  }
+  return inflateInit(strm);
 }
 
 MTFList mtf(81);

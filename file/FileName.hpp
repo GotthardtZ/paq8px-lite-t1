@@ -5,7 +5,7 @@
 #include "../String.hpp"
 
 /**
- * A class to represent a filename
+ * A class to represent a filename.
  */
 class FileName : public String {
 public:
@@ -15,7 +15,7 @@ public:
     void keepPath();
 
     /**
-     * prepare path string for screen output
+     * Prepare path string for screen output.
      */
     void replaceSlashes();
 };

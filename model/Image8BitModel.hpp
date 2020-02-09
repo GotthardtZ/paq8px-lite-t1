@@ -27,7 +27,7 @@ private:
 public:
     static constexpr int MIXERINPUTS =
             nSM * StationaryMap::MIXERINPUTS + nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS);
-    static constexpr int MIXERCONTEXTS = (2048 + 5) + 6 * 16 + 6 * 32 + 256 + 1024 + 64 + 128 + 256; // 4069
+    static constexpr int MIXERCONTEXTS = (2048 + 5) + 6 * 16 + 6 * 32 + 256 + 1024 + 64 + 128 + 256; /**< 4069 */
     static constexpr int MIXERCONTEXTSETS = 8;
 
     Shared *shared = Shared::getInstance();
@@ -47,7 +47,10 @@ public:
     uint8_t NNNNW = 0, NNNN = 0, NNNNE = 0;
     uint8_t NNNNN = 0;
     uint8_t NNNNNN = 0;
-    uint8_t px = 0, res = 0, prvFrmPx = 0, prvFrmPrediction = 0; // current PNG filter prediction, expected residual, corresponding pixel in previous frame
+    uint8_t px = 0; /**< current PNG filter prediction */
+    uint8_t res = 0; /**< expected residual */
+    uint8_t prvFrmPx = 0; /**< corresponding pixel in previous frame */
+    uint8_t prvFrmPrediction = 0; /**< prediction for corresponding pixel in previous frame */
     uint32_t lastPos = 0;
     uint32_t lastWasPNG = 0;
     uint32_t gray = 0;

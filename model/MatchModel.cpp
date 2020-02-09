@@ -143,8 +143,8 @@ void MatchModel::mix(Mixer &m) {
   //length=15..30: lengthIlog2=4
 
   const uint8_t length3 = min(lengthIlog2, 3); // 2 bits
-  const uint8_t rm = static_cast<const uint8_t>(lengthBak != 0 &&
-                                                length - lengthBak == 1); // predicting the first byte in recovery mode is still uncertain
+  const auto rm = static_cast<const uint8_t>(lengthBak != 0 &&
+                                             length - lengthBak == 1); // predicting the first byte in recovery mode is still uncertain
   const uint8_t length3Rm = length3 << 1U | rm; // 3 bits
 
   //bytewise contexts

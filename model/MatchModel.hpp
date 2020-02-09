@@ -36,12 +36,12 @@ private:
     IndirectContext<uint8_t> iCtx;
     uint32_t hashes[numHashes] {0};
     uint32_t ctx[nST] {0};
-    uint32_t length = 0; // rebased length of match (length=1 represents the smallest accepted match length), or 0 if no match
-    uint32_t index = 0; // points to next byte of match in buf, 0 when there is no match
-    uint32_t lengthBak = 0; // allows match recovery after a 1-byte mismatch
-    uint32_t indexBak = 0; //
-    uint8_t expectedByte = 0; // prediction is based on this byte (buf[index]), valid only when length>0
-    bool delta = false; // indicates that a match has just failed (delta mode)
+    uint32_t length = 0; /**< rebased length of match (length=1 represents the smallest accepted match length), or 0 if no match */
+    uint32_t index = 0; /**< points to next byte of match in buf, 0 when there is no match */
+    uint32_t lengthBak = 0; /**< allows match recovery after a 1-byte mismatch */
+    uint32_t indexBak = 0;
+    uint8_t expectedByte = 0; /**< prediction is based on this byte (buf[index]), valid only when length>0 */
+    bool delta = false; /**< indicates that a match has just failed (delta mode) */
     const uint32_t mask;
     const int hashBits;
     Ilog *ilog = Ilog::getInstance();

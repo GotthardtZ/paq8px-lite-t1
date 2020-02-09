@@ -23,9 +23,6 @@ void Mixer::add(const int x) {
 }
 
 void Mixer::set(const uint32_t cx, const uint32_t range, const int rate) {
-#ifndef NDEBUG
-  printf("Mixer::set(%d, %d, %d)\n", cx, range, rate);
-#endif
   assert(numContexts < s);
   assert(cx < range);
   assert(base + range <= m);

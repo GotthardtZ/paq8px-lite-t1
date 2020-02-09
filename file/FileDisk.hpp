@@ -6,7 +6,7 @@
 
 /**
  * This class is responsible for files on disk.
- * It simply passes function calls to stdio
+ * It simply passes function calls to stdio.
  */
 class FileDisk : public File {
 private:

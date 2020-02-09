@@ -46,7 +46,7 @@ class ExeModel {
                 fERR = 0xf, // denotes invalid opcodes
     };
 
-    // 1 byte opcodes
+    /**< 1 byte opcodes */
     static constexpr uint8_t table1[256] = {
             // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
             fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fNM | fBI, fNM | fDI, fNM | fNI, fNM | fNI, fMR | fNI, fMR | fNI, fMR | fNI,
@@ -86,7 +86,7 @@ class ExeModel {
             fNM | fNI, fNM | fNI, fMEXTRA, fMEXTRA, // f
     };
 
-    // 2 byte opcodes
+    /**< 2 byte opcodes */
     static constexpr uint8_t table2[256] = {
             // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
             fERR, fERR, fERR, fERR, fERR, fERR, fNM | fNI, fERR, fNM | fNI, fNM | fNI, fERR, fERR, fERR, fERR, fERR, fERR, // 0
@@ -125,7 +125,7 @@ class ExeModel {
             fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fERR, // f
     };
 
-    // 3 byte opcodes 0F38XX
+    /**< 3 byte opcodes 0F38XX */
     static constexpr uint8_t table3_38[256] = {
             // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
             fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI,
@@ -150,7 +150,7 @@ class ExeModel {
             fMR | fNI, fMR | fNI, fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, // f
     };
 
-    // 3 byte opcodes 0F3AXX
+    /**< 3 byte opcodes 0F3AXX */
     static constexpr uint8_t table3_3A[256] = {
             // 0       1       2       3       4       5       6       7       8       9       a       b       c       d       e       f
             fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, fMR | fBI, fMR | fBI, fMR | fBI, fMR | fBI, fMR | fBI, fMR | fBI, fMR | fBI,
@@ -172,7 +172,7 @@ class ExeModel {
             fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, fERR, // f
     };
 
-    // escape opcodes using ModRM byte to get more variants
+    /**< escape opcodes using ModRM byte to get more variants */
     static constexpr uint8_t tableX[32] = {
             // 0       1       2       3       4       5       6       7
             fMR | fBI, fERR, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, fMR | fNI, // escapes for 0xf6
@@ -554,32 +554,31 @@ class ExeModel {
     };
 
     static constexpr int codeShift = 3U;
-    static constexpr uint32_t codeMask = 0xFFU << codeShift; // 0x000007F8
-    static constexpr uint32_t clearCodeMask = 0xFFFFFFFF ^codeMask; // 0xFFFFF807
-    static constexpr uint32_t prefixMask = (1U << codeShift) - 1; // 0x07
-    static constexpr uint32_t operandSizeOverride = 0x01U << (8 + codeShift); // 0x00000800
-    static constexpr uint32_t multiByteOpcode = 0x02U << (8 + codeShift); // 0x00001000
-    static constexpr uint32_t prefixRex = 0x04U << (8 + codeShift); // 0x00002000
-    static constexpr uint32_t prefix38 = 0x08U << (8 + codeShift); // 0x00004000
-    static constexpr uint32_t prefix3A = 0x10U << (8 + codeShift); // 0x00008000
-    static constexpr uint32_t hasExtraFlags = 0x20U << (8 + codeShift); // 0x00010000
-    static constexpr uint32_t hasModRm = 0x40U << (8 + codeShift); // 0x00020000
-    static constexpr uint32_t ModRMShift = 7 + 8 + codeShift; // 18
-    static constexpr uint32_t SIBScaleShift = ModRMShift + 8 - 6; // 20
-    static constexpr uint32_t regDWordDisplacement = 1U << (8 + SIBScaleShift); // 0x10000000
-    static constexpr uint32_t addressMode = 2U << (8 + SIBScaleShift); // 0x20000000
-    static constexpr uint32_t typeShift = 2U + 8 + SIBScaleShift; // 30
+    static constexpr uint32_t codeMask = 0xFFU << codeShift; /**< 0x000007F8 */
+    static constexpr uint32_t clearCodeMask = 0xFFFFFFFF ^codeMask; /**< 0xFFFFF807 */
+    static constexpr uint32_t prefixMask = (1U << codeShift) - 1; /**< 0x07 */
+    static constexpr uint32_t operandSizeOverride = 0x01U << (8 + codeShift); /**< 0x00000800 */
+    static constexpr uint32_t multiByteOpcode = 0x02U << (8 + codeShift); /**< 0x00001000 */
+    static constexpr uint32_t prefixRex = 0x04U << (8 + codeShift); /**< 0x00002000 */
+    static constexpr uint32_t prefix38 = 0x08U << (8 + codeShift); /**< 0x00004000 */
+    static constexpr uint32_t prefix3A = 0x10U << (8 + codeShift); /**< 0x00008000 */
+    static constexpr uint32_t hasExtraFlags = 0x20U << (8 + codeShift); /**< 0x00010000 */
+    static constexpr uint32_t hasModRm = 0x40U << (8 + codeShift); /**< 0x00020000 */
+    static constexpr uint32_t ModRMShift = 7 + 8 + codeShift; /**< 18 */
+    static constexpr uint32_t SIBScaleShift = ModRMShift + 8 - 6; /**< 20 */
+    static constexpr uint32_t regDWordDisplacement = 1U << (8 + SIBScaleShift); /**< 0x10000000 */
+    static constexpr uint32_t addressMode = 2U << (8 + SIBScaleShift); /**< 0x20000000 */
+    static constexpr uint32_t typeShift = 2U + 8 + SIBScaleShift; /**< 30 */
     static constexpr uint32_t categoryShift = 5U;
-    static constexpr uint32_t categoryMask = ((1U << categoryShift) - 1); //0x1F (31)
+    static constexpr uint32_t categoryMask = ((1U << categoryShift) - 1); /**< 0x1F (31) */
     static constexpr uint8_t ModRM_mod = 0xC0;
     static constexpr uint8_t ModRM_reg = 0x38;
     static constexpr uint8_t ModRM_rm = 0x07;
     static constexpr uint8_t SIB_scale = 0xC0;
-    static constexpr uint8_t SIB_index = 0x38; //unused
+    static constexpr uint8_t SIB_index = 0x38; /**< unused */
     static constexpr uint8_t SIB_base = 0x07;
     static constexpr uint8_t REX_w = 0x08;
-
-    static constexpr uint32_t minRequired = 8; // minimum required consecutive valid instructions to be considered as code
+    static constexpr uint32_t minRequired = 8; /**< minimum required consecutive valid instructions to be considered as code */
 private:
     static constexpr int nCM1 = 10, nCM2 = 10, nIM = 1;
     Shared *shared = Shared::getInstance();
@@ -591,7 +590,7 @@ private:
     ExeState pState, state;
     Instruction op {};
     uint32_t totalOps, opMask, opCategoryMask, context;
-    uint64_t brkCtx; // hash
+    uint64_t brkCtx; /**< hash */
     bool valid;
 
     static inline auto isInvalidX64Op(uint8_t op) -> bool;
@@ -608,7 +607,7 @@ private:
     inline auto pref(int i) -> int;
 
     /**
-     * Get context at buf(i) relevant to parsing 32-bit x86 code
+     * Get context at buf(i) relevant to parsing 32-bit x86 code.
      * @param i
      * @param x
      * @return
@@ -620,8 +619,8 @@ private:
 public:
     static constexpr int MIXERINPUTS =
             (nCM1 + nCM2) * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS + ContextMap2::MIXERINPUTS_BYTE_HISTORY) +
-            nIM * IndirectMap::MIXERINPUTS; // 142
-    static constexpr int MIXERCONTEXTS = 1024 + 1024 + 1024 + 8192 + 8192 + 8192; // 27648
+            nIM * IndirectMap::MIXERINPUTS; /**< 142 */
+    static constexpr int MIXERCONTEXTS = 1024 + 1024 + 1024 + 8192 + 8192 + 8192; /**< 27648 */
     static constexpr int MIXERCONTEXTSETS = 6;
 
     ExeModel(const ModelStats *const st, const uint64_t size) : stats(st),

@@ -10,7 +10,7 @@
 
 auto main(int argc, char *argv[]) -> int {
   auto shared = Shared::getInstance();
-  shared->chosenSimd = SIMD_AVX2;
+  shared->chosenSimd = SIMD_NONE;
   shared->setLevel(9);
   FileName input;
   if( input.strsize() == 0 ) {
@@ -22,16 +22,16 @@ auto main(int argc, char *argv[]) -> int {
   uint64_t fSize = getFileSize(input.c_str());
   auto mf = new MixerFactory();
 
-  constexpr int mixerInputs = 1 + MatchModel::MIXERINPUTS;// + NormalModel::MIXERINPUTS;
-  constexpr int mixerContexts = MatchModel::MIXERCONTEXTS;// + NormalModel::MIXERCONTEXTS;
-  constexpr int mixerContextSets = MatchModel::MIXERCONTEXTSETS;// + NormalModel::MIXERCONTEXTSETS;
-//
-  auto m = mf->createMixer(mixerInputs, mixerContexts, mixerContextSets);
+//  constexpr int mixerInputs = 1 + MatchModel::MIXERINPUTS;// + NormalModel::MIXERINPUTS;
+//  constexpr int mixerContexts = MatchModel::MIXERCONTEXTS;// + NormalModel::MIXERCONTEXTS;
+//  constexpr int mixerContextSets = MatchModel::MIXERCONTEXTSETS;// + NormalModel::MIXERCONTEXTSETS;
+
+  auto m = mf->createMixer(2, 8, 1);
   m->setScaleFactor(1024, 128);
   auto *modelStats = new ModelStats();
-//  auto *models = new Models(modelStats);
-//  ContextModel contextModel(modelStats, *models);
-  MatchModel matchModel(modelStats, shared->mem * 4);
+  auto *models = new Models(modelStats);
+  ContextModel contextModel(modelStats, *models);
+//  MatchModel matchModel(modelStats, shared->mem * 4);
 //  NormalModel normalModel(modelStats, shared->mem * 32);
 //  Audio16BitModel audio16BitModel(modelStats);
 //  TextModel textModel(modelStats, shared->mem * 16);
@@ -49,9 +49,12 @@ auto main(int argc, char *argv[]) -> int {
   for( int j = 0; j < fSize; ++j ) {
     c = f.getchar();
     for( int i = 7; i >= 0; --i ) {
-//      auto p = contextModel.p();
-      matchModel.mix(*m);
-      auto p = m->p();
+      auto p = contextModel.p();
+//      matchModel.mix(*m);
+//      m->add(-2000);
+//      m->add(2000);
+//      m->set(shared->bitPosition, 1);
+//      auto p = m->p();
 //      results[position] = p;
       y = (c >> i) & 1U;
       static FILE *dbg = fopen("log.txt", "wb");
@@ -67,6 +70,7 @@ auto main(int argc, char *argv[]) -> int {
       shared->update();
 //      ys[position] = y;
 //      printf("%llu: %d, %d\n", position, y, p);
+//      printf("===========================================\n");
       ++position;
       updateBroadcaster->broadcastUpdate();
     }
@@ -91,6 +95,6 @@ auto main(int argc, char *argv[]) -> int {
 //    printf("%d, %d\n", y, results[i]);
 //  }
 //  printf("(%llu - %llu) %f\n", 0ULL, position, double(sum) / double(position));
-  programChecker->print();
+//  programChecker->print();
   return 1;
 }
