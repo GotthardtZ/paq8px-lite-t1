@@ -6,6 +6,7 @@
 #include "../ContextMap2.hpp"
 #include "../ModelStats.hpp"
 #include <cstdint>
+#include <cctype>
 
 /**
  * Used by @ref WordModel.
