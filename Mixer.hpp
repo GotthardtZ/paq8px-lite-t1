@@ -4,10 +4,13 @@
 #include "IPredictor.hpp"
 #include "Shared.hpp"
 #include "utils.hpp"
+#if defined(__i386__) || defined(__x86_64__)
 #include <immintrin.h>
+#elif defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON)
+#include <arm_neon.h>
+#endif
 
-#if defined(__GNUC__) || defined(__clang__)
-
+#if (defined(__GNUC__) || defined(__clang__)) && defined(__AVX2__)
 __attribute__((target("avx2")))
 #endif
 static auto dotProductSimdAvx2(const short *const t, const short *const w, int n) -> int {
@@ -32,7 +35,7 @@ static auto dotProductSimdAvx2(const short *const t, const short *const w, int n
 #endif
 }
 
-#if defined(__GNUC__) || defined(__clang__)
+#if (defined(__GNUC__) || defined(__clang__)) && defined(__AVX2__)
 
 __attribute__((target("avx2")))
 #endif
@@ -54,7 +57,7 @@ static void trainSimdAvx2(const short *const t, short *const w, int n, const int
 #endif
 }
 
-#if defined(__GNUC__) || defined(__clang__)
+#if (defined(__GNUC__) || defined(__clang__)) && defined(__SSE2__)
 
 __attribute__((target("sse2")))
 #endif
@@ -76,13 +79,13 @@ static auto dotProductSimdSse2(const short *const t, const short *const w, int n
 #endif
 }
 
-#if defined(__GNUC__) || defined(__clang__)
+#if (defined(__GNUC__) || defined(__clang__)) && defined(__SSE2__)
 
 __attribute__((target("sse2")))
 #endif
 static void trainSimdSse2(const short *const t, short *const w, int n, const int e) {
 #ifndef __SSE2__
-  return 0;
+  return;
 #else
   const __m128i one = _mm_set1_epi16(1);
   const __m128i err = _mm_set1_epi16(short(e));
@@ -101,8 +104,9 @@ static void trainSimdSse2(const short *const t, short *const w, int n, const int
 static auto dotProductSimdNone(const short *const t, const short *const w, int n) -> int {
   int sum = 0;
   while((n -= 2) >= 0 ) {
-    sum += (t[n] * w[n] + t[n + 1] * w[n + 1]) >> 8U;
+    sum += ((t[n] * w[n]) + (t[n + 1] * w[n + 1])) >> 8U;
   }
+  sum = sum >> 8U;
   return sum;
 }
 

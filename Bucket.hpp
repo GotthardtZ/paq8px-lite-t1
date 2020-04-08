@@ -7,10 +7,10 @@
 
 #ifdef WINDOWS
 #include <intrin.h>
-#else
-
+#elif defined(__i386__) || defined(__x86_64)
 #include <immintrin.h>
-
+#else
+#include <arm_neon.h>
 #endif
 
 static inline auto clz(uint32_t value) -> uint32_t {
