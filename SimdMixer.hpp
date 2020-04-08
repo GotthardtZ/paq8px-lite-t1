@@ -22,6 +22,9 @@ private:
       if( simd == SIMD_SSE2 ) {
         return 16 / sizeof(short); // 128 bit (16 byte) data size
       }
+      if (simd == SIMD_NEON) {
+          return 16 / sizeof(short); // 128 bit (16 byte) data size
+      }
       if( simd == SIMD_NONE ) {
         return 4 / sizeof(short); // Processes 2 shorts at once -> width is 4 bytes
       }
@@ -69,6 +72,9 @@ public:
           }
           if( simd == SIMD_AVX2 ) {
             trainSimdAvx2(&tx[0], &wx[cxt[i] * n], nx, err * rates[i]);
+          }
+          if (simd == SIMD_NEON) {
+            trainSimdNeon(&tx[0], &wx[cxt[i] * n], nx, err * rates[i]);
           }
           if((shared->options & OPTION_ADAPTIVE) != 0u ) {
             const uint32_t logErr = min(0xF, ilog2(abs(err)));
@@ -119,6 +125,9 @@ public:
           if( simd == SIMD_AVX2 ) {
             dp = dotProductSimdAvx2(&tx[0], &wx[cxt[i] * n], nx);
           }
+          if (simd == SIMD_NEON) {
+              dp = dotProductSimdNeon(&tx[0], &wx[cxt[i] * n], nx);
+          }
           dp = (dp * scaleFactor) >> 16U;
           if( dp < -2047 ) {
             dp = -2047;
@@ -140,6 +149,9 @@ public:
       }
       if( simd == SIMD_AVX2 ) {
         dp = dotProductSimdAvx2(&tx[0], &wx[cxt[0] * n], nx);
+      }
+      if (simd == SIMD_NEON) {
+          dp = dotProductSimdNeon(&tx[0], &wx[cxt[0] * n], nx);
       }
       dp = (dp * scaleFactor) >> 16U;
       return pr[0] = squash(dp);

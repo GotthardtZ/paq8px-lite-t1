@@ -118,7 +118,7 @@ static void printHelp() {
          "    Logs (appends) compression results in the specified tab separated LOGFILE.\n"
          "    Logging is only applicable for compression.\n"
          "\n"
-         "    -simd [NONE|SSE2|AVX2]\n"
+         "    -simd [NONE|SSE2|AVX2|NEON]\n"
          "    Overrides detected SIMD instruction set for neural network operations\n"
          "\n"
          "Remark: the command line arguments may be used in any order except the input\n"
@@ -156,15 +156,17 @@ static void printModules() {
 
 static void printSimdInfo(int simdIset, int detectedSimdIset) {
   printf("\nHighest SIMD vectorization support on this system: ");
-  if( detectedSimdIset < 0 || detectedSimdIset > 9 ) {
+  if( detectedSimdIset < 0 || detectedSimdIset > 11 ) {
     quit("Oops, sorry. Unexpected result.");
   }
-  static const char *vectorizationString[10] = {"none", "MMX", "SSE", "SSE2", "SSE3", "SSSE3", "SSE4.1", "SSE4.2", "AVX", "AVX2"};
+  static const char *vectorizationString[12] = {"none", "MMX", "SSE", "SSE2", "SSE3", "SSSE3", "SSE4.1", "SSE4.2", "AVX", "AVX2", "AVX512", "NEON"};
   printf("%s.\n", vectorizationString[detectedSimdIset]);
 
   printf("Using ");
-  if( simdIset >= 9 ) {
-    printf("AVX2");
+  if (simdIset == 11) {
+      printf("NEON");
+  } else if( simdIset >= 9 ) {
+      printf("AVX2");
   } else if( simdIset >= 3 ) {
     printf("SSE2");
   } else {
@@ -309,7 +311,7 @@ auto main_utf8(int argc, char **argv) -> int {
 #endif
         else if( strcasecmp(argv[i], "-simd") == 0 ) {
           if( ++i == argc ) {
-            quit("The -simd switch requires an instruction set name (NONE,SSE2,AVX2).");
+            quit("The -simd switch requires an instruction set name (NONE,SSE2,AVX2,NEON).");
           }
           if( strcasecmp(argv[i], "NONE") == 0 ) {
             simdIset = 0;
@@ -317,8 +319,12 @@ auto main_utf8(int argc, char **argv) -> int {
             simdIset = 3;
           } else if( strcasecmp(argv[i], "AVX2") == 0 ) {
             simdIset = 9;
+         } else if( strcasecmp(argv[i], "AVX2") == 0 ) {
+            simdIset = 9;
+         } else if (strcasecmp(argv[i], "NEON") == 0) {
+            simdIset = 11;
           } else {
-            quit("Invalid -simd option. Use -simd NONE, -simd SSE2 or -simd AVX2.");
+            quit("Invalid -simd option. Use -simd NONE, -simd SSE2, -simd AVX2 or -simd NEON.");
           }
         } else {
           printf("Invalid command: %s", argv[i]);
@@ -356,7 +362,9 @@ auto main_utf8(int argc, char **argv) -> int {
     }
 
     // Set highest or user selected vectorization mode
-    if( simdIset >= 9 ) {
+    if (simdIset == 11) {
+        shared->chosenSimd = SIMD_NEON;
+    } else if (simdIset >= 9) {
       shared->chosenSimd = SIMD_AVX2;
     } else if( simdIset >= 3 ) {
       shared->chosenSimd = SIMD_SSE2;
