@@ -66,30 +66,29 @@ static inline int32x4_t _mm_mulhi_epi16(int32x4_t a, int32x4_t b){
 }
 
 static inline int32x4_t _mm_madd_epi16(int32x4_t a, int32x4_t b) {
-    int32x4_t pl = vmull_s16(vget_low_s16(vreinterpretq_s16_s32(a)), vget_low_s16(vreinterpretq_s16_s32(b)));
-    int32x4_t ph = vmull_s16(vget_high_s16(vreinterpretq_s16_s32(a)), vget_high_s16(vreinterpretq_s16_s32(b)));
-    int32x2_t rl = vpadd_s32(vget_low_s32(pl), vget_high_s32(pl));
-    int32x2_t rh = vpadd_s32(vget_low_s32(ph), vget_high_s32(ph));
-    return vcombine_s32(rl, rh);
+  int32x4_t pl = vmull_s16(vget_low_s16(vreinterpretq_s16_s32(a)), vget_low_s16(vreinterpretq_s16_s32(b)));
+  int32x4_t ph = vmull_s16(vget_high_s16(vreinterpretq_s16_s32(a)), vget_high_s16(vreinterpretq_s16_s32(b)));
+  int32x2_t rl = vpadd_s32(vget_low_s32(pl), vget_high_s32(pl));
+  int32x2_t rh = vpadd_s32(vget_low_s32(ph), vget_high_s32(ph));
+  return vcombine_s32(rl, rh);
 }
-
 #endif
 
 static auto dotProductSimdNeon(const short* const t, const short* const w, int n) -> int {
 #if (!defined(__ARM_FEATURE_SIMD32) && !defined(__ARM_NEON))
-    return 0;
+  return 0;
 #else
-    int32x4_t sum = vdupq_n_s32(0);
+  int32x4_t sum = vdupq_n_s32(0);
 
-    while ((n -= 8) >= 0) {
-        int32x4_t tmp = _mm_madd_epi16(*(int32x4_t*) & t[n], *(int32x4_t*) & w[n]);
-        tmp = vshrq_n_s32(tmp, 8);
-        sum = vaddq_s32(sum, tmp);
-    }
+  while ((n -= 8) >= 0) {
+    int32x4_t tmp = _mm_madd_epi16(*(int32x4_t*) & t[n], *(int32x4_t*) & w[n]);
+    tmp = vshrq_n_s32(tmp, 8);
+    sum = vaddq_s32(sum, tmp);
+  }
 
-    sum = vaddq_s32(sum, vreinterpretq_s32_s8(vextq_s8(vreinterpretq_s8_s32(sum), vdupq_n_s8(0), 8)));
-    sum = vaddq_s32(sum, vreinterpretq_s32_s8(vextq_s8(vreinterpretq_s8_s32(sum), vdupq_n_s8(0), 4)));
-    return vgetq_lane_s32(sum, 0);
+  sum = vaddq_s32(sum, vreinterpretq_s32_s8(vextq_s8(vreinterpretq_s8_s32(sum), vdupq_n_s8(0), 8)));
+  sum = vaddq_s32(sum, vreinterpretq_s32_s8(vextq_s8(vreinterpretq_s8_s32(sum), vdupq_n_s8(0), 4)));
+  return vgetq_lane_s32(sum, 0);
 #endif
 }
 
@@ -133,7 +132,6 @@ static auto dotProductSimdSse2(const short *const t, const short *const w, int n
 #endif
 }
 
-
 #if (defined(__GNUC__) || defined(__clang__)) && defined(__SSE2__)
 
 __attribute__((target("sse2")))
@@ -155,7 +153,6 @@ static void trainSimdSse2(const short *const t, short *const w, int n, const int
   }
 #endif
 }
-
 
 static auto dotProductSimdNone(const short *const t, const short *const w, int n) -> int {
   int sum = 0;

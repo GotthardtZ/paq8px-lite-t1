@@ -11,7 +11,7 @@ auto MixerFactory::createMixer(const int n, const int m, const int s) -> Mixer *
     return new SIMDMixer<SIMD_AVX2>(n, m, s);
   }
   if (shared->chosenSimd == SIMD_NEON) {
-      return new SIMDMixer<SIMD_NEON>(n, m, s);
+    return new SIMDMixer<SIMD_NEON>(n, m, s);
   }
   assert(false);
   return nullptr;

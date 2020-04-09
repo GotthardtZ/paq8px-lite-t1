@@ -23,7 +23,7 @@ private:
         return 16 / sizeof(short); // 128 bit (16 byte) data size
       }
       if (simd == SIMD_NEON) {
-          return 16 / sizeof(short); // 128 bit (16 byte) data size
+        return 16 / sizeof(short); // 128 bit (16 byte) data size
       }
       if( simd == SIMD_NONE ) {
         return 4 / sizeof(short); // Processes 2 shorts at once -> width is 4 bytes
@@ -126,7 +126,7 @@ public:
             dp = dotProductSimdAvx2(&tx[0], &wx[cxt[i] * n], nx);
           }
           if (simd == SIMD_NEON) {
-              dp = dotProductSimdNeon(&tx[0], &wx[cxt[i] * n], nx);
+            dp = dotProductSimdNeon(&tx[0], &wx[cxt[i] * n], nx);
           }
           dp = (dp * scaleFactor) >> 16U;
           if( dp < -2047 ) {
@@ -151,7 +151,7 @@ public:
         dp = dotProductSimdAvx2(&tx[0], &wx[cxt[0] * n], nx);
       }
       if (simd == SIMD_NEON) {
-          dp = dotProductSimdNeon(&tx[0], &wx[cxt[0] * n], nx);
+        dp = dotProductSimdNeon(&tx[0], &wx[cxt[0] * n], nx);
       }
       dp = (dp * scaleFactor) >> 16U;
       return pr[0] = squash(dp);

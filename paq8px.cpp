@@ -164,9 +164,9 @@ static void printSimdInfo(int simdIset, int detectedSimdIset) {
 
   printf("Using ");
   if (simdIset == 11) {
-      printf("NEON");
+    printf("NEON");
   } else if( simdIset >= 9 ) {
-      printf("AVX2");
+    printf("AVX2");
   } else if( simdIset >= 3 ) {
     printf("SSE2");
   } else {
@@ -363,7 +363,7 @@ auto main_utf8(int argc, char **argv) -> int {
 
     // Set highest or user selected vectorization mode
     if (simdIset == 11) {
-        shared->chosenSimd = SIMD_NEON;
+      shared->chosenSimd = SIMD_NEON;
     } else if (simdIset >= 9) {
       shared->chosenSimd = SIMD_AVX2;
     } else if( simdIset >= 3 ) {
