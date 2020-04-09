@@ -1619,3 +1619,7 @@ paq8px_v185:
 - Fixed compression regression with TextParserStateInfo.
 - Fixed compression regression caused by a clang-tidy "fix".
 
+paq8px_v186
+2020.04.09
+- Fixed JpegModel ti add 2 additional inputs to the mixer. 
+
