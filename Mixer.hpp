@@ -8,22 +8,6 @@
 #include <immintrin.h>
 #elif defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON)
 #include <arm_neon.h>
-typedef int32x4_t __m128i;
-#define vreinterpretq_m128i_s8(x) \
-	    vreinterpretq_s32_s8(x)
-#define vreinterpretq_m128i_s16(x) \
-	    vreinterpretq_s32_s16(x)
-#define vreinterpretq_m128i_s32(x) \
-	    (x)
-#define vreinterpretq_s8_m128i(x) \
-        vreinterpretq_s8_s32(x)
-#define vreinterpretq_s16_m128i(x) \
-	    vreinterpretq_s16_s32(x)
-#define vreinterpretq_s32_m128i(x) \
-	    (x)
-#define vreinterpretq_m128i_u16(x) \
-	    vreinterpretq_s32_u16(x)
-
 #endif
 
 #if (defined(__GNUC__) || defined(__clang__)) && defined(__AVX2__)
@@ -74,23 +58,19 @@ static void trainSimdAvx2(const short *const t, short *const w, int n, const int
 }
 
 #if (defined(__GNUC__) || defined(__clang__)) && (defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON))
-static inline __m128i _mm_mulhi_epi16(__m128i a, __m128i b){
-  int16x4_t a1 = vget_low_s16(vreinterpretq_s16_m128i(a));
-  int16x4_t b1 = vget_low_s16(vreinterpretq_s16_m128i(b));
-  int32x4_t ab1 = vmull_s16(a1, b1);
-  int16x4_t a2 = vget_high_s16(vreinterpretq_s16_m128i(a));
-  int16x4_t b2 = vget_high_s16(vreinterpretq_s16_m128i(b));
-  int32x4_t ab2 = vmull_s16(a2, b2); 
-  uint16x8x2_t r = vuzpq_u16(vreinterpretq_u16_s32(ab1), vreinterpretq_u16_s32(ab2));
-  return vreinterpretq_m128i_u16(r.val[1]);
+static inline int32x4_t _mm_mulhi_epi16(int32x4_t a, int32x4_t b){
+  int32x4_t rl = vmull_s16(vget_low_s16(vreinterpretq_s16_s32(a)), vget_low_s16(vreinterpretq_s16_s32(b)));
+  int32x4_t rh = vmull_s16(vget_high_s16(vreinterpretq_s16_s32(a)), vget_high_s16(vreinterpretq_s16_s32(b)));
+  uint16x8x2_t r = vuzpq_u16(vreinterpretq_u16_s32(rl), vreinterpretq_u16_s32(rh));
+  return vreinterpretq_s32_u16(r.val[1]);
 }
 
-static inline __m128i _mm_madd_epi16(__m128i a, __m128i b) {
-    int32x4_t pl = vmull_s16(vget_low_s16(vreinterpretq_s16_m128i(a)), vget_low_s16(vreinterpretq_s16_m128i(b)));
-    int32x4_t ph = vmull_s16(vget_high_s16(vreinterpretq_s16_m128i(a)), vget_high_s16(vreinterpretq_s16_m128i(b)));
+static inline int32x4_t _mm_madd_epi16(int32x4_t a, int32x4_t b) {
+    int32x4_t pl = vmull_s16(vget_low_s16(vreinterpretq_s16_s32(a)), vget_low_s16(vreinterpretq_s16_s32(b)));
+    int32x4_t ph = vmull_s16(vget_high_s16(vreinterpretq_s16_s32(a)), vget_high_s16(vreinterpretq_s16_s32(b)));
     int32x2_t rl = vpadd_s32(vget_low_s32(pl), vget_high_s32(pl));
     int32x2_t rh = vpadd_s32(vget_low_s32(ph), vget_high_s32(ph));
-    return vreinterpretq_m128i_s32(vcombine_s32(rl, rh));
+    return vcombine_s32(rl, rh);
 }
 
 #endif
@@ -99,17 +79,17 @@ static auto dotProductSimdNeon(const short* const t, const short* const w, int n
 #if (!defined(__ARM_FEATURE_SIMD32) && !defined(__ARM_NEON))
     return 0;
 #else
-    __m128i sum = vreinterpretq_m128i_s32(vdupq_n_s32(0));
+    int32x4_t sum = vdupq_n_s32(0);
 
     while ((n -= 8) >= 0) {
-        __m128i tmp = _mm_madd_epi16(*(__m128i*) & t[n], *(__m128i*) & w[n]);
-        tmp = vreinterpretq_m128i_s32(vshrq_n_s32(vreinterpretq_s32_m128i(tmp), 8));
-        sum = vreinterpretq_m128i_s32(vaddq_s32(vreinterpretq_s32_m128i(sum), vreinterpretq_s32_m128i(tmp)));
+        int32x4_t tmp = _mm_madd_epi16(*(int32x4_t*) & t[n], *(int32x4_t*) & w[n]);
+        tmp = vshrq_n_s32(tmp, 8);
+        sum = vaddq_s32(sum, tmp);
     }
 
-    sum = vreinterpretq_m128i_s32(vaddq_s32(vreinterpretq_s32_m128i(sum), vreinterpretq_s32_m128i(vreinterpretq_m128i_s8(vextq_s8(vreinterpretq_s8_m128i(sum), vdupq_n_s8(0), 8)))));
-    sum = vreinterpretq_m128i_s32(vaddq_s32(vreinterpretq_s32_m128i(sum), vreinterpretq_s32_m128i(vreinterpretq_m128i_s8(vextq_s8(vreinterpretq_s8_m128i(sum), vdupq_n_s8(0), 4)))));
-    return vgetq_lane_s32(vreinterpretq_s32_m128i(sum), 0);
+    sum = vaddq_s32(sum, vreinterpretq_s32_s8(vextq_s8(vreinterpretq_s8_s32(sum), vdupq_n_s8(0), 8)));
+    sum = vaddq_s32(sum, vreinterpretq_s32_s8(vextq_s8(vreinterpretq_s8_s32(sum), vdupq_n_s8(0), 4)));
+    return vgetq_lane_s32(sum, 0);
 #endif
 }
 
@@ -117,16 +97,16 @@ static void trainSimdNeon(const short* const t, short* const w, int n, const int
 #if (!defined(__ARM_FEATURE_SIMD32) && !defined(__ARM_NEON))
   return;
 #else
-  const __m128i one = vreinterpretq_m128i_s16(vdupq_n_s16(1));
-  const __m128i err = vreinterpretq_m128i_s16(vdupq_n_s16(short(e)));
+  const int32x4_t one = vreinterpretq_s32_s16(vdupq_n_s16(1));
+  const int32x4_t err = vreinterpretq_s32_s16(vdupq_n_s16(short(e)));
 
   while ((n -= 8) >= 0) {
-    __m128i tmp = vreinterpretq_m128i_s16(vqaddq_s16(vreinterpretq_s16_m128i(*(__m128i*) & t[n]), vreinterpretq_s16_m128i(*(__m128i*) & t[n])));
+    int32x4_t tmp = vreinterpretq_s32_s16(vqaddq_s16(vreinterpretq_s16_s32(*(int32x4_t*) & t[n]), vreinterpretq_s16_s32(*(int32x4_t*) & t[n])));
     tmp = _mm_mulhi_epi16(tmp, err);
-    tmp = vreinterpretq_m128i_s16(vqaddq_s16(vreinterpretq_s16_m128i(tmp), vreinterpretq_s16_m128i(one)));
-    tmp = vreinterpretq_m128i_s16(vshrq_n_s16(vreinterpretq_s16_m128i(tmp), (1)));
-    tmp = vreinterpretq_m128i_s16(vqaddq_s16(vreinterpretq_s16_m128i(tmp), vreinterpretq_s16_m128i(*reinterpret_cast<__m128i*>(&w[n]))));
-    *reinterpret_cast<__m128i*>(&w[n]) = tmp;
+    tmp = vreinterpretq_s32_s16(vqaddq_s16(vreinterpretq_s16_s32(tmp), vreinterpretq_s16_s32(one)));
+    tmp = vreinterpretq_s32_s16(vshrq_n_s16(vreinterpretq_s16_s32(tmp), (1)));
+    tmp = vreinterpretq_s32_s16(vqaddq_s16(vreinterpretq_s16_s32(tmp), vreinterpretq_s16_s32(*reinterpret_cast<int32x4_t*>(&w[n]))));
+    *reinterpret_cast<int32x4_t*>(&w[n]) = tmp;
   }
 #endif
 }
