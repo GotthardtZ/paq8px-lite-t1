@@ -1621,7 +1621,7 @@ paq8px_v185:
 
 paq8px_v186
 2020.04.09
-- Fixed JpegModel ti add 2 additional inputs to the mixer. 
+- Fixed JpegModel to add 2 additional inputs to the mixer. 
 - Compatibility with ARM processors.
 - Added ARM NEON SIMD instructions for the Mixer.
 
