@@ -3,7 +3,7 @@
 JpegModel::JpegModel(const uint64_t size) : t(size), MJPEGMap(21, 3, 128, 127), /* BitsOfContext, InputBits, Scale, Limit */
         sm(N, 256, 1023, StateMap::BitHistory), apm1(0x8000, 24), apm2(0x20000, 24) {
   auto mf = new MixerFactory();
-  m1 = mf->createMixer(N + 1, 2050, 3);
+  m1 = mf->createMixer(N + 1 + 2, 2050, 3);
   m1->setScaleFactor(1024, 128);
 }
 
