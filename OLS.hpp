@@ -136,8 +136,9 @@ public:
     }
 
 #ifdef __GNUC__
-
+#ifdef __AVX2__
     __attribute__((target("avx2")))
+#endif
 #endif
     void updateAVX2(const T val) {
       F mul = 1.0 - lambda;

@@ -1,4 +1,11 @@
 #include "Ilog.hpp"
+#if defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON)
+#define vreinterpretq_m128_f32(x) \
+        (x)
+#define vreinterpretq_f32_m128(x) \
+        (x)
+#include <arm_neon.h>
+#endif
 
 auto Ilog::log(uint16_t x) const -> int { return static_cast<int>(t[x]); }
 
@@ -44,6 +51,10 @@ auto VLICost(uint64_t n) -> int {
 }
 
 auto rsqrt(const float x) -> float {
+#if defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON)
+  float r = vgetq_lane_f32(vreinterpretq_f32_m128(vreinterpretq_m128_f32(vrsqrteq_f32(vreinterpretq_f32_m128(vdupq_n_f32(x))))),0); //NEON
+#else
   float r = _mm_cvtss_f32(_mm_rsqrt_ss(_mm_set_ss(x))); //SSE
+#endif
   return (0.5F * (r + 1.0F / (x * r)));
 }

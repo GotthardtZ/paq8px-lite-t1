@@ -6,19 +6,25 @@
 // Uncomment one or more of the following includes if you plan adding more SIMD dispatching
 //#include <mmintrin.h>  //MMX
 //#include <xmmintrin.h> //SSE
+#ifdef __SSE2__
 #include <emmintrin.h> //SSE2
+#endif
 //#include <pmmintrin.h> //SSE3
 //#include <tmmintrin.h> //SSSE3
 //#include <smmintrin.h> //SSE4.1
 //#include <nmmintrin.h> //SSE4.2
 //#include <ammintrin.h> //SSE4A
+#if defined(__AVX__) ||defined(__AVX2__)
 #include <immintrin.h> //AVX, AVX2
+#endif
 //#include <zmmintrin.h> //AVX512
 
 //define CPUID
 #if defined(__GNUC__)||defined(__clang__)
+#if !defined(__ARM_FEATURE_SIMD32)&&!defined(__ARM_NEON)
 #include <cpuid.h>
 #define cpuid(info, x) __cpuid_count(x, 0, (info)[0], (info)[1], (info)[2], (info)[3])
+#endif
 #elif defined(_MSC_VER)
 #include <intrin.h>
 #define cpuid(info, x) __cpuidex(info, x, 0)
@@ -58,6 +64,9 @@ static inline auto xgetbv(unsigned long ctr) -> unsigned long long {
  : AVX512 //TODO
 */
 static auto simdDetect() -> int {
+#if defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON)
+  return 0;
+#else
   int cpuidResult[4] = {0, 0, 0, 0};
   cpuid(cpuidResult, 0); // call cpuid function 0 ("Get vendor ID and highest basic calling parameter")
   if( cpuidResult[0] == 0 ) {
@@ -107,6 +116,7 @@ static auto simdDetect() -> int {
   }
   //AVX2: OK
   return 9;
+#endif
 }
 
 #endif //PAQ8PX_SIMD_HPP
