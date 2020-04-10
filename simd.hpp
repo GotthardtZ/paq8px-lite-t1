@@ -62,10 +62,11 @@ static inline auto xgetbv(unsigned long ctr) -> unsigned long long {
 8: AVX
 9: AVX2
  : AVX512 //TODO
+11: NEON
 */
 static auto simdDetect() -> int {
 #if defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON)
-  return 0;
+  return 11;
 #else
   int cpuidResult[4] = {0, 0, 0, 0};
   cpuid(cpuidResult, 0); // call cpuid function 0 ("Get vendor ID and highest basic calling parameter")

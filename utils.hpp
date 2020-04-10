@@ -74,7 +74,7 @@ static_assert(sizeof(int) == 4, "sizeof(int)");
 #define DEFAULT_LEARNING_RATE 7
 
 typedef enum {
-    SIMD_NONE, SIMD_SSE2, SIMD_AVX2
+    SIMD_NONE, SIMD_SSE2, SIMD_AVX2, SIMD_NEON
 } SIMD;
 
 struct ErrorInfo {
