@@ -137,6 +137,7 @@ or in an earlier release:
   - GCC 7.3.0 (macOS)
   - GCC 7.2.0 (Ubuntu)
   - GCC 8.3.0 (Lubuntu)
+  - GCC 9.3.0 (Ubuntu)
   - clang 4.0.1-6 on (Ubuntu)
 
 Note:
@@ -149,10 +150,13 @@ Note:
 gcc users on Linux/macOS may use the following commands to make a quick build (albeit with 
 optimal parameters) targeted for their system (note the "-march=native" parameter):
 
- sudo apt-get install build-essential
+ sudo apt-get install build-essential zlib1g-dev cmake make
  sudo apt-get install zlib1g-dev
- g++ -s -fno-rtti -fwhole-program -static -std=gnu++1z -O3 -m64 -march=native -Wall -floop-strip-mine -funroll-loops -ftree-vectorize -fgcse-sm -fprofile-use paq8px.cpp -opaq8px.exe -lz 
-
+ mkdir build
+ cd build
+ cmake ..
+ make
+ 
 Remark: if the paq8px source file name includes version information (e.g. paq8px_v142.cpp) 
 then rename it to "paq8px.cpp" before invoking gcc or change the file name in the 
 gcc parameters to include the version information.

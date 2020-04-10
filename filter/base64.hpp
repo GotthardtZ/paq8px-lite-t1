@@ -121,14 +121,9 @@ public:
       int len = 0;
       int blocksOut = 0;
       int fle = 0;
-      int lineSize = 0;
-      int outLen = 0;
-      int tlf = 0;
-      lineSize = in->getchar();
-      outLen = in->getchar();
-      outLen += (in->getchar() << 8U);
-      outLen += (in->getchar() << 16U);
-      tlf = (in->getchar());
+      int lineSize = in->getchar();
+      int outLen = in->getchar() + (in->getchar() << 8U) + (in->getchar() << 16U);
+      int tlf = (in->getchar());
       outLen += ((tlf & 63U) << 24U);
       Array<uint8_t> ptr((outLen >> 2U) * 4 + 10);
       tlf = (tlf & 192U);
@@ -152,15 +147,17 @@ public:
           }
         }
         if( len != 0 ) {
-          uint8_t in0 = 0;
-          uint8_t in1 = 0;
-          uint8_t in2 = 0;
-          in0 = inn[0], in1 = inn[1], in2 = inn[2];
+          uint8_t in0 = inn[0];
+          uint8_t in1 = inn[1];
+          uint8_t in2 = inn[2];
           ptr[fle++] = (base64::table1[in0 >> 2U]);
           ptr[fle++] = (base64::table1[((in0 & 0x03U) << 4U) | ((in1 & 0xf0U) >> 4U)]);
           ptr[fle++] = ((len > 1 ? base64::table1[((in1 & 0x0fU) << 2U) | ((in2 & 0xc0U) >> 6U)] : '='));
           ptr[fle++] = ((len > 2 ? base64::table1[in2 & 0x3fU] : '='));
           blocksOut++;
+        }
+        else{
+          ptr[fle++] = 0;
         }
         if( blocksOut >= (lineSize / 4) && lineSize != 0 ) { //no lf if lineSize==0
           if((blocksOut != 0) && !in->eof() && fle <= outLen ) { //no lf if eof
