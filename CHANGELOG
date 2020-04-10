@@ -1605,7 +1605,7 @@ paq8px_v183:
   - hashed contexts were: 0-6, 8, 14; now: 1-7, 9, 14 (same in number, but generally longer)
 - Updated memory usage information displayed on help screen
 
-paq8px_v184: (
+paq8px_v184:
 2020.01.05
 - Split out most classes into individual .hpp files
 - Many (minor) code cleanup changes, e.g. initializing variables, removing signed bitwise operations, correcting typos, etc
@@ -1619,7 +1619,12 @@ paq8px_v185:
 - Fixed compression regression with TextParserStateInfo.
 - Fixed compression regression caused by a clang-tidy "fix".
 
-paq8px_v186
+paq8px_v186:
 2020.04.09
-- Fixed JpegModel ti add 2 additional inputs to the mixer. 
+- Fixed JpegModel to add 2 additional inputs to the mixer. 
+- Compatibility with ARM processors.
+- Added ARM NEON SIMD instructions for the Mixer.
 
+paq8px_v186fix1:
+2020.04.10
+- Fixed infinite loop in base64 decoder.
