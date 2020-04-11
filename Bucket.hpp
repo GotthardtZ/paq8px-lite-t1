@@ -74,8 +74,8 @@ static inline int32x4_t _mm_sad_epu8(int32x4_t a, int32x4_t b)
 
 static inline int32x4_t _mm_shuffle_epi8(int32x4_t a, int32x4_t b)
 {
-    int8x16_t tbl = vreinterpretq_s8_s64(a);   // input a
-    uint8x16_t idx = vreinterpretq_u8_s64(b);  // input b
+    int8x16_t tbl = vreinterpretq_s8_s32(a);   // input a
+    uint8x16_t idx = vreinterpretq_u8_s32(b);  // input b
     uint8x16_t idx_masked = vandq_u8(idx, vdupq_n_u8(0x8F));  // avoid using meaningless bits
 #if defined(__aarch64__)
     return vreinterpretq_s64_s8(vqtbl1q_s8(tbl, idx_masked)); //function only exist on ARMv8
@@ -201,7 +201,7 @@ public:
       int32x4_t vm = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7);
 
       int32x4_t lastX = vcombine_s64(vget_low_s64(lastL), vget_low_s64(lastH)); // mostRecentlyUsed&15 mostRecentlyUsed>>4
-      int32x4_t eq0 = vreinterpretq_s64_u8(vceqq_s8(vreinterpretq_s8_s64(lastX), vreinterpretq_s8_s64(vm))); // compare values
+      int32x4_t eq0 = vreinterpretq_s64_u8(vceqq_s8(vreinterpretq_s8_s32(lastX), vreinterpretq_s8_s32(vm))); // compare values
 
       eq0 = vorrq_s32(eq0, _mm_srli_si128(eq0, 8));    // or low values with high
 
