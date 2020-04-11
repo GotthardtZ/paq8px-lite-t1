@@ -19,10 +19,7 @@ private:
       if( simd == SIMD_AVX2 ) {
         return 32 / sizeof(short); // 256 bit (32 byte) data size
       }
-      if( simd == SIMD_SSE2 ) {
-        return 16 / sizeof(short); // 128 bit (16 byte) data size
-      }
-      if (simd == SIMD_NEON) {
+      if( simd == SIMD_SSE2 || simd == SIMD_NEON ) {
         return 16 / sizeof(short); // 128 bit (16 byte) data size
       }
       if( simd == SIMD_NONE ) {

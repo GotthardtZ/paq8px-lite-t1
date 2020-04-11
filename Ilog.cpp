@@ -1,7 +1,4 @@
 #include "Ilog.hpp"
-#if defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON)
-#include <arm_neon.h>
-#endif
 
 auto Ilog::log(uint16_t x) const -> int { return static_cast<int>(t[x]); }
 
