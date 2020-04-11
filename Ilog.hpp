@@ -5,7 +5,7 @@
 #include "cstdint"
 #if defined(__i386__) || defined(__x86_64__)
 #include <xmmintrin.h>
-#elseif defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON)
+#elif defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON)
 #include <arm_neon.h>
 #endif
 
