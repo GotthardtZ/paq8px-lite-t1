@@ -50,10 +50,10 @@ static inline int _mm_movemask_epi8(int32x4_t _a)
 }
 
 // Below functions taken and adapted from https://github.com/DLTcollab/sse2neon/blob/master/sse2neon.h
-static inline int32x4_t _mm_set_epi8(signed char b15, signed char b14, signed char b13, signed char b12,
-    signed char b11, signed char b10, signed char b9, signed char b8,
-    signed char b7, signed char b6, signed char b5, signed char b4,
-    signed char b3, signed char b2, signed char b1, signed char b0)
+static inline int32x4_t _mm_setr_epi8(signed char b0, signed char b1, signed char b2, signed char b3,
+    signed char b4, signed char b5, signed char b6, signed char b7,
+    signed char b8, signed char b9, signed char b10, signed char b11,
+    signed char b12, signed char b13, signed char b14, signed char b15)
 {
     int8_t __attribute__((aligned(16)))
         data[16] = { (int8_t)b0,  (int8_t)b1,  (int8_t)b2,  (int8_t)b3,
