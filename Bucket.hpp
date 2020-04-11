@@ -78,7 +78,7 @@ static inline int32x4_t _mm_shuffle_epi8(int32x4_t a, int32x4_t b)
     uint8x16_t idx = vreinterpretq_u8_s32(b);  // input b
     uint8x16_t idx_masked = vandq_u8(idx, vdupq_n_u8(0x8F));  // avoid using meaningless bits
 #if defined(__aarch64__)
-    return vreinterpretq_s64_s8(vqtbl1q_s8(tbl, idx_masked)); //function only exist on ARMv8
+    return vreinterpretq_s32_s8(vqtbl1q_s8(tbl, idx_masked)); //function only exist on ARMv8
 #elif defined(__GNUC__)
     int8x16_t ret;
     // %e and %f represent the even and odd D registers
@@ -88,11 +88,11 @@ static inline int32x4_t _mm_shuffle_epi8(int32x4_t a, int32x4_t b)
         "    vtbl.8  %f[ret], {%e[tbl], %f[tbl]}, %f[idx]\n"
         : [ret] "=&w" (ret)
         : [tbl] "w" (tbl), [idx] "w" (idx_masked));
-    return vreinterpretq_s64_s8(ret);
+    return vreinterpretq_s32_s8(ret);
 #else
     // use this line if testing on aarch64
     int8x8x2_t a_split = { vget_low_s8(tbl), vget_high_s8(tbl) };
-    return vreinterpretq_s64_s8(vcombine_s8(vtbl2_s8(a_split, vget_low_u8(idx_masked)), vtbl2_s8(a_split, vget_high_u8(idx_masked))));
+    return vreinterpretq_s32_s8(vcombine_s8(vtbl2_s8(a_split, vget_low_u8(idx_masked)), vtbl2_s8(a_split, vget_high_u8(idx_masked))));
 #endif
 }
 #endif
