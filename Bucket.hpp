@@ -71,6 +71,30 @@ static inline int32x4_t _mm_sad_epu8(int32x4_t a, int32x4_t b)
     uint16x8_t r = vsetq_lane_u16(r0, vdupq_n_u16(0), 0);
     return (int32x4_t) vsetq_lane_u16(r4, r, 4);
 }
+
+static inline int32x4_t _mm_shuffle_epi8(int32x4_t a, int32x4_t b)
+{
+    int8x16_t tbl = vreinterpretq_s8_s64(a);   // input a
+    uint8x16_t idx = vreinterpretq_u8_s64(b);  // input b
+    uint8x16_t idx_masked = vandq_u8(idx, vdupq_n_u8(0x8F));  // avoid using meaningless bits
+#if defined(__aarch64__)
+    return vreinterpretq_s64_s8(vqtbl1q_s8(tbl, idx_masked)); //function only exist on ARMv8
+#elif defined(__GNUC__)
+    int8x16_t ret;
+    // %e and %f represent the even and odd D registers
+    // respectively.
+    __asm__(
+        "    vtbl.8  %e[ret], {%e[tbl], %f[tbl]}, %e[idx]\n"
+        "    vtbl.8  %f[ret], {%e[tbl], %f[tbl]}, %f[idx]\n"
+        : [ret] "=&w" (ret)
+        : [tbl] "w" (tbl), [idx] "w" (idx_masked));
+    return vreinterpretq_s64_s8(ret);
+#else
+    // use this line if testing on aarch64
+    int8x8x2_t a_split = { vget_low_s8(tbl), vget_high_s8(tbl) };
+    return vreinterpretq_s64_s8(vcombine_s8(vtbl2_s8(a_split, vget_low_u8(idx_masked)), vtbl2_s8(a_split, vget_high_u8(idx_masked))));
+#endif
+}
 #endif
 
 static inline auto clz(uint32_t value) -> uint32_t {
@@ -160,7 +184,7 @@ public:
       // get mask is set get first index and return value
       int32x4_t tmp = vld1q_s32(reinterpret_cast<int32_t*>(&checksums[0])); //load 8 values (8th will be discarded)
 
-      tmp = vtbl_s32(tmp, _mm_setr_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1));
+      tmp = _mm_shuffle_epi8(tmp, _mm_setr_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1));
       tmp = vceqq_s16(vreinterpretq_s16_s32(tmp), vreinterpretq_s16_s32(xmmChecksum)); // compare ch values
       tmp = vcombine_s8(vqmovn_s16(vreinterpretq_s16_s32(tmp)), vqmovn_s16(vreinterpretq_s16_s32(vdupq_n_s32(0)))); // pack result
       uint32_t t = (_mm_movemask_epi8(tmp)) >> 1; // get mask of comparison, bit is set if eq, discard 8th bit
