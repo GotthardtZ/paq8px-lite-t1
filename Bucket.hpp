@@ -72,6 +72,8 @@ static inline int32x4_t _mm_sad_epu8(int32x4_t a, int32x4_t b)
     return (int32x4_t) vsetq_lane_u16(r4, r, 4);
 }
 
+#endif
+
 static inline auto clz(uint32_t value) -> uint32_t {
   return __builtin_clz(value);
 }
