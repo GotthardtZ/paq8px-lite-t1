@@ -24,7 +24,7 @@ static inline int32x4_t _mm_srli_si128(int32x4_t a, int imm) {
 
 static inline int _mm_movemask_epi8(int32x4_t _a)
 {
-    uint8x16_t input = vreinterpretq_u8_m128i(_a);
+    uint8x16_t input = vreinterpretq_u8_s32(_a);
     static const int8_t __attribute__((aligned(16))) xr[8] = { -7, -6, -5, -4, -3, -2, -1, 0 };
     uint8x8_t mask_and = vdup_n_u8(0x80);
     int8x8_t mask_shift = vld1_s8(xr);
