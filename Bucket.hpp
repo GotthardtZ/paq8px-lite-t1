@@ -200,7 +200,7 @@ public:
       int32x4_t one1 = vreinterpretq_s32_s8(vdupq_n_s8(1));
       int32x4_t vm = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7);
 
-      int32x4_t lastX = vcombine_s64(vget_low_s64(lastL), vget_low_s64(lastH)); // mostRecentlyUsed&15 mostRecentlyUsed>>4
+      int32x4_t lastX = vcombine_s64(vget_low_s64(vreinterpretq_s64_s32(lastL)), vget_low_s64(vreinterpretq_s64_s32(lastH))); // mostRecentlyUsed&15 mostRecentlyUsed>>4
       int32x4_t eq0 = vreinterpretq_s64_u8(vceqq_s8(vreinterpretq_s8_s32(lastX), vreinterpretq_s8_s32(vm))); // compare values
 
       eq0 = vorrq_s32(eq0, _mm_srli_si128(eq0, 8));    // or low values with high
