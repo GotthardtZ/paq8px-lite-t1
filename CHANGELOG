@@ -1628,3 +1628,7 @@ paq8px_v186:
 paq8px_v186fix1:
 2020.04.10
 - Fixed infinite loop in base64 decoder.
+
+paq8px_v187:
+2020.04.11
+- Ported ContextMap Bucket find() function to NEON.

@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "186fix1"  //update version here before publishing your changes
+#define PROGVERSION  "187"  //update version here before publishing your changes
 #define PROGYEAR     "2020"
 
 // TODO: make more models "optional"

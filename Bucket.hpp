@@ -24,75 +24,71 @@ static inline int32x4_t _mm_srli_si128(int32x4_t a, int imm) {
 
 static inline int _mm_movemask_epi8(int32x4_t _a)
 {
-    uint8x16_t input = vreinterpretq_u8_s32(_a);
-    static const int8_t __attribute__((aligned(16))) xr[8] = { -7, -6, -5, -4, -3, -2, -1, 0 };
-    uint8x8_t mask_and = vdup_n_u8(0x80);
-    int8x8_t mask_shift = vld1_s8(xr);
+  uint8x16_t input = vreinterpretq_u8_s32(_a);
+  static const int8_t __attribute__((aligned(16))) xr[8] = { -7, -6, -5, -4, -3, -2, -1, 0 };
+  uint8x8_t mask_and = vdup_n_u8(0x80);
+  int8x8_t mask_shift = vld1_s8(xr);
+  
+  uint8x8_t lo = vget_low_u8(input);
+  uint8x8_t hi = vget_high_u8(input);
+  
+  lo = vand_u8(lo, mask_and);
+  lo = vshl_u8(lo, mask_shift);
 
-    uint8x8_t lo = vget_low_u8(input);
-    uint8x8_t hi = vget_high_u8(input);
+  hi = vand_u8(hi, mask_and);
+  hi = vshl_u8(hi, mask_shift);
+  
+  lo = vpadd_u8(lo, lo);
+  lo = vpadd_u8(lo, lo);
+  lo = vpadd_u8(lo, lo);
 
-    lo = vand_u8(lo, mask_and);
-    lo = vshl_u8(lo, mask_shift);
-
-    hi = vand_u8(hi, mask_and);
-    hi = vshl_u8(hi, mask_shift);
-
-    lo = vpadd_u8(lo, lo);
-    lo = vpadd_u8(lo, lo);
-    lo = vpadd_u8(lo, lo);
-
-    hi = vpadd_u8(hi, hi);
-    hi = vpadd_u8(hi, hi);
-    hi = vpadd_u8(hi, hi);
+  hi = vpadd_u8(hi, hi);
+  hi = vpadd_u8(hi, hi);
+  hi = vpadd_u8(hi, hi);
 
   return ((hi[0] << 8) | (lo[0] & 0xFF));
 }
 
 // Below functions taken and adapted from https://github.com/DLTcollab/sse2neon/blob/master/sse2neon.h
 static inline int32x4_t _mm_setr_epi8(signed char b0, signed char b1, signed char b2, signed char b3,
-    signed char b4, signed char b5, signed char b6, signed char b7,
-    signed char b8, signed char b9, signed char b10, signed char b11,
-    signed char b12, signed char b13, signed char b14, signed char b15)
-{
-    int8_t __attribute__((aligned(16)))
-        data[16] = { (int8_t)b0,  (int8_t)b1,  (int8_t)b2,  (int8_t)b3,
-                     (int8_t)b4,  (int8_t)b5,  (int8_t)b6,  (int8_t)b7,
-                     (int8_t)b8,  (int8_t)b9,  (int8_t)b10, (int8_t)b11,
-                     (int8_t)b12, (int8_t)b13, (int8_t)b14, (int8_t)b15 };
-    return (int32x4_t)vld1q_s8(data);
+                                      signed char b4, signed char b5, signed char b6, signed char b7,
+                                      signed char b8, signed char b9, signed char b10, signed char b11,
+                                      signed char b12, signed char b13, signed char b14, signed char b15) {
+  int8_t __attribute__((aligned(16))) data[16] = { (int8_t)b0,  (int8_t)b1,  (int8_t)b2,  (int8_t)b3,
+                                                   (int8_t)b4,  (int8_t)b5,  (int8_t)b6,  (int8_t)b7,
+                                                   (int8_t)b8,  (int8_t)b9,  (int8_t)b10, (int8_t)b11,
+                                                   (int8_t)b12, (int8_t)b13, (int8_t)b14, (int8_t)b15 };
+  return (int32x4_t)vld1q_s8(data);
 }
 
-static inline int32x4_t _mm_sad_epu8(int32x4_t a, int32x4_t b)
-{
-    uint16x8_t t = vpaddlq_u8(vabdq_u8((uint8x16_t)a, (uint8x16_t)b));
-    uint16_t r0 = t[0] + t[1] + t[2] + t[3];
-    uint16_t r4 = t[4] + t[5] + t[6] + t[7];
-    uint16x8_t r = vsetq_lane_u16(r0, vdupq_n_u16(0), 0);
-    return (int32x4_t) vsetq_lane_u16(r4, r, 4);
+static inline int32x4_t _mm_sad_epu8(int32x4_t a, int32x4_t b) {
+  uint16x8_t t = vpaddlq_u8(vabdq_u8((uint8x16_t)a, (uint8x16_t)b));
+  uint16_t r0 = t[0] + t[1] + t[2] + t[3];
+  uint16_t r4 = t[4] + t[5] + t[6] + t[7];
+  uint16x8_t r = vsetq_lane_u16(r0, vdupq_n_u16(0), 0);
+  return (int32x4_t) vsetq_lane_u16(r4, r, 4);
 }
 
-static inline int32x4_t _mm_shuffle_epi8(int32x4_t a, int32x4_t b)
-{
-    int8x16_t tbl = vreinterpretq_s8_s32(a);   // input a
-    uint8x16_t idx = vreinterpretq_u8_s32(b);  // input b
-    uint8x16_t idx_masked = vandq_u8(idx, vdupq_n_u8(0x8F));  // avoid using meaningless bits
+static inline int32x4_t _mm_shuffle_epi8(int32x4_t a, int32x4_t b) {
+  int8x16_t tbl = vreinterpretq_s8_s32(a);   // input a
+  uint8x16_t idx = vreinterpretq_u8_s32(b);  // input b
+  uint8x16_t idx_masked = vandq_u8(idx, vdupq_n_u8(0x8F));  // avoid using meaningless bits
 #if defined(__aarch64__)
-    return vreinterpretq_s32_s8(vqtbl1q_s8(tbl, idx_masked)); //function only exist on ARMv8
+  return vreinterpretq_s32_s8(vqtbl1q_s8(tbl, idx_masked)); //function only exist on ARMv8
 #elif defined(__GNUC__)
-    int8x16_t ret;
-    // %e and %f represent the even and odd D registers
-    // respectively.
-    __asm__(
-        "    vtbl.8  %e[ret], {%e[tbl], %f[tbl]}, %e[idx]\n"
-        "    vtbl.8  %f[ret], {%e[tbl], %f[tbl]}, %f[idx]\n"
-        : [ret] "=&w" (ret)
-        : [tbl] "w" (tbl), [idx] "w" (idx_masked));
-    return vreinterpretq_s32_s8(ret);
+  int8x16_t ret;
+  // %e and %f represent the even and odd D registers
+  // respectively.
+  __asm__(
+      "    vtbl.8  %e[ret], {%e[tbl], %f[tbl]}, %e[idx]\n"
+      "    vtbl.8  %f[ret], {%e[tbl], %f[tbl]}, %f[idx]\n"
+      : [ret] "=&w" (ret)
+      : [tbl] "w" (tbl), [idx] "w" (idx_masked));
+  return vreinterpretq_s32_s8(ret);
 #else
-    // use this line if testing on aarch64
-    int8x8x2_t a_split = { vget_low_s8(tbl), vget_high_s8(tbl) };
-    return vreinterpretq_s32_s8(vcombine_s8(vtbl2_s8(a_split, vget_low_u8(idx_masked)), vtbl2_s8(a_split, vget_high_u8(idx_masked))));
+  // use this line if testing on aarch64
+  int8x8x2_t a_split = { vget_low_s8(tbl), vget_high_s8(tbl) };
+  return vreinterpretq_s32_s8(vcombine_s8(vtbl2_s8(a_split, vget_low_u8(idx_masked)), vtbl2_s8(a_split, vget_high_u8(idx_masked))));
 #endif
 }
 #endif
