@@ -13,7 +13,7 @@
 #include <arm_neon.h>
 
 // Below functions taken and adapted from https://github.com/jratcliff63367/sse2neon/blob/master/SSE2NEON.h
-static inline int32x4_t _mm_srli_si128(a, imm) {
+static inline int32x4_t _mm_srli_si128(int32x4_t a, int imm) {
   if ((imm) <= 0)
     return a;
   else if ((imm) > 15)
