@@ -185,7 +185,7 @@ public:
       int32x4_t tmp = vld1q_s32(reinterpret_cast<int32_t*>(&checksums[0])); //load 8 values (8th will be discarded)
 
       tmp = _mm_shuffle_epi8(tmp, _mm_setr_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1));
-      tmp = vceqq_s16(vreinterpretq_s16_s32(tmp), vreinterpretq_s16_s32(xmmChecksum)); // compare ch values
+      tmp = vceqq_s16(vreinterpretq_s8_s32(tmp), vreinterpretq_s16_s32(xmmChecksum)); // compare ch values
       tmp = vcombine_s8(vqmovn_s16(vreinterpretq_s16_s32(tmp)), vqmovn_s16(vreinterpretq_s16_s32(vdupq_n_s32(0)))); // pack result
       uint32_t t = (_mm_movemask_epi8(tmp)) >> 1; // get mask of comparison, bit is set if eq, discard 8th bit
       uint32_t a = 0;    // index into bitState or 7 if not found
