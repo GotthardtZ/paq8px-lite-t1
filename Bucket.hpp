@@ -71,7 +71,6 @@ static inline int32x4_t _mm_sad_epu8(int32x4_t a, int32x4_t b)
     uint16x8_t r = vsetq_lane_u16(r0, vdupq_n_u16(0), 0);
     return (int32x4_t) vsetq_lane_u16(r4, r, 4);
 }
-
 #endif
 
 static inline auto clz(uint32_t value) -> uint32_t {
@@ -159,7 +158,7 @@ public:
       // load 8 values, discard last one as only 7 are needed.
       // reverse order and compare 7 checksums values to @ref checksum
       // get mask is set get first index and return value
-      int32x4_t = vld1q_s32(reinterpret_cast<int32_t*>(&checksums[0])); //load 8 values (8th will be discarded)
+      int32x4_t tmp = vld1q_s32(reinterpret_cast<int32_t*>(&checksums[0])); //load 8 values (8th will be discarded)
 
       tmp = vtbl_s32(tmp, _mm_setr_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1));
       tmp = vceqq_s16(vreinterpretq_s16_s32(tmp), vreinterpretq_s16_s32(xmmChecksum)); // compare ch values
