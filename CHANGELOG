@@ -1633,3 +1633,5 @@ paq8px_v187:
 2020.04.12
 - Ported ContextMap Bucket find() function to NEON and AVX2.
 - Bucket will now use the find() function according to the SIMD vectorization being used.
+- When using SSE2, it will assume the CPU doesn't have SSE3 and will use the `None` function of Bucket.hpp`. If `-simd SSSE3` is specified , then it will use the SSSE3 SIMD function in `Bucket.hpp` and the SSE2 Mixer Training function.
+- Changed some If's statements to If/Else.
