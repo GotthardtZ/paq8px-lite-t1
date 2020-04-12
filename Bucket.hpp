@@ -136,7 +136,7 @@ public:
       /// load 8 values, discard last one as only 7 are needed.
       /// reverse order and compare 7 checksums values to @ref checksum
       /// get mask is set get first index and return value
-      __m256i tmp = _mm256_load_si256(reinterpret_cast<__m256i*>(&checksums[0]));
+      __m256i tmp = _mm256_load_si256(reinterpret_cast<__m256i *>(&checksums[0]));
       tmp = _mm256_shuffle_epi8(tmp, _mm256_setr_epi8(30, 31, 28, 29, 26, 27, 24, 25, 22, 23, 20, 21, 18, 19, 16, 17, 14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1));
       tmp = _mm256_cmpeq_epi16(tmp, xmmChecksum); // compare ch values
       tmp = _mm256_packs_epi16(tmp, _mm256_setzero_si256()); // pack result
@@ -163,11 +163,11 @@ public:
       const uint32_t pCount = _mm_cvtsi128_si32(_mm256_castsi256_si128(sum1)); // population count
       _mm256_zeroupper();
       uint32_t t0 = (~_mm256_movemask_epi8(eq0));
-      for (int i = pCount; i < 7; ++i) {
+      for ( int i = pCount; i < 7; ++i ) {
         int bitt = ctz(t0);     // get index
         t0 &= ~(1 << bitt); // clear bit set and test again
         int pri = bitState[bitt][0];
-        if (pri < worst) {
+        if ( pri < worst ) {
           worst = pri;
           idx = bitt;
         }
@@ -194,7 +194,7 @@ public:
       // load 8 values, discard last one as only 7 are needed.
       // reverse order and compare 7 checksums values to @ref checksum
       // get mask is set get first index and return value
-      __m128i tmp = _mm_load_si128(reinterpret_cast<__m128i*>(&checksums[0])); //load 8 values (8th will be discarded)
+      __m128i tmp = _mm_load_si128(reinterpret_cast<__m128i *>(&checksums[0])); //load 8 values (8th will be discarded)
 
       tmp = _mm_shuffle_epi8(tmp, _mm_setr_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1));
       tmp = _mm_cmpeq_epi16(tmp, xmmChecksum); // compare ch values
@@ -220,11 +220,11 @@ public:
       __m128i sum1 = _mm_sad_epu8(lastX, _mm_setzero_si128());        // count values, abs(a0 - b0) + abs(a1 - b1) .... up to b8
       const uint32_t pCount = _mm_cvtsi128_si32(sum1); // population count
       uint32_t t0 = (~_mm_movemask_epi8(eq0));
-      for (int i = pCount; i < 7; ++i) {
+      for ( int i = pCount; i < 7; ++i ) {
         int bitt = ctz(t0);     // get index
         t0 &= ~(1 << bitt); // clear bit set and test again
         int pri = bitState[bitt][0];
-        if (pri < worst) {
+        if ( pri < worst ) {
           worst = pri;
           idx = bitt;
         }
@@ -248,14 +248,14 @@ public:
       // load 8 values, discard last one as only 7 are needed.
       // reverse order and compare 7 checksums values to @ref checksum
       // get mask is set get first index and return value
-      int32x4_t tmp = vld1q_s32(reinterpret_cast<int32_t*>(&checksums[0])); //load 8 values (8th will be discarded)
+      int32x4_t tmp = vld1q_s32(reinterpret_cast<int32_t *>(&checksums[0])); //load 8 values (8th will be discarded)
       
       tmp = _mm_shuffle_epi8(tmp, _mm_setr_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1));
       tmp = vreinterpretq_s32_u16(vceqq_s16(vreinterpretq_s16_s32(tmp), vreinterpretq_s16_s32(xmmChecksum))); // compare ch values
       tmp = vreinterpretq_s32_s8(vcombine_s8(vqmovn_s16(vreinterpretq_s16_s32(tmp)), vqmovn_s16(vreinterpretq_s16_s32(vdupq_n_s32(0))))); // pack result
       uint32_t t = (_mm_movemask_epi8(tmp)) >> 1; // get mask of comparison, bit is set if eq, discard 8th bit
       uint32_t a = 0;    // index into bitState or 7 if not found
-      if (t != 0u) {
+      if (t != 0u ) {
         a = (clz(t) - 1) & 7U;
         mostRecentlyUsed = mostRecentlyUsed << 4U | a;
         return &bitState[a][0];
@@ -275,11 +275,11 @@ public:
       int32x4_t sum1 = _mm_sad_epu8(lastX, vdupq_n_s32(0)); // count values, abs(a0 - b0) + abs(a1 - b1) .... up to b8
       const uint32_t pCount = vgetq_lane_s32(sum1, 0); // population count
       uint32_t t0 = (~_mm_movemask_epi8(eq0));
-      for (int i = pCount; i < 7; ++i) {
+      for ( int i = pCount; i < 7; ++i ) {
         int bitt = ctz(t0);     // get index
         t0 &= ~(1 << bitt); // clear bit set and test again
         int pri = bitState[bitt][0];
-        if (pri < worst) {
+        if ( pri < worst ) {
           worst = pri;
           idx = bitt;
         }
@@ -324,7 +324,7 @@ public:
         return findNeon(checksum);
       }
       assert(false);
-      return (uint8_t*) 0;
+      return (uint8_t *) 0;
     }
 };
 
