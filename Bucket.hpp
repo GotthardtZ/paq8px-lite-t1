@@ -201,7 +201,7 @@ public:
       tmp = _mm_packs_epi16(tmp, _mm_setzero_si128()); // pack result
       uint32_t t = (_mm_movemask_epi8(tmp)) >> 1; // get mask of comparison, bit is set if eq, discard 8th bit
       uint32_t a = 0;    // index into bitState or 7 if not found
-      if (t != 0u ) {
+      if( t != 0u ) {
         a = (clz(t) - 1) & 7U;
         mostRecentlyUsed = mostRecentlyUsed << 4U | a;
         return &bitState[a][0];
