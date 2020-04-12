@@ -14,16 +14,16 @@ void ContextMap::set(const uint64_t cx) {
   assert(cn >= 0 && cn < c);
   const uint32_t ctx = cxt[cn] = finalize64(cx, hashBits);
   const uint16_t checksum = chk[cn] = static_cast<uint16_t>(checksum64(cx, hashBits, 16));
-  uint8_t *base = cp0[cn] = cp[cn] = t[ctx & mask].find(checksum);
+  uint8_t *base = cp0[cn] = cp[cn] = t[ctx & mask].find(checksum, shared->chosenSimd);
   runP[cn] = base + 3;
   // update pending bit histories for bits 2-7
   if( base[3] == 2 ) {
     const int c = base[4] + 256;
-    uint8_t *p = t[(ctx + (c >> 6U)) & mask].find(checksum);
+    uint8_t *p = t[(ctx + (c >> 6U)) & mask].find(checksum, shared->chosenSimd);
     p[0] = 1 + ((c >> 5U) & 1U);
     p[1 + ((c >> 5U) & 1U)] = 1 + ((c >> 4U) & 1U);
     p[3 + ((c >> 4U) & 3U)] = 1 + ((c >> 3U) & 1U);
-    p = t[(ctx + (c >> 3U)) & mask].find(checksum);
+    p = t[(ctx + (c >> 3U)) & mask].find(checksum, shared->chosenSimd);
     p[0] = 1 + ((c >> 2U) & 1U);
     p[1 + ((c >> 2U) & 1U)] = 1 + ((c >> 1U) & 1U);
     p[3 + ((c >> 1U) & 3U)] = 1 + (c & 1U);
@@ -67,7 +67,7 @@ void ContextMap::update() {
           case 5: {
             const uint16_t checksum = chk[i];
             const uint32_t ctx = cxt[i];
-            cp0[i] = cp[i] = t[(ctx + shared->c0) & mask].find(checksum);
+            cp0[i] = cp[i] = t[(ctx + shared->c0) & mask].find(checksum, shared->chosenSimd);
             break;
           }
           case 0: {
