@@ -8,7 +8,7 @@ auto MixerFactory::createMixer(const int n, const int m, const int s) -> Mixer *
     return new SIMDMixer<SIMD_SSE2>(n, m, s);
   }
   else if (shared->chosenSimd == SIMD_SSSE3) {
-      return new SIMDMixer<SIMD_SSSE3>(n, m, s);
+    return new SIMDMixer<SIMD_SSSE3>(n, m, s);
   }
   else if( shared->chosenSimd == SIMD_AVX2 ) {
     return new SIMDMixer<SIMD_AVX2>(n, m, s);
