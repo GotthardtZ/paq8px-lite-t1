@@ -143,7 +143,7 @@ public:
       _mm256_zeroupper();
       uint32_t t = (_mm256_movemask_epi8((tmp))) >> 1; // get mask of comparison, bit is set if eq, discard 8th bit
       uint32_t a = 0;    // index into bitState or 7 if not found
-      if (t != 0u) {
+      if ( t != 0u ) {
         a = (clz(t) - 1) & 7U;
           mostRecentlyUsed = mostRecentlyUsed << 4U | a;
           return &bitState[a][0];
@@ -163,11 +163,11 @@ public:
       const uint32_t pCount = _mm_cvtsi128_si32(_mm256_castsi256_si128(sum1)); // population count
       _mm256_zeroupper();
       uint32_t t0 = (~_mm256_movemask_epi8(eq0));
-      for ( int i = pCount; i < 7; ++i ) {
+      for( int i = pCount; i < 7; ++i ) {
         int bitt = ctz(t0);     // get index
         t0 &= ~(1 << bitt); // clear bit set and test again
         int pri = bitState[bitt][0];
-        if ( pri < worst ) {
+        if( pri < worst ) {
           worst = pri;
           idx = bitt;
         }
@@ -201,7 +201,7 @@ public:
       tmp = _mm_packs_epi16(tmp, _mm_setzero_si128()); // pack result
       uint32_t t = (_mm_movemask_epi8(tmp)) >> 1; // get mask of comparison, bit is set if eq, discard 8th bit
       uint32_t a = 0;    // index into bitState or 7 if not found
-      if (t != 0u) {
+      if (t != 0u ) {
         a = (clz(t) - 1) & 7U;
         mostRecentlyUsed = mostRecentlyUsed << 4U | a;
         return &bitState[a][0];
@@ -220,11 +220,11 @@ public:
       __m128i sum1 = _mm_sad_epu8(lastX, _mm_setzero_si128());        // count values, abs(a0 - b0) + abs(a1 - b1) .... up to b8
       const uint32_t pCount = _mm_cvtsi128_si32(sum1); // population count
       uint32_t t0 = (~_mm_movemask_epi8(eq0));
-      for ( int i = pCount; i < 7; ++i ) {
+      for( int i = pCount; i < 7; ++i ) {
         int bitt = ctz(t0);     // get index
         t0 &= ~(1 << bitt); // clear bit set and test again
         int pri = bitState[bitt][0];
-        if ( pri < worst ) {
+        if( pri < worst ) {
           worst = pri;
           idx = bitt;
         }
@@ -255,7 +255,7 @@ public:
       tmp = vreinterpretq_s32_s8(vcombine_s8(vqmovn_s16(vreinterpretq_s16_s32(tmp)), vqmovn_s16(vreinterpretq_s16_s32(vdupq_n_s32(0))))); // pack result
       uint32_t t = (_mm_movemask_epi8(tmp)) >> 1; // get mask of comparison, bit is set if eq, discard 8th bit
       uint32_t a = 0;    // index into bitState or 7 if not found
-      if (t != 0u ) {
+      if ( t != 0u ) {
         a = (clz(t) - 1) & 7U;
         mostRecentlyUsed = mostRecentlyUsed << 4U | a;
         return &bitState[a][0];
@@ -275,11 +275,11 @@ public:
       int32x4_t sum1 = _mm_sad_epu8(lastX, vdupq_n_s32(0)); // count values, abs(a0 - b0) + abs(a1 - b1) .... up to b8
       const uint32_t pCount = vgetq_lane_s32(sum1, 0); // population count
       uint32_t t0 = (~_mm_movemask_epi8(eq0));
-      for ( int i = pCount; i < 7; ++i ) {
+      for( int i = pCount; i < 7; ++i ) {
         int bitt = ctz(t0);     // get index
         t0 &= ~(1 << bitt); // clear bit set and test again
         int pri = bitState[bitt][0];
-        if ( pri < worst ) {
+        if( pri < worst ) {
           worst = pri;
           idx = bitt;
         }
