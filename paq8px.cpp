@@ -118,7 +118,7 @@ static void printHelp() {
          "    Logs (appends) compression results in the specified tab separated LOGFILE.\n"
          "    Logging is only applicable for compression.\n"
          "\n"
-         "    -simd [NONE|SSE2|AVX2|NEON]\n"
+         "    -simd [NONE|SSE2|SSSE3|AVX2|NEON]\n"
          "    Overrides detected SIMD instruction set for neural network operations\n"
          "\n"
          "Remark: the command line arguments may be used in any order except the input\n"
@@ -167,6 +167,8 @@ static void printSimdInfo(int simdIset, int detectedSimdIset) {
     printf("NEON");
   } else if( simdIset >= 9 ) {
     printf("AVX2");
+  } else if (simdIset >= 5) {
+    printf("SSSE3 & SSE2");
   } else if( simdIset >= 3 ) {
     printf("SSE2");
   } else {
@@ -311,20 +313,20 @@ auto main_utf8(int argc, char **argv) -> int {
 #endif
         else if( strcasecmp(argv[i], "-simd") == 0 ) {
           if( ++i == argc ) {
-            quit("The -simd switch requires an instruction set name (NONE,SSE2,AVX2,NEON).");
+            quit("The -simd switch requires an instruction set name (NONE,SSE2,SSSE3, AVX2, NEON).");
           }
           if( strcasecmp(argv[i], "NONE") == 0 ) {
             simdIset = 0;
           } else if( strcasecmp(argv[i], "SSE2") == 0 ) {
             simdIset = 3;
-          } else if( strcasecmp(argv[i], "AVX2") == 0 ) {
-            simdIset = 9;
+          } else if( strcasecmp(argv[i], "SSSE3") == 0 ) {
+            simdIset = 5;
          } else if( strcasecmp(argv[i], "AVX2") == 0 ) {
             simdIset = 9;
          } else if (strcasecmp(argv[i], "NEON") == 0) {
             simdIset = 11;
           } else {
-            quit("Invalid -simd option. Use -simd NONE, -simd SSE2, -simd AVX2 or -simd NEON.");
+            quit("Invalid -simd option. Use -simd NONE, -simd SSE2, -simd SSSE3, -simd AVX2 or -simd NEON.");
           }
         } else {
           printf("Invalid command: %s", argv[i]);
@@ -366,6 +368,8 @@ auto main_utf8(int argc, char **argv) -> int {
       shared->chosenSimd = SIMD_NEON;
     } else if (simdIset >= 9) {
       shared->chosenSimd = SIMD_AVX2;
+    } else if (simdIset >= 5) {
+      shared->chosenSimd = SIMD_SSSE3;
     } else if( simdIset >= 3 ) {
       shared->chosenSimd = SIMD_SSE2;
     } else {

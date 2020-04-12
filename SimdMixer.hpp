@@ -19,10 +19,10 @@ private:
       if( simd == SIMD_AVX2 ) {
         return 32 / sizeof(short); // 256 bit (32 byte) data size
       }
-      if( simd == SIMD_SSE2 || simd == SIMD_NEON ) {
+      else if( simd == SIMD_SSE2 || simd == SIMD_SSSE3 || simd == SIMD_NEON ) {
         return 16 / sizeof(short); // 128 bit (16 byte) data size
       }
-      if( simd == SIMD_NONE ) {
+      else if( simd == SIMD_NONE ) {
         return 4 / sizeof(short); // Processes 2 shorts at once -> width is 4 bytes
       }
       assert(false);
@@ -64,13 +64,13 @@ public:
           if( simd == SIMD_NONE ) {
             trainSimdNone(&tx[0], &wx[cxt[i] * n], nx, err * rates[i]);
           }
-          if( simd == SIMD_SSE2 ) {
+          else if( simd == SIMD_SSE2 || simd == SIMD_SSSE3 ) {
             trainSimdSse2(&tx[0], &wx[cxt[i] * n], nx, err * rates[i]);
           }
-          if( simd == SIMD_AVX2 ) {
+          else if( simd == SIMD_AVX2 ) {
             trainSimdAvx2(&tx[0], &wx[cxt[i] * n], nx, err * rates[i]);
           }
-          if (simd == SIMD_NEON) {
+          else if (simd == SIMD_NEON) {
             trainSimdNeon(&tx[0], &wx[cxt[i] * n], nx, err * rates[i]);
           }
           if((shared->options & OPTION_ADAPTIVE) != 0u ) {
@@ -116,13 +116,13 @@ public:
           if( simd == SIMD_NONE ) {
             dp = dotProductSimdNone(&tx[0], &wx[cxt[i] * n], nx);
           }
-          if( simd == SIMD_SSE2 ) {
+          else if( simd == SIMD_SSE2 || simd == SIMD_SSSE3 ) {
             dp = dotProductSimdSse2(&tx[0], &wx[cxt[i] * n], nx);
           }
-          if( simd == SIMD_AVX2 ) {
+          else if( simd == SIMD_AVX2 ) {
             dp = dotProductSimdAvx2(&tx[0], &wx[cxt[i] * n], nx);
           }
-          if (simd == SIMD_NEON) {
+          else if (simd == SIMD_NEON) {
             dp = dotProductSimdNeon(&tx[0], &wx[cxt[i] * n], nx);
           }
           dp = (dp * scaleFactor) >> 16U;
@@ -141,13 +141,13 @@ public:
       if( simd == SIMD_NONE ) {
         dp = dotProductSimdNone(&tx[0], &wx[cxt[0] * n], nx);
       }
-      if( simd == SIMD_SSE2 ) {
+      else if( simd == SIMD_SSE2 || simd == SIMD_SSSE3 ) {
         dp = dotProductSimdSse2(&tx[0], &wx[cxt[0] * n], nx);
       }
-      if( simd == SIMD_AVX2 ) {
+      else if( simd == SIMD_AVX2 ) {
         dp = dotProductSimdAvx2(&tx[0], &wx[cxt[0] * n], nx);
       }
-      if (simd == SIMD_NEON) {
+      else if (simd == SIMD_NEON) {
         dp = dotProductSimdNeon(&tx[0], &wx[cxt[0] * n], nx);
       }
       dp = (dp * scaleFactor) >> 16U;

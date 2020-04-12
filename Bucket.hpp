@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include "Shared.hpp"
 #include "utils.hpp"
 
 #ifdef WINDOWS
@@ -118,87 +119,126 @@ public:
      * @param checksum
      * @return
      */
-    inline auto find(const uint16_t checksum) -> uint8_t * {
-#if defined(__SSSE3__)
-      if( checksums[mostRecentlyUsed & 15U] == checksum ) {
+
+#if (defined(__GNUC__) || defined(__clang__)) && defined(__AVX2__)
+    __attribute__((target("avx2")))
+#endif
+    inline auto findAvx2(const uint16_t checksum) -> uint8_t* {
+#ifndef __AVX2__
+      return 0;
+#else
+      if (checksums[mostRecentlyUsed & 15U] == checksum) {
         return &bitState[mostRecentlyUsed & 15U][0];
       }
       int worst = 0xFFFF;
       int idx = 0;
-#if defined(__AVX2__)
       const __m256i xmmChecksum = _mm256_set1_epi16(short(checksum)); //fill 8 ch values
-     //// load 8 values, discard last one as only 7 are needed.
-     //// reverse order and compare 7 checksums values to @ref checksum
-     //// get mask is set get first index and return value
+      /// load 8 values, discard last one as only 7 are needed.
+      /// reverse order and compare 7 checksums values to @ref checksum
+      /// get mask is set get first index and return value
       __m256i tmp = _mm256_load_si256(reinterpret_cast<__m256i*>(&checksums[0]));
       tmp = _mm256_shuffle_epi8(tmp, _mm256_setr_epi8(30, 31, 28, 29, 26, 27, 24, 25, 22, 23, 20, 21, 18, 19, 16, 17, 14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1));
       tmp = _mm256_cmpeq_epi16(tmp, xmmChecksum); // compare ch values
       tmp = _mm256_packs_epi16(tmp, _mm256_setzero_si256()); // pack result
       _mm256_zeroupper();
       uint32_t t = (_mm256_movemask_epi8((tmp))) >> 1; // get mask of comparison, bit is set if eq, discard 8th bit
-#else
-      const __m128i xmmChecksum = _mm_set1_epi16(short(checksum)); //fill 8 ch values
-      // load 8 values, discard last one as only 7 are needed.
-      // reverse order and compare 7 checksums values to @ref checksum
-      // get mask is set get first index and return value
-      __m128i tmp = _mm_load_si128(reinterpret_cast<__m128i *>(&checksums[0])); //load 8 values (8th will be discarded)
-
-      tmp = _mm_shuffle_epi8(tmp, _mm_setr_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1));
-      tmp = _mm_cmpeq_epi16(tmp, xmmChecksum); // compare ch values
-      tmp = _mm_packs_epi16(tmp, _mm_setzero_si128()); // pack result
-      uint32_t t = (_mm_movemask_epi8(tmp)) >> 1; // get mask of comparison, bit is set if eq, discard 8th bit
-#endif
       uint32_t a = 0;    // index into bitState or 7 if not found
-      if( t != 0u ) {
+      if (t != 0u) {
         a = (clz(t) - 1) & 7U;
-        mostRecentlyUsed = mostRecentlyUsed << 4U | a;
-        return &bitState[a][0];
+          mostRecentlyUsed = mostRecentlyUsed << 4U | a;
+          return &bitState[a][0];
       }
-#if defined(__AVX2__)
       __m256i lastL = _mm256_set1_epi8((mostRecentlyUsed & 15U));
       __m256i lastH = _mm256_set1_epi8((mostRecentlyUsed >> 4U));
       __m256i one1 = _mm256_set1_epi8(1);
       __m256i vm = _mm256_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7);
-
+      
       __m256i lastX = _mm256_unpacklo_epi64(lastL, lastH); // mostRecentlyUsed&15 mostRecentlyUsed>>4
       __m256i eq0 = _mm256_cmpeq_epi8(lastX, vm); // compare values
 
       eq0 = _mm256_or_si256(eq0, _mm256_srli_si256(eq0, 8));    // or low values with high
-
+      
       lastX = _mm256_and_si256(one1, eq0);                //set to 1 if eq
       __m256i sum1 = _mm256_sad_epu8(lastX, _mm256_setzero_si256());        // count values, abs(a0 - b0) + abs(a1 - b1) .... up to b8
       const uint32_t pCount = _mm_cvtsi128_si32(_mm256_castsi256_si128(sum1)); // population count
       _mm256_zeroupper();
       uint32_t t0 = (~_mm256_movemask_epi8(eq0));
-#else
-      __m128i lastL = _mm_set1_epi8((mostRecentlyUsed & 15U));
-      __m128i lastH = _mm_set1_epi8((mostRecentlyUsed >> 4U));
-      __m128i one1 = _mm_set1_epi8(1);
-      __m128i vm = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7);
-
-      __m128i lastX = _mm_unpacklo_epi64(lastL, lastH); // mostRecentlyUsed&15 mostRecentlyUsed>>4
-      __m128i eq0 = _mm_cmpeq_epi8(lastX, vm); // compare values
-
-      eq0 = _mm_or_si128(eq0, _mm_srli_si128 (eq0, 8));    // or low values with high
-
-      lastX = _mm_and_si128(one1, eq0);                //set to 1 if eq
-      __m128i sum1 = _mm_sad_epu8(lastX, _mm_setzero_si128());        // count values, abs(a0 - b0) + abs(a1 - b1) .... up to b8
-      const uint32_t pCount = _mm_cvtsi128_si32(sum1); // population count
-      uint32_t t0 = (~_mm_movemask_epi8(eq0));
-#endif
-      for( int i = pCount; i < 7; ++i ) {
+      for (int i = pCount; i < 7; ++i) {
         int bitt = ctz(t0);     // get index
         t0 &= ~(1 << bitt); // clear bit set and test again
         int pri = bitState[bitt][0];
-        if( pri < worst ) {
+        if (pri < worst) {
           worst = pri;
           idx = bitt;
         }
       }
       mostRecentlyUsed = 0xF0U | idx;
       checksums[idx] = checksum;
-      return static_cast<uint8_t *>(memset(&bitState[idx][0], 0, 7));
-#elif defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON)
+      return static_cast<uint8_t*>(memset(&bitState[idx][0], 0, 7));
+#endif
+    }
+
+#if (defined(__GNUC__) || defined(__clang__)) && defined(__SSSE3__)
+    __attribute__((target("ssse3")))
+#endif
+    inline auto findSsse3(const uint16_t checksum) -> uint8_t* {
+#ifndef __SSSE3__
+      return 0;
+#else
+      if (checksums[mostRecentlyUsed & 15U] == checksum) {
+        return &bitState[mostRecentlyUsed & 15U][0];
+      }
+      int worst = 0xFFFF;
+      int idx = 0;
+      const __m128i xmmChecksum = _mm_set1_epi16(short(checksum)); //fill 8 ch values
+      // load 8 values, discard last one as only 7 are needed.
+      // reverse order and compare 7 checksums values to @ref checksum
+      // get mask is set get first index and return value
+      __m128i tmp = _mm_load_si128(reinterpret_cast<__m128i*>(&checksums[0])); //load 8 values (8th will be discarded)
+
+      tmp = _mm_shuffle_epi8(tmp, _mm_setr_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1));
+      tmp = _mm_cmpeq_epi16(tmp, xmmChecksum); // compare ch values
+      tmp = _mm_packs_epi16(tmp, _mm_setzero_si128()); // pack result
+      uint32_t t = (_mm_movemask_epi8(tmp)) >> 1; // get mask of comparison, bit is set if eq, discard 8th bit
+      uint32_t a = 0;    // index into bitState or 7 if not found
+      if (t != 0u) {
+        a = (clz(t) - 1) & 7U;
+        mostRecentlyUsed = mostRecentlyUsed << 4U | a;
+        return &bitState[a][0];
+      }
+      __m128i lastL = _mm_set1_epi8((mostRecentlyUsed & 15U));
+      __m128i lastH = _mm_set1_epi8((mostRecentlyUsed >> 4U));
+      __m128i one1 = _mm_set1_epi8(1);
+      __m128i vm = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7);
+      
+      __m128i lastX = _mm_unpacklo_epi64(lastL, lastH); // mostRecentlyUsed&15 mostRecentlyUsed>>4
+      __m128i eq0 = _mm_cmpeq_epi8(lastX, vm); // compare values
+
+      eq0 = _mm_or_si128(eq0, _mm_srli_si128(eq0, 8));    // or low values with high
+
+      lastX = _mm_and_si128(one1, eq0);                //set to 1 if eq
+      __m128i sum1 = _mm_sad_epu8(lastX, _mm_setzero_si128());        // count values, abs(a0 - b0) + abs(a1 - b1) .... up to b8
+      const uint32_t pCount = _mm_cvtsi128_si32(sum1); // population count
+      uint32_t t0 = (~_mm_movemask_epi8(eq0));
+      for (int i = pCount; i < 7; ++i) {
+        int bitt = ctz(t0);     // get index
+        t0 &= ~(1 << bitt); // clear bit set and test again
+        int pri = bitState[bitt][0];
+        if (pri < worst) {
+          worst = pri;
+          idx = bitt;
+        }
+      }
+      mostRecentlyUsed = 0xF0U | idx;
+      checksums[idx] = checksum;
+      return static_cast<uint8_t*>(memset(&bitState[idx][0], 0, 7));
+#endif
+    }
+
+    inline auto findNeon(const uint16_t checksum) -> uint8_t* {
+#if (!defined(__ARM_FEATURE_SIMD32) && !defined(__ARM_NEON))
+      return 0;
+#else
       if (checksums[mostRecentlyUsed & 15U] == checksum) {
           return &bitState[mostRecentlyUsed & 15U][0];
       }
@@ -247,7 +287,10 @@ public:
       mostRecentlyUsed = 0xF0U | idx;
       checksums[idx] = checksum;
       return static_cast<uint8_t*>(memset(&bitState[idx][0], 0, 7));
-#else
+#endif
+    }
+
+    inline auto findNone(const uint16_t checksum) -> uint8_t* {
       if( checksums[mostRecentlyUsed & 15U] == checksum ) {
         return &bitState[mostRecentlyUsed & 15U][0];
       }
@@ -265,7 +308,23 @@ public:
       mostRecentlyUsed = 0xF0U | idx;
       checksums[idx] = checksum;
       return (uint8_t *) memset(&bitState[idx][0], 0, 7);
-#endif
+    }
+
+    inline auto find(const uint16_t checksum, const SIMD chosenSimd) {
+      if ( chosenSimd == SIMD_NONE || chosenSimd == SIMD_SSE2 ) {
+        return findNone(checksum);
+      }
+      else if ( chosenSimd == SIMD_SSSE3 ) {
+        return findSsse3(checksum);
+      }
+      else if ( chosenSimd == SIMD_AVX2 ) {
+        return findAvx2(checksum);
+      }
+      else if ( chosenSimd == SIMD_NEON ) {
+        return findNeon(checksum);
+      }
+      assert(false);
+      return (uint8_t*) 0;
     }
 };
 
