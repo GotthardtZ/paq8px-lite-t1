@@ -1631,4 +1631,4 @@ paq8px_v186fix1:
 
 paq8px_v187:
 2020.04.11
-- Ported ContextMap Bucket find() function to NEON.
+- Ported ContextMap Bucket find() function to NEON and AVX2.
