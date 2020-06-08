@@ -1,7 +1,7 @@
 #include "APM.hpp"
 
 APM::APM(const int n, const int s) : AdaptiveMap(n * s, 1023), N(n * s), steps(s), cxt(0) {
-#ifndef NDEBUG
+#ifdef VERBOSE
   printf("Created APM with n = %d, s = %d\n", n, s);
 #endif
   assert(s > 4); // number of steps - must be a positive integer bigger than 4

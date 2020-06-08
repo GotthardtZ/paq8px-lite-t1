@@ -1,4 +1,4 @@
-
+﻿
                               PAQ8PX README
 
 ---------
@@ -9,7 +9,7 @@ COPYRIGHT
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
     Jan Ondrus, Andreas Morphis, Pavel L. Holoborodko, Kaido Orav, Simon Berger,
     Neill Corlett, Márcio Pais, Andrew Epstein, Mauro Vezzosi, Zoltán Gotthardt,
-    Sebastian Lehmann
+    Sebastian Lehmann, Moisés Cardona
 
     We would like to express our gratitude for the endless support of many 
     contributors who encouraged PAQ8PX development with ideas, testing, 
@@ -119,26 +119,36 @@ For the help screen just launch PAQ8PX from the command line without any options
 HOW TO COMPILE
 --------------
 
-If you are a Windows user you don't need to compile the source. Just grab the 
+Windows 
+If you are a Windows user you don't need to compile the source. Just grab the latest
 executable bundled with the source from the https://encode.su/threads/342-paq8px thread.
+If you would like to build an executable yourself you may use the Visual Studio solution
+file or in case of Mingw-w64 see the "build-mingw-w64-generic-publish.cmd" batch file
+in the build subfolder.
 
-If you are a Linux or macOS user, you will need to build the binary from source.
-You will need:
-  - the PAQ8PX source file (paq8px*.cpp),
-  - zlib
-  - a compiler.
+Linux/macOS
+gcc/clang users on Linux/macOS may use the following commands to build:
 
-The following compilers were tested and verified to work correctly in this release 
-or in an earlier release:
+ sudo apt-get install build-essential zlib1g-dev cmake make
+ mkdir build
+ cd build
+ cmake ..
+ make
+
+The following compilers were tested and verified to compile/work correctly
+in this release  or in an earlier release:
 
   - Visual Studio 2017 Community Edition (Windows)
-  - Visual Studio 2019 Community Edition (Windows)
-  - MinGW-w64 7.1.0 and 7.2.0 (Windows)
+  - Visual Studio 2019 Community Edition (Windows) verified @v187fix1
+  - MinGW-w64 7.1.0 (Windows)
+  - MinGW-w64 7.2.0 (Windows)
+  - MinGW-w64 8.1.0 (Windows) verified @v187fix1
   - GCC 7.3.0 (macOS)
   - GCC 7.2.0 (Ubuntu)
-  - GCC 8.3.0 (Lubuntu)
+  - GCC 8.3.0 (Lubuntu) verified @v187fix1
   - GCC 9.3.0 (Ubuntu)
-  - clang 4.0.1-6 on (Ubuntu)
+  - clang 4.0.1-6 (Ubuntu)
+  - clang 8.0.0-3 (Lubuntu) verified @v187fix1
 
 Note:
 
@@ -146,34 +156,16 @@ Note:
  limitation of 32-bit releases is the 2 GB memory barrier. As a consequence, compression 
  and decompression will not work on level 9 and you may experience "out of memory" errors 
  on level 8 where memory consumption is near the 2 GB limit.
-
-gcc users on Linux/macOS may use the following commands to make a quick build (albeit with 
-optimal parameters) targeted for their system (note the "-march=native" parameter):
-
- sudo apt-get install build-essential zlib1g-dev cmake make
- sudo apt-get install zlib1g-dev
- mkdir build
- cd build
- cmake ..
- make
  
-Remark: if the paq8px source file name includes version information (e.g. paq8px_v142.cpp) 
-then rename it to "paq8px.cpp" before invoking gcc or change the file name in the 
-gcc parameters to include the version information.
-
-For detailed building instructions visit:
-https://encode.su/threads/2885-PAQ8PX-building-instructions
-
 --------------
 FOR DEVELOPERS
 --------------
 
 When you make a new release:
 
-  - Please update the version number in the "Versioning" section in the source file.
+  - Please update the version number in the "Versioning" section in the paq8px.cpp source file.
   - Please append a short description of your modifications to the CHANGELOG file.
-  - Always publish a static build (link the required dll files statically).
+  - Always publish a static build (link the required library files statically).
   - Always publish a build for the general public (e.g. don't use -march=native).
   - Before publishing your build, please carry out some basic tests. Run your tests
-    with asserts on (see the "#define NDEBUG" line in the "Debug options" section 
-    in the source file).
+    with asserts on (remove the "NDEBUG" option).

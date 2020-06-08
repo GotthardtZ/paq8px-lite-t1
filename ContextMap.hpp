@@ -85,7 +85,7 @@ public:
 private:
     Shared *shared = Shared::getInstance();
     Random rnd;
-    const int c; /**< max number of contexts */
+    const int C; /**< max number of contexts */
     Array<Bucket, 64> t; /**< bit histories for bits 0-1, 2-4, 5-7. For 0-1, also contains a run count in bh[][4] and value in bh[][5] and pending update count in bh[7] */
     Array<uint8_t *> cp; /**< c pointers to current bit history */
     Array<uint8_t *> cp0; /**< First element of 7 element array containing cp[i] */
@@ -101,11 +101,11 @@ private:
 
 public:
     /**
-     * Construct using @ref m bytes of memory for @ref c contexts
+     * Construct using @ref m bytes of memory for @ref contexts contexts
      * @param m bytes of memory to use
-     * @param c number of contexts
+     * @param contexts max number of contexts
      */
-    ContextMap(uint64_t m, int c);
+    ContextMap(uint64_t m, int contexts);
 
     /**
      * Set next whole byte context to @ref cx.

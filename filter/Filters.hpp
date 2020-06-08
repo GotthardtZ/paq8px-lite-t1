@@ -65,11 +65,11 @@
 // decodes one byte from en and returns it.  decode() and decode_X()
 // maintain state information using static variables.
 
-#ifdef USE_ZLIB
+#ifndef DISABLE_ZLIB
 
 #include "zlib.hpp"
 
-#endif //USE_ZLIB
+#endif //DISABLE_ZLIB
 
 #define IMG_DET(type, start_pos, header_len, width, height) return dett = (type), \
                                                                    deth = (header_len), detd = (width) * (height), info = (width), \
@@ -137,7 +137,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
   int sof = 0;
   int sos = 0;
   int app = 0; // For JPEG detection - position where found
-#ifdef USE_AUDIOMODEL
+#ifndef DISABLE_AUDIOMODEL
   int wavi = 0;
   int wavSize = 0;
   int wavch = 0;
@@ -152,7 +152,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
   int s3mi = 0;
   int s3Mno = 0;
   int s3Mni = 0; // For S3M detection
-#endif //  USE_AUDIOMODEL
+#endif //  DISABLE_AUDIOMODEL
   uint32_t bmpi = 0;
   uint32_t dibi = 0;
   uint32_t imgbpp = 0;
@@ -188,9 +188,9 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
   int cda = 0;
   int cdm = 0; // For CD sectors detection
   uint32_t cdf = 0;
-  unsigned char zBuf[256 + 32] = {0};
-  unsigned char zin[1U << 16] = {0};
-  unsigned char zout[1 << 16] = {0}; // For ZLIB stream detection
+  uint8_t zBuf[256 + 32] = {0};
+  uint8_t zin[1U << 16] = {0};
+  uint8_t zout[1U << 16] = {0}; // For ZLIB stream detection
   int zBufPos = 0;
   int zZipPos = -1;
   int histogram[256] = {0};
@@ -277,7 +277,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
     }
 
     // ZLIB stream detection
-#ifdef USE_ZLIB
+#ifndef DISABLE_ZLIB
     histogram[c]++;
     if( i >= 256 )
       histogram[zBuf[zBufPos]]--;
@@ -388,7 +388,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
       if( nlen < 256 && i + 30 + nlen < n )
         zZipPos = i + 30 + nlen;
     }
-#endif //USE_ZLIB
+#endif //DISABLE_ZLIB
 
     if( i - pdfimp > 1024 ) {
       pdfIm = pdfImW = pdfImH = pdfImB = pdfGray = 0; // fail
@@ -494,7 +494,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
     if( type == JPEG && (sos != 0) && i > sos && (buf0 & 0xff00) == 0xff00 && (buf0 & 0xff) != 0 && (buf0 & 0xf8) != 0xd0 ) {
       return DEFAULT;
     }
-#ifdef USE_AUDIOMODEL
+#ifndef DISABLE_AUDIOMODEL
     // Detect .wav file header
     if( buf0 == 0x52494646 ) {
       wavi = i, wavm = wavLen = 0; //"RIFF"
@@ -645,7 +645,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
         in->setpos(savedPos);
       }
     }
-#endif //  USE_AUDIOMODEL
+#endif //  DISABLE_AUDIOMODEL
 
     // Detect .bmp image
     if((bmpi == 0u) && (dibi == 0u)) {
@@ -1143,39 +1143,41 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
 
     // Detect base64 encoded data
     if( b64S == 0 && buf0 == 0x73653634 && ((buf1 & 0xffffff) == 0x206261 || (buf1 & 0xffffff) == 0x204261)) {
-      b64S = 1, b64I = i - 6; //' base64' ' Base64'
+      b64S = 1; b64I = i - 6; //' base64' ' Base64'
     }
     if( b64S == 0 && ((buf1 == 0x3b626173 && buf0 == 0x6536342c) || (buf1 == 0x215b4344 && buf0 == 0x4154415b))) {
-      b64S = 3, b64I = i + 1; // ';base64,' '![CDATA['
+      b64S = 3; b64I = i + 1; // ';base64,' '![CDATA['
     }
     if( b64S > 0 ) {
       if( b64S == 1 && buf0 == 0x0d0a0d0a ) {
-        b64I = i + 1, b64Line = 0, b64S = 2;
+        b64I = i + 1; b64Line = 0; b64S = 2;
       } else if( b64S == 2 && (buf0 & 0xffff) == 0x0d0a && b64Line == 0 ) {
-        b64Line = i + 1 - b64I, b64Nl = i;
+        b64Line = i + 1 - b64I; b64Nl = i;
       } else if( b64S == 2 && (buf0 & 0xffff) == 0x0d0a && b64Line > 0 && (buf0 & 0xffffff) != 0x3d0d0a ) {
         if( i - b64Nl < b64Line && buf0 != 0x0d0a0d0a ) {
-          i -= 1, b64S = 5;
+          i -= 1; b64S = 5;
         } else if( buf0 == 0x0d0a0d0a ) {
-          i -= 3, b64S = 5;
+          i -= 3; b64S = 5;
         } else if( i - b64Nl == b64Line ) {
           b64Nl = i;
         } else {
           b64S = 0;
         }
       } else if( b64S == 2 && (buf0 & 0xffffff) == 0x3d0d0a ) {
-        i -= 1, b64S = 5; // '=' or '=='
-      } else if( b64S == 2 && !((isalnum(c) != 0) || c == '+' || c == '/' || c == 10 || c == 13 || c == '=')) {
+        i -= 1; b64S = 5; // '=' or '=='
+      } else if( b64S == 2 && !(isalnum(c) || c == '+' || c == '/' || c == 10 || c == 13 || c == '=')) {
         b64S = 0;
       }
       if( b64Line > 0 && (b64Line <= 4 || b64Line > 255)) {
         b64S = 0;
       }
-      if( b64S == 3 && i >= b64I && !((isalnum(c) != 0) || c == '+' || c == '/' || c == '=')) {
+      if( b64S == 3 && i >= b64I && !(isalnum(c) || c == '+' || c == '/' || c == '=')) {
         b64S = 4;
       }
       if((b64S == 4 && i - b64I > 128) || (b64S == 5 && i - b64I > 512 && i - b64I < (1 << 27))) {
-        return in->setpos(start + b64I), detd = i - b64I, BASE64;
+        in->setpos(start + b64I);
+        detd = i - b64I;
+        return BASE64;
       }
       if( b64S > 3 ) {
         b64S = 0;
@@ -1277,10 +1279,10 @@ decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File 
     auto c = new CdFilter();
     c->decode(tmp, out, mode, len, diffFound);
   }
-#ifdef USE_ZLIB
+#ifndef DISABLE_ZLIB
   else if( type == ZLIB )
     return decodeZlib(tmp, len, out, mode, diffFound);
-#endif //USE_ZLIB
+#endif //DISABLE_ZLIB
   else if( type == BASE64 ) {
     auto b = new Base64Filter();
     return b->decode(tmp, out, mode, len, diffFound);
@@ -1316,10 +1318,10 @@ static auto encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int in
     auto c = new CdFilter();
     c->encode(in, tmp, len, info, hdrsize);
   }
-#ifdef USE_ZLIB
+#ifndef DISABLE_ZLIB
   else if( type == ZLIB )
     return encodeZlib(in, tmp, len, hdrsize) ? 0 : 1;
-#endif //USE_ZLIB
+#endif //DISABLE_ZLIB
   else if( type == BASE64 ) {
     auto b = new Base64Filter();
     b->encode(in, tmp, len, info, hdrsize);

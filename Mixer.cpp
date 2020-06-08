@@ -2,7 +2,7 @@
 #include "utils.hpp"
 
 Mixer::Mixer(const int n, const int m, const int s) : n(n), m(m), s(s), scaleFactor(0), tx(n), wx(n * m), cxt(s), info(s), rates(s), pr(s) {
-#ifndef NDEBUG
+#ifdef VERBOSE
   printf("Created Mixer with n = %d, m = %d, s = %d\n", n, m, s);
 #endif
   for( uint64_t i = 0; i < s; ++i ) {
@@ -14,7 +14,7 @@ Mixer::Mixer(const int n, const int m, const int s) : n(n), m(m), s(s), scaleFac
 }
 
 void Mixer::add(const int x) {
-#ifndef NDEBUG
+#ifdef VERBOSE
   printf("Mixer::add(%d)\n", x);
 #endif
   assert(nx < n);
@@ -31,9 +31,9 @@ void Mixer::set(const uint32_t cx, const uint32_t range, const int rate) {
   }
   cxt[numContexts++] = base + cx;
   base += range;
-//#ifndef NDEBUG
-//  printf("numContexts: %d base: %d\n", numContexts, range); //for debugging: how many input sets do we have?
-//#endif
+#ifdef VERBOSE
+  printf("Mixer numContexts: %d, base: %d\n", numContexts, range); //how many input sets do we have?
+#endif
 }
 
 void Mixer::reset() {

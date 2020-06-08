@@ -1,4 +1,4 @@
----------------
+﻿---------------
 VERSION HISTORY
 ---------------
 
@@ -1568,12 +1568,12 @@ Paq8px_v182fix1
 - Fixed 32-bit compilation issue (_stat64i32->_stat)
 
 
-paq8px_v182fix2:
+paq8px_v182fix2
 2019.09.16
 - SSE stage: JpegModel is passing through the stage (thank you Kaido Orav)
 
 
-paq8px_v183:
+paq8px_v183
 2019.10.21
 - A new command line parameter (-hash) to enable testing/tuning the magic hash values (not compiled by default)
 - Enhancements in StateMap: 
@@ -1605,33 +1605,58 @@ paq8px_v183:
   - hashed contexts were: 0-6, 8, 14; now: 1-7, 9, 14 (same in number, but generally longer)
 - Updated memory usage information displayed on help screen
 
-paq8px_v184:
+
+paq8px_v184
 2020.01.05
 - Split out most classes into individual .hpp files
 - Many (minor) code cleanup changes, e.g. initializing variables, removing signed bitwise operations, correcting typos, etc
 - Applied consistent code format
 - Began switching documentation to Doxygen format
 
-paq8px_v185:
+
+paq8px_v185
 2020.02.09
 - Fixed requirement for AVX2. Now compiles regardless of supported vectorization level.
 - Fixed compilation on Windows.
 - Fixed compression regression with TextParserStateInfo.
 - Fixed compression regression caused by a clang-tidy "fix".
 
-paq8px_v186:
+
+paq8px_v186
 2020.04.09
 - Fixed JpegModel to add 2 additional inputs to the mixer. 
 - Compatibility with ARM processors.
 - Added ARM NEON SIMD instructions for the Mixer.
 
-paq8px_v186fix1:
+
+paq8px_v186fix1
 2020.04.10
 - Fixed infinite loop in base64 decoder.
 
-paq8px_v187:
+
+paq8px_v187
 2020.04.12
 - Ported ContextMap Bucket find() function to NEON and AVX2.
 - Bucket will now use the find() function according to the SIMD vectorization being used.
 - When using SSE2, it will assume the CPU doesn't have SSE3 and will use the `None` function of Bucket.hpp`. If `-simd SSSE3` is specified , then it will use the SSSE3 SIMD function in `Bucket.hpp` and the SSE2 Mixer Training function.
 - Changed some If's statements to If/Else.
+
+
+paq8px_v187fix1
+2020.06.08
+- Ported "Fix jpeg thumbnail compression" from paq8pxd_v76 - Thank you, Kaitz!
+- Fixed an issue with an Image8BitModel context (cm.set(hash(++i, (jump != 0)...) where a calculation result was cast to 32 bit instead of 64 bit and caused incompatibility with v183fix1
+- Fixed the speed issue with the infinite base64 loop patch from v186fix1
+- Removed the unnecessary AVX2 ContextMap Bucket find() function - it fetches 32 bytes but we need ony 14.
+- Restored Visual Studio / MSVC compatibility + provided solution and project files
+- Zlib is now available through a nuget package for Visual Studio
+- The necessary zlib source files are included in a new folder "zlib" for MinGW-W64 and other (windows) compilers
+- Provided a batch file for building with MINGW-W64 (for those who don't use cmake): "build-mingw-w64-generic-publish.cmd" - in the "build" folder
+- Preprocessor macros:
+  - Swithed from #ifndef NDEBUG to #ifdef VERBOSE wherever detailed debug information is printed on screen
+  - Swithced from USE_TEXTMODEL / USE_AUDIOMODEL / USE_ZLIB to DISABLE_TEXTMODEL / DISABLE_AUDIOMODEL / DISABLE_ZLIB so when no 
+    options are provided these features are included by default
+    When you build paq8px yourself and want maximum performance you need to provide the -DNDEBUG flag only (default in "CMakeLists.txt" and in "Build-mingw64-generic-for-publish.cmd")
+- Fixed CPU/SIMD dispatch to enable building for the general public again
+- Some cosmetic changes
+- Archives are still expected to be binary compatible with v183fix1

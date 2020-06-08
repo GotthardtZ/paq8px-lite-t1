@@ -1,7 +1,7 @@
 #include "AdaptiveMap.hpp"
 
 AdaptiveMap::AdaptiveMap(const int n, const int lim) : t(n), limit(lim) {
-#ifndef NDEBUG
+#ifdef VERBOSE
   printf("Created AdaptiveMap with n = %d, lim = %d\n", n, lim);
 #endif
   dt = DivisionTable::getDT();

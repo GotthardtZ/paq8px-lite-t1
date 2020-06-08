@@ -2,12 +2,6 @@
 #define PAQ8PX_ILOG_HPP
 
 #include "Array.hpp"
-#include "cstdint"
-#if defined(__i386__) || defined(__x86_64__)
-#include <xmmintrin.h>
-#elif defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON)
-#include <arm_neon.h>
-#endif
 
 /**
  * ilog(x) = round(log2(x) * 16), 0 <= x < 64K
@@ -49,8 +43,5 @@ private:
  */
 auto llog(uint32_t x) -> int;
 auto bitCount(uint32_t v) -> uint32_t;
-auto VLICost(uint64_t n) -> int;
-
-auto rsqrt(float x) -> float;
 
 #endif //PAQ8PX_ILOG_HPP

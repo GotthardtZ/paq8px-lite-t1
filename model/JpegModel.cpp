@@ -3,7 +3,7 @@
 JpegModel::JpegModel(const uint64_t size) : t(size), MJPEGMap(21, 3, 128, 127), /* BitsOfContext, InputBits, Scale, Limit */
         sm(N, 256, 1023, StateMap::BitHistory), apm1(0x8000, 24), apm2(0x20000, 24) {
   auto mf = new MixerFactory();
-  m1 = mf->createMixer(N + 1 + 2, 2050, 3);
+  m1 = mf->createMixer(N + 1 /*bias*/+ 2 /*MJPEGMap*/, 2050, 3);
   m1->setScaleFactor(1024, 128);
 }
 
@@ -141,12 +141,12 @@ auto JpegModel::mix(Mixer &m) -> int {
     }
 
     // Detect APPx, COM or other markers, so we can skip them
+    bool mainfields = ((((buf(3) >= 0xC1) && (buf(3) <= 0xCF) && (buf(3) != DHT)) || ((buf(3) >= 0xDC) && (buf(3) <= 0xFE))) && idx == 0);
     if((images[idx].data == 0u) && (images[idx].app == 0u) && buf(4) == FF &&
-       (((buf(3) > 0xC1) && (buf(3) <= 0xCF) && (buf(3) != DHT)) || ((buf(3) >= 0xDC) && (buf(3) <= 0xFE)))) {
+       (buf(3)>>4==0xe || buf(3)==COM || mainfields)) {
       images[idx].app = buf(2) * 256 + buf(1) + 2;
       if( idx > 0 ) {
         JASSERT(shared->buf.getpos() + images[idx].app < images[idx].offset + images[idx - 1].app)
-
       }
     }
 
@@ -398,7 +398,7 @@ auto JpegModel::mix(Mixer &m) -> int {
           int ex = 0; // decoded extra bits
           if((mcuPos & 63U) != 0u ) { // AC
             if( rs == 0 ) { // EOB
-              mcuPos = (mcuPos + 63) & -64U;
+              mcuPos = (mcuPos + 63) & 0xFFFFFFC0;
               JASSERT(mcuPos >= 0 && mcuPos <= mcusize && mcuPos <= 640)
               while((cPos & 63U) != 0u ) {
                 cBuf2.set(cPos, 0);

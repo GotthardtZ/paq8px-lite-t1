@@ -59,7 +59,7 @@ void Predictor::trainText(const char *const dictionary, int iterations) {
       if( c != CARRIAGE_RETURN ) {
         for( int bitPosition = 0; bitPosition < 8; bitPosition++ ) {
           normalModel.mix(mDummy); //update (train) model
-#ifdef USE_TEXTMODEL
+#ifndef DISABLE_TEXTMODEL
           wordModel.mix(mDummy); //update (train) model
 #endif
           mDummy.p();
@@ -72,12 +72,12 @@ void Predictor::trainText(const char *const dictionary, int iterations) {
       // reset models in between
       if( c == NEW_LINE ) {
         normalModel.reset();
-#ifdef USE_TEXTMODEL
+#ifndef DISABLE_TEXTMODEL
         wordModel.reset();
 #endif
         for( int bitPosition = 0; bitPosition < 8; bitPosition++ ) {
           normalModel.mix(mDummy); //update (train) model
-#ifdef USE_TEXTMODEL
+#ifndef DISABLE_TEXTMODEL
           wordModel.mix(mDummy); //update (train) model
 #endif
           mDummy.p();
@@ -89,7 +89,7 @@ void Predictor::trainText(const char *const dictionary, int iterations) {
     } while((c = f.getchar()) != EOF);
   }
   normalModel.reset();
-#ifdef USE_TEXTMODEL
+#ifndef DISABLE_TEXTMODEL
   wordModel.reset();
 #endif
   shared->reset();

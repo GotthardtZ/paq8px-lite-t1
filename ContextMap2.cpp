@@ -1,33 +1,29 @@
 #include "ContextMap2.hpp"
 
-ContextMap2::ContextMap2(const uint64_t size, const uint32_t count, const int scale, const uint32_t uw) : c(count), table(size >> 6U),
-        bitState(count), bitState0(count), byteHistory(count), contexts(count), checksums(count),
-        runMap(count, (1U << 12U), 127, StateMap::Run),
-        /* StateMap : s, n, lim, init */ // 63-255
-        stateMap(count, (1U << 8U), 511, StateMap::BitHistory),
-        /* StateMap : s, n, lim, init */ // 511-1023
-        bhMap8B(count, (1U << 8U), 511, StateMap::Generic),
-        /* StateMap : s, n, lim, init */ // 511-1023
-        bhMap12B(count, (1U << 12U), 511, StateMap::Generic),
-        /* StateMap : s, n, lim, init */ // 255-1023
+ContextMap2::ContextMap2(const uint64_t size, const uint32_t contexts, const int scale, const uint32_t uw) : C(contexts), table(size / sizeof(Bucket)),
+        bitState(contexts), bitState0(contexts), byteHistory(contexts), contexts(contexts), checksums(contexts),
+        runMap(contexts, (1U << 12U), 127, StateMap::Run),         /* StateMap : s, n, lim, init */ // 63-255
+        stateMap(contexts, (1U << 8U), 511, StateMap::BitHistory), /* StateMap : s, n, lim, init */ // 511-1023
+        bhMap8B(contexts, (1U << 8U), 511, StateMap::Generic),     /* StateMap : s, n, lim, init */ // 511-1023
+        bhMap12B(contexts, (1U << 12U), 511, StateMap::Generic),   /* StateMap : s, n, lim, init */ // 255-1023
         index(0), mask(uint32_t(table.size() - 1)), hashBits(ilog2(mask + 1)), validFlags(0), scale(scale), useWhat(uw) {
-#ifndef NDEBUG
-  printf("Created ContextMap2 with size = %llu, count = %d, scale = %d, uw = %d\n", size, count, scale, uw);
+#ifdef VERBOSE
+  printf("Created ContextMap2 with size = %" PRIu64 ", contexts = %d, scale = %d, uw = %d\n", size, contexts, scale, uw);
 #endif
   assert(size >= 64 && isPowerOf2(size));
   static_assert(sizeof(Bucket) == 64, "Size of Bucket should be 64!");
-  assert(c <= (int) sizeof(validFlags) * 8); // validFlags is 64 bits - it can't support more than 64 contexts
-  for( uint32_t i = 0; i < c; i++ ) {
+  assert(C <= (int) sizeof(validFlags) * 8); // validFlags is 64 bits - it can't support more than 64 contexts
+  for( uint32_t i = 0; i < C; i++ ) {
     bitState[i] = bitState0[i] = &table[i].bitState[0][0];
     byteHistory[i] = bitState[i] + 3;
   }
 }
 
 void ContextMap2::set(const uint64_t ctx) {
-  assert(index >= 0 && index < c);
+  assert(index >= 0 && index < C);
   const uint32_t ctx0 = contexts[index] = finalize64(ctx, hashBits);
   const uint16_t chk0 = checksums[index] = static_cast<uint16_t>(checksum64(ctx, hashBits, 16));
-  uint8_t *base = bitState[index] = bitState0[index] = table[ctx0 & mask].find(chk0, shared->chosenSimd);
+  uint8_t *base = bitState[index] = bitState0[index] = table[ctx0].find(chk0, shared->chosenSimd);
   byteHistory[index] = &base[3];
   const uint8_t runCount = base[3];
   if( runCount == 255 ) { // pending
@@ -54,7 +50,7 @@ void ContextMap2::set(const uint64_t ctx) {
 }
 
 void ContextMap2::skip() {
-  assert(index >= 0 && index < c);
+  assert(index >= 0 && index < C);
   index++;
   validFlags <<= 1U;
 }
@@ -97,8 +93,8 @@ void ContextMap2::update() {
           }
           case 2:
           case 5: {
-            const uint16_t chk = checksums[i];
             const uint32_t ctx = contexts[i];
+            const uint16_t chk = checksums[i];
             bitState[i] = bitState0[i] = table[(ctx + shared->c0) & mask].find(chk, shared->chosenSimd);
             break;
           }

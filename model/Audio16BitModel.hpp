@@ -6,6 +6,7 @@
 #include "../OLS.hpp"
 #include "../SmallStationaryContextMap.hpp"
 #include "../utils.hpp"
+#include "../BitCount.hpp"
 #include <cstdint>
 
 class Audio16BitModel : AudioModel {

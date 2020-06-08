@@ -2,6 +2,7 @@
 #define PAQ8PX_SIMDMIXER_HPP
 
 #include "UpdateBroadcaster.hpp"
+#include "BitCount.hpp"
 #include "Ilog.hpp"
 #include "Mixer.hpp"
 #include "Squash.hpp"
@@ -30,13 +31,12 @@ private:
 
 public:
     SIMDMixer(const int n, const int m, const int s) : Mixer(((n + (simdWidth() - 1)) & -(simdWidth())), m, s) {
-#ifndef NDEBUG
+#ifdef VERBOSE
       printf("Created SIMDMixer with n = %d, m = %d, s = %d\n", n, m, s);
 #endif
-      // TODO(epsteina): This assertion fails
-//      assert((n & simdWidth() - 1) == 0);
-      assert(m > 0);
-      assert(s >= 1);
+      assert((this->n & (simdWidth() - 1)) == 0);
+      assert(this->m > 0);
+      assert(this->s > 0);
       mp = (s > 1) ? new SIMDMixer<simd>(s, 1, 1) : nullptr;
     }
 

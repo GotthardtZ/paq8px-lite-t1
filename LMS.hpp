@@ -1,10 +1,16 @@
 #ifndef PAQ8PX_LMS_HPP
 #define PAQ8PX_LMS_HPP
 
-#include "Ilog.hpp"
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
+
+#include "cstdint"
+#if defined(__i386__) || defined(__x86_64__) || defined(_M_X64)
+#include <xmmintrin.h>
+#elif defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON)
+#include <arm_neon.h>
+#endif
 
 /**
  * Least Mean Squares predictor
@@ -47,6 +53,15 @@ public:
      */
     ~LMS() {
       delete weights, delete eg, delete buffer;
+    }
+
+    auto rsqrt(const float x) -> float {
+#if defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON)
+      float r = vgetq_lane_f32(vrsqrteq_f32(vdupq_n_f32(x)), 0); //NEON
+#else
+      float r = _mm_cvtss_f32(_mm_rsqrt_ss(_mm_set_ss(x))); //SSE
+#endif
+      return (0.5F * (r + 1.0F / (x * r)));
     }
 
     /**

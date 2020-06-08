@@ -19,10 +19,10 @@
 // - They don't need to be prime, just large odd numbers
 // - The golden ratio is usually preferred as a multiplier (PHI64)
 
-#ifdef NHASHCONFIG
-#define HASHEXPR constexpr
-#else
+#ifdef HASHCONFIGCMD
 #define HASHEXPR
+#else
+#define HASHEXPR constexpr
 #endif
 
 static HASHEXPR uint64_t hashes[14] = {UINT64_C(0x9E3779B97F4A7C15), UINT64_C(0x993DDEFFB1462949), UINT64_C(0xE9C91DC159AB0D2D),
@@ -31,7 +31,7 @@ static HASHEXPR uint64_t hashes[14] = {UINT64_C(0x9E3779B97F4A7C15), UINT64_C(0x
                                        UINT64_C(0xD39104E950564B37), UINT64_C(0x3091697D5E685623), UINT64_C(0x20EB84EE04A3C7E1),
                                        UINT64_C(0xF501F1D0944B2383), UINT64_C(0xE3E4E8AA829AB9B5)};
 
-#ifndef NHASHCONFIG
+#ifdef HASHCONFIGCMD
 
 static void loadHashesFromCmd(const char *hashesFromCommandline) {
   if( strlen(hashesFromCommandline) != 16 * 14 + 13 /*237*/) {
@@ -57,7 +57,7 @@ static void loadHashesFromCmd(const char *hashesFromCommandline) {
   }
 }
 
-#endif //NHASHCONFIG
+#endif //HASHCONFIGCMD
 
 // Golden ratio of 2^64 (not a prime)
 #define PHI64 hashes[0] // 11400714819323198485
@@ -99,8 +99,8 @@ constexpr uint64_t hash() {
  */
 static ALWAYS_INLINE
 auto finalize64(const uint64_t hash, const int hashBits) -> uint32_t {
-  assert(uint32_t(hashBits) <= 32); // just a reasonable upper limit
-  return uint32_t(hash >> (64 - hashBits));
+  assert(hashBits>=0 && hashBits <= 32); // just a reasonable upper limit
+  return static_cast<uint32_t>(hash >> (64 - hashBits));
 }
 
 /**
@@ -111,9 +111,9 @@ auto finalize64(const uint64_t hash, const int hashBits) -> uint32_t {
  * @return
  */
 static ALWAYS_INLINE
-uint64_t checksum64(const uint64_t hash, const int hashBits, const int checksumBits) {
+uint32_t checksum64(const uint64_t hash, const int hashBits, const int checksumBits) {
   assert(0 < checksumBits && uint32_t(checksumBits) <= 32); //32 is just a reasonable upper limit
-  return (hash >> (64 - hashBits - checksumBits)) & ((1 << checksumBits) - 1);
+  return static_cast<uint32_t>(hash >> (64 - hashBits - checksumBits)) & ((1U << checksumBits) - 1);
 }
 
 //
@@ -124,7 +124,7 @@ uint64_t checksum64(const uint64_t hash, const int hashBits, const int checksumB
 
 
 static ALWAYS_INLINE
-auto hash(const uint64_t x0) -> uint64_t {
+uint64_t hash(const uint64_t x0) {
   return (x0 + 1) * PHI64;
 }
 
@@ -144,59 +144,59 @@ uint64_t hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uin
 }
 
 static ALWAYS_INLINE
-auto hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4) -> uint64_t {
+uint64_t hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4) {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4;
 }
 
 static ALWAYS_INLINE
-auto hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5) -> uint64_t {
+uint64_t hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5) {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5;
 }
 
-static ALWAYS_INLINE uint64_t
-hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6) {
+static ALWAYS_INLINE
+uint64_t hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6) {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5 +
          (x6 + 1) * MUL64_6;
 }
 
-static ALWAYS_INLINE uint64_t
-hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
+static ALWAYS_INLINE 
+uint64_t hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
      const uint64_t x7) {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5 +
          (x6 + 1) * MUL64_6 + (x7 + 1) * MUL64_7;
 }
 
-static ALWAYS_INLINE uint64_t
-hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
+static ALWAYS_INLINE 
+uint64_t hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
      const uint64_t x7, const uint64_t x8) {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5 +
          (x6 + 1) * MUL64_6 + (x7 + 1) * MUL64_7 + (x8 + 1) * MUL64_8;
 }
 
-static ALWAYS_INLINE auto
-hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
-     const uint64_t x7, const uint64_t x8, const uint64_t x9) -> uint64_t {
+static ALWAYS_INLINE
+uint64_t hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
+     const uint64_t x7, const uint64_t x8, const uint64_t x9) {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5 +
          (x6 + 1) * MUL64_6 + (x7 + 1) * MUL64_7 + (x8 + 1) * MUL64_8 + (x9 + 1) * MUL64_9;
 }
 
-static ALWAYS_INLINE uint64_t
-hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
+static ALWAYS_INLINE
+uint64_t hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
      const uint64_t x7, const uint64_t x8, const uint64_t x9, const uint64_t x10) {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5 +
          (x6 + 1) * MUL64_6 + (x7 + 1) * MUL64_7 + (x8 + 1) * MUL64_8 + (x9 + 1) * MUL64_9 + (x10 + 1) * MUL64_10;
 }
 
-static ALWAYS_INLINE uint64_t
-hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
+static ALWAYS_INLINE
+uint64_t hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
      const uint64_t x7, const uint64_t x8, const uint64_t x9, const uint64_t x10, const uint64_t x11) {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5 +
          (x6 + 1) * MUL64_6 + (x7 + 1) * MUL64_7 + (x8 + 1) * MUL64_8 + (x9 + 1) * MUL64_9 + (x10 + 1) * MUL64_10 + (x11 + 1) * MUL64_11;
 }
 
-static ALWAYS_INLINE auto
-hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
-     const uint64_t x7, const uint64_t x8, const uint64_t x9, const uint64_t x10, const uint64_t x11, const uint64_t x12) -> uint64_t {
+static ALWAYS_INLINE
+uint64_t hash(const uint64_t x0, const uint64_t x1, const uint64_t x2, const uint64_t x3, const uint64_t x4, const uint64_t x5, const uint64_t x6,
+     const uint64_t x7, const uint64_t x8, const uint64_t x9, const uint64_t x10, const uint64_t x11, const uint64_t x12) {
   return (x0 + 1) * PHI64 + (x1 + 1) * MUL64_1 + (x2 + 1) * MUL64_2 + (x3 + 1) * MUL64_3 + (x4 + 1) * MUL64_4 + (x5 + 1) * MUL64_5 +
          (x6 + 1) * MUL64_6 + (x7 + 1) * MUL64_7 + (x8 + 1) * MUL64_8 + (x9 + 1) * MUL64_9 + (x10 + 1) * MUL64_10 + (x11 + 1) * MUL64_11 +
          (x12 + 1) * MUL64_12;

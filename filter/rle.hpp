@@ -2,6 +2,7 @@
 #define PAQ8PX_RLE_HPP
 
 #include "Filter.hpp"
+#include "../VLI.hpp"
 
 #define RLE_OUTPUT_RUN \
   { \
@@ -16,7 +17,7 @@ class RleFilter : Filter {
 private:
     enum {
         BASE, LITERAL, RUN, LITERAL_RUN
-    } state;
+    } state = BASE;
 
     void handleRun(uint8_t byte, uint8_t *&outPtr, uint8_t *&lastLiteral, int &run) {
       if( run > 1 ) {

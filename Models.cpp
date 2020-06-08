@@ -42,7 +42,7 @@ auto Models::indirectModel() -> IndirectModel & {
   return instance;
 }
 
-#ifdef USE_TEXTMODEL
+#ifndef DISABLE_TEXTMODEL
 
 auto Models::textModel() -> TextModel & {
   static TextModel instance {stats, shared->mem * 16};
@@ -61,7 +61,7 @@ auto wordModel() -> WordModel & {
       return instance;
     }
 
-#endif //USE_TEXTMODEL
+#endif //DISABLE_TEXTMODEL
 
 auto Models::nestModel() -> NestModel & {
   static NestModel instance {shared->mem};
@@ -108,7 +108,7 @@ auto Models::image1BitModel() -> Image1BitModel & {
   return instance;
 }
 
-#ifdef USE_AUDIOMODEL
+#ifndef DISABLE_AUDIOMODEL
 
 auto Models::audio8BitModel() -> Audio8BitModel & {
   static Audio8BitModel instance {stats};
@@ -120,4 +120,4 @@ auto Models::audio16BitModel() -> Audio16BitModel & {
   return instance;
 }
 
-#endif //USE_AUDIOMODEL
+#endif //DISABLE_AUDIOMODEL
