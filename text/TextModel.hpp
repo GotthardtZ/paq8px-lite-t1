@@ -23,7 +23,7 @@
 #include <cctype>
 #include <cstdint>
 
-#ifdef USE_TEXTMODEL
+#ifndef DISABLE_TEXTMODEL
 
 class TextModel {
 private:
@@ -115,5 +115,7 @@ public:
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
 };
-#endif //USE_TEXTMODEL
+
+#endif //DISABLE_TEXTMODEL
+
 #endif //PAQ8PX_TEXTMODEL_HPP

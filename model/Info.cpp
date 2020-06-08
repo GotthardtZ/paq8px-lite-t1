@@ -85,8 +85,8 @@ void Info::processChar(const bool isExtendedChar) {
     }
     lastLetter = 0;
     word0 = combine64(word0, c);
-    w = uint16_t(finalize64(word0, wPosBits));
-    chk = uint16_t(checksum64(word0, wPosBits, 16));
+    w = static_cast<uint16_t>(finalize64(word0, wPosBits));
+    chk = static_cast<uint16_t>(checksum64(word0, wPosBits, 16));
     text0 = (text0 << 8U | c) & 0xffffffffffu; // last 5 alphanumeric chars (other chars are ignored)
     wordLen0 = min(wordLen0 + 1, maxWordLen);
     //last letter types
@@ -115,7 +115,7 @@ void Info::processChar(const bool isExtendedChar) {
       }
     }
   } else { //it's not a letter/number
-    gapToken0 = combine64(gapToken0, isNewline ? ' ' : shared->c1);
+    gapToken0 = combine64(gapToken0, isNewline ? static_cast<uint8_t>(SPACE) : shared->c1);
     if( isNewline && pC == '+' && isLetterPpC ) {
     } //calgary/book1 hyphenation - don't shift again
     else if( c == '?' || pC == '!' || pC == '.' ) {

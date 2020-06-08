@@ -42,7 +42,7 @@ public:
 private:
     Shared *shared = Shared::getInstance();
     Random rnd;
-    const uint32_t c; /**< max number of contexts */
+    const uint32_t C; /**< max number of contexts */
     Array<Bucket, 64> table; /**< bit histories for bits 0-1, 2-4, 5-7. For 0-1, also contains run stats in bitState[][3] and byte history in bitState[][4..6] */
     Array<uint8_t *> bitState; /**< @ref c pointers to current bit history states */
     Array<uint8_t *> bitState0; /**< First element of 7 element array containing bitState[i] */
@@ -63,13 +63,13 @@ private:
 public:
     int order = 0; // is set after mix()
     /**
-     * Construct using @ref size bytes of memory for @ref count contexts.
+     * Construct using @ref size bytes of memory for @ref contexts contexts.
      * @param size bytes of memory to use
-     * @param count number of contexts
+     * @param contexts max number of contexts
      * @param scale
      * @param uw
      */
-    ContextMap2(uint64_t size, uint32_t count, int scale, uint32_t uw);
+    ContextMap2(uint64_t size, uint32_t contexts, int scale, uint32_t uw);
 
     /**
      * Set next whole byte context to @ref ctx.

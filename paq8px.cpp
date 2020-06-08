@@ -1,4 +1,4 @@
-/*
+  /*
   PAQ8PX file compressor/archiver
   see README for information
   see DOC for technical details
@@ -8,17 +8,13 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "187"  //update version here before publishing your changes
+#define PROGVERSION  "187fix1"  //update version here before publishing your changes
 #define PROGYEAR     "2020"
 
-// TODO: make more models "optional"
 
 #include "utils.hpp"
 
-// Platform-independent includes
 #include <stdexcept>  //std::exception
-
-//////////////////// Cross-platform definitions /////////////////////////////////////
 
 #include "Encoder.hpp"
 #include "ProgramChecker.hpp"
@@ -133,22 +129,22 @@ static void printHelp() {
 static void printModules() {
   printf("\n");
   printf("Build: ");
-#ifdef USE_ZLIB
-  printf("USE_ZLIB ");
+#ifndef DISABLE_ZLIB
+  printf("ZLIB: ENABLED ");
 #else
-  printf("NO_ZLIB ");
+  printf("ZLIB: DISABLED ");
 #endif
 
-#ifdef USE_AUDIOMODEL
-  printf("USE_AUDIOMODEL ");
+#ifndef DISABLE_AUDIOMODEL
+  printf("AUDIOMODEL: ENABLED ");
 #else
-  printf("NO_WAVMODEL ");
+  printf("AUDIOMODEL: DISABLED ");
 #endif
 
-#ifdef USE_TEXTMODEL
-  printf("USE_TEXTMODEL ");
+#ifndef DISABLE_TEXTMODEL
+  printf("TEXTMODEL: ENABLED ");
 #else
-  printf("NO_TEXTMODEL ");
+  printf("TEXTMODEL: DISABLED ");
 #endif
 
   printf("\n");
@@ -168,13 +164,13 @@ static void printSimdInfo(int simdIset, int detectedSimdIset) {
   } else if( simdIset >= 9 ) {
     printf("AVX2");
   } else if (simdIset >= 5) {
-    printf("SSSE3 & SSE2");
+    printf("SSE2 & SSSE3");
   } else if( simdIset >= 3 ) {
     printf("SSE2");
   } else {
     printf("non-vectorized");
   }
-  printf(" neural network functions.\n");
+  printf(" neural network and hashtable functions.\n");
 }
 
 static void printCommand(const WHATTODO &whattodo) {
@@ -199,7 +195,7 @@ static void printCommand(const WHATTODO &whattodo) {
 
 static void printOptions() {
   Shared *shared = Shared::getInstance();
-  printf(" level          = %d\n", shared->level);
+  printf(" Level          = %d\n", shared->level);
   printf(" Brute      (b) = %s\n", (shared->options & OPTION_BRUTE) != 0U ? "On  (Brute-force detection of DEFLATE streams)"
                                                                           : "Off"); //this is a compression-only option, but we put/get it for reproducibility
   printf(" Train exe  (e) = %s\n", (shared->options & OPTION_TRAINEXE) != 0U ? "On  (Pre-train x86/x64 model)" : "Off");
@@ -211,7 +207,7 @@ static void printOptions() {
   printf(" File mode      = %s\n", (shared->options & OPTION_MULTIPLE_FILE_MODE) != 0U ? "Multiple" : "Single");
 }
 
-auto main_utf8(int argc, char **argv) -> int {
+auto processCommandLine(int argc, char **argv) -> int {
   ProgramChecker *programChecker = ProgramChecker::getInstance();
   Shared *shared = Shared::getInstance();
   try {
@@ -239,7 +235,9 @@ auto main_utf8(int argc, char **argv) -> int {
     FileName outputPath;
     FileName archiveName;
     FileName logfile;
+#ifdef HASHCONFIGCMD
     String hashConfig;
+#endif
 
     for( int i = 1; i < argc; i++ ) {
       int argLen = static_cast<int>(strlen(argv[i]));
@@ -303,14 +301,14 @@ auto main_utf8(int argc, char **argv) -> int {
           }
           logfile += argv[i];
         }
-#ifndef NHASHCONFIG
+#ifdef HASHCONFIGCMD
           else if (strcasecmp(argv[i],"-hash")==0) {
             if(hashConfig.strsize()!=0)quit("Only one hash configuration may be specified.");
             if(++i==argc)quit("The -hash switch requires more parameters: 14 magic hash constants delimited by non-spaces.");
             hashConfig+=argv[i];
             loadHashesFromCmd(hashConfig.c_str());
           }
-#endif
+#endif //HASHCONFIGCMD
         else if( strcasecmp(argv[i], "-simd") == 0 ) {
           if( ++i == argc ) {
             quit("The -simd switch requires an instruction set name (NONE,SSE2,SSSE3, AVX2, NEON).");
@@ -810,7 +808,7 @@ auto main(int argc, char **argv) -> int {
       //printf("%d: %s\n", i, argv_utf8[i]); //debug: see if conversion is successful
     }
     argv_utf8[argc_utf8]=nullptr;
-    int retval=main_utf8(argc_utf8, argv_utf8);
+    int retval=processCommandLine(argc_utf8, argv_utf8);
     for(int i=0; i<argc_utf8; i++)
       delete[] argv_utf8[i];
     delete[] argv_utf8;
@@ -818,6 +816,6 @@ auto main(int argc, char **argv) -> int {
     return retval;
   }
 #else
-  return main_utf8(argc, argv);
+  return processCommandLine(argc, argv);
 #endif
 }

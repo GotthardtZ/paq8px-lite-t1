@@ -22,7 +22,7 @@ private:
         uint32_t stride = 1; // look for a match only every stride bytes after the offset
         uint32_t deletions = 0; // when a match is found, ignore these many initial post-match bytes, to model deletions
         uint32_t minLen = MinLen;
-        uint32_t bitMask = 0xFF; // match every byte according to this bit mask
+        uint8_t bitMask = 0xFF; // match every byte according to this bit mask
     };
     const SparseConfig sparse[numHashes] = {{0, 1, 0, 5, 0xDF},
                                             {1, 1, 0, 4, 0xFF},

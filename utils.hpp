@@ -2,11 +2,8 @@
 #define PAQ8PX_UTILS_HPP
 
 #include <cstdint>
+#include "BitCount.hpp"
 
-static_assert(sizeof(uint8_t) == 1, "sizeof(uint8_t)");
-static_assert(sizeof(uint16_t) == 2, "sizeof(uint16_t)");
-static_assert(sizeof(uint32_t) == 4, "sizeof(uint32_t)");
-static_assert(sizeof(uint64_t) == 8, "sizeof(uint64_t)");
 static_assert(sizeof(short) == 2, "sizeof(short)");
 static_assert(sizeof(int) == 4, "sizeof(int)");
 
@@ -135,8 +132,6 @@ class IntentionalException : public std::exception {};
   throw IntentionalException();
 }
 
-/////////////////////// Global context /////////////////////////
-
 typedef enum {
     DEFAULT = 0,
     FILECONTAINER,
@@ -228,13 +223,6 @@ static inline auto isPNG(BlockType ft) -> bool { return ft == PNG8 || ft == PNG8
 +   ((x) << 56))
 #endif
 
-#if defined(_MSC_VER)
-#define ALWAYS_INLINE __forceinline
-#elif defined(__GNUC__)
-#define ALWAYS_INLINE inline __attribute__((always_inline))
-#else
-#define ALWAYS_INLINE inline
-#endif
 
 #define TAB 0x09
 #define NEW_LINE 0x0A
@@ -284,26 +272,6 @@ static inline auto clamp4(const int px, const uint8_t n1, const uint8_t n2, cons
   return px;
 }
 
-#ifdef _MSC_VER
-#include <intrin.h>
-#ifndef __GNUC__
-
-inline int __builtin_clz( unsigned long v ) {
-  unsigned long r = 0;
-  if (_BitScanReverse(&r, v)) {
-    return 31 - r;
-  }
-  return 31;
-}
-
-inline int __builtin_ctz( unsigned long v ) {
-  unsigned long r = 0;
-  _BitScanForward(&r, v);
-  return (int) r;
-}
-#endif
-
-#endif
 
 /**
  * Returns floor(log2(x)).
@@ -314,7 +282,9 @@ inline int __builtin_ctz( unsigned long v ) {
 static auto ilog2(uint32_t x) -> uint32_t {
 #ifdef _MSC_VER
   DWORD tmp = 0;
-  if (x != 0) _BitScanReverse(&tmp, x);
+  if (x != 0) {
+    _BitScanReverse(&tmp, x);
+  }
   return tmp;
 #elif __GNUC__
   if( x != 0 ) {

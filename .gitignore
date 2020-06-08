@@ -16,3 +16,9 @@ paq8pxd
 train_bench
 afl-in
 afl-out
+# Visual Studio Specific ignores
+.vs/
+x64/
+release/
+debug/
+packages/

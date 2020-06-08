@@ -1,5 +1,7 @@
 #include "WordModel.hpp"
 
+#ifndef DISABLE_TEXTMODEL
+
 WordModel::WordModel(ModelStats const *st, const uint64_t size) : stats(st), cm(size, nCM, 74, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY),
         infoNormal(st, cm), infoPdf(st, cm), pdfTextParserState(0) {}
 
@@ -56,3 +58,5 @@ void WordModel::mix(Mixer &m) {
   }
   cm.mix(m);
 }
+
+#endif //DISABLE_TEXTMODEL

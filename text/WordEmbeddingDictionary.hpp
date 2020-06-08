@@ -6,7 +6,7 @@
 #include "Entry.hpp"
 #include "Word.hpp"
 
-#ifndef NVERBOSE
+#ifdef VERBOSE
 #include "../Shared.hpp"
 #endif
 
@@ -16,7 +16,7 @@ private:
     Array<Entry> entries;
     Array<short> table;
     int index;
-#ifndef NVERBOSE
+#ifdef VERBOSE
     uint32_t requests{};
     uint32_t hits{};
     Shared *shared = Shared::getInstance();

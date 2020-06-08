@@ -1,7 +1,7 @@
 #include "APM1.hpp"
 
 APM1::APM1(const int n, const int r) : index(0), n(n), t(n * 33), rate(r) {
-#ifndef NDEBUG
+#ifdef VERBOSE
   printf("Created APM1 with n = %d, r = %d\n", n, r);
 #endif
   assert(n > 0 && rate > 0 && rate < 32);

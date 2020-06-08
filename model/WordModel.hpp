@@ -1,14 +1,14 @@
 #ifndef PAQ8PX_WORDMODEL_HPP
 #define PAQ8PX_WORDMODEL_HPP
 
+#ifndef DISABLE_TEXTMODEL
+
 #include "../ContextMap2.hpp"
 #include "../ModelStats.hpp"
 #include "../RingBuffer.hpp"
 #include "../Shared.hpp"
 #include "Info.hpp"
 #include <cctype>
-
-#ifdef USE_TEXTMODEL
 
 /**
  * Model words, expressions, numbers, paragraphs/lines, etc.
@@ -46,6 +46,6 @@ public:
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
 };
-#endif //USE_TEXTMODEL
+#endif //DISABLE_TEXTMODEL
 
 #endif //PAQ8PX_WORDMODEL_HPP

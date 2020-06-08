@@ -31,7 +31,7 @@ void WordEmbeddingDictionary::addEntry(const short prefix, const uint8_t suffix,
 WordEmbeddingDictionary::WordEmbeddingDictionary() : entries(0x8000), table(hashSize), index(0) { reset(); }
 
 WordEmbeddingDictionary::~WordEmbeddingDictionary() {
-#ifndef NVERBOSE
+#ifdef VERBOSE
   if (requests > 0) {
       printf("\nHits: %d, Requests: %d, %.2f%%\n", hits, requests, (hits * 100.0) / requests);
 }
@@ -46,7 +46,7 @@ void WordEmbeddingDictionary::reset() {
     entries[index].prefix = -1;
     entries[index].suffix = index;
   }
-#ifndef NVERBOSE
+#ifdef VERBOSE
   requests = hits = 0;
 #endif
 }
@@ -80,7 +80,7 @@ auto WordEmbeddingDictionary::addWord(const Word *w, const uint32_t embedding) -
 
 void WordEmbeddingDictionary::getWordEmbedding(Word *w) {
   int parent = -1;
-#ifndef NVERBOSE
+#ifdef VERBOSE
   requests++;
 #endif
   w->embedding = -1;
@@ -93,17 +93,18 @@ void WordEmbeddingDictionary::getWordEmbedding(Word *w) {
     return;
   }
   w->embedding = entries[parent].embedding;
-#ifndef NVERBOSE
+#ifdef VERBOSE
   hits++;
 #endif
 }
 
 void WordEmbeddingDictionary::loadFromFile(const char *filename) {
   FileDisk f;
-#ifndef NVERBOSE
-  if (shared->toScreen) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-}
-    printf("Loading word embeddings...");
+#ifdef VERBOSE
+  if (shared->toScreen) { 
+    printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+  }
+  printf("Loading word embeddings...");
 #endif
   OpenFromMyFolder::anotherFile(&f, filename);
   Word w;
@@ -122,7 +123,7 @@ void WordEmbeddingDictionary::loadFromFile(const char *filename) {
       total++;
     }
   } while( byte >= 0 );
-#ifndef NVERBOSE
+#ifdef VERBOSE
   printf(" done [%s, %d words]\n", filename, total);
 #endif
   f.close();

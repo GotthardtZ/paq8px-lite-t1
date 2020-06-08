@@ -1,20 +1,20 @@
 #include "ContextMap.hpp"
 
-ContextMap::ContextMap(uint64_t m, const int c) : c(c), t(m >> 6U), cp(c), cp0(c), cxt(c), chk(c), runP(c),
-        sm(c, 256, 1023, StateMap::BitHistory), cn(0), mask(uint32_t(t.size() - 1)), hashBits(ilog2(mask + 1)), validFlags(0) {
-#ifndef NDEBUG
-  printf("Created ContextMap with m = %llu, c = %d\n", m, c);
+ContextMap::ContextMap(uint64_t m, const int contexts) : C(contexts), t(m >> 6U), cp(contexts), cp0(contexts), cxt(contexts), chk(contexts), runP(contexts),
+        sm(contexts, 256, 1023, StateMap::BitHistory), cn(0), mask(uint32_t(t.size() - 1)), hashBits(ilog2(mask + 1)), validFlags(0) {
+#ifdef VERBOSE
+  printf("Created ContextMap with m = %" PRIu64 ", contexts = %d\n", m, contexts);
 #endif
   assert(m >= 64 && isPowerOf2(m));
   static_assert(sizeof(Bucket) == 64, "Size of Bucket should be 64!");
-  assert(c <= (int) sizeof(validFlags) * 8); // validFlags is 64 bits - it can't support more than 64 contexts
+  assert(C <= (int) sizeof(validFlags) * 8); // validFlags is 64 bits - it can't support more than 64 contexts
 }
 
 void ContextMap::set(const uint64_t cx) {
-  assert(cn >= 0 && cn < c);
+  assert(cn >= 0 && cn < C);
   const uint32_t ctx = cxt[cn] = finalize64(cx, hashBits);
   const uint16_t checksum = chk[cn] = static_cast<uint16_t>(checksum64(cx, hashBits, 16));
-  uint8_t *base = cp0[cn] = cp[cn] = t[ctx & mask].find(checksum, shared->chosenSimd);
+  uint8_t *base = cp0[cn] = cp[cn] = t[ctx].find(checksum, shared->chosenSimd);
   runP[cn] = base + 3;
   // update pending bit histories for bits 2-7
   if( base[3] == 2 ) {
@@ -33,7 +33,7 @@ void ContextMap::set(const uint64_t cx) {
 }
 
 void ContextMap::skip() {
-  assert(cn >= 0 && cn < c);
+  assert(cn >= 0 && cn < C);
   cn++;
   validFlags <<= 1U;
 }

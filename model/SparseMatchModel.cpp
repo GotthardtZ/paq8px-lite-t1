@@ -14,7 +14,7 @@ void SparseMatchModel::update() {
   for( uint32_t i = 0; i < numHashes; i++ ) {
     uint64_t hash = 0;
     for( uint32_t j = 0, k = sparse[i].offset + 1; j < sparse[i].minLen; j++, k += sparse[i].stride ) {
-      hash = combine64(hash, buf(k) & sparse[i].bitMask);
+      hash = combine64(hash, static_cast<uint8_t>(buf(k) & sparse[i].bitMask));
     }
     hashes[i] = finalize64(hash, hashBits);
   }

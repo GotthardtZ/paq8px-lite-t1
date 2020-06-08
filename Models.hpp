@@ -53,10 +53,10 @@ public:
     auto image8BitModel() -> Image8BitModel &;
     auto image4BitModel() -> Image4BitModel &;
     static auto image1BitModel() -> Image1BitModel &;
-#ifdef USE_AUDIOMODEL
+#ifndef DISABLE_AUDIOMODEL
     auto audio8BitModel() -> Audio8BitModel &;
     auto audio16BitModel() -> Audio16BitModel &;
-#endif //USE_AUDIOMODEL
+#endif //DISABLE_AUDIOMODEL
 };
 
 #endif //PAQ8PX_MODELS_HPP

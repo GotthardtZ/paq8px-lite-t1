@@ -128,7 +128,7 @@ void TextModel::update() {
       words[Language::Unknown]++;
 
       if( Lang.id != Lang.pId ) {
-#ifndef NVERBOSE
+#ifdef VERBOSE
         if( shared->toScreen ) {
           printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
 }
@@ -150,7 +150,7 @@ void TextModel::update() {
             break;
           }
         }
-#endif
+#endif //VERBOSE
         if(((shared->options & OPTION_TRAINTXT) != 0u) && Lang.id != Language::Unknown && dictionaries[Lang.id - 1] == nullptr ) {
           switch( Lang.id ) {
             case Language::English: {

@@ -4,17 +4,18 @@
 #include "IPredictor.hpp"
 #include "Shared.hpp"
 #include "utils.hpp"
-#if defined(__i386__) || defined(__x86_64__)
+
+#if defined(__i386__) || defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>
 #elif defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON)
 #include <arm_neon.h>
 #endif
 
-#if (defined(__GNUC__) || defined(__clang__)) && defined(__AVX2__)
+#if defined(__GNUC__) || defined(__clang__)
 __attribute__((target("avx2")))
 #endif
 static auto dotProductSimdAvx2(const short *const t, const short *const w, int n) -> int {
-#ifndef __AVX2__
+#if !defined(__i386__) && !defined(__x86_64__) && !defined(_M_X64)
   return 0;
 #else
   __m256i sum = _mm256_setzero_si256();
@@ -35,12 +36,11 @@ static auto dotProductSimdAvx2(const short *const t, const short *const w, int n
 #endif
 }
 
-#if (defined(__GNUC__) || defined(__clang__)) && defined(__AVX2__)
-
+#if defined(__GNUC__) || defined(__clang__)
 __attribute__((target("avx2")))
 #endif
 static void trainSimdAvx2(const short *const t, short *const w, int n, const int e) {
-#ifndef __AVX2__
+#if !defined(__i386__) && !defined(__x86_64__) && !defined(_M_X64)
   return;
 #else
   const __m256i one = _mm256_set1_epi16(1);
@@ -74,7 +74,7 @@ static inline int32x4_t _mm_madd_epi16(int32x4_t a, int32x4_t b) {
 }
 #endif
 
-static auto dotProductSimdNeon(const short* const t, const short* const w, int n) -> int {
+static auto dotProductSimdNeon(const short *const t, const short *const w, int n) -> int {
 #if (!defined(__ARM_FEATURE_SIMD32) && !defined(__ARM_NEON))
   return 0;
 #else
@@ -92,8 +92,8 @@ static auto dotProductSimdNeon(const short* const t, const short* const w, int n
 #endif
 }
 
-static void trainSimdNeon(const short* const t, short* const w, int n, const int e) {
-#if (!defined(__ARM_FEATURE_SIMD32) && !defined(__ARM_NEON))
+static void trainSimdNeon(const short *const t, short *const w, int n, const int e) {
+#if !defined(__ARM_FEATURE_SIMD32) && !defined(__ARM_NEON)
   return;
 #else
   const int32x4_t one = vreinterpretq_s32_s16(vdupq_n_s16(1));
@@ -110,12 +110,11 @@ static void trainSimdNeon(const short* const t, short* const w, int n, const int
 #endif
 }
 
-#if (defined(__GNUC__) || defined(__clang__)) && defined(__SSE2__)
-
+#if defined(__GNUC__) || defined(__clang__)
 __attribute__((target("sse2")))
 #endif
 static auto dotProductSimdSse2(const short *const t, const short *const w, int n) -> int {
-#ifndef __SSE2__
+#if !defined(__i386__) && !defined(__x86_64__) && !defined(_M_X64)
   return 0;
 #else
   __m128i sum = _mm_setzero_si128();
@@ -132,12 +131,11 @@ static auto dotProductSimdSse2(const short *const t, const short *const w, int n
 #endif
 }
 
-#if (defined(__GNUC__) || defined(__clang__)) && defined(__SSE2__)
-
+#if defined(__GNUC__) || defined(__clang__)
 __attribute__((target("sse2")))
 #endif
 static void trainSimdSse2(const short *const t, short *const w, int n, const int e) {
-#ifndef __SSE2__
+#if !defined(__i386__) && !defined(__x86_64__) && !defined(_M_X64)
   return;
 #else
   const __m128i one = _mm_set1_epi16(1);

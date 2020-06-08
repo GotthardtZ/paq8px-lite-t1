@@ -39,7 +39,7 @@ private:
       return 0;
     }
 
-    static auto isBase64(unsigned char c) -> bool {
+    static auto isBase64(uint8_t c) -> bool {
       return (base64::isalnum(c) || (c == '+') || (c == '/') || (c == 10) || (c == 13));
     }
 
@@ -156,15 +156,22 @@ public:
           ptr[fle++] = ((len > 2 ? base64::table1[in2 & 0x3fU] : '='));
           blocksOut++;
         }
-        else{
-          ptr[fle++] = 0;
+        else {
+          if (fMode == FDECOMPRESS) {
+            quit("Unexpected Base64 decoding state");
+          }
+          else if (fMode == FCOMPARE) {
+            diffFound = fle;
+            break; // give up
+          }
         }
         if( blocksOut >= (lineSize / 4) && lineSize != 0 ) { //no lf if lineSize==0
           if((blocksOut != 0) && !in->eof() && fle <= outLen ) { //no lf if eof
             if( tlf != 0 ) {
-              ptr[fle++] = (tlf);
+              ptr[fle++] = tlf;
             } else {
-              ptr[fle++] = 13, ptr[fle++] = 10;
+              ptr[fle++] = 13;
+              ptr[fle++] = 10;
             }
           }
           blocksOut = 0;

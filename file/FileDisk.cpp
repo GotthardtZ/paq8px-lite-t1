@@ -2,10 +2,10 @@
 
 auto FileDisk::makeTmpFile() -> FILE * {
 #if defined(WINDOWS)
-  char szTempFileName[MAX_PATH];
-  const UINT uRetVal = GetTempFileName(TEXT("."), TEXT("tmp"), 0, szTempFileName);
+  wchar_t szTempFileName[MAX_PATH];
+  const UINT uRetVal = GetTempFileNameW(L".", L"tmp", 0, szTempFileName);
   if (uRetVal == 0) return nullptr;
-  return fopen(szTempFileName, "w+bTD");
+  return fopen(Utf8Str(szTempFileName).utf8_str, "w+bTD");
 #else
   return tmpfile();
 #endif

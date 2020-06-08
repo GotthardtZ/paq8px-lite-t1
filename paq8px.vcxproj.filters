@@ -1,0 +1,570 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="file">
+      <UniqueIdentifier>{e9d79d62-d43f-4cd5-a8cc-b85122735072}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="filter">
+      <UniqueIdentifier>{9640ca62-e1c3-485e-b510-770803fd1825}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="model">
+      <UniqueIdentifier>{b7cb947a-b9cc-43a3-91e9-f0b49f39101f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="text">
+      <UniqueIdentifier>{648bde0f-1376-450c-8c89-e9b4863d8783}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="paq8px.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AdaptiveMap.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="APM.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="APM1.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ContextMap.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ContextMap2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DummyMixer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Encoder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Ilog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="IndirectMap.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Mixer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MixerFactory.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Models.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ModelStats.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MTFList.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Predictor.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ProgramChecker.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Random.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Shared.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SmallStationaryContextMap.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SSE.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="StateMap.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="StateTable.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="StationaryMap.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="String.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="UpdateBroadcaster.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="file\File.cpp">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="file\FileDisk.cpp">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="file\FileName.cpp">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="file\FileTmp.cpp">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="file\ListOfFiles.cpp">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="file\OpenFromMyFolder.cpp">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="filter\LZWDictionary.cpp">
+      <Filter>filter</Filter>
+    </ClCompile>
+    <ClCompile Include="filter\TextParserStateInfo.cpp">
+      <Filter>filter</Filter>
+    </ClCompile>
+    <ClCompile Include="model\Audio8BitModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\Audio16BitModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\AudioModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\CharGroupModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\ContextModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\DmcForest.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\DmcModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\DmcNode.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\ExeModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\Image1BitModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\Image4BitModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\Image8BitModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\Image24BitModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\IndirectModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\Info.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\JpegModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\LinearPredictionModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\MatchModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\NestModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\NormalModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\RecordModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\SparseMatchModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\SparseModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\WordModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\XMLModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="text\English.cpp">
+      <Filter>text</Filter>
+    </ClCompile>
+    <ClCompile Include="text\EnglishStemmer.cpp">
+      <Filter>text</Filter>
+    </ClCompile>
+    <ClCompile Include="text\French.cpp">
+      <Filter>text</Filter>
+    </ClCompile>
+    <ClCompile Include="text\FrenchStemmer.cpp">
+      <Filter>text</Filter>
+    </ClCompile>
+    <ClCompile Include="text\German.cpp">
+      <Filter>text</Filter>
+    </ClCompile>
+    <ClCompile Include="text\GermanStemmer.cpp">
+      <Filter>text</Filter>
+    </ClCompile>
+    <ClCompile Include="text\Stemmer.cpp">
+      <Filter>text</Filter>
+    </ClCompile>
+    <ClCompile Include="text\TextModel.cpp">
+      <Filter>text</Filter>
+    </ClCompile>
+    <ClCompile Include="text\Word.cpp">
+      <Filter>text</Filter>
+    </ClCompile>
+    <ClCompile Include="text\WordEmbeddingDictionary.cpp">
+      <Filter>text</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="AdaptiveMap.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="APM.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="APM1.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Array.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="BH.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Bucket.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ContextMap.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ContextMap2.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DivisionTable.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DummyMixer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Encoder.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Hash.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HashTable.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Ilog.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IndirectContext.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IndirectMap.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IPredictor.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LMS.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Mixer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MixerFactory.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Models.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ModelStats.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MTFList.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="OLS.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Predictor.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ProgramChecker.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Random.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="RingBuffer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Shared.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="simd.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SimdMixer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SmallStationaryContextMap.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Squash.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SSE.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="StateMap.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="StateTable.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="StationaryMap.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Stretch.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="String.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="UpdateBroadcaster.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="utils.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="file\File.hpp">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="file\FileDisk.hpp">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="file\FileName.hpp">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="file\FileTmp.hpp">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="file\fileUtils.hpp">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="file\fileUtils2.hpp">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="file\ListOfFiles.hpp">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="file\OpenFromMyFolder.hpp">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="filter\base64.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
+    <ClInclude Include="filter\bmp.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
+    <ClInclude Include="filter\cd.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
+    <ClInclude Include="filter\ecc.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
+    <ClInclude Include="filter\endianness16b.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
+    <ClInclude Include="filter\eol.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
+    <ClInclude Include="filter\exe.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
+    <ClInclude Include="filter\Filter.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
+    <ClInclude Include="filter\Filters.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
+    <ClInclude Include="filter\gif.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
+    <ClInclude Include="filter\im32.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
+    <ClInclude Include="filter\lzw.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
+    <ClInclude Include="filter\LZWDictionary.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
+    <ClInclude Include="filter\LZWEntry.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
+    <ClInclude Include="filter\rle.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
+    <ClInclude Include="filter\TextParserStateInfo.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
+    <ClInclude Include="filter\zlib.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
+    <ClInclude Include="model\Audio8BitModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\Audio16BitModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\AudioModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\CharGroupModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\ContextModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\DmcForest.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\DmcModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\DmcNode.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\ExeModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\Image1BitModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\Image4BitModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\Image8BitModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\Image24BitModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\IndirectModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\Info.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\JpegModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\LinearPredictionModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\MatchModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\NestModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\NormalModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\RecordModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\SparseMatchModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\SparseModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\WordModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\XMLModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="text\Cache.hpp">
+      <Filter>text</Filter>
+    </ClInclude>
+    <ClInclude Include="text\English.hpp">
+      <Filter>text</Filter>
+    </ClInclude>
+    <ClInclude Include="text\EnglishStemmer.hpp">
+      <Filter>text</Filter>
+    </ClInclude>
+    <ClInclude Include="text\Entry.hpp">
+      <Filter>text</Filter>
+    </ClInclude>
+    <ClInclude Include="text\French.hpp">
+      <Filter>text</Filter>
+    </ClInclude>
+    <ClInclude Include="text\FrenchStemmer.hpp">
+      <Filter>text</Filter>
+    </ClInclude>
+    <ClInclude Include="text\German.hpp">
+      <Filter>text</Filter>
+    </ClInclude>
+    <ClInclude Include="text\GermanStemmer.hpp">
+      <Filter>text</Filter>
+    </ClInclude>
+    <ClInclude Include="text\Language.hpp">
+      <Filter>text</Filter>
+    </ClInclude>
+    <ClInclude Include="text\Paragraph.hpp">
+      <Filter>text</Filter>
+    </ClInclude>
+    <ClInclude Include="text\Segment.hpp">
+      <Filter>text</Filter>
+    </ClInclude>
+    <ClInclude Include="text\Sentence.hpp">
+      <Filter>text</Filter>
+    </ClInclude>
+    <ClInclude Include="text\Stemmer.hpp">
+      <Filter>text</Filter>
+    </ClInclude>
+    <ClInclude Include="text\TextModel.hpp">
+      <Filter>text</Filter>
+    </ClInclude>
+    <ClInclude Include="text\Word.hpp">
+      <Filter>text</Filter>
+    </ClInclude>
+    <ClInclude Include="text\WordEmbeddingDictionary.hpp">
+      <Filter>text</Filter>
+    </ClInclude>
+    <ClInclude Include="BitCount.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VLI.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+</Project>

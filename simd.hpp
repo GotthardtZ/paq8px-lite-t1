@@ -6,27 +6,23 @@
 // Uncomment one or more of the following includes if you plan adding more SIMD dispatching
 //#include <mmintrin.h>  //MMX
 //#include <xmmintrin.h> //SSE
-#ifdef __SSE2__
 #include <emmintrin.h> //SSE2
-#endif
 //#include <pmmintrin.h> //SSE3
 //#include <tmmintrin.h> //SSSE3
 //#include <smmintrin.h> //SSE4.1
 //#include <nmmintrin.h> //SSE4.2
 //#include <ammintrin.h> //SSE4A
-#if defined(__AVX__) ||defined(__AVX2__)
 #include <immintrin.h> //AVX, AVX2
-#endif
 //#include <zmmintrin.h> //AVX512
 
 //define CPUID
-#if defined(__GNUC__)||defined(__clang__)
-#if !defined(__ARM_FEATURE_SIMD32)&&!defined(__ARM_NEON)
+#if defined(__GNUC__) || defined(__clang__)
+#if !defined(__ARM_FEATURE_SIMD32) && !defined(__ARM_NEON)
 #include <cpuid.h>
 #define cpuid(info, x) __cpuid_count(x, 0, (info)[0], (info)[1], (info)[2], (info)[3])
 #endif
 #elif defined(_MSC_VER)
-#include <intrin.h>
+#include <immintrin.h>
 #define cpuid(info, x) __cpuidex(info, x, 0)
 #else
 #error Unknown compiler

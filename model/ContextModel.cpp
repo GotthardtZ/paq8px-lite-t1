@@ -129,7 +129,7 @@ auto ContextModel::p() -> int {
       m->setScaleFactor(2048, 128);
       return image24BitModel.mix(*m), m->p();
     }
-#ifdef USE_AUDIOMODEL
+#ifndef DISABLE_AUDIOMODEL
     case AUDIO:
     case AUDIO_LE: {
       RecordModel &recordModel = models.recordModel();
@@ -146,7 +146,7 @@ auto ContextModel::p() -> int {
       return audio16BitModel.mix(*m), m->p();
 
     }
-#endif //USE_AUDIOMODEL
+#endif //DISABLE_AUDIOMODEL
     case JPEG: {
       JpegModel &jpegModel = models.jpegModel();
       m->setScaleFactor(1024, 256);
@@ -180,12 +180,12 @@ auto ContextModel::p() -> int {
     recordModel.mix(*m);
     CharGroupModel &charGroupModel = models.charGroupModel();
     charGroupModel.mix(*m);
-#ifdef USE_TEXTMODEL
+#ifndef DISABLE_TEXTMODEL
     TextModel &textModel = models.textModel();
     textModel.mix(*m);
     WordModel &wordModel = models.wordModel();
     wordModel.mix(*m);
-#endif //USE_TEXTMODEL
+#endif //DISABLE_TEXTMODEL
     IndirectModel &indirectModel = models.indirectModel();
     indirectModel.mix(*m);
     DmcForest &dmcForest = models.dmcForest();
