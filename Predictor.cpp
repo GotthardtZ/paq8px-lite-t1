@@ -2,7 +2,7 @@
 
 Predictor::Predictor() : models(&stats), contextModel(&stats, models), sse(&stats), pr(2048) {
   shared->reset();
-  shared->buf.setSize(shared->mem * 8);
+  shared->buf.setSize(min(shared->mem * 8, 1ULL<<31)); /*< no reason to go over 2 GB, since we don't support compressing larger files */
   //initiate pre-training
 
   if((shared->options & OPTION_TRAINTXT) != 0U ) {

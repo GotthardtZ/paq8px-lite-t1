@@ -37,7 +37,7 @@ public:
     SmallStationaryContextMap pltMap[nPltMaps];
     IndirectMap sceneMap[5];
     IndirectContext<uint8_t> iCtx[nPltMaps];
-    RingBuffer<uint8_t> buffer {0x100000}; /**< internal rotating buffer for (PNG unfiltered) pixel data */
+    RingBuffer<uint8_t> buffer {0x100000}; /**< internal rotating buffer for (PNG unfiltered) pixel data (1MB) */
     Array<short> jumps {0x8000};
     //pixel neighborhood
     uint8_t WWWWWW = 0, WWWWW = 0, WWWW = 0, WWW = 0, WW = 0, W = 0;

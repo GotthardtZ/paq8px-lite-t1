@@ -51,7 +51,7 @@ public:
                                        nSSM * SmallStationaryContextMap::MIXERINPUTS + nSM * StationaryMap::MIXERINPUTS; // 23
     static constexpr int MIXERCONTEXTS = 8;
     static constexpr int MIXERCONTEXTSETS = 1;
-    MatchModel(ModelStats *st, uint64_t size);
+    MatchModel(ModelStats *st, const uint64_t buffermemorysize, const uint64_t mapmemorysize);
     void update();
     void mix(Mixer &m);
 };

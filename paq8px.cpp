@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "187fix1"  //update version here before publishing your changes
+#define PROGVERSION  "187fix2"  //update version here before publishing your changes
 #define PROGYEAR     "2020"
 
 
@@ -39,6 +39,7 @@ static void printHelp() {
          "      -0 = store (uses 322 MB)\n"
          "      -1 -2 -3 = faster (uses 417, 431, 459 MB)\n"
          "      -4 -5 -6 -7 -8 -9 = smaller (uses 514, 624, 845, 1288, 2172, 3941 MB)\n"
+         "      -10  -11  -12     = extreme (uses 7478, 14553, 28702 MB)\n"
          "    The listed memory requirements are indicative, actual usage may vary\n"
          "    depending on several factors including need for temporary files,\n"
          "    temporary memory needs of some preprocessing (transformations), etc.\n"
@@ -245,14 +246,23 @@ auto processCommandLine(int argc, char **argv) -> int {
         if( argLen == 1 ) {
           quit("Empty command.");
         }
-        if( argv[i][1] >= '0' && argv[i][1] <= '9' ) {
+        if( argv[i][1] >= '0' && argv[i][1] <= '9' ) { // first  digit of level
           if( whattodo != DoNone ) {
             quit("Only one command may be specified.");
           }
+          int level = argv[i][1] - '0';
+          int j = 2;
+          if (argLen >= 3 && argv[i][2] >= '0' && argv[i][2] <= '9') { // second digit of level
+            level = level*10 + argv[i][2] - '0';
+            j++;
+          }
+          if (level > 12) {
+            quit("Compression level must be between 0 and 12.");
+          }
+          shared->setLevel(level);
           whattodo = DoCompress;
-          shared->setLevel(argv[i][1] - '0');
           //process optional compression switches
-          for( int j = 2; j < argLen; j++ ) {
+          for( ; j < argLen; j++ ) {
             switch( argv[i][j] & 0xDFU ) {
               case 'B':
                 shared->options |= OPTION_BRUTE;
@@ -580,7 +590,7 @@ auto processCommandLine(int argc, char **argv) -> int {
     }
 
     // Set globals according to requested compression level
-    assert(shared->level >= 0 && shared->level <= 9);
+    assert(shared->level <= 12);
     Encoder en(mode, &archive);
     uint64_t contentSize = 0;
     uint64_t totalSize = 0;

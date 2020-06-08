@@ -33,8 +33,8 @@ void Shared::reset() {
   c8 = 0;
 }
 
-void Shared::setLevel(uint8_t l) {
-  level = l;
+void Shared::setLevel(uint8_t level) {
+  this->level = level;
   mem = 65536ULL << level;
 }
 

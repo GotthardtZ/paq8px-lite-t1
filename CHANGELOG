@@ -1653,10 +1653,15 @@ paq8px_v187fix1
 - The necessary zlib source files are included in a new folder "zlib" for MinGW-W64 and other (windows) compilers
 - Provided a batch file for building with MINGW-W64 (for those who don't use cmake): "build-mingw-w64-generic-publish.cmd" - in the "build" folder
 - Preprocessor macros:
-  - Swithed from #ifndef NDEBUG to #ifdef VERBOSE wherever detailed debug information is printed on screen
-  - Swithced from USE_TEXTMODEL / USE_AUDIOMODEL / USE_ZLIB to DISABLE_TEXTMODEL / DISABLE_AUDIOMODEL / DISABLE_ZLIB so when no 
-    options are provided these features are included by default
+  - Switched from #ifndef NDEBUG to #ifdef VERBOSE wherever detailed debug information is printed on screen
+  - Switched from USE_TEXTMODEL / USE_AUDIOMODEL / USE_ZLIB to DISABLE_TEXTMODEL / DISABLE_AUDIOMODEL / DISABLE_ZLIB so when no options are provided these features are included by default
     When you build paq8px yourself and want maximum performance you need to provide the -DNDEBUG flag only (default in "CMakeLists.txt" and in "Build-mingw64-generic-for-publish.cmd")
 - Fixed CPU/SIMD dispatch to enable building for the general public again
 - Some cosmetic changes
 - Archives are still expected to be binary compatible with v183fix1
+
+
+paq8px_v187fix2
+2020.06.09
+- Fixed string copy issue in "OpenFromMyFolder.hpp" that caused text pretraining to malfunction.
+- Enabled compression levels up to 12 (~ 28-32 GB depending on the models loaded)
