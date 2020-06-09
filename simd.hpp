@@ -2,7 +2,7 @@
 #define PAQ8PX_SIMD_HPP
 
 ///////////////////////// SIMD Vectorization detection //////////////////////////////////
-
+#if (!defined(__ARM_FEATURE_SIMD32) && !defined(__ARM_NEON))
 // Uncomment one or more of the following includes if you plan adding more SIMD dispatching
 //#include <mmintrin.h>  //MMX
 //#include <xmmintrin.h> //SSE
@@ -14,6 +14,7 @@
 //#include <ammintrin.h> //SSE4A
 #include <immintrin.h> //AVX, AVX2
 //#include <zmmintrin.h> //AVX512
+#endif
 
 //define CPUID
 #if defined(__GNUC__) || defined(__clang__)

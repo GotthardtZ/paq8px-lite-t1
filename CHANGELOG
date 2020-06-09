@@ -1665,3 +1665,7 @@ paq8px_v187fix2
 2020.06.09
 - Fixed string copy issue in "OpenFromMyFolder.hpp" that caused text pretraining to malfunction.
 - Enabled compression levels up to 12 (~ 28-32 GB depending on the models loaded)
+
+paq8px_v187fix3
+2020.06.09
+- Restored compilation on ARM processors using GCC (Must use -DNATIVECPU=ON on cmake).

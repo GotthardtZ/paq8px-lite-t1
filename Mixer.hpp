@@ -11,7 +11,7 @@
 #include <arm_neon.h>
 #endif
 
-#if defined(__GNUC__) || defined(__clang__)
+#if (defined(__GNUC__) || defined(__clang__)) && (!defined(__ARM_FEATURE_SIMD32) && !defined(__ARM_NEON))
 __attribute__((target("avx2")))
 #endif
 static auto dotProductSimdAvx2(const short *const t, const short *const w, int n) -> int {
@@ -36,7 +36,7 @@ static auto dotProductSimdAvx2(const short *const t, const short *const w, int n
 #endif
 }
 
-#if defined(__GNUC__) || defined(__clang__)
+#if (defined(__GNUC__) || defined(__clang__)) && (!defined(__ARM_FEATURE_SIMD32) && !defined(__ARM_NEON))
 __attribute__((target("avx2")))
 #endif
 static void trainSimdAvx2(const short *const t, short *const w, int n, const int e) {
@@ -93,7 +93,7 @@ static auto dotProductSimdNeon(const short *const t, const short *const w, int n
 }
 
 static void trainSimdNeon(const short *const t, short *const w, int n, const int e) {
-#if !defined(__ARM_FEATURE_SIMD32) && !defined(__ARM_NEON)
+#if (!defined(__ARM_FEATURE_SIMD32) && !defined(__ARM_NEON))
   return;
 #else
   const int32x4_t one = vreinterpretq_s32_s16(vdupq_n_s16(1));
@@ -110,7 +110,7 @@ static void trainSimdNeon(const short *const t, short *const w, int n, const int
 #endif
 }
 
-#if defined(__GNUC__) || defined(__clang__)
+#if (defined(__GNUC__) || defined(__clang__)) && (!defined(__ARM_FEATURE_SIMD32) && !defined(__ARM_NEON))
 __attribute__((target("sse2")))
 #endif
 static auto dotProductSimdSse2(const short *const t, const short *const w, int n) -> int {
@@ -131,7 +131,7 @@ static auto dotProductSimdSse2(const short *const t, const short *const w, int n
 #endif
 }
 
-#if defined(__GNUC__) || defined(__clang__)
+#if (defined(__GNUC__) || defined(__clang__)) && (!defined(__ARM_FEATURE_SIMD32) && !defined(__ARM_NEON))
 __attribute__((target("sse2")))
 #endif
 static void trainSimdSse2(const short *const t, short *const w, int n, const int e) {
