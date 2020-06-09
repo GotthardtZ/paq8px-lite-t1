@@ -48,7 +48,7 @@ public:
     ContextMap2 cm;
     SmallStationaryContextMap SCMap[nSSM];
     StationaryMap map[nSM];
-    RingBuffer<uint8_t> buffer {0x100000}; // internal rotating buffer for (PNG unfiltered) pixel data
+    RingBuffer<uint8_t> buffer {0x100000}; // internal rotating buffer for (PNG unfiltered) pixel data (1 MB)
     //pixel neighborhood
     uint8_t WWWWWW = 0, WWWWW = 0, WWWW = 0, WWW = 0, WW = 0, W = 0;
     uint8_t NWWWW = 0, NWWW = 0, NWW = 0, NW = 0, N = 0, NE = 0, NEE = 0, NEEE = 0, NEEEE = 0;

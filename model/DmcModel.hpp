@@ -28,11 +28,15 @@
  *   and a bit history ("state"). The 0,1 counts are updated adaptively favoring newer events.
  *   The bit history state is mapped to a probability adaptively using a @ref StateMap.
  * - The predictions of multiple "DmcModel"s are combined and stabilized in a @ref DmcForest.
+ *
+ * Max memory use:
+ * 12 bytes (DMC node size, fixed) * 2^28 nodes (that is 268'435'456, max) = 3'221'225'472 (~ 3 GB)
+ *
  */
 class DmcModel {
 private:
     constexpr static uint64_t dmcNodesBase = (255 * 256); /**< 65280 */
-    constexpr static uint64_t dmcNodesMax = ((1ULL << 31U) / sizeof(DMCNode)); /**< 178 956 970 */
+    constexpr static uint64_t dmcNodesMax = (1ULL << 28); /**< 268'435'456 */
     Shared *shared = Shared::getInstance();
     Random rnd;
     Array<DMCNode> t; /**< state graph */
@@ -65,11 +69,13 @@ public:
      * Update state graph.
      */
     void update();
+
     /**
      * Determine if the state graph is full or not.
      * @return
      */
     [[nodiscard]] auto isFull() const -> bool;
+
     [[nodiscard]] auto pr1() const -> int;
     auto pr2() -> int;
     auto st() -> int;

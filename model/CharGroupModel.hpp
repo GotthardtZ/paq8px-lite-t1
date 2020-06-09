@@ -14,7 +14,7 @@
  *     "A (fairly simple) sentence." becomes "A (a a) a.",
  * and
  *     "A picture is worth a 1000 words!" becomes "A a a a a 1 a!"
- * And the model uses these simplified "strings" as contexts for a @ref ContextMap.
+ * And the model uses these simplified "strings" as contexts for a @ref ContextMap2.
  * a "mask" is a simplification of the last some bytes of the input sequence emphasizing some feature that looks promising to use it as a context.
  */
 class CharGroupModel {

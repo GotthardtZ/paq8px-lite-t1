@@ -1,5 +1,27 @@
 #include "Models.hpp"
 
+/*
+ relationship between compression level, shared->mem and NormalModel memory use ( shared->mem * 32 ) as an example
+
+ level   shared->mem    NormalModel memory use
+ -----   -----------    ----------------------
+   1      0.125 MB              4 MB
+   2      0.25	MB              8 MB
+   3      0.5   MB             16 MB
+   4      1.0   MB             32 MB
+   5      2.0   MB             64 MB
+   6      4.0   MB            128 MB
+   7      8.0   MB            256 MB
+   8     16.0   MB            512 MB
+   9     32.0   MB           1024 MB
+  10     64.0   MB           2048 MB
+  11    128.0   MB           4096 MB
+  12    256.0   MB           8192 MB
+  13    512.0   MB          16384 MB 
+
+*/
+
+
 Models::Models(ModelStats *st) : stats(st) {}
 
 auto Models::normalModel() -> NormalModel & {
@@ -8,7 +30,7 @@ auto Models::normalModel() -> NormalModel & {
 }
 
 auto Models::dmcForest() -> DmcForest & {
-  static DmcForest instance {shared->mem};
+  static DmcForest instance {shared->mem};  /**< Not the actual memory use - see in the model */
   return instance;
 }
 
@@ -28,7 +50,7 @@ auto Models::sparseModel() -> SparseModel & {
 }
 
 auto Models::matchModel() -> MatchModel & {
-  static MatchModel instance {stats, shared->mem * 4};
+  static MatchModel instance {stats, shared->mem * 4 /*buffermemorysize*/, shared->mem / 32 /*mapmeorysize*/ };
   return instance;
 }
 
@@ -84,7 +106,7 @@ auto Models::linearPredictionModel() -> LinearPredictionModel & {
 }
 
 auto Models::jpegModel() -> JpegModel & {
-  static JpegModel instance {shared->mem};
+  static JpegModel instance {shared->mem}; /**< Not the actual memory use - see in the model */
   return instance;
 }
 

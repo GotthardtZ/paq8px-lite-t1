@@ -6,7 +6,7 @@
 #include "DmcModel.hpp"
 
 /**
- * This class solves two problems of the DMC model
+ * This class solves two problems of the DMC model.
  * 1) The DMC model is a memory hungry algorithm. In theory it works best when it can clone
  *    nodes forever. But when the state graph is full you can't clone nodes anymore.
  *    You can either i) reset the model (the state graph) and start over
@@ -41,7 +41,7 @@ class DmcForest {
 private:
     static constexpr uint32_t MODELS = 10; /**< 8 fast and 2 slow models */
     static constexpr uint32_t dmcParams[MODELS] = {2, 32, 64, 4, 128, 8, 256, 16, 1024, 1536};
-    static constexpr uint64_t dmcMem[MODELS] = {6, 10, 11, 7, 12, 8, 13, 9, 2, 2};
+    static constexpr uint32_t dmcMem[MODELS] = {6, 10, 11, 7, 12, 8, 13, 9, 2, 2};
     Shared *shared = Shared::getInstance();
     Array<DmcModel *> dmcModels;
 
@@ -53,7 +53,7 @@ public:
     ~DmcForest();
 
     /**
-     * Update and predict.
+     * Update and predict all the DMC models.
      * @param m
      */
     void mix(Mixer &m);
