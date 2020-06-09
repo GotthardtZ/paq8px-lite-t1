@@ -118,7 +118,7 @@ public:
      * @return
      */
 
-#if defined(__GNUC__) || defined(__clang__)
+#if (defined(__GNUC__) || defined(__clang__)) && (!defined(__ARM_FEATURE_SIMD32) && !defined(__ARM_NEON))
     __attribute__((target("ssse3")))
 #endif
     inline auto findSsse3(const uint16_t checksum) -> uint8_t* {
