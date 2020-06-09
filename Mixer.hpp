@@ -11,7 +11,7 @@
 #include <arm_neon.h>
 #endif
 
-#if defined(__GNUC__) || defined(__clang__)
+#if defined(__GNUC__) || defined(__clang__) && (!defined(__ARM_FEATURE_SIMD32) && !defined(__ARM_NEON))
 __attribute__((target("avx2")))
 #endif
 static auto dotProductSimdAvx2(const short *const t, const short *const w, int n) -> int {
