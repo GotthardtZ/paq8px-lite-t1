@@ -102,6 +102,35 @@ static inline auto ctz(uint32_t value) -> uint32_t {
 
 /**
  * Hash bucket, 64 bytes
+ *
+ * Contains bit histories (statistics only) and byte histories (byte values).
+ * For every byte the bit histories are stored in the "bitState" array
+ * (7 bytes) in 3 different buckets:
+ * The 1st bucket: 
+ *  [bit statistics for bit 0] 
+ *  [bit statistics for bit 1 when bit 0 was 0] 
+ *  [bit statistics for bit 1 when bit 0 was 1] 
+ *  [union of byte run count and the pending flag (0xFF)]
+ *  [byte value: byte in context #1 - belongs to run count]
+ *  [byte value: byte in context #2]
+ *  [byte value: byte in context #3]
+ * The 2nd bucket:
+ *  [bit statistics for bit 2]
+ *  [bit statistics for bit 3 when bit 2 was 0]
+ *  [bit statistics for bit 3 when bit 2 was 1]
+ *  [bit statistics for bit 4 when bit 2-3 was 00]
+ *  [bit statistics for bit 4 when bit 2-3 was 01]
+ *  [bit statistics for bit 4 when bit 2-3 was 10]
+ *  [bit statistics for bit 4 when bit 2-3 was 11]
+ * The 3rd bucket:
+ *  [bit statistics for bit 5]
+ *  [bit statistics for bit 6 when bit 5 was 0]
+ *  [bit statistics for bit 6 when bit 5 was 1]
+ *  [bit statistics for bit 7 when bit 5-6 was 00]
+ *  [bit statistics for bit 7 when bit 5-6 was 01]
+ *  [bit statistics for bit 7 when bit 5-6 was 10]
+ *  [bit statistics for bit 7 when bit 5-6 was 11]
+
  */
 class Bucket {
     uint16_t checksums[7]; /**< byte context checksums */
@@ -128,8 +157,6 @@ public:
       if (checksums[mostRecentlyUsed & 15U] == checksum) {
         return &bitState[mostRecentlyUsed & 15U][0];
       }
-      int worst = 0xFFFF;
-      int idx = 0;
       const __m128i xmmChecksum = _mm_set1_epi16(short(checksum)); //fill 8 ch values
       // load 8 values, discard last one as only 7 are needed.
       // reverse order and compare 7 checksums values to @ref checksum
@@ -140,11 +167,11 @@ public:
       tmp = _mm_cmpeq_epi16(tmp, xmmChecksum); // compare ch values
       tmp = _mm_packs_epi16(tmp, _mm_setzero_si128()); // pack result
       uint32_t t = (_mm_movemask_epi8(tmp)) >> 1; // get mask of comparison, bit is set if eq, discard 8th bit
-      uint32_t a = 0;    // index into bitState or 7 if not found
+      uint32_t idx = 0; // index into bitState
       if( t != 0u ) {
-        a = (clz(t) - 1) & 7U;
-        mostRecentlyUsed = mostRecentlyUsed << 4U | a;
-        return &bitState[a][0];
+        idx = (clz(t) - 1) & 7U;
+        mostRecentlyUsed = static_cast<uint8_t>(mostRecentlyUsed << 4 | idx);
+        return &bitState[idx][0];
       }
       __m128i lastL = _mm_set1_epi8((mostRecentlyUsed & 15U));
       __m128i lastH = _mm_set1_epi8((mostRecentlyUsed >> 4U));
@@ -160,6 +187,7 @@ public:
       __m128i sum1 = _mm_sad_epu8(lastX, _mm_setzero_si128());        // count values, abs(a0 - b0) + abs(a1 - b1) .... up to b8
       const uint32_t pCount = _mm_cvtsi128_si32(sum1); // population count
       uint32_t t0 = (~_mm_movemask_epi8(eq0));
+      int worst = 0xFFFF;
       for( int i = pCount; i < 7; ++i ) {
         int bitt = ctz(t0);     // get index
         t0 &= ~(1 << bitt); // clear bit set and test again

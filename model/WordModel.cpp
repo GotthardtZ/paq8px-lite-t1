@@ -11,17 +11,19 @@ void WordModel::reset() {
 }
 
 void WordModel::mix(Mixer &m) {
-  if( shared->bitPosition == 0 ) {
+  INJECT_SHARED_bpos
+  if( bpos == 0 ) {
     //extract text from pdf
-    const uint8_t c1 = shared->c4;
-    if( shared->c4 == 0x0a42540aU /* "\nBT\n" */) {
+    INJECT_SHARED_c4
+    const uint8_t c1 = c4;
+    if( c4 == 0x0a42540aU /* "\nBT\n" */) {
       pdfTextParserState = 1; // Begin Text
-    } else if( shared->c4 == 0x0a45540aU /* "\nET\n" */) {
+    } else if( c4 == 0x0a45540aU /* "\nET\n" */) {
       pdfTextParserState = 0;
     } // end Text
     bool doPdfProcess = true;
     if( pdfTextParserState != 0 ) {
-      const uint8_t pC = shared->c4 >> 8U;
+      const uint8_t pC = c4 >> 8U;
       if( pC != '\\' ) {
         if( c1 == '[' ) {
           pdfTextParserState |= 2U;

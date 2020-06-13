@@ -6,14 +6,19 @@
 #include <cstdint>
 
 // helper #defines to access shared variables
-#define INJECT_SHARED_buf const RingBuffer<uint8_t> &buf = shared->buf;
-#define INJECT_SHARED_y const uint8_t y = shared->y;
+#define INJECT_SHARED_buf   const RingBuffer<uint8_t> &buf=shared->buf;
+#define INJECT_SHARED_pos   const uint32_t pos=shared->buf.getpos();
+#define INJECT_SHARED_y     const uint8_t  y=shared->y;
+#define INJECT_SHARED_c0    const uint8_t  c0=shared->c0;
+#define INJECT_SHARED_c1    const uint8_t  c1=shared->c1;
+#define INJECT_SHARED_bpos  const uint8_t  bpos=shared->bitPosition;
+#define INJECT_SHARED_c4    const uint32_t c4=shared->c4;
+#define INJECT_SHARED_c8    const uint32_t c8=shared->c8;
 
 /**
- * Shared information by the all models and some other classes.
+ * Shared information by all the models and some other classes.
  */
 struct Shared {
-public:
     RingBuffer<uint8_t> buf; /**< Rotating input queue set by Predictor */
     uint8_t y = 0; /**< Last bit, 0 or 1 */
     uint8_t c0 = 1; /**< Last 0-7 bits of the partial byte with a leading 1 bit (1-255) */

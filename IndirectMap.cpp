@@ -27,7 +27,7 @@ void IndirectMap::set(const uint64_t ctx) {
 void IndirectMap::update() {
   INJECT_SHARED_y
   StateTable::update(cp, y, rnd);
-  b += static_cast<unsigned int>((y != 0U) && b > 0);
+  b += static_cast<uint32_t>((y != 0U) && b > 0);
 }
 
 void IndirectMap::setScale(const int Scale) { this->scale = Scale; }

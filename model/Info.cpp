@@ -44,9 +44,9 @@ void Info::processChar(const bool isExtendedChar) {
   pC = c;
   isLetterPpC = isLetterPc;
   isLetterPc = isLetter;
-
-  c4 = c4 << 8U | shared->c1;
-  c = shared->c1;
+  INJECT_SHARED_c1
+  c4 = c4 << 8U | c1;
+  c = c1;
   if( c >= 'A' && c <= 'Z' ) {
     c += 'a' - 'A';
     lastUpper = 0;
@@ -86,7 +86,7 @@ void Info::processChar(const bool isExtendedChar) {
     lastLetter = 0;
     word0 = combine64(word0, c);
     w = static_cast<uint16_t>(finalize64(word0, wPosBits));
-    chk = static_cast<uint16_t>(checksum64(word0, wPosBits, 16));
+    chk = checksum16(word0, wPosBits);
     text0 = (text0 << 8U | c) & 0xffffffffffu; // last 5 alphanumeric chars (other chars are ignored)
     wordLen0 = min(wordLen0 + 1, maxWordLen);
     //last letter types
@@ -115,7 +115,7 @@ void Info::processChar(const bool isExtendedChar) {
       }
     }
   } else { //it's not a letter/number
-    gapToken0 = combine64(gapToken0, isNewline ? static_cast<uint8_t>(SPACE) : shared->c1);
+    gapToken0 = combine64(gapToken0, isNewline ? static_cast<uint8_t>(SPACE) : c1);
     if( isNewline && pC == '+' && isLetterPpC ) {
     } //calgary/book1 hyphenation - don't shift again
     else if( c == '?' || pC == '!' || pC == '.' ) {
@@ -128,7 +128,8 @@ void Info::processChar(const bool isExtendedChar) {
       shiftWords();
     }
     if( wordLen0 != 0 ) { //beginning of a new non-word token
-      wordPositions[w] = shared->buf.getpos();
+      INJECT_SHARED_pos
+      wordPositions[w] = pos;
       checksums[w] = chk;
       w = 0;
       chk = 0;
@@ -145,26 +146,26 @@ void Info::processChar(const bool isExtendedChar) {
       mask2 = 0;
     }
 
-    if( shared->c1 == '.' || shared->c1 == '!' || shared->c1 == '?' ) {
+    if( c1 == '.' || c1 == '!' || c1 == '?' ) {
       mask2 |= '!';
-    } else if( shared->c1 == ',' || shared->c1 == ';' || shared->c1 == ':' ) {
+    } else if( c1 == ',' || c1 == ';' || c1 == ':' ) {
       mask2 |= ',';
-    } else if( shared->c1 == '(' || shared->c1 == '{' || shared->c1 == '[' || shared->c1 == '<' ) {
+    } else if( c1 == '(' || c1 == '{' || c1 == '[' || c1 == '<' ) {
       mask2 |= '(';
-      opened = shared->c1;
-    } else if( shared->c1 == ')' || shared->c1 == '}' || shared->c1 == ']' || shared->c1 == '>' ) {
+      opened = c1;
+    } else if( c1 == ')' || c1 == '}' || c1 == ']' || c1 == '>' ) {
       mask2 |= ')';
       opened = 0;
-    } else if( shared->c1 == QUOTE || shared->c1 == APOSTROPHE ) {
-      mask2 |= shared->c1;
+    } else if( c1 == QUOTE || c1 == APOSTROPHE ) {
+      mask2 |= c1;
       opened = 0;
     } else {
-      mask2 |= shared->c1; //0, SPACE, NEW_LINE, /\+=%$- etc.
+      mask2 |= c1; //0, SPACE, NEW_LINE, /\+=%$- etc.
     }
   }
 
   //const uint8_t characterGroup = stats->Text.characterGroup;
-  uint8_t g = shared->c1;
+  uint8_t g = c1;
   if( g >= 128 ) {
     //utf8 code points (weak context)
     if((g & 0xf8u) == 0xf0 ) {
@@ -179,7 +180,7 @@ void Info::processChar(const bool isExtendedChar) {
     } else if( g == 0xff ) {
       g = 5;
     } else {
-      g = shared->c1 & 0xf0u;
+      g = c1 & 0xf0u;
     }
   } else if( g >= '0' && g <= '9' ) {
     g = '0';
@@ -220,17 +221,19 @@ void Info::processChar(const bool isExtendedChar) {
 void Info::lineModelPredict() {
   uint64_t i = 1024;
   const auto isNewline = c == NEW_LINE || c == 0;
+  INJECT_SHARED_pos
   if( isNewline ) { // a new line has just started (or: zero in asciiz or in binary data)
     nl2 = nl1;
-    nl1 = shared->buf.getpos();
+    nl1 = pos;
     firstChar = -1;
     firstWord = 0;
     line0 = 0;
   }
-  line0 = combine64(line0, shared->c1);
+  INJECT_SHARED_c1
+  line0 = combine64(line0, c1);
   cm.set(hash(++i, line0));
 
-  int col = shared->buf.getpos() - nl1;
+  int col = pos - nl1;
   if( col == 1 ) {
     firstChar = groups & 0xffU;
   }
@@ -239,7 +242,7 @@ void Info::lineModelPredict() {
   const uint8_t pCAbove = buf[nl2 + col - 1];
 
   const auto isNewLineStart = col == 0 && nl2 > 0;
-  const auto isPrevCharMatchAbove = shared->c1 == pCAbove && col != 0 && nl2 != 0;
+  const auto isPrevCharMatchAbove = c1 == pCAbove && col != 0 && nl2 != 0;
   const uint32_t aboveCtx = cAbove << 1U | uint32_t(isPrevCharMatchAbove);
   if( isNewLineStart ) {
     lineMatch = 0; //first char not yet known = nothing to match
@@ -256,15 +259,15 @@ void Info::lineModelPredict() {
     cm.skip();
     i++;
   }
-  cm.set(hash(++i, aboveCtx, shared->c1));
-  cm.set(hash(++i, col << 9U | aboveCtx, shared->c1));
+  cm.set(hash(++i, aboveCtx, c1));
+  cm.set(hash(++i, col << 9U | aboveCtx, c1));
   const int lineLength = nl1 - nl2;
   cm.set(hash(++i, nl1 - nl2, col, aboveCtx, groups & 0xffu)); // english_mc
-  cm.set(hash(++i, nl1 - nl2, col, aboveCtx, shared->c1)); // english_mc
+  cm.set(hash(++i, nl1 - nl2, col, aboveCtx, c1)); // english_mc
 
   // modeling line content per column (and NEW_LINE is some extent)
-  cm.set(hash(++i, col, static_cast<uint64_t>(shared->c1 == SPACE))); // after space vs after other char in this column // world95.txt
-  cm.set(hash(++i, col, shared->c1));
+  cm.set(hash(++i, col, static_cast<uint64_t>(c1 == SPACE))); // after space vs after other char in this column // world95.txt
+  cm.set(hash(++i, col, c1));
   cm.set(hash(++i, col, mask & 0x1ffU));
   cm.set(hash(++i, col, lineLength)); // the length of the previous line may foretell the content of columns
 
@@ -287,8 +290,9 @@ void Info::lineModelSkip(ContextMap2 &cm) {
 }
 
 void Info::predict(const uint8_t pdfTextParserState) {
+  INJECT_SHARED_pos
   const uint32_t lastPos = checksums[w] != chk ? 0 : wordPositions[w]; //last occurrence (position) of a whole word or number
-  const uint32_t dist = lastPos == 0 ? 0 : min(llog(shared->buf.getpos() - lastPos + 120) >> 4, 20);
+  const uint32_t dist = lastPos == 0 ? 0 : min(llog(pos - lastPos + 120) >> 4, 20);
   const bool word0MayEndNow = lastPos != 0;
   const uint8_t mayBeCaps = static_cast<const uint8_t>(uint8_t(c4 >> 8U) >= 'A' && uint8_t(c4 >> 8U) <= 'Z' && uint8_t(c4) >= 'A' &&
                                                        uint8_t(c4) <= 'Z');
@@ -318,7 +322,7 @@ void Info::predict(const uint8_t pdfTextParserState) {
   cm.set(hash(++i, word0, dist));
   cm.set(hash(++i, word1, gapToken0, dist));
 
-  cm.set(hash(++i, shared->buf.getpos() >> 10U, word0)); //word/number tokens and characters occurring in this 1K block
+  cm.set(hash(++i, pos >> 10U, word0)); //word/number tokens and characters occurring in this 1K block
 
   // Simple word morphology (order 1-4)
 
@@ -379,18 +383,12 @@ void Info::predict(const uint8_t pdfTextParserState) {
     cm.set(hash(++i, word0, c1, word1, word3));
     cm.set(hash(++i, word0, c1, word2, word3));
   } else {
-    cm.skip();
-    i++;
-    cm.skip();
-    i++;
-    cm.skip();
-    i++;
-    cm.skip();
-    i++;
-    cm.skip();
-    i++;
-    cm.skip();
-    i++;
+    cm.skip(); i++;
+    cm.skip(); i++;
+    cm.skip(); i++;
+    cm.skip(); i++;
+    cm.skip(); i++;
+    cm.skip(); i++;
   }
 
   const uint8_t g = groups & 0xffu;

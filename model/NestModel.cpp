@@ -3,8 +3,10 @@
 NestModel::NestModel(const uint64_t size) : cm(size, nCM) {}
 
 void NestModel::mix(Mixer &m) {
-  if( shared->bitPosition == 0 ) {
-    int c = shared->c1;
+  INJECT_SHARED_bpos
+  if( bpos == 0 ) {
+    INJECT_SHARED_c1
+    int c = c1;
     int matched = 1;
     int vv = 0;
     w *= static_cast<int>((vc & 7U) > 0 && (vc & 7U) < 3);
@@ -34,6 +36,7 @@ void NestModel::mix(Mixer &m) {
       wc = (wc << 3U) | vv;
       lvc = vv;
     }
+    INJECT_SHARED_c4
     switch( c ) {
       case ' ':
         qc = 0;
@@ -75,7 +78,7 @@ void NestModel::mix(Mixer &m) {
         break;
       case '\'':
         pc += 0x42;
-        if( c != static_cast<uint8_t>(shared->c4 >> 8U)) {
+        if( c != static_cast<uint8_t>(c4 >> 8U)) {
           sense2 ^= 1;
         } else {
           ac += (2 * sense2 - 1);
@@ -118,13 +121,13 @@ void NestModel::mix(Mixer &m) {
         break;
       case '/':
         pc += 0x11;
-        if( shared->c1 == '<' ) {
+        if( c1 == '<' ) {
           qc += 74;
         }
         break;
       case '=':
         pc += 87;
-        if( c != static_cast<uint8_t>(shared->c4 >> 8U)) {
+        if( c != static_cast<uint8_t>(c4 >> 8U)) {
           sense1 ^= 1U;
         } else {
           ec += (2 * sense1 - 1);
@@ -133,9 +136,9 @@ void NestModel::mix(Mixer &m) {
       default:
         matched = 0;
     }
-    if( shared->c4 == 0x266C743B ) {
+    if( c4 == 0x266C743B ) {
       uc = min(7, uc + 1); //&lt;
-    } else if( shared->c4 == 0x2667743B ) {
+    } else if( c4 == 0x2667743B ) {
       uc -= static_cast<int>(uc > 0); //&gt;
     }
     if( matched != 0 ) {
@@ -156,9 +159,9 @@ void NestModel::mix(Mixer &m) {
     cm.set(hash(++i, (13 * vc + ic) & 0xffffu));
     cm.set(hash(++i, (vc / 3 + pc) & 0xffffu));
     cm.set(hash(++i, (7 * wc + qc) & 0xffffu));
-    cm.set(hash(++i, vc & 0xffffu, shared->c4 & 0xffu));
-    cm.set(hash(++i, (3 * pc) & 0xffffu, shared->c4 & 0xffu));
-    cm.set(hash(++i, ic & 0xffffu, shared->c4 & 0xffu));
+    cm.set(hash(++i, vc & 0xffffu, c4 & 0xffu));
+    cm.set(hash(++i, (3 * pc) & 0xffffu, c4 & 0xffu));
+    cm.set(hash(++i, ic & 0xffffu, c4 & 0xffu));
   }
   cm.mix(m);
 }

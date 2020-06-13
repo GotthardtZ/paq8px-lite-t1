@@ -21,17 +21,19 @@ ContextModel::ContextModel(ModelStats *st, Models &models) : stats(st), models(m
 auto ContextModel::p() -> int {
   uint32_t &blockPosition = stats->blPos;
   // Parse block type and block size
-  if( shared->bitPosition == 0 ) {
+  INJECT_SHARED_bpos
+  if( bpos == 0 ) {
     --blockSize;
     blockPosition++;
+    INJECT_SHARED_c1
     if( blockSize == -1 ) {
-      nextBlockType = static_cast<BlockType>(shared->c1); //got blockType but don't switch (we don't have all the info yet)
+      nextBlockType = static_cast<BlockType>(c1); //got blockType but don't switch (we don't have all the info yet)
       bytesRead = 0;
       readSize = true;
     } else if( blockSize < 0 ) {
       if( readSize ) {
-        bytesRead |= int(shared->c1 & 0x7FU) << ((-blockSize - 2) * 7);
-        if((shared->c1 >> 7U) == 0 ) {
+        bytesRead |= int(c1 & 0x7FU) << ((-blockSize - 2) * 7);
+        if((c1 >> 7U) == 0 ) {
           readSize = false;
           if( !hasInfo(nextBlockType)) {
             blockSize = bytesRead;
@@ -44,8 +46,9 @@ auto ContextModel::p() -> int {
           }
         }
       } else if( blockSize == -5 ) {
+        INJECT_SHARED_c4
         blockSize = bytesRead;
-        blockInfo = shared->c4;
+        blockInfo = c4;
         blockPosition = 0;
       }
     }

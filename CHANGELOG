@@ -1664,8 +1664,18 @@ paq8px_v187fix1
 paq8px_v187fix2
 2020.06.09
 - Fixed string copy issue in "OpenFromMyFolder.hpp" that caused text pretraining to malfunction.
-- Enabled compression levels up to 12 (~ 28-32 GB depending on the models loaded)
+- Enabled compression levels up to 12 (10 => 7-8 GB, 11 => 14-16 GB, 12 => ~ 28-32 GB depending on the models loaded)
+
 
 paq8px_v187fix3
 2020.06.09
 - Restored compilation on ARM processors using GCC (Must use -DNATIVECPU=ON on cmake).
+
+
+paq8px_v187fix4
+2020.06.13
+- Cosmetic changes (formatting for better readability)
+- Added a couple of remarks
+- Restricted input buffer size to 1GB (on compression level 12 less memory is used: 28702 MB -> 27678 MB)
+- Restored INJECT #definitions for accessing Shared members (speed improvement)
+- Archives are still expected to be binary compatible with v183fix1

@@ -33,9 +33,30 @@ void Shared::reset() {
   c8 = 0;
 }
 
+/*
+ relationship between compression level, shared->mem and buf memory use ( shared->mem * 8 )
+
+ level   shared->mem    buf memory use
+ -----   -----------    --------------
+   1      0.125 MB              1 MB
+   2      0.25	MB              2 MB
+   3      0.5   MB              4 MB
+   4      1.0   MB              8 MB
+   5      2.0   MB             16 MB
+   6      4.0   MB             32 MB
+   7      8.0   MB             64 MB
+   8     16.0   MB            128 MB
+   9     32.0   MB            256 MB
+  10     64.0   MB            512 MB
+  11    128.0   MB           1024 MB
+  12    256.0   MB           1024 MB
+
+*/
+
 void Shared::setLevel(uint8_t level) {
   this->level = level;
   mem = 65536ULL << level;
+  buf.setSize(min(mem * 8, 1ULL << 30)); /**< no reason to go over 1 GB */
 }
 
 auto Shared::isOutputDirected() -> bool {

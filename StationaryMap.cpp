@@ -38,7 +38,7 @@ void StationaryMap::update() {
   error = ((error / 8) * dt[count]) / 1024;
   prediction = min(0x3FFFFF, max(0, prediction + error));
   *cp = (prediction << 10U) | count;
-  b += static_cast<unsigned int>((y != 0U) && b > 0);
+  b += static_cast<uint32_t>((y != 0U) && b > 0);
 }
 
 void StationaryMap::mix(Mixer &m) {

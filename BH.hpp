@@ -52,7 +52,7 @@ public:
 
 template<uint64_t B>
 inline auto BH<B>::operator[](const uint64_t ctx) -> uint8_t * {
-  const auto chk = static_cast<uint16_t>(checksum64(ctx, hashBits, 16));
+  const uint16_t chk = checksum16(ctx, hashBits);
   const uint32_t i = finalize64(ctx, hashBits) * searchLimit & mask;
   uint8_t *p = nullptr;
   uint16_t *cp = nullptr;

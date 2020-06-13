@@ -15,8 +15,9 @@ MatchModel::MatchModel(ModelStats *st, const uint64_t buffermemorysize, const ui
 
 void MatchModel::update() {
   INJECT_SHARED_buf
+  INJECT_SHARED_bpos
   if( length != 0 ) {
-    const int expectedBit = (expectedByte >> ((8 - shared->bitPosition) & 7U)) & 1U;
+    const int expectedBit = (expectedByte >> ((8 - bpos) & 7U)) & 1U;
     INJECT_SHARED_y
     if( y != expectedBit ) {
       if( lengthBak != 0 && length - lengthBak < MinLen ) { // mismatch too soon in recovery mode -> give up
@@ -32,7 +33,7 @@ void MatchModel::update() {
   }
 
   //bytewise contexts
-  if( shared->bitPosition == 0 ) {
+  if( bpos == 0 ) {
     // update hashes
     for( uint32_t i = 0, minLen = MinLen + (numHashes - 1) * StepSize; i < numHashes; i++, minLen -= StepSize ) {
       uint64_t hash = 0;
@@ -48,7 +49,8 @@ void MatchModel::update() {
       if( lengthBak < mask ) {
         lengthBak++;
       }
-      if( buf[indexBak] == shared->c1 ) { // match continues -> recover
+      INJECT_SHARED_c1
+      if( buf[indexBak] == c1 ) { // match continues -> recover
         length = lengthBak;
         index = indexBak;
       } else { // still mismatch
@@ -91,8 +93,9 @@ void MatchModel::update() {
       }
     }
     // update position information in hashtable
+    INJECT_SHARED_pos
     for( uint32_t i = 0; i < numHashes; i++ ) {
-      table[hashes[i]] = shared->buf.getpos();
+      table[hashes[i]] = pos;
     }
     stats->Match.expectedByte = expectedByte = (length != 0 ? buf[index] : 0);
   }
@@ -105,15 +108,18 @@ void MatchModel::mix(Mixer &m) {
     ctx[i] = 0;
   }
 
-  const int expectedBit = length != 0 ? (expectedByte >> (7 - shared->bitPosition)) & 1U : 0;
+  INJECT_SHARED_bpos
+  INJECT_SHARED_c0
+  INJECT_SHARED_c1
+  const int expectedBit = length != 0 ? (expectedByte >> (7 - bpos)) & 1U : 0;
   if( length != 0 ) {
     if( length <= 16 ) {
       ctx[0] = (length - 1) * 2 + expectedBit; // 0..31
     } else {
       ctx[0] = 24 + (min(length - 1, 63) >> 2U) * 2 + expectedBit; // 32..55
     }
-    ctx[0] = ((ctx[0] << 8U) | shared->c0);
-    ctx[1] = ((expectedByte << 11U) | (shared->bitPosition << 8U) | shared->c1) + 1;
+    ctx[0] = ((ctx[0] << 8U) | c0);
+    ctx[1] = ((expectedByte << 11U) | (bpos << 8U) | c1) + 1;
     const int sign = 2 * expectedBit - 1;
     m.add(sign * (min(length, 32) << 5U)); // +/- 32..1024
     m.add(sign * (ilog->log(min(length, 65535)) << 2U)); // +/-  0..1024
@@ -123,7 +129,7 @@ void MatchModel::mix(Mixer &m) {
   }
 
   if( delta ) { // delta mode: helps predicting the remaining bits of a character when a mismatch occurs
-    ctx[2] = (expectedByte << 8U) | shared->c0;
+    ctx[2] = (expectedByte << 8U) | c0;
   }
 
   for( uint32_t i = 0; i < nST; i++ ) {
@@ -148,33 +154,34 @@ void MatchModel::mix(Mixer &m) {
   const uint8_t length3Rm = length3 << 1U | rm; // 3 bits
 
   //bytewise contexts
-  if( shared->bitPosition == 0 ) {
+  INJECT_SHARED_c4
+  if( bpos == 0 ) {
     if( length != 0 ) {
       cm.set(hash(0, expectedByte, length3Rm));
-      cm.set(hash(1, expectedByte, length3Rm, shared->c1));
+      cm.set(hash(1, expectedByte, length3Rm, c1));
     } else {
       // when there is no match it is still slightly beneficial not to skip(), but set some low-order contexts
-      cm.set(hash(2, shared->c4 & 0xffu)); // order 1
-      cm.set(hash(3, shared->c4 & 0xffffu)); // order 2
+      cm.set(hash(2, c4 & 0xffu)); // order 1
+      cm.set(hash(3, c4 & 0xffffu)); // order 2
     }
   }
   cm.mix(m);
 
   //bitwise contexts
   {
-    maps[0].set(hash(expectedByte, shared->c0, shared->c4 & 0xffffu, length3Rm));
+    maps[0].set(hash(expectedByte, c0, c4 & 0xffffu, length3Rm));
     INJECT_SHARED_y
     iCtx += y;
     const uint8_t c = length3Rm << 1U | expectedBit; // 4 bits
-    iCtx = (shared->bitPosition << 11U) | (shared->c1 << 3U) | c;
+    iCtx = (bpos << 11U) | (c1 << 3U) | c;
     maps[1].setDirect(iCtx());
-    SCM.set((shared->bitPosition << 3U) | c);
+    SCM.set((bpos << 3U) | c);
   }
   maps[0].mix(m);
   maps[1].mix(m);
   SCM.mix(m);
 
-  const uint32_t lengthC = lengthIlog2 != 0 ? lengthIlog2 + 1 : static_cast<unsigned int>(delta);
+  const uint32_t lengthC = lengthIlog2 != 0 ? lengthIlog2 + 1 : static_cast<uint32_t>(delta);
   //no match, no delta mode:   lengthC=0
   //failed match, delta mode:  lengthC=1
   //length=1..2:   lengthC=2

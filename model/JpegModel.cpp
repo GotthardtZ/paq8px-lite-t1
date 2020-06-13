@@ -54,22 +54,24 @@ auto JpegModel::mix(Mixer &m) -> int {
                                                        0xd7, 0xd8, 0xd9, 0xda, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea, 0xf2,
                                                        0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa};
 
+  INJECT_SHARED_pos
   if( idx < 0 ) {
     memset(&images[0], 0, sizeof(images));
     idx = 0;
-    lastPos = shared->buf.getpos();
+    lastPos = pos;
   }
 
-  INJECT_SHARED_buf
 
   // Be sure to quit on a byte boundary
-  if( shared->bitPosition == 0 ) {
+  INJECT_SHARED_buf
+  INJECT_SHARED_bpos
+  if( bpos == 0 ) {
     images[idx].nextJpeg = static_cast<uint32_t>(images[idx].jpeg > 1);
   }
-  if( shared->bitPosition != 0 && (images[idx].jpeg == 0u)) {
+  if( bpos != 0 && (images[idx].jpeg == 0u)) {
     return images[idx].nextJpeg;
   }
-  if( shared->bitPosition == 0 && images[idx].app > 0 ) {
+  if( bpos == 0 && images[idx].app > 0 ) {
     --images[idx].app;
     if( idx < maxEmbeddedLevel && buf(4) == FF && buf(3) == SOI && buf(2) == FF &&
         ((buf(1) & 0xFEU) == 0xC0 || buf(1) == 0xC4 || (buf(1) >= 0xDB && buf(1) <= 0xFE))) {
@@ -79,7 +81,7 @@ auto JpegModel::mix(Mixer &m) -> int {
   if( images[idx].app > 0 ) {
     return images[idx].nextJpeg;
   }
-  if( shared->bitPosition == 0 ) {
+  if( bpos == 0 ) {
     // Parse.  Baseline DCT-Huffman JPEG syntax is:
     // SOI APPx... misc... SOF0 DHT... SOS data EOI
     // SOI (= FF D8) start of image.
@@ -119,7 +121,7 @@ auto JpegModel::mix(Mixer &m) -> int {
     if((images[idx].jpeg == 0u) && buf(4) == FF && buf(3) == SOI && buf(2) == FF &&
        ((buf(1) & 0xFEU) == 0xC0 || buf(1) == 0xC4 || (buf(1) >= 0xDB && buf(1) <= 0xFE))) {
       images[idx].jpeg = 1;
-      images[idx].offset = shared->buf.getpos() - 4;
+      images[idx].offset = pos - 4;
       images[idx].sos = images[idx].sof = images[idx].htSize = images[idx].data = 0, images[idx].app =
               static_cast<int>(buf(1) >> 4 == 0xE) * 2;
       mcusize = huffcode = huffBits = huffSize = mcuPos = cPos = 0, rs = -1;
@@ -131,11 +133,11 @@ auto JpegModel::mix(Mixer &m) -> int {
     // Detect end of JPEG when data contains a marker other than RSTx
     // or byte stuff (00), or if we jumped in position since the last byte seen
     if((images[idx].jpeg != 0u) && (images[idx].data != 0u) &&
-       ((buf(2) == FF && (buf(1) != 0u) && (buf(1) & 0xf8U) != RST0) || (shared->buf.getpos() - lastPos > 1))) {
-      JASSERT((buf(1) == EOI) || (shared->buf.getpos() - lastPos > 1))
+       ((buf(2) == FF && (buf(1) != 0u) && (buf(1) & 0xf8U) != RST0) || (pos - lastPos > 1))) {
+      JASSERT((buf(1) == EOI) || (pos - lastPos > 1))
       FINISH(true)
     }
-    lastPos = shared->buf.getpos();
+    lastPos = pos;
     if( images[idx].jpeg == 0u ) {
       return images[idx].nextJpeg;
     }
@@ -146,7 +148,7 @@ auto JpegModel::mix(Mixer &m) -> int {
        (buf(3)>>4==0xe || buf(3)==COM || mainfields)) {
       images[idx].app = buf(2) * 256 + buf(1) + 2;
       if( idx > 0 ) {
-        JASSERT(shared->buf.getpos() + images[idx].app < images[idx].offset + images[idx - 1].app)
+        JASSERT(pos + images[idx].app < images[idx].offset + images[idx - 1].app)
       }
     }
 
@@ -154,21 +156,21 @@ auto JpegModel::mix(Mixer &m) -> int {
     if( buf(5) == FF && buf(4) == SOS ) {
       int len = buf(3) * 256 + buf(2);
       if( len == 6 + 2 * buf(1) && (buf(1) != 0u) && buf(1) <= 4 ) { // buf(1) is Ns
-        images[idx].sos = shared->buf.getpos() - 5, images[idx].data = images[idx].sos + len + 2, images[idx].jpeg = 2;
+        images[idx].sos = pos - 5, images[idx].data = images[idx].sos + len + 2, images[idx].jpeg = 2;
       }
     }
     if( buf(4) == FF && buf(3) == DHT && images[idx].htSize < 8 ) {
-      images[idx].ht[images[idx].htSize++] = shared->buf.getpos() - 4;
+      images[idx].ht[images[idx].htSize++] = pos - 4;
     }
     if( buf(4) == FF && (buf(3) & 0xFE) == SOF0 ) {
-      images[idx].sof = shared->buf.getpos() - 4;
+      images[idx].sof = pos - 4;
     }
 
     // Parse quantization tables
     if( buf(4) == FF && buf(3) == DQT ) {
-      dqtEnd = shared->buf.getpos() + buf(2) * 256 + buf(1) - 1, dqt_state = 0;
+      dqtEnd = pos + buf(2) * 256 + buf(1) - 1, dqt_state = 0;
     } else if( dqt_state >= 0 ) {
-      if( shared->buf.getpos() >= dqtEnd ) {
+      if( pos >= dqtEnd ) {
         dqt_state = -1;
       } else {
         if( dqt_state % 65 == 0 ) {
@@ -194,12 +196,12 @@ auto JpegModel::mix(Mixer &m) -> int {
   {
     // Build Huffman tables
     // huf[Tc][Th][m] = min, max+1 codes of length m, pointer to byte values
-    if( shared->buf.getpos() == images[idx].data && shared->bitPosition == 1 ) {
+    if( pos == images[idx].data && bpos == 1 ) {
       for( uint32_t i = 0; i < images[idx].htSize; ++i ) {
         uint32_t p = images[idx].ht[i] + 4; // pointer to current table after length field
         uint32_t end = p + buf[p - 2] * 256 + buf[p - 1] - 2; // end of Huffman table
         uint32_t count = 0; // sanity check
-        while( p < end && end < shared->buf.getpos() && end < p + 2100 && ++count < 10 ) {
+        while( p < end && end < pos && end < p + 2100 && ++count < 10 ) {
           int tc = buf[p] >> 4U;
           int th = buf[p] & 15U;
           if( tc >= 2 || th >= 4 ) {
@@ -368,7 +370,7 @@ auto JpegModel::mix(Mixer &m) -> int {
 
   // Decode Huffman
   {
-    if((mcusize != 0) && buf(1 + static_cast<int>(shared->bitPosition == 0)) != FF ) { // skip stuffed byte
+    if((mcusize != 0) && buf(1 + static_cast<int>(bpos == 0)) != FF ) { // skip stuffed byte
       JASSERT(huffBits <= 32)
       INJECT_SHARED_y
       huffcode += huffcode + y;
@@ -602,7 +604,7 @@ auto JpegModel::mix(Mixer &m) -> int {
   if((images[idx].jpeg == 0u) || (images[idx].data == 0u)) {
     return images[idx].nextJpeg;
   }
-  if( buf(1 + static_cast<int>(shared->bitPosition == 0)) == FF ) {
+  if( buf(1 + static_cast<int>(bpos == 0)) == FF ) {
     m.add(128); //network bias
     m.set(0, 1 + 8);
     m.set(0, 1 + 1024);
@@ -628,7 +630,7 @@ auto JpegModel::mix(Mixer &m) -> int {
   // update context
   const int comp = color[mcuPos >> 6U];
   const int coef = (mcuPos & 63U) | comp << 6U;
-  const int hc = (huffcode * 4 + static_cast<int>((mcuPos & 63U) == 0) * 2 + static_cast<unsigned int>(comp == 0)) | 1U << (huffBits + 2);
+  const int hc = (huffcode * 4 + static_cast<int>((mcuPos & 63U) == 0) * 2 + static_cast<uint32_t>(comp == 0)) | 1U << (huffBits + 2);
   const bool firstCol = column == 0 && blockW[mcuPos >> 6U] > mcuPos;
   if( ++hbCount > 2 || huffBits == 0 ) {
     hbCount = 0;

@@ -22,19 +22,19 @@ ContextMap2::ContextMap2(const uint64_t size, const uint32_t contexts, const int
 void ContextMap2::set(const uint64_t ctx) {
   assert(index >= 0 && index < C);
   const uint32_t ctx0 = contexts[index] = finalize64(ctx, hashBits);
-  const uint16_t chk0 = checksums[index] = static_cast<uint16_t>(checksum64(ctx, hashBits, 16));
-  uint8_t *base = bitState[index] = bitState0[index] = table[ctx0].find(chk0, shared->chosenSimd);
+  const uint16_t chk0 = checksums[index] = checksum16(ctx, hashBits);
+  uint8_t *base = bitState[index] = bitState0[index] = table[ctx0].findNone(chk0);
   byteHistory[index] = &base[3];
   const uint8_t runCount = base[3];
   if( runCount == 255 ) { // pending
     // update pending bit histories for bits 2-7
     // in case of a collision updating (mixing) is slightly better (but slightly slower) then resetting, so we update
     const int c = base[4] + 256;
-    uint8_t *p1A = table[(ctx0 + (c >> 6U)) & mask].find(chk0, shared->chosenSimd);
+    uint8_t *p1A = table[(ctx0 + (c >> 6U)) & mask].findNone(chk0);
     StateTable::update(p1A, ((c >> 5U) & 1), rnd);
     StateTable::update(p1A + 1 + ((c >> 5) & 1), ((c >> 4) & 1), rnd);
     StateTable::update(p1A + 3 + ((c >> 4U) & 3), ((c >> 3) & 1), rnd);
-    uint8_t *p1B = table[(ctx0 + (c >> 3)) & mask].find(chk0, shared->chosenSimd);
+    uint8_t *p1B = table[(ctx0 + (c >> 3)) & mask].findNone(chk0);
     StateTable::update(p1B, (c >> 2) & 1, rnd);
     StateTable::update(p1B + 1 + ((c >> 2) & 1), (c >> 1) & 1, rnd);
     StateTable::update(p1B + 3 + ((c >> 1) & 3), c & 1, rnd);
@@ -57,6 +57,9 @@ void ContextMap2::skip() {
 
 void ContextMap2::update() {
   INJECT_SHARED_y
+  INJECT_SHARED_bpos
+  INJECT_SHARED_c1
+  INJECT_SHARED_c0
   for( uint32_t i = 0; i < index; i++ ) {
     if(((validFlags >> (index - 1 - i)) & 1U) != 0 ) {
       if( bitState[i] != nullptr ) {
@@ -66,17 +69,17 @@ void ContextMap2::update() {
       auto byteHistoryPtr = byteHistory[i];
       const auto runCount = byteHistoryPtr[0];
 
-      if( runCount == 255 && shared->bitPosition >= 2 ) {
+      if( runCount == 255 && bpos >= 2 ) {
         bitState[i] = nullptr; // shadow non-reserved slots for bits 2..7 and skip update temporarily
       } else {
-        switch( shared->bitPosition ) {
+        switch( bpos ) {
           case 0: {
             // update byte history
             const auto byteState = byteHistoryPtr[-3];
             if( byteState < 3 ) { // 1st byte has just become known
-              byteHistoryPtr[1] = byteHistoryPtr[2] = byteHistoryPtr[3] = shared->c1; // set all byte candidates to shared->c1
+              byteHistoryPtr[1] = byteHistoryPtr[2] = byteHistoryPtr[3] = c1; // set all byte candidates to c1
             } else { // 2nd byte is known
-              const auto isMatch = byteHistoryPtr[1] == shared->c1;
+              const auto isMatch = byteHistoryPtr[1] == c1;
               if( isMatch ) {
                 if( runCount < 253 ) {
                   byteHistoryPtr[0] = runCount + 1;
@@ -86,7 +89,7 @@ void ContextMap2::update() {
                 // scroll byte candidates
                 byteHistoryPtr[3] = byteHistoryPtr[2];
                 byteHistoryPtr[2] = byteHistoryPtr[1];
-                byteHistoryPtr[1] = shared->c1;
+                byteHistoryPtr[1] = c1;
               }
             }
             break;
@@ -95,7 +98,7 @@ void ContextMap2::update() {
           case 5: {
             const uint32_t ctx = contexts[i];
             const uint16_t chk = checksums[i];
-            bitState[i] = bitState0[i] = table[(ctx + shared->c0) & mask].find(chk, shared->chosenSimd);
+            bitState[i] = bitState0[i] = table[(ctx + c0) & mask].findNone(chk);
             break;
           }
           case 1:
@@ -105,7 +108,7 @@ void ContextMap2::update() {
             break;
           case 4:
           case 7:
-            bitState[i] = bitState0[i] + 3 + (shared->c0 & 3U);
+            bitState[i] = bitState0[i] + 3 + (c0 & 3U);
             break;
           default:
             assert(false);
@@ -113,7 +116,7 @@ void ContextMap2::update() {
       }
     }
   }
-  if( shared->bitPosition == 0 ) {
+  if( bpos == 0 ) {
     index = 0;
     validFlags = 0;
   } // start over
@@ -132,6 +135,8 @@ void ContextMap2::mix(Mixer &m) {
     bhMap12B.subscribe();
   }
   order = 0;
+  INJECT_SHARED_bpos
+  INJECT_SHARED_c0
   for( uint32_t i = 0; i < index; i++ ) {
     if(((validFlags >> (index - 1 - i)) & 1) != 0 ) {
       const int state = bitState[i] != nullptr ? *bitState[i] : 0;
@@ -145,21 +150,21 @@ void ContextMap2::mix(Mixer &m) {
       const uint8_t byte1 = byteHistoryPtr[1];
       const uint8_t byte2 = byteHistoryPtr[2];
       const uint8_t byte3 = byteHistoryPtr[3];
-      const bool complete1 = (byteState >= 3) || (byteState >= 1 && shared->bitPosition == 0);
-      const bool complete2 = (byteState >= 7) || (byteState >= 3 && shared->bitPosition == 0);
-      const bool complete3 = (byteState >= 15) || (byteState >= 7 && shared->bitPosition == 0);
+      const bool complete1 = (byteState >= 3) || (byteState >= 1 && bpos == 0);
+      const bool complete2 = (byteState >= 7) || (byteState >= 3 && bpos == 0);
+      const bool complete3 = (byteState >= 15) || (byteState >= 7 && bpos == 0);
       if((useWhat & CM_USE_RUN_STATS) != 0U ) {
-        const int bp = (0xFEA4U >> (shared->bitPosition << 1U)) & 3U; // {0}->0  {1}->1  {2,3,4}->2  {5,6,7}->3
+        const int bp = (0xFEA4U >> (bpos << 1U)) & 3U; // {0}->0  {1}->1  {2,3,4}->2  {5,6,7}->3
         bool skipRunMap = true;
         if( complete1 ) {
-          if(((byte1 + 256) >> (8 - shared->bitPosition)) == shared->c0 ) { // 1st candidate (last byte seen) matches
-            const int predictedBit = (byte1 >> (7 - shared->bitPosition)) & 1U;
+          if(((byte1 + 256) >> (8 - bpos)) == c0 ) { // 1st candidate (last byte seen) matches
+            const int predictedBit = (byte1 >> (7 - bpos)) & 1U;
             const int byte1IsUncertain = static_cast<const int>(byte2 != byte1);
             const int runCount = byteHistoryPtr[0]; // 1..254
             m.add(stretch(runMap.p2(i, runCount << 4U | bp << 2U | byte1IsUncertain << 1 | predictedBit)) >> (1 + byte1IsUncertain));
             skipRunMap = false;
-          } else if( complete2 && ((byte2 + 256) >> (8 - shared->bitPosition)) == shared->c0 ) { // 2nd candidate matches
-            const int predictedBit = (byte2 >> (7 - shared->bitPosition)) & 1U;
+          } else if( complete2 && ((byte2 + 256) >> (8 - bpos)) == c0 ) { // 2nd candidate matches
+            const int predictedBit = (byte2 >> (7 - bpos)) & 1U;
             const int byte2IsUncertain = static_cast<const int>(byte3 != byte2);
             m.add(stretch(runMap.p2(i, bitIsUncertain << 1U | predictedBit)) >> (2 + byte2IsUncertain));
             skipRunMap = false;
@@ -191,8 +196,8 @@ void ContextMap2::mix(Mixer &m) {
       }
 
       if((useWhat & CM_USE_BYTE_HISTORY) != 0U ) {
-        const int bhBits = (((byte1 >> (7 - shared->bitPosition)) & 1)) | (((byte2 >> (7 - shared->bitPosition)) & 1) << 1) |
-                           (((byte3 >> (7 - shared->bitPosition)) & 1) << 2);
+        const int bhBits = (((byte1 >> (7 - bpos)) & 1)) | (((byte2 >> (7 - bpos)) & 1) << 1) |
+                           (((byte3 >> (7 - bpos)) & 1) << 2);
 
         int bhState = 0; // 4 bit
         if( complete3 ) {
@@ -205,9 +210,9 @@ void ContextMap2::mix(Mixer &m) {
         //else new context (bhState=0)
 
         const uint8_t stateGroup = StateTable::group(state); //0..31
-        m.add(stretch(bhMap8B.p2(i, bitIsUncertain << 7U | (bhState << 3U) | shared->bitPosition))
+        m.add(stretch(bhMap8B.p2(i, bitIsUncertain << 7U | (bhState << 3U) | bpos))
                       >> 2); // using bitIsUncertain is generally beneficial except for some 8bpp image (noticeable loss)
-        m.add(stretch(bhMap12B.p2(i, stateGroup << 7U | (bhState << 3U) | shared->bitPosition)) >> 2U);
+        m.add(stretch(bhMap12B.p2(i, stateGroup << 7U | (bhState << 3U) | bpos)) >> 2U);
       }
     } else { //skipped context
       if((useWhat & CM_USE_RUN_STATS) != 0U ) {

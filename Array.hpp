@@ -48,6 +48,11 @@ private:
       return (reservedSize == 0) ? 0 : reservedSize * sizeof(T) + padding();
     }
 
+    /**
+    * Assignment operator is private so that it cannot be called
+    */
+    auto operator=(Array const& /*unused*/) -> Array& { return *this; }
+
 public:
     explicit Array(uint64_t requestedSize) { create(requestedSize); }
 
@@ -87,17 +92,12 @@ public:
      * @param x the element to append
      */
     void pushBack(const T &x);
-
     /**
      * Prevent copying
+     * Remark: GCC complains if this member is private, so it is public
      */
     Array(const Array &) { assert(false); }
 
-    /**
-     * Prevent assignment
-     * @return
-     */
-    Array &operator=(const Array &) { assert(false); }; // NOLINT(bugprone-unhandled-self-assignment,cert-oop54-cpp)
 };
 
 template<class T, const int Align>

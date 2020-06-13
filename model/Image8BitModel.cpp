@@ -105,9 +105,11 @@ void Image8BitModel::setParam(int info0, uint32_t gray0, uint32_t isPNG0) {
 
 void Image8BitModel::mix(Mixer &m) {
   // Select nearby pixels as context
-  if( shared->bitPosition == 0 ) {
+  INJECT_SHARED_bpos
+  if( bpos == 0 ) {
     INJECT_SHARED_buf
-    if( shared->buf.getpos() != lastPos + 1 ) {
+    INJECT_SHARED_pos
+    if( pos != lastPos + 1 ) {
       x = line = px = jump = 0;
       filterOn = false;
       columns[0] = max(1, w / max(1, ilog2(w) * 2));
@@ -122,7 +124,7 @@ void Image8BitModel::mix(Mixer &m) {
       }
       buffer.fill(0x7F);
       prevFramePos = framePos;
-      framePos = shared->buf.getpos();
+      framePos = pos;
       prevFrameWidth = frameWidth;
       frameWidth = w;
     } else {
@@ -132,43 +134,40 @@ void Image8BitModel::mix(Mixer &m) {
         line++;
       }
     }
-    lastPos = shared->buf.getpos();
+    lastPos = pos;
 
+    INJECT_SHARED_c1
     if( isPNG ) {
       if( x == 1 ) {
-        filter = shared->c1;
+        filter = c1;
       } else {
         switch( filter ) {
           case 1: {
-            buffer.add(static_cast<uint8_t>(shared->c1 + buffer(1) * static_cast<int>(x > 2 || (x == 0))));
+            buffer.add(static_cast<uint8_t>(c1 + buffer(1) * static_cast<int>(x > 2 || (x == 0))));
             filterOn = x > 1;
             px = buffer(1);
             break;
           }
           case 2: {
-            buffer.add(static_cast<uint8_t>(shared->c1 + buffer(w) * static_cast<int>((filterOn = (line > 0)))));
+            buffer.add(static_cast<uint8_t>(c1 + buffer(w) * static_cast<int>((filterOn = (line > 0)))));
             px = buffer(w);
             break;
           }
           case 3: {
-            buffer.add(static_cast<uint8_t>(shared->c1 +
-                                            (buffer(w) * static_cast<int>(line > 0) + buffer(1) * static_cast<int>(x > 2 || (x == 0))) /
-                                            2));
+            buffer.add(static_cast<uint8_t>(c1 + (buffer(w) * static_cast<int>(line > 0) + buffer(1) * static_cast<int>(x > 2 || (x == 0))) / 2));
             filterOn = (x > 1 || line > 0);
             px = (buffer(1) * static_cast<int>(x > 1) + buffer(w) * static_cast<int>(line > 0)) / 2;
             break;
           }
           case 4: {
-            buffer.add(static_cast<uint8_t>(shared->c1 +
-                                            paeth(buffer(1) * static_cast<int>(x > 2 || (x == 0)), buffer(w) * static_cast<int>(line > 0),
-                                                  buffer(w + 1) * static_cast<int>(line > 0 && (x > 2 || (x == 0))))));
+            buffer.add(static_cast<uint8_t>(c1 + paeth(buffer(1) * static_cast<int>(x > 2 || (x == 0)), buffer(w) * static_cast<int>(line > 0), buffer(w + 1) * static_cast<int>(line > 0 && (x > 2 || (x == 0))))));
             filterOn = (x > 1 || line > 0);
             px = paeth(buffer(1) * static_cast<int>(x > 1), buffer(w) * static_cast<int>(line > 0),
                        buffer(w + 1) * static_cast<int>(x > 1 && line > 0));
             break;
           }
           default:
-            buffer.add(shared->c1);
+            buffer.add(c1);
             filterOn = false;
             px = 0;
         }
@@ -177,7 +176,7 @@ void Image8BitModel::mix(Mixer &m) {
         }
       }
     } else { // non-png
-      buffer.add(shared->c1);
+      buffer.add(c1);
       if( x == 0 ) {
         memset(&jumps[0], 0, sizeof(short) * jumps.size());
         if( line > 0 && w > 8 ) {
@@ -431,25 +430,26 @@ void Image8BitModel::mix(Mixer &m) {
       stats->Image.ctx = ctx >> gray;
     }
   }
-  uint8_t b = (shared->c0 << (8 - shared->bitPosition));
+  INJECT_SHARED_c0
+  uint8_t b = (c0 << (8 - bpos));
   if((x != 0) || !isPNG) {
     if( gray ) {
       int i = 0;
       map[i++].setDirect(0);
-      map[i++].setDirect(((static_cast<uint8_t>(clip(W + N - NW) - px - b)) * 8 + shared->bitPosition) |
+      map[i++].setDirect(((static_cast<uint8_t>(clip(W + N - NW) - px - b)) * 8 + bpos) |
                          (logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) << 11U));
 
       for( int j = 0; j < nSM1; i++, j++ ) {
-        map[i].setDirect((mapContexts[j] - px - b) * 8 + shared->bitPosition);
+        map[i].setDirect((mapContexts[j] - px - b) * 8 + bpos);
       }
 
       for( int j = 0; i < nSM; i++, j++ ) {
-        map[i].setDirect((pOLS[j] - px - b) * 8 + shared->bitPosition);
+        map[i].setDirect((pOLS[j] - px - b) * 8 + bpos);
       }
     }
-    sceneMap[2].setDirect(finalize64(hash(x, line), 19) * 8 + shared->bitPosition);
-    sceneMap[3].setDirect((prvFrmPx - b) * 8 + shared->bitPosition);
-    sceneMap[4].setDirect((prvFrmPrediction - b) * 8 + shared->bitPosition);
+    sceneMap[2].setDirect(finalize64(hash(x, line), 19) * 8 + bpos);
+    sceneMap[3].setDirect((prvFrmPx - b) * 8 + bpos);
+    sceneMap[4].setDirect((prvFrmPrediction - b) * 8 + bpos);
   }
 
   // predict next bit
@@ -461,7 +461,7 @@ void Image8BitModel::mix(Mixer &m) {
       }
     } else {
       for( int i = 0; i < nPltMaps; i++ ) {
-        pltMap[i].set((shared->bitPosition << 8U) | iCtx[i]());
+        pltMap[i].set((bpos << 8U) | iCtx[i]());
         pltMap[i].mix(m);
       }
     }
@@ -473,10 +473,10 @@ void Image8BitModel::mix(Mixer &m) {
 
     col = (col + 1) & 7U;
     m.set(5 + ctx, 2048 + 5);
-    m.set(col * 2 + static_cast<int>(isPNG && shared->c0 == ((0x100U | res) >> (8 - shared->bitPosition))) +
+    m.set(col * 2 + static_cast<int>(isPNG && c0 == ((0x100U | res) >> (8 - bpos))) +
           min(5, filterOn ? filter + 1 : 0) * 16, 6 * 16);
     m.set(((isPNG ? px : N + W) >> 4U) + min(5, filterOn ? filter + 1 : 0) * 32, 6 * 32);
-    m.set(shared->c0, 256);
+    m.set(c0, 256);
     m.set((static_cast<int>(abs((W - N)) > 4) << 9U) | (static_cast<int>(abs((N - NE)) > 4) << 8U) |
           (static_cast<int>(abs((W - NW)) > 4) << 7U) | (static_cast<int>(W > N) << 6U) | (static_cast<int>(N > NE) << 5U) |
           (static_cast<int>(W > NW) << 4U) | (static_cast<int>(W > WW) << 3U) | (static_cast<int>(N > NN) << 2U) |
@@ -485,7 +485,7 @@ void Image8BitModel::mix(Mixer &m) {
     m.set(min(127, column[1]), 128);
     m.set(min(255, (x + line) / 32), 256);
   } else {
-    m.add(-2048 + ((filter >> (7 - shared->bitPosition)) & 1U) * 4096);
+    m.add(-2048 + ((filter >> (7 - bpos)) & 1U) * 4096);
     m.set(min(4, filter), MIXERINPUTS);
   }
 }

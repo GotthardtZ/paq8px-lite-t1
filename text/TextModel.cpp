@@ -48,7 +48,8 @@ void TextModel::update() {
   if( g > 4 || g != (Info.masks[4] & 0x1FU)) {
     Info.masks[4] <<= 5U, Info.masks[4] |= g;
   }
-  bytePos[c] = shared->buf.getpos();
+  INJECT_SHARED_pos
+  bytePos[c] = pos;
   if( c != lc ) {
     c = lc;
     Info.lastUpper = 0, Info.maskUpper |= 1U;
@@ -56,7 +57,7 @@ void TextModel::update() {
   uint8_t pC = buf(2);
   State = Parse::Unknown;
   parseCtx = hash(State, pWord->Hash[0], c,
-                  (ilog2(Info.lastNewLine) + 1) * static_cast<unsigned int>(Info.lastNewLine * 3 > Info.prevNewLine),
+                  (ilog2(Info.lastNewLine) + 1) * static_cast<uint32_t>(Info.lastNewLine * 3 > Info.prevNewLine),
                   Info.masks[1] & 0xFCU);
 
   if((c >= 'a' && c <= 'z') || c == APOSTROPHE || c == '-' || c > 0x7F ) {
@@ -120,7 +121,7 @@ void TextModel::update() {
       uint32_t best = MIN_RECOGNIZED_WORDS;
       for( int i = Language::Count - 1; i > Language::Unknown; i-- ) {
         if( Lang.count[i - 1] >= best ) {
-          best = Lang.count[i - 1] + static_cast<unsigned int>(i == Lang.pId); //bias to prefer the previously detected language
+          best = Lang.count[i - 1] + static_cast<uint32_t>(i == Lang.pId); //bias to prefer the previously detected language
           Lang.id = i;
         }
         words[i]++;
@@ -183,7 +184,7 @@ void TextModel::update() {
           }
         }
       }
-      wordPos[pWord->Hash[0] & (wordPos.size() - 1)] = shared->buf.getpos();
+      wordPos[pWord->Hash[0] & (wordPos.size() - 1)] = pos;
       if( cSegment->wordCount == 0 ) {
         memcpy(&cSegment->firstWord, pWord, sizeof(Word));
       }
@@ -193,7 +194,7 @@ void TextModel::update() {
       }
       cSentence->wordCount++;
       Info.wordLength[1] = Info.wordLength[0], Info.wordLength[0] = 0;
-      Info.quoteLength += static_cast<unsigned int>(Info.quoteLength > 0);
+      Info.quoteLength += static_cast<uint32_t>(Info.quoteLength > 0);
       if( Info.quoteLength > 0x1F ) {
         Info.quoteLength = 0;
       }
@@ -372,8 +373,7 @@ void TextModel::update() {
       Info.lastDigit = 0;
       Info.masks[3] += 7;
     } else if( Info.numbers[0] > 0 ) {
-      Info.numMask <<= 2U, Info.numMask |= 1U + static_cast<unsigned int>(Info.numbers[0] >= Info.numbers[1]) +
-                                           static_cast<unsigned int>(Info.numbers[0] > Info.numbers[1]);
+      Info.numMask <<= 2U, Info.numMask |= 1U + static_cast<uint32_t>(Info.numbers[0] >= Info.numbers[1]) + static_cast<uint32_t>(Info.numbers[0] > Info.numbers[1]);
       Info.numDiff <<= 2U, Info.numDiff |= min(3, ilog2(abs(static_cast<int>(Info.numbers[0] - Info.numbers[1]))));
       Info.numbers[1] = Info.numbers[0], Info.numbers[0] = 0;
       Info.numHashes[1] = Info.numHashes[0], Info.numHashes[0] = 0;
@@ -395,8 +395,7 @@ void TextModel::update() {
   if( Info.UTF8Remaining > 0 && leadingBitsSet == 1 ) {
     Info.UTF8Remaining--;
   } else {
-    Info.UTF8Remaining = (leadingBitsSet != 1) ? (c != 0xC0 && c != 0xC1 && c < 0xF5) ? (leadingBitsSet -
-                                                                                         static_cast<int>(leadingBitsSet > 0)) : -1 : 0;
+    Info.UTF8Remaining = (leadingBitsSet != 1) ? (c != 0xC0 && c != 0xC1 && c < 0xF5) ? (leadingBitsSet - static_cast<int>(leadingBitsSet > 0)) : -1 : 0;
   }
   Info.maskPunctuation = static_cast<int>(bytePos[','] > bytePos['.']) | (static_cast<int>(bytePos[','] > bytePos['!']) << 1U) |
                          (static_cast<int>(bytePos[','] > bytePos['?']) << 2U) | (static_cast<int>(bytePos[','] > bytePos[':']) << 3U) |
@@ -420,105 +419,132 @@ void TextModel::setContexts() {
 
   cm.set(parseCtx);
   uint64_t i = State * 64;
-  cm.set(hash(++i, cWordHash0, pWordHash0, static_cast<int>(Info.lastUpper < Info.wordLength[0]) |
-                                           (static_cast<int>(Info.lastDigit < Info.wordLength[0] + Info.wordGap) << 1U)));
-  cm.set(hash(++i, cWordHash0, words[Lang.pId](2).Hash[0], min(10, ilog2(static_cast<uint32_t>(Info.numbers[0]))),
-              static_cast<int>(Info.lastUpper < Info.lastLetter + Info.wordLength[1]) | (static_cast<int>(Info.lastLetter > 3) << 1U) |
-              (static_cast<int>(Info.lastLetter > 0 && Info.wordLength[1] < 3) << 2U)));
-  cm.set(hash(++i, cWordHash0, Info.masks[1] & 0x3FFU, words[Lang.pId](3).Hash[1],
-              static_cast<int>(Info.lastDigit < Info.wordLength[0] + Info.wordGap) |
-              (static_cast<int>(Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1U) | ((Info.spaces & 0x7F) << 2U)));
+  cm.set(hash(++i, cWordHash0, pWordHash0, 
+    static_cast<int>(Info.lastUpper < Info.wordLength[0]) |
+    (static_cast<int>(Info.lastDigit < Info.wordLength[0] + Info.wordGap) << 1U)
+  ));
+  cm.set(hash(++i, cWordHash0, words[Lang.pId](2).Hash[0], 
+    min(10, ilog2(static_cast<uint32_t>(Info.numbers[0]))), static_cast<int>(Info.lastUpper < Info.lastLetter + Info.wordLength[1]) |
+    (static_cast<int>(Info.lastLetter > 3) << 1U) | 
+    (static_cast<int>(Info.lastLetter > 0 && Info.wordLength[1] < 3) << 2U)
+  ));
+  cm.set(hash(++i, cWordHash0, 
+    Info.masks[1] & 0x3FFU, words[Lang.pId](3).Hash[1], static_cast<int>(Info.lastDigit < Info.wordLength[0] + Info.wordGap) | 
+    (static_cast<int>(Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1U) |
+    ((Info.spaces & 0x7F) << 2U)
+  ));
   cm.set(hash(++i, cWordHash0, pWordHash1));
   cm.set(hash(++i, cWordHash0, pWordHash1, words[Lang.pId](2).Hash[1]));
   cm.set(hash(++i, w, words[Lang.pId](2).Hash[0], words[Lang.pId](3).Hash[0]));
   cm.set(hash(++i, cWordHash0, c, (cSentence->verbIndex < cSentence->wordCount) ? cSentence->lastVerb.Hash[0] : 0));
   cm.set(hash(++i, pWordHash1, Info.masks[1] & 0xFCU, lc, Info.wordGap));
-  cm.set(hash(++i, (Info.lastLetter == 0) ? cWordHash0 : pWordHash0, c, cSegment->firstWord.Hash[1],
-              min(3, ilog2(cSegment->wordCount + 1))));
+  cm.set(hash(++i, (Info.lastLetter == 0) ? cWordHash0 : pWordHash0, c, cSegment->firstWord.Hash[1], min(3, ilog2(cSegment->wordCount + 1))));
   cm.set(hash(++i, cWordHash0, c, segments(1).firstWord.Hash[1]));
-  cm.set(hash(++i, max(31, lc), Info.masks[1] & 0xFFCU,
-              (Info.spaces & 0xFEU) | static_cast<unsigned int>(Info.lastPunctuation < Info.lastLetter),
-              (Info.maskUpper & 0xFFU) | (((0x100U | Info.firstLetter) * static_cast<unsigned int>(Info.wordLength[0] > 1)) << 8U)));
+  cm.set(hash(++i, max(31, lc), Info.masks[1] & 0xFFCU, 
+    (Info.spaces & 0xFEU) | 
+    static_cast<uint32_t>(Info.lastPunctuation < Info.lastLetter), (Info.maskUpper & 0xFFU) | 
+    (((0x100U | Info.firstLetter) * static_cast<uint32_t>(Info.wordLength[0] > 1)) << 8U)
+  ));
   cm.set(hash(++i, column, min(7, ilog2(Info.lastUpper + 1)), ilog2(Info.lastPunctuation + 1)));
-  cm.set(hash(++i, (column & 0xF8U) | (Info.masks[1] & 3U) | (static_cast<int>(Info.prevNewLine - Info.lastNewLine > 63) << 2U) |
-                   (min(3, Info.lastLetter) << 8U) | (Info.firstChar << 10U) | (static_cast<int>(Info.commas > 4) << 18U) |
-                   (static_cast<int>(m2 >= 1 && m2 <= 5) << 19U) | (static_cast<int>(m2 >= 6 && m2 <= 10) << 20U) |
-                   (static_cast<int>(m2 == 11 || m2 == 12) << 21U) | (static_cast<int>(Info.lastUpper < column) << 22U) |
-                   (static_cast<int>(Info.lastDigit < column) << 23U) |
-                   (static_cast<int>(column < Info.prevNewLine - Info.lastNewLine) << 24U)));
-  cm.set(hash(++i, (2 * column) / 3,
-              min(13, Info.lastPunctuation) + static_cast<int>(Info.lastPunctuation > 16) + static_cast<int>(Info.lastPunctuation > 32) +
-              Info.maskPunctuation * 16, ilog2(Info.lastUpper + 1), ilog2(Info.prevNewLine - Info.lastNewLine),
-              static_cast<int>((Info.masks[1] & 3U) == 0) | (static_cast<int>(m2 < 6) << 1U) | (static_cast<int>(m2 < 11) << 2U)));
+  cm.set(hash(++i, 
+    (column & 0xF8U) | 
+    (Info.masks[1] & 3U) | 
+    (static_cast<int>(Info.prevNewLine - Info.lastNewLine > 63) << 2U) |
+    (min(3, Info.lastLetter) << 8U) | 
+    (Info.firstChar << 10U) | 
+    (static_cast<int>(Info.commas > 4) << 18U) |
+    (static_cast<int>(m2 >= 1 && m2 <= 5) << 19U) | 
+    (static_cast<int>(m2 >= 6 && m2 <= 10) << 20U) |
+    (static_cast<int>(m2 == 11 || m2 == 12) << 21U) | 
+    (static_cast<int>(Info.lastUpper < column) << 22U) |
+    (static_cast<int>(Info.lastDigit < column) << 23U) |
+    (static_cast<int>(column < Info.prevNewLine - Info.lastNewLine) << 24U)
+  ));
+  cm.set(hash(++i, (2 * column) / 3, 
+    min(13, Info.lastPunctuation) + static_cast<int>(Info.lastPunctuation > 16) + static_cast<int>(Info.lastPunctuation > 32) + Info.maskPunctuation * 16, 
+    ilog2(Info.lastUpper + 1), 
+    ilog2(Info.prevNewLine - Info.lastNewLine), 
+      static_cast<int>((Info.masks[1] & 3U) == 0) | 
+      (static_cast<int>(m2 < 6) << 1U) | 
+      (static_cast<int>(m2 < 11) << 2U)
+  ));
   cm.set(hash(++i, column >> 1U, Info.spaces & 0xFU));
-  cm.set(hash(++i, Info.masks[3] & 0x3FU, min((max(Info.wordLength[0], 3) - 2) * static_cast<int>(Info.wordLength[0] < 8), 3),
-              Info.firstLetter * static_cast<int>(Info.wordLength[0] < 5), w,
-              static_cast<int>(c == buf(2)) | (static_cast<int>(Info.masks[2] > 0) << 1U) |
-              (static_cast<int>(Info.lastPunctuation < Info.wordLength[0] + Info.wordGap) << 2U) |
-              (static_cast<int>(Info.lastUpper < Info.wordLength[0]) << 3U) |
-              (static_cast<int>(Info.lastDigit < Info.wordLength[0] + Info.wordGap) << 4U) |
-              (static_cast<int>(Info.lastPunctuation < 2 + Info.wordLength[0] + Info.wordGap + Info.wordLength[1]) << 5U)));
+  cm.set(hash(++i, Info.masks[3] & 0x3FU, 
+    min((max(Info.wordLength[0], 3) - 2) * static_cast<int>(Info.wordLength[0] < 8), 3), 
+    Info.firstLetter * static_cast<int>(Info.wordLength[0] < 5),
+    w, 
+      static_cast<int>(c == buf(2)) | (static_cast<int>(Info.masks[2] > 0) << 1U) |
+      (static_cast<int>(Info.lastPunctuation < Info.wordLength[0] + Info.wordGap) << 2U) |
+      (static_cast<int>(Info.lastUpper < Info.wordLength[0]) << 3U) |
+      (static_cast<int>(Info.lastDigit < Info.wordLength[0] + Info.wordGap) << 4U) |
+      (static_cast<int>(Info.lastPunctuation < 2 + Info.wordLength[0] + Info.wordGap + Info.wordLength[1]) << 5U)
+  ));
   cm.set(hash(++i, w, c, Info.numHashes[1]));
-  cm.set(hash(++i, w, c, llog(shared->buf.getpos() - wordPos[w & (wordPos.size() - 1)]) >> 1));
+  INJECT_SHARED_pos
+  cm.set(hash(++i, w, c, llog(pos - wordPos[w & (wordPos.size() - 1)]) >> 1));
   cm.set(hash(++i, w, c, Info.topicDescriptor.Hash[0]));
   cm.set(hash(++i, Info.numLength[0], c, Info.topicDescriptor.Hash[0]));
   cm.set(hash(++i, (Info.lastLetter > 0) ? c : 0x100, Info.masks[1] & 0xFFCU, Info.nestHash & 0x7FFU));
-  cm.set(hash(++i, w, c, Info.masks[3] & 0x1FFU, (static_cast<int>(cSentence->verbIndex == 0 && cSentence->lastVerb.length() > 0) << 6U) |
-                                                 (static_cast<int>(Info.wordLength[1] > 3) << 5U) |
-                                                 (static_cast<int>(cSegment->wordCount == 0) << 4U) |
-                                                 (static_cast<int>(cSentence->segmentCount == 0 && cSentence->wordCount < 2) << 3U) |
-                                                 (static_cast<int>(Info.lastPunctuation >=
-                                                                   Info.lastLetter + Info.wordLength[1] + Info.wordGap) << 2U) |
-                                                 (static_cast<int>(Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1U) |
-                                                 static_cast<int>(Info.lastUpper <
-                                                                  Info.wordLength[0] + Info.wordGap + Info.wordLength[1])));
-  cm.set(hash(++i, c, pWordHash1, Info.firstLetter * static_cast<int>(Info.wordLength[0] < 6),
-              (static_cast<int>(Info.lastPunctuation < Info.wordLength[0] + Info.wordGap) << 1U) |
-              static_cast<int>(Info.lastPunctuation >= Info.lastLetter + Info.wordLength[1] + Info.wordGap)));
-  cm.set(hash(++i, w, c, words[Lang.pId](1 + static_cast<int>(Info.wordLength[0] == 0)).letters[words[Lang.pId](
-          1 + static_cast<int>(Info.wordLength[0] == 0)).start], Info.firstLetter * static_cast<int>(Info.wordLength[0] < 7)));
+  cm.set(hash(++i, w, c, Info.masks[3] & 0x1FFU,
+    (static_cast<int>(cSentence->verbIndex == 0 && cSentence->lastVerb.length() > 0) << 6U) |
+    (static_cast<int>(Info.wordLength[1] > 3) << 5U) |
+    (static_cast<int>(cSegment->wordCount == 0) << 4U) |
+    (static_cast<int>(cSentence->segmentCount == 0 && cSentence->wordCount < 2) << 3U) |
+    (static_cast<int>(Info.lastPunctuation >= Info.lastLetter + Info.wordLength[1] + Info.wordGap) << 2U) |
+    (static_cast<int>(Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1U) |
+     static_cast<int>(Info.lastUpper < Info.wordLength[0] + Info.wordGap + Info.wordLength[1])
+  ));
+  cm.set(hash(++i, c, pWordHash1, 
+    Info.firstLetter * static_cast<int>(Info.wordLength[0] < 6),
+      (static_cast<int>(Info.lastPunctuation < Info.wordLength[0] + Info.wordGap) << 1U) |
+      static_cast<int>(Info.lastPunctuation >= Info.lastLetter + Info.wordLength[1] + Info.wordGap)
+  ));
+  cm.set(hash(++i, w, c, words[Lang.pId](1 + static_cast<int>(Info.wordLength[0] == 0)).letters[words[Lang.pId](1 + static_cast<int>(Info.wordLength[0] == 0)).start], Info.firstLetter * static_cast<int>(Info.wordLength[0] < 7)));
   cm.set(hash(++i, column, Info.spaces & 7U, Info.nestHash & 0x7FFU));
-  cm.set(hash(++i, cWordHash0, static_cast<int>(Info.lastUpper < column) | (static_cast<int>(Info.lastUpper < Info.wordLength[0]) << 1U),
-              min(5, Info.wordLength[0])));
-  cm.set(hash(++i, Lang.id, w, uint8_t(words[Lang.id](1 + static_cast<int>(State != Parse::ReadingWord)).embedding),
-              static_cast<int>(Info.lastUpper < Info.wordLength[0]) | (static_cast<int>(cSegment->wordCount == 0) << 1U)));
+  cm.set(hash(++i, cWordHash0, 
+    static_cast<int>(Info.lastUpper < column) | 
+    (static_cast<int>(Info.lastUpper < Info.wordLength[0]) << 1U), min(5, Info.wordLength[0])
+  ));
+  cm.set(hash(++i, Lang.id, w, 
+    uint8_t(words[Lang.id](1 + static_cast<int>(State != Parse::ReadingWord)).embedding),
+      static_cast<int>(Info.lastUpper < Info.wordLength[0]) |
+      (static_cast<int>(cSegment->wordCount == 0) << 1U)
+  ));
   assert(i - State * 64 + 1 == nCM2);
 }
 
 void TextModel::mix(Mixer &m) {
-  if( shared->bitPosition == 0 ) {
+  INJECT_SHARED_bpos
+  if( bpos == 0 ) {
     update();
     setContexts();
   }
   cm.mix(m);
 
+  INJECT_SHARED_c0
+  INJECT_SHARED_c1
   const uint8_t characterGroup = stats->Text.characterGroup;
-  m.set(finalize64(
-          hash((Lang.id != Language::Unknown) ? 1 + static_cast<int>(stemmers[Lang.id - 1]->isVowel(shared->c1)) : 0, Info.masks[1] & 0xFF,
-               shared->c0), 11), 2048);
-  m.set(finalize64(hash(ilog2(Info.wordLength[0] + 1), shared->c0, static_cast<int>(Info.lastDigit < Info.wordLength[0] + Info.wordGap) |
-                                                                   (static_cast<int>(Info.lastUpper < Info.lastLetter + Info.wordLength[1])
-                                                                           << 1U) | (static_cast<int>(Info.lastPunctuation <
-                                                                                                      Info.wordLength[0] + Info.wordGap)
-          << 2U) | (static_cast<int>(Info.lastUpper < Info.wordLength[0]) << 3U)), 11), 2048);
-  m.set(finalize64(hash(Info.masks[1] & 0x3FFU, characterGroup, static_cast<uint64_t>(Info.lastUpper < Info.wordLength[0]),
-                        static_cast<uint64_t>(Info.lastUpper < Info.lastLetter + Info.wordLength[1])), 12), 4096);
-  m.set(finalize64(hash(Info.spaces & 0x1FFU, characterGroup, static_cast<int>(Info.lastUpper < Info.wordLength[0]) |
-                                                              (static_cast<int>(Info.lastUpper < Info.lastLetter + Info.wordLength[1])
-                                                                      << 1U) |
-                                                              (static_cast<int>(Info.lastPunctuation < Info.lastLetter) << 2U) |
-                                                              (static_cast<int>(Info.lastPunctuation < Info.wordLength[0] + Info.wordGap)
-                                                                      << 3U) | (static_cast<int>(Info.lastPunctuation <
-                                                                                                 Info.lastLetter + Info.wordLength[1] +
-                                                                                                 Info.wordGap) << 4U)), 12), 4096);
-  m.set(finalize64(hash(Info.firstLetter * static_cast<int>(Info.wordLength[0] < 4), min(6, Info.wordLength[0]), shared->c0), 11), 2048);
-  m.set(finalize64(
-          hash((*pWord)[0], (*pWord)(0), min(4, Info.wordLength[0]), static_cast<uint64_t>(Info.lastPunctuation < Info.lastLetter)), 11),
-        2048);
-  m.set(finalize64(hash(min(4, Info.wordLength[0]), characterGroup, static_cast<uint64_t>(Info.lastUpper < Info.wordLength[0]),
-                        (Info.nestHash > 0) ? Info.nestHash & 0xFFU : 0x100U | (Info.firstLetter *
-                                                                                static_cast<int>(Info.wordLength[0] > 0 &&
-                                                                                                 Info.wordLength[0] < 4))), 12), 4096);
+  m.set(finalize64(hash((Lang.id != Language::Unknown) ? 1 + static_cast<int>(stemmers[Lang.id - 1]->isVowel(c1)) : 0, Info.masks[1] & 0xFF, c0), 11), 2048);
+  m.set(finalize64(hash(ilog2(Info.wordLength[0] + 1), c0, 
+    static_cast<int>(Info.lastDigit < Info.wordLength[0] + Info.wordGap) |
+    (static_cast<int>(Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1U) |
+    (static_cast<int>(Info.lastPunctuation < Info.wordLength[0] + Info.wordGap) << 2U) | 
+    (static_cast<int>(Info.lastUpper < Info.wordLength[0]) << 3U)), 11), 2048);
+  m.set(finalize64(hash(Info.masks[1] & 0x3FFU, characterGroup, 
+    static_cast<uint64_t>(Info.lastUpper < Info.wordLength[0]),
+    static_cast<uint64_t>(Info.lastUpper < Info.lastLetter + Info.wordLength[1])), 12), 4096);
+  m.set(finalize64(hash(Info.spaces & 0x1FFU, characterGroup, 
+    static_cast<int>(Info.lastUpper < Info.wordLength[0]) |
+    (static_cast<int>(Info.lastUpper < Info.lastLetter + Info.wordLength[1]) << 1U) |
+    (static_cast<int>(Info.lastPunctuation < Info.lastLetter) << 2U) |
+    (static_cast<int>(Info.lastPunctuation < Info.wordLength[0] + Info.wordGap) << 3U) | 
+    (static_cast<int>(Info.lastPunctuation < Info.lastLetter + Info.wordLength[1] + Info.wordGap) << 4U)), 12), 4096);
+  m.set(finalize64(hash(Info.firstLetter * static_cast<int>(Info.wordLength[0] < 4), min(6, Info.wordLength[0]), c0), 11), 2048);
+  m.set(finalize64(hash((*pWord)[0], (*pWord)(0), min(4, Info.wordLength[0]), static_cast<uint64_t>(Info.lastPunctuation < Info.lastLetter)), 11), 2048);
+  m.set(finalize64(hash(min(4, Info.wordLength[0]), characterGroup, 
+    static_cast<uint64_t>(Info.lastUpper < Info.wordLength[0]),
+    (Info.nestHash > 0) ? Info.nestHash & 0xFFU : 0x100U |
+    (Info.firstLetter * static_cast<int>(Info.wordLength[0] > 0 && Info.wordLength[0] < 4))), 12), 4096);
   m.set(finalize64(hash(characterGroup, Info.masks[4] & 0x1FU, (Info.masks[4] >> 5) & 0x1FU), 13), 8192);
   m.set(finalize64(hash(characterGroup, uint8_t(pWord->embedding), Lang.id, State), 11), 2048);
 }

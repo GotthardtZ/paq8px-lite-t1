@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "187fix3"  //update version here before publishing your changes
+#define PROGVERSION  "187fix4"  //update version here before publishing your changes
 #define PROGYEAR     "2020"
 
 
@@ -36,10 +36,10 @@ static void printHelp() {
          "  " PROGNAME " -LEVEL[SWITCHES] INPUTSPEC [OUTPUTSPEC]\n"
          "\n"
          "    -LEVEL:\n"
-         "      -0 = store (uses 322 MB)\n"
-         "      -1 -2 -3 = faster (uses 417, 431, 459 MB)\n"
-         "      -4 -5 -6 -7 -8 -9 = smaller (uses 514, 624, 845, 1288, 2172, 3941 MB)\n"
-         "      -10  -11  -12     = extreme (uses 7478, 14553, 28702 MB)\n"
+         "      -0 = no compression, only transformations when applicable (uses 322 MB)\n"
+         "      -1 -2 -3 = compress using less memory (417, 431, 459 MB)\n"
+         "      -4 -5 -6 -7 -8 -9 = use more memory (514, 624, 845, 1288, 2172, 3941 MB)\n"
+         "      -10  -11  -12     = use even more memory (7478, 14553, 27678 MB)\n"
          "    The listed memory requirements are indicative, actual usage may vary\n"
          "    depending on several factors including need for temporary files,\n"
          "    temporary memory needs of some preprocessing (transformations), etc.\n"
@@ -67,10 +67,9 @@ static void printHelp() {
          "    utility. The FILELIST file must contain a header but will be ignored.\n"
          "\n"
          "    OUTPUTSPEC:\n"
-         "    When omitted: the archive will be created in the same folder where the\n"
-         "    input file resides. The archive filename will be constructed from the\n"
-         "    input file name by appending ." PROGNAME PROGVERSION " extension\n"
-         "    to it.\n"
+         "    When omitted: the archive will be created in the current folder. The\n"
+         "    archive filename will be constructed from the input file name by \n"
+         "    appending ." PROGNAME PROGVERSION " extension to it.\n"
          "    When OUTPUTSPEC is a filename (with an optional path) it will be\n"
          "    used as the archive filename.\n"
          "    When OUTPUTSPEC is a folder the archive file will be generated from\n"
@@ -119,7 +118,7 @@ static void printHelp() {
          "    Overrides detected SIMD instruction set for neural network operations\n"
          "\n"
          "Remark: the command line arguments may be used in any order except the input\n"
-         "and output: always the input comes first then (the optional) output.\n"
+         "and output: always the input comes first then output (which may be omitted).\n"
          "\n"
          "    Example:\n"
          "      " PROGNAME " -8 enwik8 folder/ -v -log logfile.txt -simd sse2\n"
@@ -131,15 +130,15 @@ static void printModules() {
   printf("\n");
   printf("Build: ");
 #ifndef DISABLE_ZLIB
-  printf("ZLIB: ENABLED ");
+  printf("ZLIB: ENABLED, ");
 #else
-  printf("ZLIB: DISABLED ");
+  printf("ZLIB: DISABLED, ");
 #endif
 
 #ifndef DISABLE_AUDIOMODEL
-  printf("AUDIOMODEL: ENABLED ");
+  printf("AUDIOMODEL: ENABLED, ");
 #else
-  printf("AUDIOMODEL: DISABLED ");
+  printf("AUDIOMODEL: DISABLED, ");
 #endif
 
 #ifndef DISABLE_TEXTMODEL

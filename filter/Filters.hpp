@@ -334,7 +334,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
         strm.total_in = strm.total_out = 0;
         if( zlibInflateInit(&strm, zh) == Z_OK ) {
           for( int j = i - (brute ? 255 : 31); j < n; j += 1 << 16 ) {
-            unsigned int blsize = min(n - j, 1 << 16);
+            uint32_t blsize = min(n - j, 1 << 16);
             in->setpos(start + j);
             if( in->blockRead(zin, blsize) != blsize )
               break;
