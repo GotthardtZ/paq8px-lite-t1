@@ -1,6 +1,6 @@
 #include "IndirectModel.hpp"
 
-IndirectModel::IndirectModel(const uint64_t size) : cm(size, nCM) {}
+IndirectModel::IndirectModel(const Shared* const sh, const uint64_t size) : shared(sh), cm(sh, size, nCM) {}
 
 void IndirectModel::mix(Mixer &m) {
   INJECT_SHARED_bpos

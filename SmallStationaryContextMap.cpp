@@ -1,8 +1,11 @@
 #include "SmallStationaryContextMap.hpp"
 
-SmallStationaryContextMap::SmallStationaryContextMap(const int bitsOfContext, const int inputBits, const int rate, const int scale) : data(
-        (1ULL << bitsOfContext) * ((1ULL << inputBits) - 1)), mask((1U << bitsOfContext) - 1), stride((1U << inputBits) - 1),
-        bTotal(inputBits), rate(rate), scale(scale) {
+SmallStationaryContextMap::SmallStationaryContextMap(const Shared* const sh, const int bitsOfContext, const int inputBits, const int rate, const int scale) : 
+  shared(sh),
+  data((1ULL << bitsOfContext) * ((1ULL << inputBits) - 1)), 
+  mask((1U << bitsOfContext) - 1), 
+  stride((1U << inputBits) - 1),
+  bTotal(inputBits), rate(rate), scale(scale) {
 #ifdef VERBOSE
   printf("Created SmallStationaryContextMap with bitsOfContext = %d, inputBits = %d, rate = %d, scale = %d\n", bitsOfContext, inputBits, rate, scale);
 #endif
@@ -30,7 +33,7 @@ void SmallStationaryContextMap::update() {
 }
 
 void SmallStationaryContextMap::mix(Mixer &m) {
-  shared->updateBroadcaster->subscribe(this);
+  shared->GetUpdateBroadcaster()->subscribe(this);
   cp = &data[context + b];
   const int prediction = (*cp) >> 4U;
   m.add((stretch(prediction) * scale) >> 8);

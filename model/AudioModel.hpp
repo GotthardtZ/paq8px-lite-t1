@@ -12,11 +12,11 @@
  */
 class AudioModel {
 protected:
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     ModelStats *stats;
     int s = 0;
     int wMode = 0;
-    explicit AudioModel(ModelStats *st);
+    explicit AudioModel(const Shared* const sh, ModelStats *st);
     auto s2(int i) -> int;
     auto t2(int i) -> int;
     auto x1(int i) -> int;

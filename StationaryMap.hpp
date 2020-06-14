@@ -23,7 +23,7 @@ public:
     static constexpr int MIXERINPUTS = 2;
 
 private:
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     Array<uint32_t> data;
     const uint32_t mask, maskBits, stride, bTotal;
     uint32_t context {};
@@ -42,7 +42,7 @@ public:
      * @param scale
      * @param limit
      */
-    StationaryMap(int bitsOfContext, int inputBits, int scale, uint16_t limit);
+    StationaryMap(const Shared* const sh, int bitsOfContext, int inputBits, int scale, uint16_t limit);
 
     /**
      * ctx must be a direct context (no hash)

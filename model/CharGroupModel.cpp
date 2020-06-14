@@ -1,6 +1,6 @@
 #include "CharGroupModel.hpp"
 
-CharGroupModel::CharGroupModel(const uint64_t size) : cm(size, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY) {}
+CharGroupModel::CharGroupModel(const Shared* const sh, const uint64_t size) : shared(sh), cm(sh, size, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY) {}
 
 void CharGroupModel::mix(Mixer &m) {
   INJECT_SHARED_bpos

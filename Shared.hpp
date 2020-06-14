@@ -1,8 +1,8 @@
 #ifndef PAQ8PX_SHARED_HPP
 #define PAQ8PX_SHARED_HPP
 
-#include "RingBuffer.hpp"
 #include "UpdateBroadcaster.hpp"
+#include "RingBuffer.hpp"
 #include <cstdint>
 
 // helper #defines to access shared variables
@@ -19,6 +19,9 @@
  * Shared information by all the models and some other classes.
  */
 struct Shared {
+private:
+    UpdateBroadcaster updateBroadcaster;
+public:
     RingBuffer<uint8_t> buf; /**< Rotating input queue set by Predictor */
     uint8_t y = 0; /**< Last bit, 0 or 1 */
     uint8_t c0 = 1; /**< Last 0-7 bits of the partial byte with a leading 1 bit (1-255) */
@@ -30,15 +33,16 @@ struct Shared {
     SIMD chosenSimd = SIMD_NONE; /**< default value, will be overridden by the CPU dispatcher, and may be overridden from the command line */
     uint8_t level = 0; /**< level=0: no compression (only transformations), 1..12 compress using less..more RAM */
     uint64_t mem = 0; /**< pre-calculated value of 65536 * 2^level */
-    bool toScreen = true; /**< default value, overridden at instatiation */
-    UpdateBroadcaster *updateBroadcaster = UpdateBroadcaster::getInstance();
+    bool toScreen = true;
 
-    static auto getInstance() -> Shared *;
+    Shared() {
+      toScreen = !isOutputDirected();
+    }
+    void init(uint8_t level);
     void update();
     void reset();
-    void setLevel(uint8_t level);
+    UpdateBroadcaster *GetUpdateBroadcaster() const;
 private:
-    Shared() = default;
 
     /**
      * Copy constructor is private so that it cannot be called

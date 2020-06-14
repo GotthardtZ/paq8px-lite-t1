@@ -370,6 +370,7 @@
     <ClInclude Include="model\Image24BitModel.hpp" />
     <ClInclude Include="model\Image4BitModel.hpp" />
     <ClInclude Include="model\Image8BitModel.hpp" />
+    <ClInclude Include="model\ImageModelsCommon.hpp" />
     <ClInclude Include="model\IndirectModel.hpp" />
     <ClInclude Include="model\Info.hpp" />
     <ClInclude Include="model\JpegModel.hpp" />
@@ -415,6 +416,7 @@
     <ClInclude Include="text\TextModel.hpp" />
     <ClInclude Include="text\Word.hpp" />
     <ClInclude Include="text\WordEmbeddingDictionary.hpp" />
+    <ClInclude Include="TransformOptions.hpp" />
     <ClInclude Include="UpdateBroadcaster.hpp" />
     <ClInclude Include="utils.hpp" />
     <ClInclude Include="VLI.hpp" />

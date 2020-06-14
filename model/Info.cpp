@@ -1,6 +1,6 @@
 #include "Info.hpp"
 
-Info::Info(ModelStats const *st, ContextMap2 &contextmap) : stats(st), cm(contextmap) {
+Info::Info(const Shared* const sh, ModelStats const *st, ContextMap2 &contextmap) : shared(sh), stats(st), cm(contextmap) {
   reset();
 }
 

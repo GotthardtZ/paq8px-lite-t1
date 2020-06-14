@@ -1,6 +1,6 @@
 #include "Predictor.hpp"
 
-Predictor::Predictor() : models(&stats), contextModel(&stats, models), sse(&stats), pr(2048) {
+Predictor::Predictor(Shared* const sh) : shared(sh), models(sh, &stats), contextModel(sh, &stats, models), sse(sh, &stats), pr(2048) {
   shared->reset();
   //initiate pre-training
   if((shared->options & OPTION_TRAINTXT) != 0U ) {
@@ -20,8 +20,6 @@ void Predictor::update(uint8_t y) {
   // update global context: pos, bitPosition, c0, c4, c8, buf
   shared->y = y;
   shared->update();
-  // Broadcast to all current subscribers: y (and c0, c1, c4, etc) is known
-  shared->updateBroadcaster->broadcastUpdate();
 
   INJECT_SHARED_bpos
   INJECT_SHARED_c0
@@ -38,8 +36,10 @@ void Predictor::update(uint8_t y) {
 void Predictor::trainText(const char *const dictionary, int iterations) {
   NormalModel &normalModel = models.normalModel();
   WordModel &wordModel = models.wordModel();
-  DummyMixer mDummy(NormalModel::MIXERINPUTS + WordModel::MIXERINPUTS, NormalModel::MIXERCONTEXTS + WordModel::MIXERCONTEXTS,
-                    NormalModel::MIXERCONTEXTSETS + WordModel::MIXERCONTEXTSETS);
+  DummyMixer mDummy(shared, 
+    NormalModel::MIXERINPUTS + WordModel::MIXERINPUTS, 
+    NormalModel::MIXERCONTEXTS + WordModel::MIXERCONTEXTS,
+    NormalModel::MIXERCONTEXTSETS + WordModel::MIXERCONTEXTSETS);
   stats.blockType = TEXT;
   INJECT_SHARED_pos
   assert(pos == 0 && stats.blPos == 0);
@@ -56,15 +56,14 @@ void Predictor::trainText(const char *const dictionary, int iterations) {
       trainingByteCount++;
       uint8_t c1 = c == NEW_LINE ? SPACE : c;
       if( c != CARRIAGE_RETURN ) {
-        for( int bitPosition = 0; bitPosition < 8; bitPosition++ ) {
+        for( int bpos = 0; bpos < 8; bpos++ ) {
           normalModel.mix(mDummy); //update (train) model
 #ifndef DISABLE_TEXTMODEL
           wordModel.mix(mDummy); //update (train) model
 #endif
           mDummy.p();
-          shared->y = (c1 >> (7 - bitPosition)) & 1U;
+          shared->y = (c1 >> (7 - bpos)) & 1U;
           shared->update();
-          shared->updateBroadcaster->broadcastUpdate();
         }
       }
       // emulate a space before and after each word/expression
@@ -82,7 +81,6 @@ void Predictor::trainText(const char *const dictionary, int iterations) {
           mDummy.p();
           shared->y = (c1 >> (7 - bpos)) & 1U;
           shared->update();
-          shared->updateBroadcaster->broadcastUpdate();
         }
       }
     } while((c = f.getchar()) != EOF);
@@ -99,7 +97,7 @@ void Predictor::trainText(const char *const dictionary, int iterations) {
 
 void Predictor::trainExe() {
   ExeModel &exeModel = models.exeModel();
-  DummyMixer dummyM(ExeModel::MIXERINPUTS, ExeModel::MIXERCONTEXTS, ExeModel::MIXERCONTEXTSETS);
+  DummyMixer dummyM(shared, ExeModel::MIXERINPUTS, ExeModel::MIXERCONTEXTS, ExeModel::MIXERCONTEXTSETS);
   INJECT_SHARED_pos
   assert(pos == 0 && stats.blPos == 0);
   FileDisk f;
@@ -114,7 +112,6 @@ void Predictor::trainExe() {
       dummyM.p();
       shared->y = (c >> (7 - bpos)) & 1U;
       shared->update();
-      shared->updateBroadcaster->broadcastUpdate();
     }
   } while((c = f.getchar()) != EOF);
   printf(" done [%d bytes]\n", trainingByteCount);

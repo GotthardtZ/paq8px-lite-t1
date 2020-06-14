@@ -30,10 +30,10 @@
  */
 class Models {
 private:
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     ModelStats *stats; //read-write
 public:
-    explicit Models(ModelStats *st);
+    explicit Models(const Shared* const sh, ModelStats *st);
     auto normalModel() -> NormalModel &;
     auto dmcForest() -> DmcForest &;
     auto charGroupModel() -> CharGroupModel &;
@@ -47,12 +47,12 @@ public:
     auto nestModel() -> NestModel &;
     auto xmlModel() -> XMLModel &;
     auto exeModel() -> ExeModel &;
-    static auto linearPredictionModel() -> LinearPredictionModel &;
+    auto linearPredictionModel() -> LinearPredictionModel &;
     auto jpegModel() -> JpegModel &;
     auto image24BitModel() -> Image24BitModel &;
     auto image8BitModel() -> Image8BitModel &;
     auto image4BitModel() -> Image4BitModel &;
-    static auto image1BitModel() -> Image1BitModel &;
+    auto image1BitModel() -> Image1BitModel &;
 #ifndef DISABLE_AUDIOMODEL
     auto audio8BitModel() -> Audio8BitModel &;
     auto audio16BitModel() -> Audio16BitModel &;

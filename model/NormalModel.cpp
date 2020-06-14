@@ -1,8 +1,10 @@
 #include "NormalModel.hpp"
 
-NormalModel::NormalModel(ModelStats *st, const uint64_t cmSize) : stats(st), cm(cmSize, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY),
-        smOrder0Slow(1, 255, 1023, StateMap::Generic), smOrder1Slow(1, 255 * 256, 1023, StateMap::Generic),
-        smOrder1Fast(1, 255 * 256, 64, StateMap::Generic) // 64->16 is also ok
+NormalModel::NormalModel(const Shared* const sh, ModelStats *st, const uint64_t cmSize) : 
+  shared(sh), stats(st), cm(sh, cmSize, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY),
+  smOrder0Slow(sh, 1, 255, 1023, StateMap::Generic), 
+  smOrder1Slow(sh, 1, 255 * 256, 1023, StateMap::Generic),
+  smOrder1Fast(sh, 1, 255 * 256, 64, StateMap::Generic) // 64->16 is also ok
 {
   assert(isPowerOf2(cmSize));
 }

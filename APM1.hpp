@@ -15,7 +15,7 @@
  */
 class APM1 : IPredictor {
 private:
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     int index; /**< last p, context */
     const int n; /**< number of contexts */
     Array<uint16_t> t; /**< [n][33]:  p, context -> p */
@@ -29,7 +29,7 @@ public:
      * @param n the number of contexts
      * @param r the learning rate
      */
-    APM1(int n, int r);
+    APM1(const Shared* const sh, int n, int r);
     /**
      * Returns adjusted probability in context @ref cx (0 to n-1).
      * @param pr initial (pre-adjusted) probability

@@ -14,14 +14,18 @@
 class BmpFilter : public Filter {
 private:
     int width = 0;
+    bool skipRgb = false;
     static constexpr int rgb565MinRun = 63;
 public:
-    void setWidth(int w) {
+
+  void setWidth(int w) {
       width = w;
     }
+  void setSkipRgb(bool skipRgb0) {
+    skipRgb = skipRgb0;
+  }
 
     void encode(File *in, File *out, uint64_t size, int width, int & /*headerSize*/) override {
-      Shared *shared = Shared::getInstance();
       uint32_t r = 0;
       uint32_t g = 0;
       uint32_t b = 0;
@@ -45,8 +49,8 @@ public:
             isPossibleRgb565 = total > 0;
           }
           out->putChar(g);
-          out->putChar((shared->options & OPTION_SKIPRGB) != 0u ? r : g - r);
-          out->putChar((shared->options & OPTION_SKIPRGB) != 0u ? b : g - b);
+          out->putChar(skipRgb ? r : g - r);
+          out->putChar(skipRgb ? b : g - b);
         }
         for( int j = 0; j < width % 3; j++ ) {
           out->putChar(in->getchar());
@@ -58,7 +62,6 @@ public:
     }
 
     auto decode(File * /*in*/, File *out, FMode fMode, uint64_t size, uint64_t &diffFound) -> uint64_t override {
-      Shared *shared = Shared::getInstance();
       uint32_t r = 0;
       uint32_t g = 0;
       uint32_t b = 0;
@@ -71,7 +74,7 @@ public:
           g = encoder->decompress();
           r = encoder->decompress();
           b = encoder->decompress();
-          if((shared->options & OPTION_SKIPRGB) == 0u ) {
+          if( !skipRgb ) {
             r = g - r, b = g - b;
           }
           if( isPossibleRGB565 ) {

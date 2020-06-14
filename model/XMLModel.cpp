@@ -64,7 +64,7 @@ void XMLModel::detectContent(XMLContent *content) {
   }
 }
 
-XMLModel::XMLModel(const uint64_t size) : cm(size, nCM) {}
+XMLModel::XMLModel(const Shared* const sh, const uint64_t size) : shared(sh), cm(sh, size, nCM) {}
 
 void XMLModel::update() {
   XMLTag *pTag = &cache.tags[(cache.Index - 1) & (cacheSize - 1)];

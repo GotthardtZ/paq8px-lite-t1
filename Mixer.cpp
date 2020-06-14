@@ -1,7 +1,8 @@
 #include "Mixer.hpp"
 #include "utils.hpp"
 
-Mixer::Mixer(const int n, const int m, const int s) : n(n), m(m), s(s), scaleFactor(0), tx(n), wx(n * m), cxt(s), info(s), rates(s), pr(s) {
+Mixer::Mixer(const Shared* const sh, const int n, const int m, const int s) : shared(sh), n(n), m(m), s(s), 
+scaleFactor(0), tx(n), wx(n * m), cxt(s), info(s), rates(s), pr(s) {
 #ifdef VERBOSE
   printf("Created Mixer with n = %d, m = %d, s = %d\n", n, m, s);
 #endif

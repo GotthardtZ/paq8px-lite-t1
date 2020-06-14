@@ -1,11 +1,11 @@
 #include "SparseMatchModel.hpp"
 
-SparseMatchModel::SparseMatchModel(const uint64_t size) : table(size / sizeof(uint32_t)), maps {{22, 1, 128, 1023},
-                                                                                                {17, 4, 128, 1023},
-                                                                                                {8,  1, 128, 1023},
-                                                                                                {19, 1, 128, 1023}},
-        mask(uint32_t(size / sizeof(uint32_t) - 1)), hashBits(ilog2(mask + 1)) {
-  assert(isPowerOf2(size));
+SparseMatchModel::SparseMatchModel(const Shared* const sh, const uint64_t size) : shared(sh), 
+  table(size / sizeof(uint32_t)), 
+  maps {{sh, 22, 1, 128, 1023}, {sh, 17, 4, 128, 1023}, {sh, 8,  1, 128, 1023}, {sh, 19, 1, 128, 1023}},
+  mask(uint32_t(size / sizeof(uint32_t) - 1)), 
+  hashBits(ilog2(mask + 1)) {
+    assert(isPowerOf2(size));
 }
 
 void SparseMatchModel::update() {

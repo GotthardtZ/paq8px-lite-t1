@@ -1,11 +1,11 @@
 #include "ContextMap2.hpp"
 
-ContextMap2::ContextMap2(const uint64_t size, const uint32_t contexts, const int scale, const uint32_t uw) : C(contexts), table(size / sizeof(Bucket)),
+ContextMap2::ContextMap2(const Shared* const sh, const uint64_t size, const uint32_t contexts, const int scale, const uint32_t uw) : shared(sh), C(contexts), table(size / sizeof(Bucket)),
         bitState(contexts), bitState0(contexts), byteHistory(contexts), contexts(contexts), checksums(contexts),
-        runMap(contexts, (1U << 12U), 127, StateMap::Run),         /* StateMap : s, n, lim, init */ // 63-255
-        stateMap(contexts, (1U << 8U), 511, StateMap::BitHistory), /* StateMap : s, n, lim, init */ // 511-1023
-        bhMap8B(contexts, (1U << 8U), 511, StateMap::Generic),     /* StateMap : s, n, lim, init */ // 511-1023
-        bhMap12B(contexts, (1U << 12U), 511, StateMap::Generic),   /* StateMap : s, n, lim, init */ // 255-1023
+        runMap(sh, contexts, (1U << 12U), 127, StateMap::Run),         /* StateMap : s, n, lim, init */ // 63-255
+        stateMap(sh, contexts, (1U << 8U), 511, StateMap::BitHistory), /* StateMap : s, n, lim, init */ // 511-1023
+        bhMap8B(sh, contexts, (1U << 8U), 511, StateMap::Generic),     /* StateMap : s, n, lim, init */ // 511-1023
+        bhMap12B(sh, contexts, (1U << 12U), 511, StateMap::Generic),   /* StateMap : s, n, lim, init */ // 255-1023
         index(0), mask(uint32_t(table.size() - 1)), hashBits(ilog2(mask + 1)), validFlags(0), scale(scale), useWhat(uw) {
 #ifdef VERBOSE
   printf("Created ContextMap2 with size = %" PRIu64 ", contexts = %d, scale = %d, uw = %d\n", size, contexts, scale, uw);
@@ -125,7 +125,7 @@ void ContextMap2::update() {
 void ContextMap2::setScale(const int Scale) { scale = Scale; }
 
 void ContextMap2::mix(Mixer &m) {
-  shared->updateBroadcaster->subscribe(this);
+  shared->GetUpdateBroadcaster()->subscribe(this);
   stateMap.subscribe();
   if((useWhat & CM_USE_RUN_STATS) != 0U ) {
     runMap.subscribe();

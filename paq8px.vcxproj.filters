@@ -563,6 +563,12 @@
     <ClInclude Include="VLI.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="model\ImageModelsCommon.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="TransformOptions.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

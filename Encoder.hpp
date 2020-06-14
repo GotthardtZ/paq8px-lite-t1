@@ -24,7 +24,7 @@ private:
     uint32_t x; /**< Decompress mode: last 4 input bytes of archive */
     File *alt; /**< decompress() source in COMPRESS mode */
     float p1 {}, p2 {}; /**< percentages for progress indicator: 0.0 .. 1.0 */
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
 
     /**
      * code(i) in COMPRESS mode compresses bit @ref i (0 or 1) to file f.
@@ -43,7 +43,7 @@ public:
      * @param m the mode to operate in
      * @param f the file to read from or write to
      */
-    Encoder(Mode m, File *f);
+    Encoder(Shared* const sh, Mode m, File *f);
     [[nodiscard]] auto getMode() const -> Mode;
     /**
      * Returns current length of archive

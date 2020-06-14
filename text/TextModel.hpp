@@ -33,7 +33,7 @@ private:
                                                 18, 19, 20, 23, 21, 22, 23, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
                                                 2, 2, 2, 2, 2, 24, 27, 25, 27, 26, 27, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
                                                 3, 3, 3, 3, 3, 3, 3, 3, 28, 30, 29, 30, 30};
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     ModelStats *stats;
     static constexpr uint32_t MIN_RECOGNIZED_WORDS = 4;
     ContextMap2 cm;
@@ -102,7 +102,7 @@ public:
     static constexpr int MIXERCONTEXTS = 2048 + 2048 + 4096 + 4096 + 2048 + 2048 + 4096 + 8192 + 2048; //30720
     static constexpr int MIXERCONTEXTSETS = 9;
 
-    TextModel(ModelStats *st, uint64_t size);
+    TextModel(const Shared* const sh, ModelStats *st, uint64_t size);
     ~TextModel();
     void update();
     void mix(Mixer &m);

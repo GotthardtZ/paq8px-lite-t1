@@ -11,7 +11,7 @@
  * This combines all the context models with a Mixer.
  */
 class ContextModel {
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     ModelStats *stats;
     Models models;
     Mixer *m;
@@ -23,7 +23,7 @@ class ContextModel {
     bool readSize = false;
 
 public:
-    ContextModel(ModelStats *st, Models &models);
+    ContextModel(const Shared* const sh, ModelStats *st, Models &models);
     auto p() -> int;
     ~ContextModel();
 };

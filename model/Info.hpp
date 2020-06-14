@@ -19,7 +19,7 @@ private:
     static constexpr int maxLastUpper = 63;
     static constexpr int maxLastLetter = 16;
     static constexpr int nCM1 = 17; /**< pdf / non_pdf contexts */
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     ModelStats const *stats;
     ContextMap2 &cm;
     Array<uint32_t> wordPositions {1U << wPosBits}; /**< last positions of whole words/numbers */
@@ -49,7 +49,7 @@ private:
     uint32_t mask {}, expr0Chars {}, mask2 {}, f4 {};
 
 public:
-    Info(ModelStats const *st, ContextMap2 &contextmap);
+    Info(const Shared* const sh, ModelStats const *st, ContextMap2 &contextmap);
 
     /**
      * Zero the contents.

@@ -157,10 +157,10 @@ private:
     APM apm1;
     APM apm2;
     Ilog *ilog = Ilog::getInstance();
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
 
 public:
-    explicit JpegModel(uint64_t size);
+    explicit JpegModel(const Shared* const sh, uint64_t size);
     ~JpegModel();
     auto mix(Mixer &m) -> int;
 };

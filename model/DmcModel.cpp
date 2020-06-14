@@ -4,10 +4,11 @@ auto DmcModel::incrementCounter(const uint32_t x, const uint32_t increment) -> u
   return (((x << 6U) - x) >> 6U) + (increment << 10U); // x * (1-1/64) + increment
 }
 
-DmcModel::DmcModel(const uint64_t dmcNodes, const uint32_t thStart) : t(min(dmcNodes + dmcNodesBase, dmcNodesMax)),
-        sm(1, 256, 256 /*64-512 are all fine*/, StateMap::BitHistory) {
-  resetStateGraph(thStart);
-}
+DmcModel::DmcModel(const Shared* const sh, const uint64_t dmcNodes, const uint32_t thStart) : shared(sh), 
+  t(min(dmcNodes + dmcNodesBase, dmcNodesMax)),
+  sm(sh, 1, 256, 256 /*64-512 are all fine*/, StateMap::BitHistory) {
+    resetStateGraph(thStart);
+  }
 
 void DmcModel::resetStateGraph(const uint32_t thStart) {
   // the top 4 bits must be unused by nx0 and nx1 for storing the 4+4 bits of the bit history state byte

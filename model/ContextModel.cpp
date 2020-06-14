@@ -1,21 +1,28 @@
 #include "ContextModel.hpp"
 
-ContextModel::ContextModel(ModelStats *st, Models &models) : stats(st), models(models) {
+ContextModel::ContextModel(const Shared* const sh, ModelStats *st, Models &models) : shared(sh), stats(st), models(models) {
   auto mf = new MixerFactory();
-  m = mf->createMixer(1 + //bias
-                      MatchModel::MIXERINPUTS + NormalModel::MIXERINPUTS + SparseMatchModel::MIXERINPUTS + SparseModel::MIXERINPUTS +
-                      RecordModel::MIXERINPUTS + CharGroupModel::MIXERINPUTS + TextModel::MIXERINPUTS + WordModel::MIXERINPUTS +
-                      IndirectModel::MIXERINPUTS + DmcForest::MIXERINPUTS + NestModel::MIXERINPUTS + XMLModel::MIXERINPUTS +
-                      LinearPredictionModel::MIXERINPUTS + ExeModel::MIXERINPUTS,
-                      MatchModel::MIXERCONTEXTS + NormalModel::MIXERCONTEXTS + SparseMatchModel::MIXERCONTEXTS +
-                      SparseModel::MIXERCONTEXTS + RecordModel::MIXERCONTEXTS + CharGroupModel::MIXERCONTEXTS + TextModel::MIXERCONTEXTS +
-                      WordModel::MIXERCONTEXTS + IndirectModel::MIXERCONTEXTS + DmcForest::MIXERCONTEXTS + NestModel::MIXERCONTEXTS +
-                      XMLModel::MIXERCONTEXTS + LinearPredictionModel::MIXERCONTEXTS + ExeModel::MIXERCONTEXTS,
-                      MatchModel::MIXERCONTEXTSETS + NormalModel::MIXERCONTEXTSETS + SparseMatchModel::MIXERCONTEXTSETS +
-                      SparseModel::MIXERCONTEXTSETS + RecordModel::MIXERCONTEXTSETS + CharGroupModel::MIXERCONTEXTSETS +
-                      TextModel::MIXERCONTEXTSETS + WordModel::MIXERCONTEXTSETS + IndirectModel::MIXERCONTEXTSETS +
-                      DmcForest::MIXERCONTEXTSETS + NestModel::MIXERCONTEXTSETS + XMLModel::MIXERCONTEXTSETS +
-                      LinearPredictionModel::MIXERCONTEXTSETS + ExeModel::MIXERCONTEXTSETS);
+  m = mf->createMixer(
+    sh,
+    1 +  //bias
+    MatchModel::MIXERINPUTS + NormalModel::MIXERINPUTS + SparseMatchModel::MIXERINPUTS +
+    SparseModel::MIXERINPUTS + RecordModel::MIXERINPUTS + CharGroupModel::MIXERINPUTS +
+    TextModel::MIXERINPUTS + WordModel::MIXERINPUTS + IndirectModel::MIXERINPUTS +
+    DmcForest::MIXERINPUTS + NestModel::MIXERINPUTS + XMLModel::MIXERINPUTS +
+    LinearPredictionModel::MIXERINPUTS + ExeModel::MIXERINPUTS
+    ,
+    MatchModel::MIXERCONTEXTS + NormalModel::MIXERCONTEXTS + SparseMatchModel::MIXERCONTEXTS +
+    SparseModel::MIXERCONTEXTS + RecordModel::MIXERCONTEXTS + CharGroupModel::MIXERCONTEXTS +
+    TextModel::MIXERCONTEXTS + WordModel::MIXERCONTEXTS + IndirectModel::MIXERCONTEXTS +
+    DmcForest::MIXERCONTEXTS + NestModel::MIXERCONTEXTS + XMLModel::MIXERCONTEXTS +
+    LinearPredictionModel::MIXERCONTEXTS + ExeModel::MIXERCONTEXTS
+    ,
+    MatchModel::MIXERCONTEXTSETS + NormalModel::MIXERCONTEXTSETS + SparseMatchModel::MIXERCONTEXTSETS +
+    SparseModel::MIXERCONTEXTSETS + RecordModel::MIXERCONTEXTSETS + CharGroupModel::MIXERCONTEXTSETS +
+    TextModel::MIXERCONTEXTSETS + WordModel::MIXERCONTEXTSETS + IndirectModel::MIXERCONTEXTSETS +
+    DmcForest::MIXERCONTEXTSETS + NestModel::MIXERCONTEXTSETS + XMLModel::MIXERCONTEXTSETS +
+    LinearPredictionModel::MIXERCONTEXTSETS + ExeModel::MIXERCONTEXTSETS
+  );
 }
 
 auto ContextModel::p() -> int {
@@ -73,7 +80,7 @@ auto ContextModel::p() -> int {
   // Test for special block types
   switch( blockType ) {
     case IMAGE1: {
-      Image1BitModel &image1BitModel = Models::image1BitModel();
+      Image1BitModel &image1BitModel = models.image1BitModel();
       image1BitModel.setParam(blockInfo);
       image1BitModel.mix(*m);
       break;
@@ -198,7 +205,7 @@ auto ContextModel::p() -> int {
     XMLModel &xmlModel = models.xmlModel();
     xmlModel.mix(*m);
     if( blockType != TEXT && blockType != TEXT_EOL ) {
-      LinearPredictionModel &linearPredictionModel = Models::linearPredictionModel();
+      LinearPredictionModel &linearPredictionModel = models.linearPredictionModel();
       linearPredictionModel.mix(*m);
       ExeModel &exeModel = models.exeModel();
       exeModel.mix(*m);

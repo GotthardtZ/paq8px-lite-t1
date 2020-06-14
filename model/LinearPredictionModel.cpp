@@ -1,10 +1,13 @@
 #include "LinearPredictionModel.hpp"
 
-LinearPredictionModel::LinearPredictionModel() : sMap {{11, 1, 6, 128},
-                                                       {11, 1, 6, 128},
-                                                       {11, 1, 6, 128},
-                                                       {11, 1, 6, 128},
-                                                       {11, 1, 6, 128}} {}
+LinearPredictionModel::LinearPredictionModel(const Shared* const sh) : shared(sh),
+  sMap {{sh, 11, 1, 6, 128},
+        {sh, 11, 1, 6, 128},
+        {sh, 11, 1, 6, 128},
+        {sh, 11, 1, 6, 128},
+        {sh, 11, 1, 6, 128}
+  }
+{}
 
 void LinearPredictionModel::mix(Mixer &m) {
   INJECT_SHARED_bpos

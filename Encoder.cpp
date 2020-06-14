@@ -24,7 +24,7 @@ auto Encoder::code(int i) -> int {
   return y;
 }
 
-Encoder::Encoder(Mode m, File *f) : mode(m), archive(f), x1(0), x2(0xffffffff), x(0), alt(nullptr) {
+Encoder::Encoder(Shared* const sh, Mode m, File *f) : shared(sh), predictor(sh), mode(m), archive(f), x1(0), x2(0xffffffff), x(0), alt(nullptr) {
   if( mode == DECOMPRESS ) {
     uint64_t start = size();
     archive->setEnd();

@@ -19,7 +19,7 @@ private:
 #ifdef VERBOSE
     uint32_t requests{};
     uint32_t hits{};
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
 #endif
     auto findEntry(short prefix, uint8_t suffix) -> int;
     void addEntry(short prefix, uint8_t suffix, int offset);

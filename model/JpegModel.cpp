@@ -1,9 +1,9 @@
 #include "JpegModel.hpp"
 
-JpegModel::JpegModel(const uint64_t size) : t(size), MJPEGMap(21, 3, 128, 127), /* BitsOfContext, InputBits, Scale, Limit */
-        sm(N, 256, 1023, StateMap::BitHistory), apm1(0x8000, 24), apm2(0x20000, 24) {
+JpegModel::JpegModel(const Shared* const sh, const uint64_t size) : shared(sh), t(size), MJPEGMap(sh, 21, 3, 128, 127), /* BitsOfContext, InputBits, Scale, Limit */
+        sm(sh, N, 256, 1023, StateMap::BitHistory), apm1(sh, 0x8000, 24), apm2(sh, 0x20000, 24) {
   auto mf = new MixerFactory();
-  m1 = mf->createMixer(N + 1 /*bias*/+ 2 /*MJPEGMap*/, 2050, 3);
+  m1 = mf->createMixer(sh, N + 1 /*bias*/+ 2 /*MJPEGMap*/, 2050, 3);
   m1->setScaleFactor(1024, 128);
 }
 
@@ -687,10 +687,10 @@ auto JpegModel::mix(Mixer &m) -> int {
   switch( hbCount ) {
     case 0: {
       for( int i = 0; i < N; ++i ) {
-        cp[i] = t[cxt[i]] + 1;
+        cp[i] = t[cxt[i]];
         const uint8_t s = *cp[i];
-        const uint32_t p = sm.p2(i, s);
-        m.add((static_cast<int>(p) - 2048) >> 3U);
+        const int p = sm.p2(i, s);
+        m.add((p - 2048) >> 3U);
         const int st = stretch(p);
         m1->add(st);
         m.add(st >> 1U);
@@ -702,8 +702,8 @@ auto JpegModel::mix(Mixer &m) -> int {
       for( int i = 0; i < N; ++i ) {
         cp[i] += hc;
         const uint8_t s = *cp[i];
-        const uint32_t p = sm.p2(i, s);
-        m.add((static_cast<int>(p) - 2048) >> 3U);
+        const int p = sm.p2(i, s);
+        m.add((p - 2048) >> 3U);
         const int st = stretch(p);
         m1->add(st);
         m.add(st >> 1U);
@@ -715,8 +715,8 @@ auto JpegModel::mix(Mixer &m) -> int {
       for( int i = 0; i < N; ++i ) {
         cp[i] += hc;
         const uint8_t s = *cp[i];
-        const uint32_t p = sm.p2(i, s);
-        m.add((static_cast<int>(p) - 2048) >> 3U);
+        const int p = sm.p2(i, s);
+        m.add((p - 2048) >> 3U);
         const int st = stretch(p);
         m1->add(st);
         m.add(st >> 1U);

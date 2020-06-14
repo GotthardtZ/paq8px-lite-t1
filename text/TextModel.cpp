@@ -1,8 +1,9 @@
 #include "TextModel.hpp"
 
-TextModel::TextModel(ModelStats *st, const uint64_t size) : stats(st), cm(size, nCM2, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY),
-        stemmers(Language::Count - 1), languages(Language::Count - 1), dictionaries(Language::Count - 1), wordPos(0x10000),
-        State(Parse::Unknown), pState(State), Lang {{0}, {0}, Language::Unknown, Language::Unknown}, Info {}, parseCtx(0) {
+TextModel::TextModel(const Shared* const sh, ModelStats *st, const uint64_t size) : shared(sh), stats(st), 
+    cm(sh, size, nCM2, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY),
+    stemmers(Language::Count - 1), languages(Language::Count - 1), dictionaries(Language::Count - 1), wordPos(0x10000),
+    State(Parse::Unknown), pState(State), Lang {{0}, {0}, Language::Unknown, Language::Unknown}, Info {}, parseCtx(0) {
   stemmers[Language::English - 1] = new EnglishStemmer();
   stemmers[Language::French - 1] = new FrenchStemmer();
   stemmers[Language::German - 1] = new GermanStemmer();

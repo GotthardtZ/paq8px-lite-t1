@@ -37,7 +37,7 @@ class DmcModel {
 private:
     constexpr static uint64_t dmcNodesBase = (255 * 256); /**< 65280 */
     constexpr static uint64_t dmcNodesMax = (1ULL << 28); /**< 268'435'456 */
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     Random rnd;
     Array<DMCNode> t; /**< state graph */
     StateMap sm; /**< stateMap for bit history states */
@@ -55,7 +55,7 @@ private:
      */
     [[nodiscard]] static auto incrementCounter(uint32_t x, uint32_t increment) -> uint32_t;
 public:
-    DmcModel(uint64_t dmcNodes, uint32_t thStart);
+    DmcModel(const Shared* const sh, uint64_t dmcNodes, uint32_t thStart);
 
     /**
      * Initialize the state graph to a bytewise order 1 model.

@@ -174,7 +174,7 @@ static void trainSimdNone(const short *const t, short *const w, int n, const int
 
 class Mixer : protected IPredictor {
 protected:
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     const uint32_t n; /**< max inputs */
     const uint32_t m; /**< max contexts */
     const uint32_t s; /**< max context sets */
@@ -199,7 +199,7 @@ public:
      * @param m
      * @param s
      */
-    Mixer(int n, int m, int s);
+    Mixer(const Shared* const sh, int n, int m, int s);
 
     ~Mixer() override = default;
     /**

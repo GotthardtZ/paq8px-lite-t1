@@ -40,7 +40,7 @@ public:
     static constexpr int MIXERINPUTS_BYTE_HISTORY = 2;
 
 private:
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     Random rnd;
     const uint32_t C; /**< max number of contexts */
     Array<Bucket, 64> table; /**< bit and byte histories (statistics) */
@@ -69,7 +69,7 @@ public:
      * @param scale
      * @param uw
      */
-    ContextMap2(uint64_t size, uint32_t contexts, int scale, uint32_t uw);
+    ContextMap2(const Shared* const sh, uint64_t size, uint32_t contexts, int scale, uint32_t uw);
 
     /**
      * Set next whole byte context to @ref ctx.

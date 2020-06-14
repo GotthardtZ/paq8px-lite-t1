@@ -21,7 +21,7 @@ private:
     static constexpr int nST = 3;
     static constexpr int nSSM = 2;
     static constexpr int nSM = 2;
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     ModelStats *stats;
     enum Parameters : uint32_t {
         MaxExtend = 0, /**< longest allowed match expansion // warning: larger value -> slowdown */
@@ -51,7 +51,7 @@ public:
                                        nSSM * SmallStationaryContextMap::MIXERINPUTS + nSM * StationaryMap::MIXERINPUTS; // 23
     static constexpr int MIXERCONTEXTS = 8;
     static constexpr int MIXERCONTEXTSETS = 1;
-    MatchModel(ModelStats *st, const uint64_t buffermemorysize, const uint64_t mapmemorysize);
+    MatchModel(const Shared* const sh, ModelStats *st, const uint64_t buffermemorysize, const uint64_t mapmemorysize);
     void update();
     void mix(Mixer &m);
 };

@@ -14,7 +14,7 @@ class NormalModel {
 private:
     static constexpr int nCM = 9;
     static constexpr int nSM = 3;
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     ModelStats *stats;
     ContextMap2 cm;
     StateMap smOrder0Slow;
@@ -26,7 +26,7 @@ public:
             nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS + ContextMap2::MIXERINPUTS_BYTE_HISTORY) + nSM; //66
     static constexpr int MIXERCONTEXTS = 64 + 8 + 1024 + 256 + 256 + 256 + 256 + 1536; //3656
     static constexpr int MIXERCONTEXTSETS = 7;
-    NormalModel(ModelStats *st, uint64_t cmSize);
+    NormalModel(const Shared* const sh, ModelStats *st, uint64_t cmSize);
     void reset();
 
     /**

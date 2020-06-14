@@ -1,8 +1,8 @@
 #include "DmcForest.hpp"
 
-DmcForest::DmcForest(const uint64_t size) : dmcModels(MODELS) {
+DmcForest::DmcForest(const Shared* const sh, const uint64_t size) : shared(sh), dmcModels(MODELS) {
   for( int i = MODELS - 1; i >= 0; i-- ) {
-    dmcModels[i] = new DmcModel(size / dmcMem[i], dmcParams[i]);
+    dmcModels[i] = new DmcModel(sh, size / dmcMem[i], dmcParams[i]);
   }
 }
 

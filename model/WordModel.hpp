@@ -21,20 +21,19 @@ private:
     static constexpr int nCM2 = 41; // common contexts
     static constexpr int nCM = nCM1 + nCM2; // 58
 public:
-    static constexpr int MIXERINPUTS =
-            nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS + ContextMap2::MIXERINPUTS_BYTE_HISTORY); // 406
+    static constexpr int MIXERINPUTS = nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS + ContextMap2::MIXERINPUTS_BYTE_HISTORY); // 406
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
 
 private:
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     ModelStats const *stats;
     ContextMap2 cm;
     Info infoNormal; //used for general content
     Info infoPdf; //used only in case of pdf text - in place of infoNormal
     uint8_t pdfTextParserState; // 0..7
 public:
-    WordModel(ModelStats const *st, uint64_t size);
+    WordModel(const Shared* const sh, ModelStats const *st, uint64_t size);
     void reset();
     void mix(Mixer &m);
 };

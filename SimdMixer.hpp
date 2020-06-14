@@ -11,7 +11,6 @@ template<SIMD simd>
 class SIMDMixer : public Mixer {
 private:
     SIMDMixer *mp; /**< points to a Mixer to combine results */
-    UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 
     /**
      * Define padding requirements.
@@ -30,14 +29,14 @@ private:
     }
 
 public:
-    SIMDMixer(const int n, const int m, const int s) : Mixer(((n + (simdWidth() - 1)) & -(simdWidth())), m, s) {
+    SIMDMixer(const Shared* const sh, const int n, const int m, const int s) : Mixer(sh, ((n + (simdWidth() - 1)) & -(simdWidth())), m, s) {
 #ifdef VERBOSE
       printf("Created SIMDMixer with n = %d, m = %d, s = %d\n", n, m, s);
 #endif
       assert((this->n & (simdWidth() - 1)) == 0);
       assert(this->m > 0);
       assert(this->s > 0);
-      mp = (s > 1) ? new SIMDMixer<simd>(s, 1, 1) : nullptr;
+      mp = (s > 1) ? new SIMDMixer<simd>(sh, s, 1, 1) : nullptr;
     }
 
     ~SIMDMixer() override {
@@ -104,7 +103,7 @@ public:
      * @return prediction
      */
     auto p() -> int override {
-      updater->subscribe(this);
+      shared->GetUpdateBroadcaster()->subscribe(this);
       assert(scaleFactor > 0);
       //if(mp)printf("nx: %d, numContexts: %d, base: %d\n",nx, numContexts, base); //for debugging: how many inputs do we have?
       while( nx & (simdWidth() - 1)) {

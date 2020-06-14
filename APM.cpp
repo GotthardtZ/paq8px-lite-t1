@@ -1,6 +1,6 @@
 #include "APM.hpp"
 
-APM::APM(const int n, const int s) : AdaptiveMap(n * s, 1023), N(n * s), steps(s), cxt(0) {
+APM::APM(const Shared* const sh, const int n, const int s) : AdaptiveMap(sh, n * s, 1023), N(n * s), steps(s), cxt(0) {
 #ifdef VERBOSE
   printf("Created APM with n = %d, s = %d\n", n, s);
 #endif
@@ -17,7 +17,7 @@ void APM::update() {
 }
 
 auto APM::p(int pr, int cx, const int lim) -> int {
-  updater->subscribe(this);
+  shared->GetUpdateBroadcaster()->subscribe(this);
   assert(pr >= 0 && pr < 4096);
   assert(cx >= 0 && cx < N / steps);
   assert(limit > 0 && limit < 1024);

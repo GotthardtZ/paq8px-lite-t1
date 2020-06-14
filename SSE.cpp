@@ -1,12 +1,19 @@
 #include "SSE.hpp"
 
-SSE::SSE(ModelStats *st) : stats(st), Text {{{0x10000, 24}, {0x10000, 24}, {0x10000, 24}, {0x10000, 24}}, /* APM: contexts, steps */
-                                            {{0x10000, 7},  {0x10000, 6},  {0x10000, 6}} /* APM1: contexts, rate */
-}, Image {{{{0x1000, 24}, {0x10000, 24}, {0x10000, 24}, {0x10000, 24}}, {{0x10000, 7}, {0x10000, 7}}}, // color
-          {{{0x1000, 24}, {0x10000, 24}, {0x10000, 24}, {0x10000, 24}}, {{0x10000, 5}, {0x10000, 6}}}, // palette
-          {{{0x1000, 24}, {0x10000, 24}, {0x10000, 24}}} //gray
-}, Generic {{{0x2000, 7}, {0x10000, 7}, {0x10000, 7}, {0x10000, 7}, {0x10000, 7}, {0x10000, 7}, {0x10000, 7}}} {}
-
+SSE::SSE(const Shared* const sh, ModelStats *st) : shared(sh), stats(st), 
+  Text {
+    { /*APM:*/  {sh,0x10000,24}, {sh,0x10000,24}, {sh,0x10000,24}, {sh,0x10000,24}}, /* APM: contexts, steps */
+    { /*APM1:*/ {sh,0x10000,7}, {sh,0x10000,6}, {sh,0x10000,6}} /* APM1: contexts, rate */
+  },
+  Image {
+    { /*APM:*/ {{sh,0x1000,24}, {sh,0x10000,24}, {sh,0x10000,24}, {sh,0x10000,24}}, /*APM1:*/ {{sh,0x10000,7}, {sh,0x10000,7}} }, // color
+    { /*APM:*/ {{sh,0x1000,24}, {sh,0x10000,24}, {sh,0x10000,24}, {sh,0x10000,24}}, /*APM1:*/ {{sh,0x10000,5}, {sh,0x10000,6}} }, // palette
+    { /*APM:*/ {{sh,0x1000,24}, {sh,0x10000,24}, {sh,0x10000,24}} } //gray
+  },
+  Generic {
+    /*APM1:*/ {{sh,0x2000,7}, {sh,0x10000,7}, {sh,0x10000,7}, {sh,0x10000,7}, {sh,0x10000,7}, {sh,0x10000,7}, {sh,0x10000,7}}
+  }
+{}
 auto SSE::p(int pr0) -> int {
   INJECT_SHARED_c0
   INJECT_SHARED_bpos

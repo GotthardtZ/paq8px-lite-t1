@@ -28,7 +28,7 @@ private:
     static constexpr int nSSM = 4;
     static constexpr int nIM = 3;
     static constexpr int nIndContexts = 5;
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     ModelStats *stats;
     ContextMap cm, cn, co;
     ContextMap cp;
@@ -53,7 +53,7 @@ public:
             nIM * IndirectMap::MIXERINPUTS; // 149
     static constexpr int MIXERCONTEXTS = 1024 + 512 + 11 * 32; //1888
     static constexpr int MIXERCONTEXTSETS = 3;
-    RecordModel(ModelStats *st, uint64_t size);
+    RecordModel(const Shared* const sh, ModelStats *st, uint64_t size);
     void mix(Mixer &m);
 };
 

@@ -1,38 +1,5 @@
 #include "Shared.hpp"
 
-Shared *Shared::mPInstance = nullptr;
-
-auto Shared::getInstance() -> Shared * {
-  if( mPInstance == nullptr ) {
-    mPInstance = new Shared;
-    mPInstance->toScreen = !Shared::isOutputDirected();
-  }
-
-  return mPInstance;
-}
-
-void Shared::update() {
-  c0 += c0 + y;
-  bitPosition = (bitPosition + 1U) & 7U;
-  if( bitPosition == 0 ) {
-    c1 = c0;
-    buf.add(c1);
-    c8 = (c8 << 8U) | (c4 >> 24U);
-    c4 = (c4 << 8U) | c0;
-    c0 = 1;
-  }
-}
-
-void Shared::reset() {
-  buf.reset();
-  y = 0;
-  c0 = 1;
-  c1 = 0;
-  bitPosition = 0;
-  c4 = 0;
-  c8 = 0;
-}
-
 /*
  relationship between compression level, shared->mem and buf memory use ( shared->mem * 8 )
 
@@ -53,16 +20,46 @@ void Shared::reset() {
 
 */
 
-void Shared::setLevel(uint8_t level) {
+void Shared::init(uint8_t level) {
   this->level = level;
   mem = 65536ULL << level;
   buf.setSize(min(mem * 8, 1ULL << 30)); /**< no reason to go over 1 GB */
+  toScreen = !isOutputDirected();
+}
+
+void Shared::update() {
+  c0 += c0 + y;
+  bitPosition = (bitPosition + 1U) & 7U;
+  if( bitPosition == 0 ) {
+    c1 = c0;
+    buf.add(c1);
+    c8 = (c8 << 8U) | (c4 >> 24U);
+    c4 = (c4 << 8U) | c0;
+    c0 = 1;
+  }
+  // Broadcast to all current subscribers: y (and c0, c1, c4, etc) is known
+  updateBroadcaster.broadcastUpdate();
+}
+
+void Shared::reset() {
+  buf.reset();
+  y = 0;
+  c0 = 1;
+  c1 = 0;
+  bitPosition = 0;
+  c4 = 0;
+  c8 = 0;
+}
+
+UpdateBroadcaster *Shared::GetUpdateBroadcaster() const {
+  UpdateBroadcaster* updater = const_cast<UpdateBroadcaster*>(&updateBroadcaster);
+  return updater;
 }
 
 auto Shared::isOutputDirected() -> bool {
 #ifdef WINDOWS
   DWORD FileType = GetFileType(GetStdHandle(STD_OUTPUT_HANDLE));
-      return (FileType == FILE_TYPE_PIPE) || (FileType == FILE_TYPE_DISK);
+  return (FileType == FILE_TYPE_PIPE) || (FileType == FILE_TYPE_DISK);
 #endif
 #ifdef UNIX
   return isatty(fileno(stdout)) == 0;

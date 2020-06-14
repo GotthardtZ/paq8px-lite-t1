@@ -2,8 +2,11 @@
 
 #ifndef DISABLE_TEXTMODEL
 
-WordModel::WordModel(ModelStats const *st, const uint64_t size) : stats(st), cm(size, nCM, 74, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY),
-        infoNormal(st, cm), infoPdf(st, cm), pdfTextParserState(0) {}
+WordModel::WordModel(const Shared* const sh, ModelStats const *st, const uint64_t size) : 
+  shared(sh), stats(st), 
+  cm(sh, size, nCM, 74, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY),
+  infoNormal(sh, st, cm), infoPdf(sh, st, cm), pdfTextParserState(0)
+{}
 
 void WordModel::reset() {
   infoNormal.reset();

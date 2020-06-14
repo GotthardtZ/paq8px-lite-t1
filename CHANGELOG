@@ -1612,6 +1612,7 @@ paq8px_v184
 - Many (minor) code cleanup changes, e.g. initializing variables, removing signed bitwise operations, correcting typos, etc
 - Applied consistent code format
 - Began switching documentation to Doxygen format
+- Ported Bucket find() function from paq8pdx
 
 
 paq8px_v185
@@ -1678,4 +1679,12 @@ paq8px_v187fix4
 - Added a couple of remarks
 - Restricted input buffer size to 1GB (on compression level 12 less memory is used: 28702 MB -> 27678 MB)
 - Restored INJECT #definitions for accessing Shared members (speed improvement)
+- Bucket find() function is hardwired to the non-SIMD version (speed improvement; SIMD version introduced in v184 seems to be somewhat slower than the non-SIMD one)
+- Archives are still expected to be binary compatible with v183fix1
+
+
+paq8px_v187fix5
+2020.06.14
+- More cosmetic changes (formatting for better readability), more remarks in code
+- "Shared" and "UpdateBroadcaster" instances are compositioned instead of using a singleton
 - Archives are still expected to be binary compatible with v183fix1

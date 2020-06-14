@@ -1,12 +1,19 @@
 #include "MatchModel.hpp"
 
-MatchModel::MatchModel(ModelStats *st, const uint64_t buffermemorysize, const uint64_t mapmemorysize) : stats(st), table(buffermemorysize / sizeof(uint32_t)),
-        stateMaps {{1, 56 * 256,          1023, StateMap::Generic},
-                   {1, 8 * 256 * 256 + 1, 1023, StateMap::Generic},
-                   {1, 256 * 256,         1023, StateMap::Generic}},
-        cm(mapmemorysize, nCM, 74, CM_USE_RUN_STATS), SCM {6, 1, 6, 64},
-        maps {{23, 1, 64, 1023},
-              {15, 1, 64, 1023}}, iCtx {15, 1}, mask(uint32_t(buffermemorysize / sizeof(uint32_t) - 1)), hashBits(ilog2(mask + 1)) {
+MatchModel::MatchModel(const Shared* const sh, ModelStats *st, const uint64_t buffermemorysize, const uint64_t mapmemorysize) : 
+  shared(sh),
+  stats(st), 
+  table(buffermemorysize / sizeof(uint32_t)),
+  stateMaps {{sh, 1, 56 * 256,          1023, StateMap::Generic},
+             {sh, 1, 8 * 256 * 256 + 1, 1023, StateMap::Generic},
+             {sh, 1, 256 * 256,         1023, StateMap::Generic}},
+  cm(sh, mapmemorysize, nCM, 74, CM_USE_RUN_STATS),
+  SCM {sh, 6, 1, 6, 64},
+  maps {{sh, 23, 1, 64, 1023},
+        {sh, 15, 1, 64, 1023}}, 
+  iCtx {15, 1}, 
+  mask(uint32_t(buffermemorysize / sizeof(uint32_t) - 1)), 
+  hashBits(ilog2(mask + 1)) {
 #ifdef VERBOSE
   printf("Created MatchModel with size = %" PRIu64 "\n", size);
 #endif

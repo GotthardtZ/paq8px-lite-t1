@@ -9,7 +9,7 @@
 #include "../OLS.hpp"
 #include "../SmallStationaryContextMap.hpp"
 #include "../StationaryMap.hpp"
-#include "Image24BitModel.hpp"
+#include "ImageModelsCommon.hpp"
 #include <cstdint>
 
 /**
@@ -30,7 +30,7 @@ public:
     static constexpr int MIXERCONTEXTS = (2048 + 5) + 6 * 16 + 6 * 32 + 256 + 1024 + 64 + 128 + 256; /**< 4069 */
     static constexpr int MIXERCONTEXTSETS = 8;
 
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     ModelStats *stats;
     ContextMap2 cm;
     StationaryMap map[nSM];
@@ -72,12 +72,12 @@ public:
     uint8_t pOLS[nOLS] = {0};
     static constexpr double lambda[nOLS] = {0.996, 0.87, 0.93, 0.8, 0.9};
     static constexpr int num[nOLS] = {32, 12, 15, 10, 14};
-    OLS<double, uint8_t> ols[nOLS] = {{num[0], 1, lambda[0]},
-                                      {num[1], 1, lambda[1]},
-                                      {num[2], 1, lambda[2]},
-                                      {num[3], 1, lambda[3]},
-                                      {num[4], 1, lambda[4]}};
-    OLS<double, uint8_t> sceneOls {13, 1, 0.994};
+    OLS<double, uint8_t> ols[nOLS] = {{shared,num[0], 1, lambda[0]},
+                                      {shared,num[1], 1, lambda[1]},
+                                      {shared,num[2], 1, lambda[2]},
+                                      {shared,num[3], 1, lambda[3]},
+                                      {shared,num[4], 1, lambda[4]}};
+    OLS<double, uint8_t> sceneOls {shared,13, 1, 0.994};
     const uint8_t *olsCtx1[32] = {&WWWWWW, &WWWWW, &WWWW, &WWW, &WW, &W, &NWWWW, &NWWW, &NWW, &NW, &N, &NE, &NEE, &NEEE, &NEEEE, &NNWWW,
                                   &NNWW, &NNW, &NN, &NNE, &NNEE, &NNEEE, &NNNWW, &NNNW, &NNN, &NNNE, &NNNEE, &NNNNW, &NNNN, &NNNNE, &NNNNN,
                                   &NNNNNN};
@@ -87,7 +87,7 @@ public:
     const uint8_t *olsCtx5[14] = {&WWWW, &WWW, &WW, &W, &NWWW, &NWW, &NW, &N, &NNWW, &NNW, &NN, &NNNW, &NNN, &NNNN};
     const uint8_t **olsCtxs[nOLS] = {&olsCtx1[0], &olsCtx2[0], &olsCtx3[0], &olsCtx4[0], &olsCtx5[0]};
 
-    Image8BitModel(ModelStats *st, uint64_t size);
+    Image8BitModel(const Shared* const sh, ModelStats *st, uint64_t size);
     void setParam(int info0, uint32_t gray0, uint32_t isPNG0);
     void mix(Mixer &m);
 };

@@ -1,28 +1,22 @@
 #include "RecordModel.hpp"
 
-RecordModel::RecordModel(ModelStats *st, const uint64_t size) : stats(st), cm(32768, 3), cn(32768 / 2, 3), co(32768 * 2, 3), cp(size, 16),
-        maps {{10, 8, 86, 1023},
-              {10, 8, 86, 1023},
-              {8,  8, 86, 1023},
-              {8,  8, 86, 1023},
-              {8,  8, 86, 1023},
-              {11, 1, 86, 1023}
-        },
-        sMap {{11, 1, 6, 86},
-              {3,  1, 6, 86},
-              {19, 1, 5, 128},
-              {8,  8, 5, 64} // pos&255
-        },
-        iMap {{8, 8, 86, 255},
-              {8, 8, 86, 255},
-              {8, 8, 86, 255}
-        }, 
-        iCtx {{16, 8},
-             {16, 8},
-             {16, 8},
-             {20, 8},
-             {11, 1}
-        } {}
+RecordModel::RecordModel(const Shared* const sh, ModelStats *st, const uint64_t size) : shared(sh), stats(st), 
+    cm(sh,32768,3), cn(sh,32768/2,3), co(sh,32768*2,3), // cm,cn,co: memory pressure is advantageous
+    cp(sh,size,16),
+    maps{ /* BitsOfContext, InputBits, Scale, Limit  */
+      {sh,10,8,86,1023},{sh,10,8,86,1023},{sh,8,8,86,1023},{sh,8,8,86,1023},{sh,8,8,86,1023},{sh,11,1,86,1023}
+    },
+    sMap{ /* BitsOfContext, InputBits, Rate, Scale */
+      {sh,11,1,6,86}, {sh,3,1,6,86}, {sh,19,1,5,128},
+      {sh,8,8,5,64} // pos&255
+    },
+    iMap{ /* BitsOfContext, InputBits, Scale, Limit */
+      {sh,8,8,86,255}, {sh,8,8,86,255}, {sh,8,8,86,255}
+    },
+    iCtx{ // BitsPerContext, InputBits
+      {16,8}, {16,8}, {16,8}, {20,8}, {11,1}
+    }
+  {} 
 
 void RecordModel::mix(Mixer &m) {
   // find record length

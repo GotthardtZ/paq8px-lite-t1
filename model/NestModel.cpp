@@ -1,6 +1,6 @@
 #include "NestModel.hpp"
 
-NestModel::NestModel(const uint64_t size) : cm(size, nCM) {}
+NestModel::NestModel(const Shared* const sh, const uint64_t size) : shared(sh), cm(sh, size, nCM) {}
 
 void NestModel::mix(Mixer &m) {
   INJECT_SHARED_bpos

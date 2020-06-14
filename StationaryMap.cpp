@@ -1,8 +1,11 @@
 #include "StationaryMap.hpp"
 
-StationaryMap::StationaryMap(const int bitsOfContext, const int inputBits, const int scale, const uint16_t limit) : data(
-        (1ULL << bitsOfContext) * ((1ULL << inputBits) - 1)), mask((1U << bitsOfContext) - 1), maskBits(bitsOfContext),
-        stride((1U << inputBits) - 1), bTotal(inputBits), scale(scale), limit(limit) {
+StationaryMap::StationaryMap(const Shared* const sh, const int bitsOfContext, const int inputBits, const int scale, const uint16_t limit) : 
+  shared(sh),
+  data((1ULL << bitsOfContext) * ((1ULL << inputBits) - 1)),
+  mask((1U << bitsOfContext) - 1), 
+  maskBits(bitsOfContext),
+  stride((1U << inputBits) - 1), bTotal(inputBits), scale(scale), limit(limit) {
 #ifdef VERBOSE
   printf("Created StationaryMap with bitsOfContext = %d, inputBits = %d, scale = %d, limit = %d\n", bitsOfContext, inputBits, scale, limit);
 #endif
@@ -42,7 +45,7 @@ void StationaryMap::update() {
 }
 
 void StationaryMap::mix(Mixer &m) {
-  shared->updateBroadcaster->subscribe(this);
+  shared->GetUpdateBroadcaster()->subscribe(this);
   cp = &data[context + b];
   int prediction = (*cp) >> 20U;
   m.add((stretch(prediction) * scale) >> 8U);
