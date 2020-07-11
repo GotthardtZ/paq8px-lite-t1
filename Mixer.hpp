@@ -228,6 +228,7 @@ public:
      * @param rate
      */
     void set(uint32_t cx, uint32_t range, int rate = DEFAULT_LEARNING_RATE);
+    void skip(uint32_t range);
     void reset();
 };
 

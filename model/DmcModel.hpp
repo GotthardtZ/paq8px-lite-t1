@@ -33,7 +33,7 @@
  * 12 bytes (DMC node size, fixed) * 2^28 nodes (that is 268'435'456, max) = 3'221'225'472 (~ 3 GB)
  *
  */
-class DmcModel {
+class DmcModel : protected IPredictor {
 private:
     constexpr static uint64_t dmcNodesBase = (255 * 256); /**< 65280 */
     constexpr static uint64_t dmcNodesMax = (1ULL << 28); /**< 268'435'456 */

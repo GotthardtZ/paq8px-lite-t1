@@ -241,6 +241,8 @@
     <ClCompile Include="AdaptiveMap.cpp" />
     <ClCompile Include="APM.cpp" />
     <ClCompile Include="APM1.cpp" />
+    <ClCompile Include="ArithmeticEncoder.cpp" />
+    <ClCompile Include="Clz.hpp" />
     <ClCompile Include="ContextMap.cpp" />
     <ClCompile Include="ContextMap2.cpp" />
     <ClCompile Include="DummyMixer.cpp" />
@@ -312,6 +314,7 @@
     <ClInclude Include="AdaptiveMap.hpp" />
     <ClInclude Include="APM.hpp" />
     <ClInclude Include="APM1.hpp" />
+    <ClInclude Include="ArithmeticEncoder.hpp" />
     <ClInclude Include="Array.hpp" />
     <ClInclude Include="BH.hpp" />
     <ClInclude Include="BitCount.hpp" />

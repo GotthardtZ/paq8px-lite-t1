@@ -12,11 +12,15 @@ Predictor::Predictor(Shared* const sh) : shared(sh), models(sh, &stats), context
   }
 }
 
-auto Predictor::p() const -> int { return pr; }
+auto Predictor::p() -> int { 
+  // predict
+  pr = contextModel.p();
+  // SSE Stage
+  pr = sse.p(pr);
+  return pr;
+}
 
 void Predictor::update(uint8_t y) {
-  stats.misses += stats.misses + static_cast<unsigned long long>((pr >> 11U) != y);
-
   // update global context: pos, bitPosition, c0, c4, c8, buf
   shared->y = y;
   shared->update();
@@ -25,12 +29,8 @@ void Predictor::update(uint8_t y) {
   INJECT_SHARED_c0
   const uint8_t characterGroup = (bpos > 0) ? asciiGroupC0[0][(1U << bpos) - 2 + (c0 & ((1U << bpos) - 1))] : 0;
   stats.Text.characterGroup = characterGroup;
-
-  // predict
-  pr = contextModel.p();
-
-  // SSE Stage
-  pr = sse.p(pr);
+  stats.misses += stats.misses + static_cast<uint64_t>((pr >> 11U) != y);
+  
 }
 
 void Predictor::trainText(const char *const dictionary, int iterations) {

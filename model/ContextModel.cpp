@@ -3,6 +3,7 @@
 ContextModel::ContextModel(const Shared* const sh, ModelStats *st, Models &models) : shared(sh), stats(st), models(models) {
   auto mf = new MixerFactory();
   m = mf->createMixer(
+    // this is the maximim case: how many mixer inputs, mixer contexts and mixer context sets are needed (max)
     sh,
     1 +  //bias
     MatchModel::MIXERINPUTS + NormalModel::MIXERINPUTS + SparseMatchModel::MIXERINPUTS +
@@ -62,12 +63,12 @@ auto ContextModel::p() -> int {
 
     if( blockPosition == 0 ) {
       blockType = nextBlockType; //got all the info - switch to next blockType
+      stats->blockType = blockType;
     }
     if( blockSize == 0 ) {
       blockType = DEFAULT;
+      stats->blockType = blockType;
     }
-
-    stats->blockType = blockType;
   }
 
   m->add(256); //network bias
@@ -88,79 +89,89 @@ auto ContextModel::p() -> int {
     case IMAGE4: {
       Image4BitModel &image4BitModel = models.image4BitModel();
       image4BitModel.setParam(blockInfo);
+      image4BitModel.mix(*m);
       m->setScaleFactor(2048, 256);
-      return image4BitModel.mix(*m), m->p();
+      return m->p();
     }
     case IMAGE8: {
       Image8BitModel &image8BitModel = models.image8BitModel();
       image8BitModel.setParam(blockInfo, 0, 0);
+      image8BitModel.mix(*m);
       m->setScaleFactor(2048, 128);
-      return image8BitModel.mix(*m), m->p();
+      return m->p();
     }
     case IMAGE8GRAY: {
       Image8BitModel &image8BitModel = models.image8BitModel();
       image8BitModel.setParam(blockInfo, 1, 0);
+      image8BitModel.mix(*m);
       m->setScaleFactor(2048, 128);
-      return image8BitModel.mix(*m), m->p();
+      return m->p();
     }
     case IMAGE24: {
       Image24BitModel &image24BitModel = models.image24BitModel();
       image24BitModel.setParam(blockInfo, 0, 0);
+      image24BitModel.mix(*m);
       m->setScaleFactor(1024, 128);
-      return image24BitModel.mix(*m), m->p();
+      return m->p();
     }
     case IMAGE32: {
       Image24BitModel &image24BitModel = models.image24BitModel();
       image24BitModel.setParam(blockInfo, 1, 0);
+      image24BitModel.mix(*m);
       m->setScaleFactor(2048, 128);
-      return image24BitModel.mix(*m), m->p();
+      return m->p();
     }
     case PNG8: {
       Image8BitModel &image8BitModel = models.image8BitModel();
       image8BitModel.setParam(blockInfo, 0, 1);
+      image8BitModel.mix(*m);
       m->setScaleFactor(2048, 128);
-      return image8BitModel.mix(*m), m->p();
+      return m->p();
     }
     case PNG8GRAY: {
       Image8BitModel &image8BitModel = models.image8BitModel();
       image8BitModel.setParam(blockInfo, 1, 1);
+      image8BitModel.mix(*m);
       m->setScaleFactor(2048, 128);
-      return image8BitModel.mix(*m), m->p();
+      return m->p();
     }
     case PNG24: {
       Image24BitModel &image24BitModel = models.image24BitModel();
       image24BitModel.setParam(blockInfo, 0, 1);
+      image24BitModel.mix(*m);
       m->setScaleFactor(1024, 128);
-      return image24BitModel.mix(*m), m->p();
+      return m->p();
     }
     case PNG32: {
       Image24BitModel &image24BitModel = models.image24BitModel();
       image24BitModel.setParam(blockInfo, 1, 1);
+      image24BitModel.mix(*m);
       m->setScaleFactor(2048, 128);
-      return image24BitModel.mix(*m), m->p();
+      return m->p();
     }
 #ifndef DISABLE_AUDIOMODEL
     case AUDIO:
     case AUDIO_LE: {
-      RecordModel &recordModel = models.recordModel();
-      recordModel.mix(*m);
       if((blockInfo & 2U) == 0 ) {
         Audio8BitModel &audio8BitModel = models.audio8BitModel();
         audio8BitModel.setParam(blockInfo);
-        m->setScaleFactor(1024, 128);
-        return audio8BitModel.mix(*m), m->p();
+        audio8BitModel.mix(*m);
       }
-      Audio16BitModel &audio16BitModel = models.audio16BitModel();
-      audio16BitModel.setParam(blockInfo);
+      else {
+        Audio16BitModel& audio16BitModel = models.audio16BitModel();
+        audio16BitModel.setParam(blockInfo);
+        audio16BitModel.mix(*m);
+      }
+      RecordModel& recordModel = models.recordModel();
+      recordModel.mix(*m);
       m->setScaleFactor(1024, 128);
-      return audio16BitModel.mix(*m), m->p();
-
+      return m->p();
     }
 #endif //DISABLE_AUDIOMODEL
     case JPEG: {
       JpegModel &jpegModel = models.jpegModel();
-      m->setScaleFactor(1024, 256);
       if( jpegModel.mix(*m) != 0 ) {
+        m->setScaleFactor(1024, 256);
         return m->p();
       }
     }

@@ -21,8 +21,8 @@ public:
 
     auto decode(File * /*in*/, File *out, FMode fMode, uint64_t size, uint64_t &diffFound) -> uint64_t override {
       for( uint64_t i = 0, l = size >> 1U; i < l; i++ ) {
-        uint8_t b1 = encoder->decompress();
-        uint8_t b2 = encoder->decompress();
+        uint8_t b1 = encoder->decompressByte();
+        uint8_t b2 = encoder->decompressByte();
         if( fMode == FDECOMPRESS ) {
           out->putChar(b2);
           out->putChar(b1);
@@ -40,9 +40,9 @@ public:
       }
       if((diffFound == 0u) && (size & 1U) > 0 ) {
         if( fMode == FDECOMPRESS ) {
-          out->putChar(encoder->decompress());
+          out->putChar(encoder->decompressByte());
         } else if( fMode == FCOMPARE ) {
-          if( out->getchar() != encoder->decompress()) {
+          if( out->getchar() != encoder->decompressByte()) {
             diffFound = size - 1;
           }
         }

@@ -10,7 +10,7 @@
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LocalDebuggerCommandArguments>-6 c:\tst\paq8px_tests\tst_jpg1\a.jpg </LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-6 d:\Mentés\a\m2\sum </LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
 </Project>

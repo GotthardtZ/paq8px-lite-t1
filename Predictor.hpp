@@ -39,7 +39,7 @@ public:
      * Returns P(1) as a 12 bit number (0-4095).
      * @return the prediction
      */
-    [[nodiscard]] auto p() const -> int;
+    [[nodiscard]] auto p() -> int;
 
     /**
      * Trains the models with the actual bit (0 or 1).

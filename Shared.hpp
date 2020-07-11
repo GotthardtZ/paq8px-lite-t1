@@ -31,7 +31,7 @@ public:
     uint32_t c8 = 0; /**< Another 4 bytes (buf(8)..buf(5)) */
     uint8_t options = 0;
     SIMD chosenSimd = SIMD_NONE; /**< default value, will be overridden by the CPU dispatcher, and may be overridden from the command line */
-    uint8_t level = 0; /**< level=0: no compression (only transformations), 1..12 compress using less..more RAM */
+    uint8_t level = 0; /**< level=0: no compression (only transformations), level=1..12 compress using less..more RAM */
     uint64_t mem = 0; /**< pre-calculated value of 65536 * 2^level */
     bool toScreen = true;
 

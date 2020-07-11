@@ -154,8 +154,7 @@ Note:
 
  We build and test 64-bit releases, 32-bit releases are seldom built or tested. A known
  limitation of 32-bit releases is the 2 GB memory barrier. As a consequence, compression 
- and decompression will not work on level 9 and you may experience "out of memory" errors 
- on level 8 where memory consumption is near the 2 GB limit.
+ and decompression with 32-bit releases may not work ("out of memory") on level 8 and above.
  
 --------------
 FOR DEVELOPERS

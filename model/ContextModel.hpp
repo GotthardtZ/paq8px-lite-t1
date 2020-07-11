@@ -17,7 +17,7 @@ class ContextModel {
     Mixer *m;
     BlockType nextBlockType = DEFAULT;
     BlockType blockType = DEFAULT;
-    int blockSize = 0;
+    int blockSize = 1;
     int blockInfo = 0;
     int bytesRead = 0;
     bool readSize = false;

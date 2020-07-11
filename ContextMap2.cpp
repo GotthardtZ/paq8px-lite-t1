@@ -23,18 +23,18 @@ void ContextMap2::set(const uint64_t ctx) {
   assert(index >= 0 && index < C);
   const uint32_t ctx0 = contexts[index] = finalize64(ctx, hashBits);
   const uint16_t chk0 = checksums[index] = checksum16(ctx, hashBits);
-  uint8_t *base = bitState[index] = bitState0[index] = table[ctx0].findNone(chk0);
+  uint8_t *base = bitState[index] = bitState0[index] = table[ctx0].find(chk0);
   byteHistory[index] = &base[3];
   const uint8_t runCount = base[3];
   if( runCount == 255 ) { // pending
     // update pending bit histories for bits 2-7
     // in case of a collision updating (mixing) is slightly better (but slightly slower) then resetting, so we update
     const int c = base[4] + 256;
-    uint8_t *p1A = table[(ctx0 + (c >> 6U)) & mask].findNone(chk0);
+    uint8_t *p1A = table[(ctx0 + (c >> 6U)) & mask].find(chk0);
     StateTable::update(p1A, ((c >> 5U) & 1), rnd);
     StateTable::update(p1A + 1 + ((c >> 5) & 1), ((c >> 4) & 1), rnd);
     StateTable::update(p1A + 3 + ((c >> 4U) & 3), ((c >> 3) & 1), rnd);
-    uint8_t *p1B = table[(ctx0 + (c >> 3)) & mask].findNone(chk0);
+    uint8_t *p1B = table[(ctx0 + (c >> 3)) & mask].find(chk0);
     StateTable::update(p1B, (c >> 2) & 1, rnd);
     StateTable::update(p1B + 1 + ((c >> 2) & 1), (c >> 1) & 1, rnd);
     StateTable::update(p1B + 3 + ((c >> 1) & 3), c & 1, rnd);
@@ -98,7 +98,7 @@ void ContextMap2::update() {
           case 5: {
             const uint32_t ctx = contexts[i];
             const uint16_t chk = checksums[i];
-            bitState[i] = bitState0[i] = table[(ctx + c0) & mask].findNone(chk);
+            bitState[i] = bitState0[i] = table[(ctx + c0) & mask].find(chk);
             break;
           }
           case 1:

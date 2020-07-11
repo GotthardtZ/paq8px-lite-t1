@@ -55,6 +55,7 @@ public:
      * @param ctx
      */
     void set(uint64_t ctx);
+    void setscale(int scale);
     void reset(int rate);
     void update() override;
     void mix(Mixer &m);

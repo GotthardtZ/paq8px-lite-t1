@@ -106,6 +106,6 @@ auto DmcModel::pr2() -> int {
 }
 
 auto DmcModel::st() -> int {
-  update();
+  shared->GetUpdateBroadcaster()->subscribe(this);
   return stretch(pr1()) + stretch(pr2()); // average the predictions for stability
 }

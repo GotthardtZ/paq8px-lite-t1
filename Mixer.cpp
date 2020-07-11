@@ -2,7 +2,7 @@
 #include "utils.hpp"
 
 Mixer::Mixer(const Shared* const sh, const int n, const int m, const int s) : shared(sh), n(n), m(m), s(s), 
-scaleFactor(0), tx(n), wx(n * m), cxt(s), info(s), rates(s), pr(s) {
+  scaleFactor(0), tx(n), wx(n * m), cxt(s), info(s), rates(s), pr(s) {
 #ifdef VERBOSE
   printf("Created Mixer with n = %d, m = %d, s = %d\n", n, m, s);
 #endif
@@ -27,7 +27,7 @@ void Mixer::set(const uint32_t cx, const uint32_t range, const int rate) {
   assert(numContexts < s);
   assert(cx < range);
   assert(base + range <= m);
-  if((shared->options & OPTION_ADAPTIVE) == 0U ) {
+  if((shared->options & OPTION_ADAPTIVE) == 0 ) {
     rates[numContexts] = rate;
   }
   cxt[numContexts++] = base + cx;
@@ -35,6 +35,13 @@ void Mixer::set(const uint32_t cx, const uint32_t range, const int rate) {
 #ifdef VERBOSE
   printf("Mixer numContexts: %d, base: %d\n", numContexts, range); //how many input sets do we have?
 #endif
+}
+
+void Mixer::skip(const uint32_t range) {
+  assert(numContexts < s);
+  assert(base + range <= m);
+  cxt[numContexts++] = UINT32_MAX; // flag for skipping
+  base += range;
 }
 
 void Mixer::reset() {

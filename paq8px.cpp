@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "187fix5"  //update version here before publishing your changes
+#define PROGVERSION  "187fix6"  //update version here before publishing your changes
 #define PROGYEAR     "2020"
 
 
@@ -606,17 +606,17 @@ auto processCommandLine(int argc, char **argv) -> int {
       totalSize += start;
       if((shared.options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
 
-        en.compress(TEXT);
+        en.encodeBlockType(TEXT);
         uint64_t len1 = input.size(); //ASCIIZ filename of listfile - with ending zero
         const String *const s = listoffiles.getString();
         uint64_t len2 = s->size(); //ASCIIZ filenames of files to compress - with ending zero
         en.encodeBlockSize(len1 + len2);
 
         for( uint64_t i = 0; i < len1; i++ ) {
-          en.compress(input[i]); //ASCIIZ filename of listfile
+          en.compressByte(input[i]); //ASCIIZ filename of listfile
         }
         for( uint64_t i = 0; i < len2; i++ ) {
-          en.compress((*s)[i]); //ASCIIZ filenames of files to compress
+          en.compressByte((*s)[i]); //ASCIIZ filenames of files to compress
         }
 
         printf("1/2 - Filename of listfile : %" PRIu64 " bytes\n", len1);
@@ -634,17 +634,17 @@ auto processCommandLine(int argc, char **argv) -> int {
       if( output.strsize() != 0 ) {
         quit("Output filename must not be specified when extracting multiple files.");
       }
-      if((c = en.decompress()) != TEXT ) {
+      if((c = en.decodeBlockType()) != TEXT ) {
         quit(errmsgInvalidChar);
       }
       en.decodeBlockSize(); //we don't really need it
-      while((c = en.decompress()) != 0 ) {
+      while((c = en.decompressByte()) != 0 ) {
         if( c == 255 ) {
           quit(errmsgInvalidChar);
         }
         listFilename += static_cast<char>(c);
       }
-      while((c = en.decompress()) != 0 ) {
+      while((c = en.decompressByte()) != 0 ) {
         if( c == 255 ) {
           quit(errmsgInvalidChar);
         }

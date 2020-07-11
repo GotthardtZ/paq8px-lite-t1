@@ -33,7 +33,7 @@ public:
       uint8_t b = 0;
       uint64_t count = 0;
       for( int i = 0; i < static_cast<int>(size); i++, count++ ) {
-        if((b = encoder->decompress()) == NEW_LINE ) {
+        if((b = encoder->decompressByte()) == NEW_LINE ) {
           if( fMode == FDECOMPRESS ) {
             out->putChar(CARRIAGE_RETURN);
           } else if( fMode == FCOMPARE ) {

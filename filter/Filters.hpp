@@ -41,7 +41,7 @@
 //   en.setFile(File *out);
 //   int decode(Encoder& en);
 //
-// Decodes and returns one byte.  Input is from en.decompress(), which
+// Decodes and returns one byte.  Input is from en.decompressByte(), which
 // reads from out if in COMPRESS mode.  During compression, n calls
 // to decode() must exactly match n bytes of in, or else it is compressed
 // as type 0 without encoding.
@@ -1231,20 +1231,17 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info, Tran
 
 static void directEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int info = -1) {
   // TODO: Large file support
-  en.compress(type);
+  en.encodeBlockType(type);
   en.encodeBlockSize(len);
   if( info != -1 ) {
-    en.compress((info >> 24) & 0xFF);
-    en.compress((info >> 16) & 0xFF);
-    en.compress((info >> 8) & 0xFF);
-    en.compress((info) & 0xFF);
+    en.encodeInfo(info);
   }
   fprintf(stderr, "Compressing... ");
   for( uint64_t j = 0; j < len; ++j ) {
     if((j & 0xfff) == 0 ) {
       en.printStatus(j, len);
     }
-    en.compress(in->getchar());
+    en.compressByte(in->getchar());
   }
   fprintf(stderr, "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
 }
@@ -1362,7 +1359,7 @@ transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int in
       tmp.setpos(0);
       if( hasRecursion(type)) {
         // TODO(epsteina): Large file support
-        en.compress(type);
+        en.encodeBlockType(type);
         en.encodeBlockSize(tmpSize);
         BlockType type2 = static_cast<BlockType>((info >> 24) & 0xFF);
         if( type2 != DEFAULT ) {
@@ -1500,7 +1497,7 @@ static void compressfile(const Shared* const shared, const char *filename, uint6
   assert(en.getMode() == COMPRESS);
   assert(filename && filename[0]);
 
-  en.compress(FILECONTAINER);
+  en.encodeBlockType(FILECONTAINER);
   uint64_t start = en.size();
   en.encodeBlockSize(fileSize);
 
@@ -1528,14 +1525,10 @@ static auto decompressRecursive(File *out, uint64_t blockSize, Encoder &en, FMod
   uint64_t diffFound = 0;
   int info = 0;
   while( i < blockSize ) {
-    type = static_cast<BlockType>(en.decompress());
+    type = en.decodeBlockType();
     len = en.decodeBlockSize();
     if( hasInfo(type)) {
-      info = 0;
-      for( int j = 0; j < 4; ++j ) {
-        info <<= 8;
-        info += en.decompress();
-      }
+      info = en.decodeInfo();
     }
     if( hasRecursion(type)) {
       FileTmp tmp;
@@ -1555,14 +1548,14 @@ static auto decompressRecursive(File *out, uint64_t blockSize, Encoder &en, FMod
           en.printStatus();
         }
         if( mode == FDECOMPRESS ) {
-          out->putChar(en.decompress());
+          out->putChar(en.decompressByte());
         } else if( mode == FCOMPARE ) {
-          if( en.decompress() != out->getchar() && (diffFound == 0u)) {
+          if( en.decompressByte() != out->getchar() && (diffFound == 0u)) {
             mode = FDISCARD;
             diffFound = i + j + 1;
           }
         } else {
-          en.decompress();
+          en.decompressByte();
         }
       }
     }
@@ -1576,7 +1569,7 @@ static void decompressFile(const Shared *const shared, const char *filename, FMo
   assert(en.getMode() == DECOMPRESS);
   assert(filename && filename[0]);
 
-  BlockType blocktype = static_cast<BlockType>(en.decompress());
+  BlockType blocktype = en.decodeBlockType();
   if( blocktype != FILECONTAINER ) {
     quit("Bad archive.");
   }

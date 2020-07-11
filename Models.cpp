@@ -1,9 +1,9 @@
 #include "Models.hpp"
 
 /*
- relationship between compression level, shared->mem and NormalModel memory use ( shared->mem * 32 ) as an example
+ relationship between compression level, shared->mem and NormalModel memory use as an example
 
- level   shared->mem    NormalModel memory use
+ level   shared->mem    NormalModel memory use (shared->mem*32)
  -----   -----------    ----------------------
    1      0.125 MB              4 MB
    2      0.25	MB              8 MB
@@ -49,7 +49,7 @@ auto Models::sparseModel() -> SparseModel & {
 }
 
 auto Models::matchModel() -> MatchModel & {
-  static MatchModel instance {shared, stats, shared->mem * 4 /*buffermemorysize*/, shared->mem / 32 /*mapmeorysize*/ };
+  static MatchModel instance {shared, stats, shared->mem * 4 /*buffermemorysize*/, shared->mem / 32 /*mapmemorysize*/ };
   return instance;
 }
 
