@@ -40,7 +40,7 @@ public:
     static constexpr int MIXERCONTEXTS = 4096 + 2048 + 2048 + 256 + 10; // 8458
     static constexpr int MIXERCONTEXTSETS = 5;
 
-    explicit Audio8BitModel(const Shared* const sh, ModelStats *st);
+    explicit Audio8BitModel(Shared* const sh);
     void setParam(int info);
     void mix(Mixer &m);
 };

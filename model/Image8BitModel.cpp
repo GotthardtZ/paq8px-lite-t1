@@ -1,7 +1,7 @@
 #include "Image8BitModel.hpp"
 
-Image8BitModel::Image8BitModel(const Shared* const sh, ModelStats *st, const uint64_t size) : 
-  shared(sh), stats(st), 
+Image8BitModel::Image8BitModel(Shared* const sh, const uint64_t size) : 
+  shared(sh), 
   cm(sh, size, nCM, 64, CM_USE_RUN_STATS),
   map { /* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
     /*nSM0: 0- 1*/ {sh, 0,8,64,1023}, {sh,15,1,64,1023},
@@ -352,11 +352,11 @@ void Image8BitModel::mix(Mixer &m) {
         res = clamp4(W + N - NW, W, NW, N, NE) - px;
       }
 
-      stats->Image.pixels.W = W;
-      stats->Image.pixels.N = N;
-      stats->Image.pixels.NN = NN;
-      stats->Image.pixels.WW = WW;
-      stats->Image.ctx = ctx >> gray;
+      shared->State.Image.pixels.W = W;
+      shared->State.Image.pixels.N = N;
+      shared->State.Image.pixels.NN = NN;
+      shared->State.Image.pixels.WW = WW;
+      shared->State.Image.ctx = ctx >> gray;
     }
   }
   INJECT_SHARED_c0

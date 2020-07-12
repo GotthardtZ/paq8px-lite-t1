@@ -1,9 +1,9 @@
 #include "Shared.hpp"
 
 /*
- relationship between compression level, shared->mem and buf memory use ( shared->mem * 8 )
+ relationship between compression level, shared->mem and buf memory use 
 
- level   shared->mem    buf memory use
+ level   shared->mem    buf memory use (shared->mem * 8)
  -----   -----------    --------------
    1      0.125 MB              1 MB
    2      0.25	MB              2 MB
@@ -27,28 +27,28 @@ void Shared::init(uint8_t level) {
   toScreen = !isOutputDirected();
 }
 
-void Shared::update() {
-  c0 += c0 + y;
-  bitPosition = (bitPosition + 1U) & 7U;
-  if( bitPosition == 0 ) {
-    c1 = c0;
-    buf.add(c1);
-    c8 = (c8 << 8U) | (c4 >> 24U);
-    c4 = (c4 << 8U) | c0;
-    c0 = 1;
+void Shared::update(int y) {
+  State.y = y;
+  State.c0 += State.c0 + y;
+  State.bitPosition = (State.bitPosition + 1U) & 7U;
+  if(State.bitPosition == 0 ) {
+    State.c1 = State.c0;
+    buf.add(State.c1);
+    State.c8 = (State.c8 << 8U) | (State.c4 >> 24U);
+    State.c4 = (State.c4 << 8U) | State.c0;
+    State.c0 = 1;
   }
+  static constexpr uint8_t asciiGroup[254] = { 0, 10, 0, 1, 10, 10, 0, 4, 2, 3, 10, 10, 10, 10, 0, 0, 5, 4, 2, 2, 3, 3, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 5, 5, 9, 4, 2, 2, 2, 2, 3, 3, 3, 3, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 0, 0, 0, 0, 5, 8, 8, 5, 9, 9, 6, 5, 2, 2, 2, 2, 2, 2, 2, 8, 3, 3, 3, 3, 3, 3, 3, 8, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 8, 8, 8, 8, 8, 5, 5, 9, 9, 9, 9, 9, 7, 8, 5, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 8, 8, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 8, 8, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10 };
+  State.Text.characterGroup = (State.bitPosition > 0) ? asciiGroup[(1U << State.bitPosition) - 2 + (State.c0 & ((1U << State.bitPosition) - 1))] : 0;
+  
   // Broadcast to all current subscribers: y (and c0, c1, c4, etc) is known
   updateBroadcaster.broadcastUpdate();
 }
 
 void Shared::reset() {
   buf.reset();
-  y = 0;
-  c0 = 1;
-  c1 = 0;
-  bitPosition = 0;
-  c4 = 0;
-  c8 = 0;
+  memset(&State, 0, sizeof(State));
+  State.c0 = 1;
 }
 
 UpdateBroadcaster *Shared::GetUpdateBroadcaster() const {

@@ -4,15 +4,13 @@
 #include "../text/TextModel.hpp"
 #include "../Mixer.hpp"
 #include "../MixerFactory.hpp"
-#include "../ModelStats.hpp"
 #include "../Models.hpp"
 
 /**
  * This combines all the context models with a Mixer.
  */
 class ContextModel {
-    const Shared * const shared;
-    ModelStats *stats;
+    Shared * const shared;
     Models models;
     Mixer *m;
     BlockType nextBlockType = DEFAULT;
@@ -23,7 +21,7 @@ class ContextModel {
     bool readSize = false;
 
 public:
-    ContextModel(const Shared* const sh, ModelStats *st, Models &models);
+    ContextModel(Shared* const sh, Models &models);
     auto p() -> int;
     ~ContextModel();
 };

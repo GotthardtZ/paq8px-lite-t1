@@ -1,6 +1,6 @@
 #include "Info.hpp"
 
-Info::Info(const Shared* const sh, ModelStats const *st, ContextMap2 &contextmap) : shared(sh), stats(st), cm(contextmap) {
+Info::Info(Shared* const sh, ContextMap2 &contextmap) : shared(sh), cm(contextmap) {
   reset();
 }
 
@@ -164,7 +164,7 @@ void Info::processChar(const bool isExtendedChar) {
     }
   }
 
-  //const uint8_t characterGroup = stats->Text.characterGroup;
+  //const uint8_t characterGroup = shared->State.Text.characterGroup;
   uint8_t g = c1;
   if( g >= 128 ) {
     //utf8 code points (weak context)
@@ -296,7 +296,8 @@ void Info::predict(const uint8_t pdfTextParserState) {
   const bool word0MayEndNow = lastPos != 0;
   const uint8_t mayBeCaps = static_cast<const uint8_t>(uint8_t(c4 >> 8U) >= 'A' && uint8_t(c4 >> 8U) <= 'Z' && uint8_t(c4) >= 'A' &&
                                                        uint8_t(c4) <= 'Z');
-  const bool isTextBlock = stats->blockType == TEXT || stats->blockType == TEXT_EOL;
+  INJECT_SHARED_blockType
+  const bool isTextBlock = blockType == TEXT || blockType == TEXT_EOL;
 
   uint64_t i = 2048 * static_cast<int>(isTextBlock);
 

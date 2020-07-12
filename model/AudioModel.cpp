@@ -1,6 +1,6 @@
 #include "AudioModel.hpp"
 
-AudioModel::AudioModel(const Shared* const sh, ModelStats *st) : shared(sh), stats(st) {}
+AudioModel::AudioModel(Shared* const sh) : shared(sh) {}
 
 auto AudioModel::s2(int i) -> int {
   INJECT_SHARED_buf

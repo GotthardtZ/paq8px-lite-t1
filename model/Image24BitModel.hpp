@@ -3,7 +3,6 @@
 
 #include "../ContextMap2.hpp"
 #include "../HashTable.hpp"
-#include "../ModelStats.hpp"
 #include "../OLS.hpp"
 #include "../SmallStationaryContextMap.hpp"
 #include "../StationaryMap.hpp"
@@ -29,8 +28,7 @@ public:
     static constexpr int MIXERCONTEXTS = 6 + 256 + 512 + 2048 + 8 * 32 + 6 * 64 + 256 * 2 + 1024 + 8192 + 8192 + 8192 + 8192 + 256; //38022
     static constexpr int MIXERCONTEXTSETS = 13;
 
-    const Shared * const shared;
-    ModelStats *stats;
+    Shared * const shared;
     ContextMap2 cm;
     SmallStationaryContextMap SCMap[nSSM];
     StationaryMap map[nSM];
@@ -74,7 +72,7 @@ public:
     const uint8_t *olsCtx6[8] = {&WWW, &WW, &W, &NNN, &NN, &N, &p1, &p2};
     const uint8_t **olsCtxs[nOLS] = {&olsCtx1[0], &olsCtx2[0], &olsCtx3[0], &olsCtx4[0], &olsCtx5[0], &olsCtx6[0]};
 
-    Image24BitModel(const Shared* const sh, ModelStats *st, uint64_t size);
+    Image24BitModel(Shared* const sh, uint64_t size);
     void update();
 
     /**

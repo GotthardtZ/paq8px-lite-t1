@@ -1,6 +1,6 @@
 #include "Audio8BitModel.hpp"
 
-Audio8BitModel::Audio8BitModel(const Shared* const sh, ModelStats *st) : AudioModel(sh, st),
+Audio8BitModel::Audio8BitModel(Shared* const sh) : AudioModel(sh),
   sMap1B{ /* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
     /*nOLS: 0-3*/ {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,86}, {sh,11,1,9,86}, {sh,11,1,7,86}},
     /*nOLS: 4-7*/ {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}}, {{sh,11,1,6,128}, {sh,11,1,9,128}, {sh,11,1,7,86}},
@@ -11,11 +11,12 @@ Audio8BitModel::Audio8BitModel(const Shared* const sh, ModelStats *st) : AudioMo
 
 void Audio8BitModel::setParam(int info) {
   INJECT_SHARED_bpos
-  if( stats->blPos == 0 && bpos == 0 ) {
+  INJECT_SHARED_blockPos
+  if(blockPos == 0 && bpos == 0 ) {
     assert((info & 2) == 0);
     stereo = (info & 1U);
     mask = 0;
-    stats->wav = stereo + 1;
+    shared->State.wav = stereo + 1;
     wMode = info;
     for( int i = 0; i < nLMS; i++ ) {
       lms[i][0].reset(), lms[i][1].reset();
@@ -25,9 +26,10 @@ void Audio8BitModel::setParam(int info) {
 
 void Audio8BitModel::mix(Mixer &m) {
   INJECT_SHARED_bpos
+  INJECT_SHARED_blockPos
   INJECT_SHARED_c1
   if( bpos == 0 ) {
-    ch = (stereo) != 0 ? stats->blPos & 1U : 0;
+    ch = (stereo) != 0 ? blockPos & 1U : 0;
     const int8_t s = int(((wMode & 4U) > 0) ? c1 ^ 128U : c1) - 128U;
     const int pCh = ch ^stereo;
     int i = 0;
@@ -45,7 +47,7 @@ void Audio8BitModel::mix(Mixer &m) {
       residuals[i][pCh] = s - prd[i][pCh][0];
     }
     errLog = min(0xF, ilog2(errLog));
-    stats->Audio = mxCtx = ilog2(min(0x1F, bitCount(mask))) * 2 + ch;
+    shared->State.Audio = mxCtx = ilog2(min(0x1F, bitCount(mask))) * 2 + ch;
 
     int k1 = 90;
     int k2 = k1 - 12 * stereo;

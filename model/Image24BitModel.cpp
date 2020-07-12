@@ -1,7 +1,7 @@
 #include "Image24BitModel.hpp"
 
-Image24BitModel::Image24BitModel(const Shared* const sh, ModelStats *st, const uint64_t size) : 
-  shared(sh), stats(st), cm(sh, size, nCM, 64, CM_USE_RUN_STATS),
+Image24BitModel::Image24BitModel(Shared* const sh, const uint64_t size) : 
+  shared(sh), cm(sh, size, nCM, 64, CM_USE_RUN_STATS),
   SCMap { /* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
     {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
     {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
@@ -385,14 +385,14 @@ void Image24BitModel::update() {
       map[++i].setDirect(buf(1 + static_cast<int>((isPNG != 0u) && x < 2)));
       map[++i].setDirect(min(color, stride - 1));
       map[++i].setDirect(0);
-      stats->Image.plane = min(color, stride - 1);
-      stats->Image.pixels.W = W;
-      stats->Image.pixels.N = N;
-      stats->Image.pixels.NN = NN;
-      stats->Image.pixels.WW = WW;
-      stats->Image.pixels.Wp1 = Wp1;
-      stats->Image.pixels.Np1 = Np1;
-      stats->Image.ctx = ctx[0] >> 3U;
+      shared->State.Image.plane = min(color, stride - 1);
+      shared->State.Image.pixels.W = W;
+      shared->State.Image.pixels.N = N;
+      shared->State.Image.pixels.NN = NN;
+      shared->State.Image.pixels.WW = WW;
+      shared->State.Image.pixels.Wp1 = Wp1;
+      shared->State.Image.pixels.Np1 = Np1;
+      shared->State.Image.ctx = ctx[0] >> 3U;
     }
   }
   if( x > 0 || (isPNG == 0u)) {

@@ -1,6 +1,6 @@
 #include "RecordModel.hpp"
 
-RecordModel::RecordModel(const Shared* const sh, ModelStats *st, const uint64_t size) : shared(sh), stats(st), 
+RecordModel::RecordModel(Shared* const sh, const uint64_t size) : shared(sh),
     cm(sh,32768,3), cn(sh,32768/2,3), co(sh,32768*2,3), // cm,cn,co: memory pressure is advantageous
     cp(sh,size,16),
     maps{ /* BitsOfContext, InputBits, Scale, Limit  */
@@ -28,14 +28,15 @@ void RecordModel::mix(Mixer &m) {
     int w = c4 & 0xffffU;
     int c = w & 255U;
     int d = w >> 8U;
-    if((stats->wav) > 2 && (stats->wav) != runLength[0] ) {
-      runLength[0] = stats->wav;
+    if((shared->State.wav) > 2 && (shared->State.wav) != runLength[0] ) {
+      runLength[0] = shared->State.wav;
       rCount[0] = rCount[1] = 0;
     } else {
       // detect dBASE tables
-      if( stats->blPos == 0 || (dbase.version > 0 && stats->blPos >= dbase.end)) {
+      INJECT_SHARED_blockPos
+      if( blockPos == 0 || (dbase.version > 0 && blockPos >= dbase.end)) {
         dbase.version = 0;
-      } else if( dbase.version == 0 && stats->blockType == DEFAULT && stats->blPos >= 31 ) {
+      } else if( dbase.version == 0 && shared->State.blockType == DEFAULT && blockPos >= 31 ) {
         uint8_t b = buf(32);
         if(((b & 7U) == 3 || (b & 7U) == 4 || (b >> 4U) == 3 || b == 0xF5) && ((b = buf(30)) > 0 && b < 13) &&
            ((b = buf(29)) > 0 && b < 32) &&
@@ -45,14 +46,14 @@ void RecordModel::mix(Mixer &m) {
                                                                        (((dbase.headerLength -= 255 + 8) - 32 - 1) % 32) == 0))) &&
            ((dbase.recordLength = buf(22) | (buf(21) << 8U)) > 8) && (buf(20) == 0 && buf(19) == 0 && buf(17) <= 1 && buf(16) <= 1)) {
           dbase.version = (((b = buf(32)) >> 4U) == 3) ? 3 : b & 7U;
-          dbase.start = stats->blPos - 32 + dbase.headerLength;
+          dbase.start = blockPos - 32 + dbase.headerLength;
           dbase.end = dbase.start + dbase.nRecords * dbase.recordLength;
           if( dbase.version == 3 ) {
             runLength[0] = 32;
             rCount[0] = rCount[1] = 0;
           }
         }
-      } else if( dbase.version > 0 && stats->blPos == dbase.start ) {
+      } else if( dbase.version > 0 && blockPos == dbase.start ) {
         runLength[0] = dbase.recordLength;
         rCount[0] = rCount[1] = 0;
       }
@@ -199,7 +200,7 @@ void RecordModel::mix(Mixer &m) {
     cp.set(hash(++i, iCtx[1]() & 0xFFU, iCtx[3]() & 0xFFU));
 
     cp.set(hash(++i, N, (WxNW = c ^ buf(runLength[0] + 1))));
-    cp.set(hash(++i, static_cast<int>(stats->Match.length3 != 0) << 8U | stats->Match.expectedByte, uint8_t(iCtx[1]()), N, WxNW));
+    cp.set(hash(++i, static_cast<int>(shared->State.Match.length3 != 0) << 8U | shared->State.Match.expectedByte, uint8_t(iCtx[1]()), N, WxNW));
 
     int k = 0x300;
     if( mayBeImg24B ) {
@@ -255,7 +256,7 @@ void RecordModel::mix(Mixer &m) {
 
   m.set(static_cast<uint32_t>(runLength[0] > 2) * ((bpos << 7U) | mxCtx), 1024);
   m.set(((N ^ B) >> 4U) | (x << 4U), 512);
-  m.set(((stats->Text.characterGroup) << 5U) | x, 11 * 32);
+  m.set(((shared->State.Text.characterGroup) << 5U) | x, 11 * 32);
 
-  stats->wav = min(0xFFFF, runLength[0]);
+  shared->State.wav = min(0xFFFF, runLength[0]);
 }

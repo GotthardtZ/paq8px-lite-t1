@@ -2,10 +2,10 @@
 
 #ifndef DISABLE_TEXTMODEL
 
-WordModel::WordModel(const Shared* const sh, ModelStats const *st, const uint64_t size) : 
-  shared(sh), stats(st), 
+WordModel::WordModel(Shared* const sh, const uint64_t size) : 
+  shared(sh),
   cm(sh, size, nCM, 74, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY),
-  infoNormal(sh, st, cm), infoPdf(sh, st, cm), pdfTextParserState(0)
+  infoNormal(sh, cm), infoPdf(sh, cm), pdfTextParserState(0)
 {}
 
 void WordModel::reset() {
@@ -54,7 +54,8 @@ void WordModel::mix(Mixer &m) {
       infoPdf.predict(pdfTextParserState);
       Info::lineModelSkip(cm);
     } else {
-      const bool isTextBlock = stats->blockType == TEXT || stats->blockType == TEXT_EOL;
+      INJECT_SHARED_blockType
+      const bool isTextBlock = blockType == TEXT || blockType == TEXT_EOL;
       const bool isExtendedChar = isTextBlock && c1 >= 128;
       infoNormal.processChar(isExtendedChar);
       infoNormal.predict(pdfTextParserState);

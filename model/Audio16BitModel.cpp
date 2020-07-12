@@ -1,6 +1,6 @@
 #include "Audio16BitModel.hpp"
 
-Audio16BitModel::Audio16BitModel(const Shared* const sh, ModelStats *st) : AudioModel(sh, st), 
+Audio16BitModel::Audio16BitModel(Shared* const sh) : AudioModel(sh), 
   sMap1B{ /* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
     /*nOLS: 0-3*/ {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}},
     /*nOLS: 4-7*/ {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}},
@@ -11,13 +11,14 @@ Audio16BitModel::Audio16BitModel(const Shared* const sh, ModelStats *st) : Audio
 
 void Audio16BitModel::setParam(int info) {
   INJECT_SHARED_bpos
-  if( stats->blPos == 0 && bpos == 0 ) {
+  INJECT_SHARED_blockPos
+  if( blockPos == 0 && bpos == 0 ) {
     info |= 4U; // comment this line if skipping the endianness transform
     assert((info & 2) != 0);
     stereo = (info & 1U);
     lsb = static_cast<int>(info < 4);
     mask = 0;
-    stats->wav = (stereo + 1) * 2;
+    shared->State.wav = (stereo + 1) * 2;
     wMode = info;
     for( int i = 0; i < nLMS; i++ ) {
       lms[i][0].reset(), lms[i][1].reset();
@@ -27,10 +28,11 @@ void Audio16BitModel::setParam(int info) {
 
 void Audio16BitModel::mix(Mixer &m) {
   INJECT_SHARED_bpos
-  if( bpos == 0 && stats->blPos != 0 ) {
-    ch = (stereo) != 0 ? (stats->blPos & 2U) >> 1U : 0;
-    lsb = (stats->blPos & 1U) ^ static_cast<uint32_t>(wMode < 4);
-    if((stats->blPos & 1U) == 0 ) {
+    INJECT_SHARED_blockPos
+  if( bpos == 0 && blockPos != 0 ) {
+    ch = (stereo) != 0 ? (blockPos & 2U) >> 1U : 0;
+    lsb = (blockPos & 1U) ^ static_cast<uint32_t>(wMode < 4);
+    if((blockPos & 1U) == 0 ) {
       sample = (wMode < 4) ? s2(2) : t2(2);
       const int pCh = ch ^stereo;
       int i = 0;
@@ -123,7 +125,7 @@ void Audio16BitModel::mix(Mixer &m) {
         prd[i][ch][1] = signedClip16(prd[i][ch][0] + residuals[i][pCh]);
       }
     }
-    stats->Audio = 0x80U | (mxCtx = ilog2(min(0x1F, bitCount(mask))) * 4 + ch * 2 + lsb);
+    shared->State.Audio = 0x80U | (mxCtx = ilog2(min(0x1F, bitCount(mask))) * 4 + ch * 2 + lsb);
   }
 
   INJECT_SHARED_c0

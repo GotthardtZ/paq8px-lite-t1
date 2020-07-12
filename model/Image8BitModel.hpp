@@ -5,7 +5,6 @@
 #include "../ContextMap2.hpp"
 #include "../IndirectContext.hpp"
 #include "../IndirectMap.hpp"
-#include "../ModelStats.hpp"
 #include "../OLS.hpp"
 #include "../SmallStationaryContextMap.hpp"
 #include "../StationaryMap.hpp"
@@ -30,8 +29,7 @@ public:
     static constexpr int MIXERCONTEXTS = (2048 + 5) + 6 * 16 + 6 * 32 + 256 + 1024 + 64 + 128 + 256; /**< 4069 */
     static constexpr int MIXERCONTEXTSETS = 8;
 
-    const Shared * const shared;
-    ModelStats *stats;
+    Shared * const shared;
     ContextMap2 cm;
     StationaryMap map[nSM];
     SmallStationaryContextMap pltMap[nPltMaps];
@@ -87,7 +85,7 @@ public:
     const uint8_t *olsCtx5[14] = {&WWWW, &WWW, &WW, &W, &NWWW, &NWW, &NW, &N, &NNWW, &NNW, &NN, &NNNW, &NNN, &NNNN};
     const uint8_t **olsCtxs[nOLS] = {&olsCtx1[0], &olsCtx2[0], &olsCtx3[0], &olsCtx4[0], &olsCtx5[0]};
 
-    Image8BitModel(const Shared* const sh, ModelStats *st, uint64_t size);
+    Image8BitModel(Shared* const sh, uint64_t size);
     void setParam(int info0, uint32_t gray0, uint32_t isPNG0);
     void mix(Mixer &m);
 };

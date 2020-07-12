@@ -260,7 +260,6 @@
     <ClCompile Include="Mixer.cpp" />
     <ClCompile Include="MixerFactory.cpp" />
     <ClCompile Include="Models.cpp" />
-    <ClCompile Include="ModelStats.cpp" />
     <ClCompile Include="model\Audio16BitModel.cpp" />
     <ClCompile Include="model\Audio8BitModel.cpp" />
     <ClCompile Include="model\AudioModel.cpp" />
@@ -359,7 +358,6 @@
     <ClInclude Include="Mixer.hpp" />
     <ClInclude Include="MixerFactory.hpp" />
     <ClInclude Include="Models.hpp" />
-    <ClInclude Include="ModelStats.hpp" />
     <ClInclude Include="model\Audio16BitModel.hpp" />
     <ClInclude Include="model\Audio8BitModel.hpp" />
     <ClInclude Include="model\AudioModel.hpp" />

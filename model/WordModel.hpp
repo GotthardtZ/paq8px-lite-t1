@@ -4,7 +4,6 @@
 #ifndef DISABLE_TEXTMODEL
 
 #include "../ContextMap2.hpp"
-#include "../ModelStats.hpp"
 #include "../RingBuffer.hpp"
 #include "../Shared.hpp"
 #include "Info.hpp"
@@ -26,14 +25,13 @@ public:
     static constexpr int MIXERCONTEXTSETS = 0;
 
 private:
-    const Shared * const shared;
-    ModelStats const *stats;
+    Shared * const shared;
     ContextMap2 cm;
     Info infoNormal; //used for general content
     Info infoPdf; //used only in case of pdf text - in place of infoNormal
     uint8_t pdfTextParserState; // 0..7
 public:
-    WordModel(const Shared* const sh, ModelStats const *st, uint64_t size);
+    WordModel(Shared* const sh, uint64_t size);
     void reset();
     void mix(Mixer &m);
 };

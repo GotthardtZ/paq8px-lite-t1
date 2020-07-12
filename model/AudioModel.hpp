@@ -1,7 +1,6 @@
 #ifndef PAQ8PX_AUDIOMODEL_HPP
 #define PAQ8PX_AUDIOMODEL_HPP
 
-#include "../ModelStats.hpp"
 #include "../Shared.hpp"
 #include <cstdint>
 
@@ -12,11 +11,10 @@
  */
 class AudioModel {
 protected:
-    const Shared * const shared;
-    ModelStats *stats;
+    Shared * const shared;
     int s = 0;
     int wMode = 0;
-    explicit AudioModel(const Shared* const sh, ModelStats *st);
+    explicit AudioModel(Shared* const sh);
     auto s2(int i) -> int;
     auto t2(int i) -> int;
     auto x1(int i) -> int;

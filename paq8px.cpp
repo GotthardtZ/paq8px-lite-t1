@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "187fix6"  //update version here before publishing your changes
+#define PROGVERSION  "187fix7"  //update version here before publishing your changes
 #define PROGYEAR     "2020"
 
 

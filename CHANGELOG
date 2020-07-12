@@ -1704,3 +1704,9 @@ paq8px_v187fix6
 - Flexibility fix: Separated arithmetic encoder from Encode class
 - Flexibility fix: distinguished compressing block header information from compressing general data
 - Small cosmetic changes
+- No compression improvements but small fluctuations are to be expected vs. v187fix5
+
+paq8px_v187fix7
+2020.07.12
+- Merged ModelStats to Shared
+- Archives are expected to be binary compatible with v187fix6

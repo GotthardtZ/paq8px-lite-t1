@@ -5,7 +5,6 @@
 #include "../ContextMap.hpp"
 #include "../IndirectContext.hpp"
 #include "../IndirectMap.hpp"
-#include "../ModelStats.hpp"
 #include "../RingBuffer.hpp"
 #include "../SmallStationaryContextMap.hpp"
 #include "../StationaryMap.hpp"
@@ -28,8 +27,7 @@ private:
     static constexpr int nSSM = 4;
     static constexpr int nIM = 3;
     static constexpr int nIndContexts = 5;
-    const Shared * const shared;
-    ModelStats *stats;
+    Shared * const shared;
     ContextMap cm, cn, co;
     ContextMap cp;
     StationaryMap maps[nSM];
@@ -53,7 +51,7 @@ public:
             nIM * IndirectMap::MIXERINPUTS; // 149
     static constexpr int MIXERCONTEXTS = 1024 + 512 + 11 * 32; //1888
     static constexpr int MIXERCONTEXTSETS = 3;
-    RecordModel(const Shared* const sh, ModelStats *st, uint64_t size);
+    RecordModel(Shared* const sh, uint64_t size);
     void mix(Mixer &m);
 };
 

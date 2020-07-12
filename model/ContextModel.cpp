@@ -1,6 +1,6 @@
 #include "ContextModel.hpp"
 
-ContextModel::ContextModel(const Shared* const sh, ModelStats *st, Models &models) : shared(sh), stats(st), models(models) {
+ContextModel::ContextModel(Shared* const sh, Models &models) : shared(sh), models(models) {
   auto mf = new MixerFactory();
   m = mf->createMixer(
     // this is the maximim case: how many mixer inputs, mixer contexts and mixer context sets are needed (max)
@@ -27,12 +27,12 @@ ContextModel::ContextModel(const Shared* const sh, ModelStats *st, Models &model
 }
 
 auto ContextModel::p() -> int {
-  uint32_t &blockPosition = stats->blPos;
+  uint32_t &blpos = shared->State.blockPos;
   // Parse block type and block size
   INJECT_SHARED_bpos
   if( bpos == 0 ) {
     --blockSize;
-    blockPosition++;
+    blpos++;
     INJECT_SHARED_c1
     if( blockSize == -1 ) {
       nextBlockType = static_cast<BlockType>(c1); //got blockType but don't switch (we don't have all the info yet)
@@ -48,7 +48,7 @@ auto ContextModel::p() -> int {
             if( hasRecursion(nextBlockType)) {
               blockSize = 0;
             }
-            blockPosition = 0;
+            blpos = 0;
           } else {
             blockSize = -1;
           }
@@ -57,17 +57,17 @@ auto ContextModel::p() -> int {
         INJECT_SHARED_c4
         blockSize = bytesRead;
         blockInfo = c4;
-        blockPosition = 0;
+        blpos = 0;
       }
     }
 
-    if( blockPosition == 0 ) {
+    if(blpos == 0 ) {
       blockType = nextBlockType; //got all the info - switch to next blockType
-      stats->blockType = blockType;
+      shared->State.blockType = blockType;
     }
     if( blockSize == 0 ) {
       blockType = DEFAULT;
-      stats->blockType = blockType;
+      shared->State.blockType = blockType;
     }
   }
 

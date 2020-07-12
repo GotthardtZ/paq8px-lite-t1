@@ -2,7 +2,6 @@
 #define PAQ8PX_MODELS_HPP
 
 #include "text/TextModel.hpp"
-#include "ModelStats.hpp"
 #include "model/Audio16BitModel.hpp"
 #include "model/Audio8BitModel.hpp"
 #include "model/CharGroupModel.hpp"
@@ -30,10 +29,9 @@
  */
 class Models {
 private:
-    const Shared * const shared;
-    ModelStats *stats; //read-write
+    Shared * const shared;
 public:
-    explicit Models(const Shared* const sh, ModelStats *st);
+    explicit Models(Shared* const sh);
     auto normalModel() -> NormalModel &;
     auto dmcForest() -> DmcForest &;
     auto charGroupModel() -> CharGroupModel &;

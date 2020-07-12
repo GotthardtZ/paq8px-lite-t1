@@ -1,7 +1,7 @@
 #include "NormalModel.hpp"
 
-NormalModel::NormalModel(const Shared* const sh, ModelStats *st, const uint64_t cmSize) : 
-  shared(sh), stats(st), cm(sh, cmSize, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY),
+NormalModel::NormalModel(Shared* const sh, const uint64_t cmSize) : 
+  shared(sh), cm(sh, cmSize, nCM, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY),
   smOrder0Slow(sh, 1, 255, 1023, StateMap::Generic), 
   smOrder1Slow(sh, 1, 255 * 256, 1023, StateMap::Generic),
   smOrder1Fast(sh, 1, 255 * 256, 64, StateMap::Generic) // 64->16 is also ok
@@ -40,7 +40,7 @@ void NormalModel::mix(Mixer &m) {
   const int order = max(0, cm.order - (nCM - 7)); //0-7
   assert(0 <= order && order <= 7);
   m.set(order << 3U | bpos, 64);
-  stats->order = order;
+  shared->State.order = order;
 }
 
 void NormalModel::mixPost(Mixer &m) {
@@ -52,10 +52,10 @@ void NormalModel::mixPost(Mixer &m) {
   INJECT_SHARED_c0
   INJECT_SHARED_c1
   INJECT_SHARED_bpos
+  INJECT_SHARED_blockType
   m.set(8 + (c1 | static_cast<int>(bpos > 5) << 8U | static_cast<int>(((c0 & ((1U << bpos) - 1)) == 0) || (c0 == ((2 << bpos) - 1))) << 9U), 8 + 1024);
   m.set(c0, 256);
-  m.set(stats->order | ((c4 >> 6U) & 3U) << 3U | static_cast<int>(bpos == 0) << 5U |
-        static_cast<int>(c1 == c2) << 6U | static_cast<int>(stats->blockType == EXE) << 7U, 256);
+  m.set(shared->State.order | ((c4 >> 6U) & 3U) << 3U | static_cast<int>(bpos == 0) << 5U | static_cast<int>(c1 == c2) << 6U | static_cast<int>(blockType == EXE) << 7U, 256);
   m.set(c2, 256);
   m.set(c3, 256);
   if( bpos != 0 ) {

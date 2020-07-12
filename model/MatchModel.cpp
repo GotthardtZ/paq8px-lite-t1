@@ -1,8 +1,7 @@
 #include "MatchModel.hpp"
 
-MatchModel::MatchModel(const Shared* const sh, ModelStats *st, const uint64_t buffermemorysize, const uint64_t mapmemorysize) : 
+MatchModel::MatchModel(Shared* const sh, const uint64_t buffermemorysize, const uint64_t mapmemorysize) : 
   shared(sh),
-  stats(st), 
   table(buffermemorysize / sizeof(uint32_t)),
   stateMaps {{sh, 1, 56 * 256,          1023, StateMap::Generic},
              {sh, 1, 8 * 256 * 256 + 1, 1023, StateMap::Generic},
@@ -104,7 +103,7 @@ void MatchModel::update() {
     for( uint32_t i = 0; i < numHashes; i++ ) {
       table[hashes[i]] = pos;
     }
-    stats->Match.expectedByte = expectedByte = (length != 0 ? buf[index] : 0);
+    shared->State.Match.expectedByte = expectedByte = (length != 0 ? buf[index] : 0);
   }
 }
 
@@ -197,5 +196,5 @@ void MatchModel::mix(Mixer &m) {
   //length=15..30: lengthC=5
 
   m.set(min(lengthC, 7), 8);
-  stats->Match.length3 = min(lengthC, 3);
+  shared->State.Match.length3 = min(lengthC, 3);
 }

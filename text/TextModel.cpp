@@ -1,6 +1,6 @@
 #include "TextModel.hpp"
 
-TextModel::TextModel(const Shared* const sh, ModelStats *st, const uint64_t size) : shared(sh), stats(st), 
+TextModel::TextModel(Shared* const sh, const uint64_t size) : shared(sh),
     cm(sh, size, nCM2, 64, CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY),
     stemmers(Language::Count - 1), languages(Language::Count - 1), dictionaries(Language::Count - 1), wordPos(0x10000),
     State(Parse::Unknown), pState(State), Lang {{0}, {0}, Language::Unknown, Language::Unknown}, Info {}, parseCtx(0) {
@@ -133,22 +133,22 @@ void TextModel::update() {
 #ifdef VERBOSE
         if( shared->toScreen ) {
           printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-}
+}       INJECT_SHARED_blockPos
         switch( Lang.id ) {
           case Language::Unknown: {
-            printf("[language: Unknown, blPos: %d]\n", stats->blPos);
+            printf("[language: Unknown, blPos: %d]\n", blockPos);
             break;
           }
           case Language::English: {
-            printf("[language: English, blPos: %d]\n", stats->blPos);
+            printf("[language: English, blPos: %d]\n", blockPos);
             break;
           }
           case Language::French: {
-            printf("[language: French,  blPos: %d]\n", stats->blPos);
+            printf("[language: French,  blPos: %d]\n", blockPos);
             break;
           }
           case Language::German: {
-            printf("[language: German,  blPos: %d]\n", stats->blPos);
+            printf("[language: German,  blPos: %d]\n", blockPos);
             break;
           }
         }
@@ -402,8 +402,8 @@ void TextModel::update() {
                          (static_cast<int>(bytePos[','] > bytePos['?']) << 2U) | (static_cast<int>(bytePos[','] > bytePos[':']) << 3U) |
                          (static_cast<int>(bytePos[','] > bytePos[';']) << 4U);
 
-  stats->Text.firstLetter = Info.firstLetter;
-  stats->Text.mask = Info.masks[1] & 0xFFU;
+  shared->State.Text.firstLetter = Info.firstLetter;
+  shared->State.Text.mask = Info.masks[1] & 0xFFU;
 }
 
 void TextModel::setContexts() {
@@ -524,7 +524,7 @@ void TextModel::mix(Mixer &m) {
 
   INJECT_SHARED_c0
   INJECT_SHARED_c1
-  const uint8_t characterGroup = stats->Text.characterGroup;
+  const uint8_t characterGroup = shared->State.Text.characterGroup;
   m.set(finalize64(hash((Lang.id != Language::Unknown) ? 1 + static_cast<int>(stemmers[Lang.id - 1]->isVowel(c1)) : 0, Info.masks[1] & 0xFF, c0), 11), 2048);
   m.set(finalize64(hash(ilog2(Info.wordLength[0] + 1), c0, 
     static_cast<int>(Info.lastDigit < Info.wordLength[0] + Info.wordGap) |

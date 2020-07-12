@@ -4,15 +4,13 @@
 #include "APM.hpp"
 #include "APM1.hpp"
 #include "Hash.hpp"
-#include "ModelStats.hpp"
 
 /**
  * Filter the context model with APMs
  */
 class SSE {
 private:
-    const Shared * const shared;
-    ModelStats *stats;
+    Shared * const shared;
     struct {
         APM APMs[4];
         APM1 APM1s[3];
@@ -31,7 +29,7 @@ private:
     } Generic;
 
 public:
-    explicit  SSE(const Shared* const sh, ModelStats *st);
+    explicit SSE(Shared* const sh);
     auto p(int pr0) -> int;
 };
 

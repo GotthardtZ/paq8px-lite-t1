@@ -201,7 +201,7 @@ void ExeModel::update() {
   context = state + 16 * op.bytesRead + 16 * (op.REX & REX_w);
   stateBh[context] = (stateBh[context] << 8U) | c1;
 
-  bool forced = stats->blockType == EXE;
+  bool forced = shared->State.blockType == EXE;
   if( valid || forced ) {
     uint32_t mask = 0;
     uint32_t count0 = 0;
@@ -212,10 +212,11 @@ void ExeModel::update() {
         count0 += mask & 1U;
       }
       int j = (i < 4) ? i + 1 : 5 + (i - 4) * (2 + static_cast<int>(i > 6));
+      INJECT_SHARED_blockPos
       cm.set(hash(i, exeCxt(j, 
         buf(1) * static_cast<int>(j > 6)),
         ((1U << nCM1) | mask) * static_cast<uint32_t>(count0 * nCM1 / 2 >= i), 
-        (0x08U | (stats->blPos & 0x07U)) * static_cast<uint32_t>(i < 4)
+        (0x08U | (blockPos & 0x07U)) * static_cast<uint32_t>(i < 4)
       ));
       i++;
     }
@@ -279,7 +280,7 @@ void ExeModel::update() {
 }
 
 void ExeModel::mix(Mixer &m) {
-  auto forced = stats->blockType == EXE;
+  auto forced = shared->State.blockType == EXE;
   INJECT_SHARED_bpos
   if( bpos == 0 ) {
     update();

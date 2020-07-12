@@ -21,10 +21,10 @@
 */
 
 
-Models::Models(const Shared* const sh, ModelStats *st) : shared(sh), stats(st) {}
+Models::Models(Shared* const sh) : shared(sh) {}
 
 auto Models::normalModel() -> NormalModel & {
-  static NormalModel instance {shared, stats, shared->mem * 32};
+  static NormalModel instance {shared, shared->mem * 32};
   return instance;
 }
 
@@ -39,7 +39,7 @@ auto Models::charGroupModel() -> CharGroupModel & {
 }
 
 auto Models::recordModel() -> RecordModel & {
-  static RecordModel instance {shared, stats, shared->mem * 2};
+  static RecordModel instance {shared, shared->mem * 2};
   return instance;
 }
 
@@ -49,7 +49,7 @@ auto Models::sparseModel() -> SparseModel & {
 }
 
 auto Models::matchModel() -> MatchModel & {
-  static MatchModel instance {shared, stats, shared->mem * 4 /*buffermemorysize*/, shared->mem / 32 /*mapmemorysize*/ };
+  static MatchModel instance {shared, shared->mem * 4 /*buffermemorysize*/, shared->mem / 32 /*mapmemorysize*/ };
   return instance;
 }
 
@@ -66,12 +66,12 @@ auto Models::indirectModel() -> IndirectModel & {
 #ifndef DISABLE_TEXTMODEL
 
 auto Models::textModel() -> TextModel & {
-  static TextModel instance {shared, stats, shared->mem * 16};
+  static TextModel instance {shared, shared->mem * 16};
   return instance;
 }
 
 auto Models::wordModel() -> WordModel & {
-  static WordModel instance {shared, stats, shared->mem * 16};
+  static WordModel instance {shared, shared->mem * 16};
   return instance;
 }
 
@@ -95,7 +95,7 @@ auto Models::xmlModel() -> XMLModel & {
 }
 
 auto Models::exeModel() -> ExeModel & {
-  static ExeModel instance {shared, stats, shared->mem * 4};
+  static ExeModel instance {shared, shared->mem * 4};
   return instance;
 }
 
@@ -110,12 +110,12 @@ auto Models::jpegModel() -> JpegModel & {
 }
 
 auto Models::image24BitModel() -> Image24BitModel & {
-  static Image24BitModel instance {shared, stats, shared->mem * 4};
+  static Image24BitModel instance {shared, shared->mem * 4};
   return instance;
 }
 
 auto Models::image8BitModel() -> Image8BitModel & {
-  static Image8BitModel instance {shared, stats, shared->mem * 4};
+  static Image8BitModel instance {shared, shared->mem * 4};
   return instance;
 }
 
@@ -132,12 +132,12 @@ auto Models::image1BitModel() -> Image1BitModel & {
 #ifndef DISABLE_AUDIOMODEL
 
 auto Models::audio8BitModel() -> Audio8BitModel & {
-  static Audio8BitModel instance {shared, stats};
+  static Audio8BitModel instance {shared};
   return instance;
 }
 
 auto Models::audio16BitModel() -> Audio16BitModel & {
-  static Audio16BitModel instance {shared, stats};
+  static Audio16BitModel instance {shared};
   return instance;
 }
 
