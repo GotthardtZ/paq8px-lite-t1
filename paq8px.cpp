@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "187fix7"  //update version here before publishing your changes
+#define PROGVERSION  "188"  //update version here before publishing your changes
 #define PROGYEAR     "2020"
 
 
@@ -51,6 +51,7 @@ static void printHelp() {
          "          (english.dic, english.exp)\n"
          "      a = Adaptive learning rate\n"
          "      s = Skip the color transform, just reorder the RGB channels\n"
+         "      l = Use Long Short-Term Memory network\n"
          "    INPUTSPEC:\n"
          "    The input may be a FILE or a PATH/FILE or a [PATH/]@FILELIST.\n"
          "    Only file content and the file size is kept in the archive. Filename,\n"
@@ -203,6 +204,7 @@ static void printOptions(Shared *shared) {
   printf(" Adaptive   (a) = %s\n", (shared->options & OPTION_ADAPTIVE) != 0U ? "On  (Adaptive learning rate)" : "Off");
   printf(" Skip RGB   (s) = %s\n",
          (shared->options & OPTION_SKIPRGB) != 0U ? "On  (Skip the color transform, just reorder the RGB channels)" : "Off");
+  printf(" Use LSTM   (l) = %s\n", (shared->options & OPTION_LSTM) != 0U ? "On  (Use Long Short-Term Memory network)" : "Off");
   printf(" File mode      = %s\n", (shared->options & OPTION_MULTIPLE_FILE_MODE) != 0U ? "Multiple" : "Single");
 }
 
@@ -276,6 +278,9 @@ auto processCommandLine(int argc, char **argv) -> int {
                 break;
               case 'S':
                 shared.options |= OPTION_SKIPRGB;
+                break;
+              case 'L':
+                shared.options |= OPTION_LSTM;
                 break;
               default: {
                 printf("Invalid compression switch: %c", argv[1][j]);

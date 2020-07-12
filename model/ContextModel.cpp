@@ -3,26 +3,26 @@
 ContextModel::ContextModel(Shared* const sh, Models &models) : shared(sh), models(models) {
   auto mf = new MixerFactory();
   m = mf->createMixer(
-    // this is the maximim case: how many mixer inputs, mixer contexts and mixer context sets are needed (max)
+    // this is the maximum case: how many mixer inputs, mixer contexts and mixer context sets are needed (max)
     sh,
     1 +  //bias
     MatchModel::MIXERINPUTS + NormalModel::MIXERINPUTS + SparseMatchModel::MIXERINPUTS +
     SparseModel::MIXERINPUTS + RecordModel::MIXERINPUTS + CharGroupModel::MIXERINPUTS +
     TextModel::MIXERINPUTS + WordModel::MIXERINPUTS + IndirectModel::MIXERINPUTS +
     DmcForest::MIXERINPUTS + NestModel::MIXERINPUTS + XMLModel::MIXERINPUTS +
-    LinearPredictionModel::MIXERINPUTS + ExeModel::MIXERINPUTS
+    LinearPredictionModel::MIXERINPUTS + ExeModel::MIXERINPUTS + LstmModel<>::MIXERINPUTS
     ,
     MatchModel::MIXERCONTEXTS + NormalModel::MIXERCONTEXTS + SparseMatchModel::MIXERCONTEXTS +
     SparseModel::MIXERCONTEXTS + RecordModel::MIXERCONTEXTS + CharGroupModel::MIXERCONTEXTS +
     TextModel::MIXERCONTEXTS + WordModel::MIXERCONTEXTS + IndirectModel::MIXERCONTEXTS +
     DmcForest::MIXERCONTEXTS + NestModel::MIXERCONTEXTS + XMLModel::MIXERCONTEXTS +
-    LinearPredictionModel::MIXERCONTEXTS + ExeModel::MIXERCONTEXTS
+    LinearPredictionModel::MIXERCONTEXTS + ExeModel::MIXERCONTEXTS + LstmModel<>::MIXERCONTEXTS
     ,
     MatchModel::MIXERCONTEXTSETS + NormalModel::MIXERCONTEXTSETS + SparseMatchModel::MIXERCONTEXTSETS +
     SparseModel::MIXERCONTEXTSETS + RecordModel::MIXERCONTEXTSETS + CharGroupModel::MIXERCONTEXTSETS +
     TextModel::MIXERCONTEXTSETS + WordModel::MIXERCONTEXTSETS + IndirectModel::MIXERCONTEXTSETS +
     DmcForest::MIXERCONTEXTSETS + NestModel::MIXERCONTEXTSETS + XMLModel::MIXERCONTEXTSETS +
-    LinearPredictionModel::MIXERCONTEXTSETS + ExeModel::MIXERCONTEXTSETS
+    LinearPredictionModel::MIXERCONTEXTSETS + ExeModel::MIXERCONTEXTSETS + +LstmModel<>::MIXERCONTEXTSETS
   );
 }
 
@@ -77,6 +77,10 @@ auto ContextModel::p() -> int {
   matchModel.mix(*m);
   NormalModel &normalModel = models.normalModel();
   normalModel.mix(*m);
+  if ((shared->options & OPTION_LSTM) != 0u) {
+    LstmModel<>& lstmModel = models.lstmModel();
+    lstmModel.mix(*m);
+  }
 
   // Test for special block types
   switch( blockType ) {

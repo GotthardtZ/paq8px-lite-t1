@@ -1710,3 +1710,7 @@ paq8px_v187fix7
 2020.07.12
 - Merged ModelStats to Shared
 - Archives are expected to be binary compatible with v187fix6
+
+paq8px_v188
+2020.07.12
+- New option switch "l" to use an LSTM model
