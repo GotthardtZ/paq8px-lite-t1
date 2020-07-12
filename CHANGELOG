@@ -19,7 +19,7 @@ DIFFERENCES FROM PAQ8A
 The user interface supports directory compression and drag and drop.
 The preprocessor segments the input into blocks and uses more robust
 EXE detection.  An indirect context model was added.  There is no
-dictionary preprocessor like PAQ8B/C/d/E.
+dictionary preprocessor like PAQ8B/C/D/E.
 
 DIFFERENCES FROM PAQ8F
 
@@ -220,7 +220,7 @@ pap8px_v18
 
 pap8px_v19
 2009.05.12
-- fixed bug in MOD detection (broken detecting files with 64 patterns) + more MODs can be recognized (those marked with m.K. 8CHN 6CHN FLT4 or FLT8)
+- fixed bug in MOD detection (broken detecting files with 64 patterns) + more MODs can be recognized (those marked with M.K. 8CHN 6CHN FLT4 or FLT8)
 
 
 pap8px_v20
@@ -278,7 +278,7 @@ pap8px_v29
 pap8px_v30
 2009.05.21
 - Removed some redundant code from compress procedure
-- Added directEncodeBlock() procedure for repeated task in compress() procedure
+- Added direct_encode_block() procedure for repeated task in compress() procedure
 
 
 pap8px_v31
@@ -852,8 +852,8 @@ paq8px_v121_fixed2
 
 paq8px_v121_fixed3
 2017.12.09
-- Fixed im24bitModel: put back scm10 and Map[29] contextMaps (erroneously removed in paq8px_v121_fixed2).
-- Clip, Clim4, LogMeanDiffQt: modified code to be more intuitive (hopefully)
+- Fixed im24bitModel: put back scm10 and Map[29] contextmaps (erroneously removed in paq8px_v121_fixed2).
+- Clip, Climp4, LogMeanDiffQt: modified code to be more intuitive (hopefully)
 - No model or compression improvements
 
 
@@ -882,7 +882,7 @@ paq8px_v125
 - Changes to the zlib transform:
   - Fixed bug when zlib doesn't produce any output when using Z_NO_FLUSH
   - Early break when no more combinations are left to try, skipping decompression of the remaining stream
-- optional switch to skip the 24/32bpp RGB color transform and only perform channel reordering
+- Optional switch to skip the 24/32bpp RGB color transform and only perform channel reordering
 
 
 paq8px_v126 
@@ -917,9 +917,9 @@ paq8px_v129
 paq8px_v129_fix1 
 2017.01.13
 - Fixed "error: use of deleted function" in gcc in Array class (v114-129) reported by Mauro
-- Sanity check in makeDir function
+- Sanity check in makedir function
 - Changed "rb+" to "rb" in FileDisk.open() to enable compressing read-only files
-- Assert failed in FileTmp.blockWrite() during zlib decompression when count was 0 and asserts were on (it caused no problems otherwise in release mode); fixed in both blockRead() and blockWrite()
+- Assert failed in FileTmp.blockwrite() during zlib decompression when count was 0 and asserts were on (it caused no problems otherwise in release mode); fixed in both blockread() and blockwrite()
 - Assert failed in FileTmp.setpos() when IMAGE8 bmp detection calculated a "detd" value larger than the actual block. Fixed in setpos(); will try to isolate it to let it fix in detect() as well.
 - Minor fixes in doc and/or code (Buf, IntBuf, Mixer, ContextMap, matchModel, ContextModel)
 - im24bitModel: reverted undesired Visual Studio autoformatting
@@ -948,7 +948,7 @@ paq8px_v130_fix1
 - Fixed decode_cd(): dealing with the "residual" data was buggy
 - Removed unnecessary includes
 - Corrected comments here and there
-- Heavily commented expandCdSector(), encodeCd() and decodeCd() functions
+- Heavily commented expand_cd_sector(), encode_cd() and decode_cd() functions
 
 
 paq8px_v130_fix2 
@@ -1015,8 +1015,8 @@ paq8px_v137
 - Changed some [] arrays to Array<> in order to detect out of bound operations
 - Now you can disable/enable compilation of certain models/transformations (ZLIB, TEXTMODEL, WORDMODEL, WAVMODEL)
 - The "String" class is extended with new functions to support the new command line interface
-- A new "FileName" class to represent a fileName/filePath.
-- Introduced some file/folder helper functions (examinePath(), getFileSize(), appendToFile(), isOutputRedirected() - see source)
+- A new "FileName" class to represent a filename/filepath.
+- Introduced some file/folder helper functions (examinepath(), getfilesize(), appendtofile(), isoutputredirected() - see source)
 - Dispatcher for SSE2/AVX2 neural network functions
 - Remark: needed to switch jpegmodel from function to class for the new CPU-dispatched Mixer.
 - Improvements - for users
@@ -1024,7 +1024,7 @@ paq8px_v137
   - Archives are now comparable - based solely on their content regardless of the input filename and path
   - Input filename and its path is not stored in the archive anymore.
   - Wildcard support and folder compression is removed for the sake of a list-based file enumeration.
-  - If you wish to compress more files, you'll have to gather the fileNames (with optional relative paths) in a text file.
+  - If you wish to compress more files, you'll have to gather the filenames (with optional relative paths) in a text file.
   - When compressing multiple files you may now save extra information about those files (date, permissions,
     file attributes, even your own remarks). But you have to gather it yourself. See the help screen for more info.
   - All "Windows drag and drop" support is removed:
@@ -1089,7 +1089,7 @@ pap8px_v141fix2
 2018.04.18
 - Restored clang (linux) compatibility (changed gcc pragmas to function attributes for the dot product and train functions)
 - Fixed compiler warnings
-- Fixed a bug in decodeGif() (1st part of a while condition was always true)
+- Fixed a bug in decode_gif() (1st part of a while condition was always true)
 - Fixed a bug in main() (value of 'options' was never EOF)
 - JpegModel reserved memory always (even if this model was not used). Fixed.
 - Until now we didn't know the overhead (the size of the added "diff" information) of zlib recompression. Now we know. It is printed on screen along with the segmentation information.
@@ -1113,7 +1113,7 @@ pap8px_v141fix4
 - Small changes/fixes in Word, Language, TextModel and the English Stemmer classes
   - Added virtual destructors
   - Created a function to print the result of the stemmer (i.e. word stem) for debugging
-  - Fixed 2 items in the exceptions1 list (idle, gentle)
+  - Fixed 2 items in the Exceptions1 list (idle, gentle)
   - Fixed a bug in Step5 ( W->End+=!EndsInShortSyllable(W);  ->  W->End+=EndsInShortSyllable(W); )
   - Modified TrimStartingApostrophe() to trim more than 1 apostrophe both from the beginning and end in pairs
   - Commented some parts of the English Stemming routines
@@ -1224,7 +1224,7 @@ paq8px_v156
   - moved normalmodel in front of the special models improving compression of images and files containing mixed content
 - Minor fixes: in wordModel
   - pC (previous character) was not converted to lowercase before use.
-  - added blockType==TEXT_EOL condition where blockType==TEXT was used.
+  - added blocktype==TEXT_EOL condition where blocktype==TEXT was used.
 - Fixed: multiple file mode
   - since v137 compression could degrade significantly due to a bug around block type/size detection
   - it did not affect compression in single file mode
@@ -1471,7 +1471,7 @@ Paq8px_v179fix2
 - All models are classes now
 - A new model factory, so that unused models do not consume memory (preparation*)
 - Scaling in Mixer: multipliers instead of shifts (preparation*)
-- update() is now a standalone function in all maps (preparation*)
+- Update() is now a standalone function in all maps (preparation*)
 - Other minor/cosmetic changes
 - Eliminated some compiler warnings (VC++)
 
@@ -1484,7 +1484,7 @@ Paq8px_v179fix3
 - Refactored Training (NormalModel, ExeModel)
 - Refactored APM and StateMap, StateMap now handles context sets (it processed single-contexts until now)
 - Scaling of stretched probabilities is now performed by *>> instead of */ in the maps
-- Fixed an Image8BitModel context (thank you Márcio)
+- Fixed an Image8bitModel context (thank you Márcio)
 - Re-added distancemodel removed in v179fix2
 - Other minor/cosmetic changes, fixed some method and variable names to follow naming conventions
 - Blended earlier removed changelogs from cpp to CHANGELOG
@@ -1499,7 +1499,7 @@ Paq8px_v179fix4
 - Removed some unused functions and calculations
 - Fixed an index in Audio16bitModel
 - AudioModel now encapsulates the common functions of Audio8bitModel and Audio16bitModel
-- The detectContent() functionality of XMLModel is moved to its class
+- The DetectContent() functionality of XMLModel is moved to its class
 - SSE stage is separated from Predictor to its own function
 - Other minor/cosmetic changes
 
@@ -1519,7 +1519,7 @@ Paq8px_v180
 2019.07.05
 - Minor code changes with unchanged functionality according to VS2019 suggestions with C++11 guidelines in mind
 - Minor fixes in probabilistic increment in StateMap
-- Introduced probabilistic increment in stateMaps (IndirectMap, ContextMap2, Image4bitModel, Image1bitModel, JpegModel, DMCModel)
+- Introduced probabilistic increment in StateMaps (IndirectMap, ContextMap2, Image4bitModel, Image1bitModel, JpegModel, DMCModel)
 - Improvements in ContextMap, ContextMap2
 - Introduced state group in StateMap (used by ContextMap2)
 - More global scope (now ExeModel-related) cleanup 
@@ -1605,6 +1605,9 @@ paq8px_v183
   - hashed contexts were: 0-6, 8, 14; now: 1-7, 9, 14 (same in number, but generally longer)
 - Updated memory usage information displayed on help screen
 
+paq8px_v183fix1:
+2019.10.22
+- fixed text pre-training
 
 paq8px_v184
 2020.01.05
@@ -1612,6 +1615,7 @@ paq8px_v184
 - Many (minor) code cleanup changes, e.g. initializing variables, removing signed bitwise operations, correcting typos, etc
 - Applied consistent code format
 - Began switching documentation to Doxygen format
+- Ported Bucket find() function from paq8pdx
 
 
 paq8px_v185
@@ -1664,8 +1668,49 @@ paq8px_v187fix1
 paq8px_v187fix2
 2020.06.09
 - Fixed string copy issue in "OpenFromMyFolder.hpp" that caused text pretraining to malfunction.
-- Enabled compression levels up to 12 (~ 28-32 GB depending on the models loaded)
+- Enabled compression levels up to 12 (10 => 7-8 GB, 11 => 14-16 GB, 12 => ~ 28-32 GB depending on the models loaded)
+
 
 paq8px_v187fix3
 2020.06.09
 - Restored compilation on ARM processors using GCC (Must use -DNATIVECPU=ON on cmake).
+
+
+paq8px_v187fix4
+2020.06.13
+- Cosmetic changes (formatting for better readability)
+- Added a couple of remarks
+- Restricted input buffer size to 1GB (on compression level 12 less memory is used: 28702 MB -> 27678 MB)
+- Restored INJECT #definitions for accessing Shared members (speed improvement)
+- Bucket find() function is hardwired to the non-SIMD version (speed improvement; SIMD version introduced in v184 seems to be somewhat slower than the non-SIMD one)
+- Archives are still expected to be binary compatible with v183fix1
+
+
+paq8px_v187fix5
+2020.06.14
+- More cosmetic changes (formatting for better readability), more remarks in code
+- "Shared" and "UpdateBroadcaster" instances are compositioned instead of using a singleton
+- Archives are still expected to be binary compatible with v183fix1
+
+
+paq8px_v187fix6
+2020.07.12
+- Bucket.hpp: removed SIMD find() methods (no speed benefit)
+- Flexibility fix: Separated prediction and update functionality from arithmetic encoding
+  - until now  : detector -> encoder -> arithmetic encoder -> predictor (predict+update)
+  - from now on: detector -> encoder -> predictor predict; arithmetic encoder; predictor update
+  - until now: only one predictor (and one sse stage) could be used and this single predictor (and sse stage) needed to switch between the different blocktypes/models
+  - from now on: we will be able to use different predictors (and separate sse stages and separate mixers) for different blocktypes
+- Flexibility fix: Separated arithmetic encoder from Encode class
+- Flexibility fix: distinguished compressing block header information from compressing general data
+- Small cosmetic changes
+- No compression improvements but small fluctuations are to be expected vs. v187fix5
+
+paq8px_v187fix7
+2020.07.12
+- Merged ModelStats to Shared
+- Archives are expected to be binary compatible with v187fix6
+
+paq8px_v188
+2020.07.12
+- New option switch "l" to use an LSTM model

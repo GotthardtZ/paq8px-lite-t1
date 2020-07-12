@@ -44,7 +44,7 @@ public:
      * @return
      */
     inline auto operator[](uint64_t i) -> uint8_t * {
-      auto chk = static_cast<uint8_t>(checksum64(i, hashBits, 8)); /**< 8-bit checksum */
+      const uint8_t chk = checksum8(i, hashBits);
       i = finalize64(i, hashBits) * B & mask; /**< index: force bounds */
       //search for the checksum in t
       uint8_t *p = &t[0];

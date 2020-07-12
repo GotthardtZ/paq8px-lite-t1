@@ -1,101 +1,33 @@
 #include "Image8BitModel.hpp"
 
-Image8BitModel::Image8BitModel(ModelStats *st, const uint64_t size) : stats(st), cm(size, nCM, 64, CM_USE_RUN_STATS),
-        map {/* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
-                /*nSM0: 0- 1*/ {0,  8, 64, 1023},
-                               {15, 1, 64, 1023},
-                /*nSM1: 0- 4*/
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                /*nSM1: 5- 9*/
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                /*nSM1:10-14*/
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                /*nSM1:15-19*/
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                /*nSM1:20-24*/
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                /*nSM1:25-29*/
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                /*nSM1:30-34*/
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                /*nSM1:35-39*/
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                /*nSM1:40-44*/
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                /*nSM1:45-49*/
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                /*nSM1:50-54*/
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                /*nOLS:   0- 4*/
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023},
-                               {11, 1, 64, 1023}
-        },
-        pltMap {/* SmallStationaryContextMap: BitsOfContext, InputBits, Rate, Scale */
-                {11, 1, 7, 64},
-                {11, 1, 7, 64},
-                {11, 1, 7, 64},
-                {11, 1, 7, 64}
-        },
-        sceneMap {/* IndirectMap: BitsOfContext, InputBits, Scale, Limit */
-                {8,  8, 64, 255},
-                {8,  8, 64, 255},
-                {22, 1, 64, 255},
-                {11, 1, 64, 255},
-                {11, 1, 64, 255}
-        },
-        iCtx {/* IndirectContext<uint8_t>: BitsPerContext, InputBits */
-                {16, 8},
-                {16, 8},
-                {16, 8},
-                {16, 8}
-        } {}
+Image8BitModel::Image8BitModel(Shared* const sh, const uint64_t size) : 
+  shared(sh), 
+  cm(sh, size, nCM, 64, CM_USE_RUN_STATS),
+  map { /* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
+    /*nSM0: 0- 1*/ {sh, 0,8,64,1023}, {sh,15,1,64,1023},
+    /*nSM1: 0- 4*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1: 5- 9*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:10-14*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:15-19*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:20-24*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:25-29*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:30-34*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:35-39*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:40-44*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:45-49*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nSM1:50-54*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023},
+    /*nOLS:   0- 4*/ {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}, {sh,11,1,64,1023}
+  },
+  pltMap {   /* SmallStationaryContextMap: BitsOfContext, InputBits, Rate, Scale */
+    {sh,11,1,7,64}, {sh,11,1,7,64}, {sh,11,1,7,64}, {sh,11,1,7,64}
+  },
+  sceneMap { /* IndirectMap: BitsOfContext, InputBits, Scale, Limit */
+    {sh,8,8,64,255}, {sh,8,8,64,255}, {sh,22,1,64,255}, {sh,11,1,64,255}, {sh,11,1,64,255}
+  },
+  iCtx {     /* IndirectContext<U8>: BitsPerContext, InputBits */
+    {16,8}, {16,8}, {16,8}, {16,8}
+  }
+  {}
 
 void Image8BitModel::setParam(int info0, uint32_t gray0, uint32_t isPNG0) {
   w = info0;
@@ -105,9 +37,11 @@ void Image8BitModel::setParam(int info0, uint32_t gray0, uint32_t isPNG0) {
 
 void Image8BitModel::mix(Mixer &m) {
   // Select nearby pixels as context
-  if( shared->bitPosition == 0 ) {
+  INJECT_SHARED_bpos
+  if( bpos == 0 ) {
     INJECT_SHARED_buf
-    if( shared->buf.getpos() != lastPos + 1 ) {
+    INJECT_SHARED_pos
+    if( pos != lastPos + 1 ) {
       x = line = px = jump = 0;
       filterOn = false;
       columns[0] = max(1, w / max(1, ilog2(w) * 2));
@@ -122,7 +56,7 @@ void Image8BitModel::mix(Mixer &m) {
       }
       buffer.fill(0x7F);
       prevFramePos = framePos;
-      framePos = shared->buf.getpos();
+      framePos = pos;
       prevFrameWidth = frameWidth;
       frameWidth = w;
     } else {
@@ -132,43 +66,40 @@ void Image8BitModel::mix(Mixer &m) {
         line++;
       }
     }
-    lastPos = shared->buf.getpos();
+    lastPos = pos;
 
+    INJECT_SHARED_c1
     if( isPNG ) {
       if( x == 1 ) {
-        filter = shared->c1;
+        filter = c1;
       } else {
         switch( filter ) {
           case 1: {
-            buffer.add(static_cast<uint8_t>(shared->c1 + buffer(1) * static_cast<int>(x > 2 || (x == 0))));
+            buffer.add(static_cast<uint8_t>(c1 + buffer(1) * static_cast<int>(x > 2 || (x == 0))));
             filterOn = x > 1;
             px = buffer(1);
             break;
           }
           case 2: {
-            buffer.add(static_cast<uint8_t>(shared->c1 + buffer(w) * static_cast<int>((filterOn = (line > 0)))));
+            buffer.add(static_cast<uint8_t>(c1 + buffer(w) * static_cast<int>((filterOn = (line > 0)))));
             px = buffer(w);
             break;
           }
           case 3: {
-            buffer.add(static_cast<uint8_t>(shared->c1 +
-                                            (buffer(w) * static_cast<int>(line > 0) + buffer(1) * static_cast<int>(x > 2 || (x == 0))) /
-                                            2));
+            buffer.add(static_cast<uint8_t>(c1 + (buffer(w) * static_cast<int>(line > 0) + buffer(1) * static_cast<int>(x > 2 || (x == 0))) / 2));
             filterOn = (x > 1 || line > 0);
             px = (buffer(1) * static_cast<int>(x > 1) + buffer(w) * static_cast<int>(line > 0)) / 2;
             break;
           }
           case 4: {
-            buffer.add(static_cast<uint8_t>(shared->c1 +
-                                            paeth(buffer(1) * static_cast<int>(x > 2 || (x == 0)), buffer(w) * static_cast<int>(line > 0),
-                                                  buffer(w + 1) * static_cast<int>(line > 0 && (x > 2 || (x == 0))))));
+            buffer.add(static_cast<uint8_t>(c1 + paeth(buffer(1) * static_cast<int>(x > 2 || (x == 0)), buffer(w) * static_cast<int>(line > 0), buffer(w + 1) * static_cast<int>(line > 0 && (x > 2 || (x == 0))))));
             filterOn = (x > 1 || line > 0);
             px = paeth(buffer(1) * static_cast<int>(x > 1), buffer(w) * static_cast<int>(line > 0),
                        buffer(w + 1) * static_cast<int>(x > 1 && line > 0));
             break;
           }
           default:
-            buffer.add(shared->c1);
+            buffer.add(c1);
             filterOn = false;
             px = 0;
         }
@@ -177,7 +108,7 @@ void Image8BitModel::mix(Mixer &m) {
         }
       }
     } else { // non-png
-      buffer.add(shared->c1);
+      buffer.add(c1);
       if( x == 0 ) {
         memset(&jumps[0], 0, sizeof(short) * jumps.size());
         if( line > 0 && w > 8 ) {
@@ -367,8 +298,7 @@ void Image8BitModel::mix(Mixer &m) {
         mapContexts[j++] = clip((N * 2 + NE) - (NN + 2 * NNE) + buffer(w * 3 - 1));
         mapContexts[j++] = clip((NW * 2 + NNW) - (NNWW + buffer(w * 3 + 2) * 2) + buffer(w * 4 + 3));
         mapContexts[j++] = clip(NNWW + W - buffer(w * 2 + 3));
-        mapContexts[j++] = clip(
-                (-buffer(w * 4) + 5 * NNN - 10 * NN + 10 * N + clip(W * 4 - NWW * 6 + buffer(w * 2 + 3) * 4 - buffer(w * 3 + 4))) / 5);
+        mapContexts[j++] = clip((-buffer(w * 4) + 5 * NNN - 10 * NN + 10 * N + clip(W * 4 - NWW * 6 + buffer(w * 2 + 3) * 4 - buffer(w * 3 + 4))) / 5);
         mapContexts[j++] = clip(NEE + clip(buffer(w - 3) * 2 - buffer(w * 2 - 4)) - buffer(w - 4));
         mapContexts[j++] = clip(NW + W - NWW);
         mapContexts[j++] = clip((N * 2 + NW) - (NN + 2 * NNW) + buffer(w * 3 + 1));
@@ -406,9 +336,7 @@ void Image8BitModel::mix(Mixer &m) {
         cm.set(hash(++i, (W + clamp4(NE * 3 - NNE * 3 + NNNE, W, N, NE, NEE)) / 2, px, logMeanDiffQt(N, (NW + NE) / 2)));
         cm.set(hash(++i, (N + NNN) / 8, clip(N * 3 - NN * 3 + NNN) / 4, px));
         cm.set(hash(++i, (W + WWW) / 8, clip(W * 3 - WW * 3 + WWW) / 4, px));
-        cm.set(hash(++i, clip((-buffer(4) + 5 * WWW - 10 * WW + 10 * W +
-                               clamp4(NE * 4 - NNE * 6 + buffer(w * 3 - 1) * 4 - buffer(w * 4 - 1), N, NE, buffer(w - 2), buffer(w - 3))) /
-                              5) - px));
+        cm.set(hash(++i, clip((-buffer(4) + 5 * WWW - 10 * WW + 10 * W + clamp4(NE * 4 - NNE * 6 + buffer(w * 3 - 1) * 4 - buffer(w * 4 - 1), N, NE, buffer(w - 2), buffer(w - 3))) / 5) - px));
         cm.set(hash(++i, clip(N * 2 - NN) - px, logMeanDiffQt(N, clip(NN * 2 - NNN))));
         cm.set(hash(++i, clip(W * 2 - WW) - px, logMeanDiffQt(NE, clip(N * 2 - NW))));
 
@@ -424,32 +352,33 @@ void Image8BitModel::mix(Mixer &m) {
         res = clamp4(W + N - NW, W, NW, N, NE) - px;
       }
 
-      stats->Image.pixels.W = W;
-      stats->Image.pixels.N = N;
-      stats->Image.pixels.NN = NN;
-      stats->Image.pixels.WW = WW;
-      stats->Image.ctx = ctx >> gray;
+      shared->State.Image.pixels.W = W;
+      shared->State.Image.pixels.N = N;
+      shared->State.Image.pixels.NN = NN;
+      shared->State.Image.pixels.WW = WW;
+      shared->State.Image.ctx = ctx >> gray;
     }
   }
-  uint8_t b = (shared->c0 << (8 - shared->bitPosition));
+  INJECT_SHARED_c0
+  uint8_t b = (c0 << (8 - bpos));
   if((x != 0) || !isPNG) {
     if( gray ) {
       int i = 0;
       map[i++].setDirect(0);
-      map[i++].setDirect(((static_cast<uint8_t>(clip(W + N - NW) - px - b)) * 8 + shared->bitPosition) |
+      map[i++].setDirect(((static_cast<uint8_t>(clip(W + N - NW) - px - b)) * 8 + bpos) |
                          (logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) << 11U));
 
       for( int j = 0; j < nSM1; i++, j++ ) {
-        map[i].setDirect((mapContexts[j] - px - b) * 8 + shared->bitPosition);
+        map[i].setDirect((mapContexts[j] - px - b) * 8 + bpos);
       }
 
       for( int j = 0; i < nSM; i++, j++ ) {
-        map[i].setDirect((pOLS[j] - px - b) * 8 + shared->bitPosition);
+        map[i].setDirect((pOLS[j] - px - b) * 8 + bpos);
       }
     }
-    sceneMap[2].setDirect(finalize64(hash(x, line), 19) * 8 + shared->bitPosition);
-    sceneMap[3].setDirect((prvFrmPx - b) * 8 + shared->bitPosition);
-    sceneMap[4].setDirect((prvFrmPrediction - b) * 8 + shared->bitPosition);
+    sceneMap[2].setDirect(finalize64(hash(x, line), 19) * 8 + bpos);
+    sceneMap[3].setDirect((prvFrmPx - b) * 8 + bpos);
+    sceneMap[4].setDirect((prvFrmPrediction - b) * 8 + bpos);
   }
 
   // predict next bit
@@ -461,7 +390,7 @@ void Image8BitModel::mix(Mixer &m) {
       }
     } else {
       for( int i = 0; i < nPltMaps; i++ ) {
-        pltMap[i].set((shared->bitPosition << 8U) | iCtx[i]());
+        pltMap[i].set((bpos << 8U) | iCtx[i]());
         pltMap[i].mix(m);
       }
     }
@@ -473,10 +402,10 @@ void Image8BitModel::mix(Mixer &m) {
 
     col = (col + 1) & 7U;
     m.set(5 + ctx, 2048 + 5);
-    m.set(col * 2 + static_cast<int>(isPNG && shared->c0 == ((0x100U | res) >> (8 - shared->bitPosition))) +
+    m.set(col * 2 + static_cast<int>(isPNG && c0 == ((0x100U | res) >> (8 - bpos))) +
           min(5, filterOn ? filter + 1 : 0) * 16, 6 * 16);
     m.set(((isPNG ? px : N + W) >> 4U) + min(5, filterOn ? filter + 1 : 0) * 32, 6 * 32);
-    m.set(shared->c0, 256);
+    m.set(c0, 256);
     m.set((static_cast<int>(abs((W - N)) > 4) << 9U) | (static_cast<int>(abs((N - NE)) > 4) << 8U) |
           (static_cast<int>(abs((W - NW)) > 4) << 7U) | (static_cast<int>(W > N) << 6U) | (static_cast<int>(N > NE) << 5U) |
           (static_cast<int>(W > NW) << 4U) | (static_cast<int>(W > WW) << 3U) | (static_cast<int>(N > NN) << 2U) |
@@ -485,7 +414,7 @@ void Image8BitModel::mix(Mixer &m) {
     m.set(min(127, column[1]), 128);
     m.set(min(255, (x + line) / 32), 256);
   } else {
-    m.add(-2048 + ((filter >> (7 - shared->bitPosition)) & 1U) * 4096);
+    m.add(-2048 + ((filter >> (7 - bpos)) & 1U) * 4096);
     m.set(min(4, filter), MIXERINPUTS);
   }
 }

@@ -15,7 +15,7 @@ public:
     static constexpr int MIXERINPUTS = 2;
 
 private:
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     Random rnd;
     Array<uint8_t> data;
     StateMap sm;
@@ -30,7 +30,7 @@ private:
     int scale;
 
 public:
-    IndirectMap(int bitsOfContext, int inputBits, int scale, int limit);
+    IndirectMap(const Shared* const sh, int bitsOfContext, int inputBits, int scale, int limit);
     void setDirect(uint32_t ctx);
     void set(uint64_t ctx);
     void update() override;

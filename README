@@ -9,7 +9,7 @@ COPYRIGHT
     Bill Pettis, Przemyslaw Skibinski, Matthew Fite, wowtiger, Andrew Paterson,
     Jan Ondrus, Andreas Morphis, Pavel L. Holoborodko, Kaido Orav, Simon Berger,
     Neill Corlett, Márcio Pais, Andrew Epstein, Mauro Vezzosi, Zoltán Gotthardt,
-    Sebastian Lehmann, Moisés Cardona
+    Sebastian Lehmann, Moisés Cardona, Byron Knoll
 
     We would like to express our gratitude for the endless support of many 
     contributors who encouraged PAQ8PX development with ideas, testing, 
@@ -154,8 +154,7 @@ Note:
 
  We build and test 64-bit releases, 32-bit releases are seldom built or tested. A known
  limitation of 32-bit releases is the 2 GB memory barrier. As a consequence, compression 
- and decompression will not work on level 9 and you may experience "out of memory" errors 
- on level 8 where memory consumption is near the 2 GB limit.
+ and decompression with 32-bit releases may not work ("out of memory") on level 8 and above.
  
 --------------
 FOR DEVELOPERS

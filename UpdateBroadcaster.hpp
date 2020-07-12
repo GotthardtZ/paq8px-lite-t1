@@ -10,15 +10,12 @@
  */
 class UpdateBroadcaster {
 public:
-    static auto getInstance() -> UpdateBroadcaster *;
     void subscribe(IPredictor *subscriber);
     void broadcastUpdate();
+    UpdateBroadcaster() {}
 private:
-    static UpdateBroadcaster *mPInstance;
     int n {0}; /**< number of subscribed predictors, (number of items in "subscribers" array) */
     IPredictor *subscribers[1024] {};
-
-    UpdateBroadcaster() = default;
 
     /**
      * Copy constructor is private so that it cannot be called

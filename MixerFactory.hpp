@@ -7,10 +7,8 @@
 #include "SimdMixer.hpp"
 
 class MixerFactory {
-private:
-    Shared *shared = Shared::getInstance();
 public:
-    auto createMixer(int n, int m, int s) -> Mixer *;
+    auto createMixer(const Shared* const sh, int n, int m, int s) -> Mixer *;
 };
 
 #endif //PAQ8PX_MIXERFACTORY_HPP

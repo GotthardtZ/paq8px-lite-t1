@@ -9,18 +9,18 @@ class LinearPredictionModel {
 private:
     static constexpr int nOLS = 3;
     static constexpr int nSSM = nOLS + 2;
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     SmallStationaryContextMap sMap[nSSM];
-    OLS<double, uint8_t> ols[nOLS] {{32, 4, 0.995},
-                                    {32, 4, 0.995},
-                                    {32, 4, 0.995}};
+    OLS<double, uint8_t> ols[nOLS] {{shared, 32, 4, 0.995},
+                                    {shared, 32, 4, 0.995},
+                                    {shared, 32, 4, 0.995}};
     uint8_t prd[nSSM] {0};
 
 public:
     static constexpr int MIXERINPUTS = nSSM * SmallStationaryContextMap::MIXERINPUTS; // 10
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
-    LinearPredictionModel();
+    LinearPredictionModel(const Shared* const sh);
     void mix(Mixer &m);
 };
 

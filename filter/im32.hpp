@@ -7,8 +7,7 @@
 #include <cstdint>
 
 // 32-bit image
-static void encodeIm32(File *in, File *out, uint64_t len, int width) {
-  Shared *shared = Shared::getInstance();
+static void encodeIm32(File *in, File *out, uint64_t len, int width, bool skipRgb) {
   int r = 0;
   int g = 0;
   int b = 0;
@@ -20,8 +19,8 @@ static void encodeIm32(File *in, File *out, uint64_t len, int width) {
       r = in->getchar();
       a = in->getchar();
       out->putChar(g);
-      out->putChar((shared->options & OPTION_SKIPRGB) != 0u ? r : g - r);
-      out->putChar((shared->options & OPTION_SKIPRGB) != 0u ? b : g - b);
+      out->putChar(skipRgb ? r : g - r);
+      out->putChar(skipRgb ? b : g - b);
       out->putChar(a);
     }
     for( int j = 0; j < width % 4; j++ ) {
@@ -33,8 +32,7 @@ static void encodeIm32(File *in, File *out, uint64_t len, int width) {
   }
 }
 
-static auto decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMode mode, uint64_t &diffFound) -> uint64_t {
-  Shared *shared = Shared::getInstance();
+static auto decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMode mode, uint64_t &diffFound, bool skipRgb) -> uint64_t {
   int r = 0;
   int g = 0;
   int b = 0;
@@ -47,23 +45,23 @@ static auto decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMode m
   for( int i = 0; i < static_cast<int>(size / width); i++ ) {
     p = i * width;
     for( int j = 0; j < width / 4; j++ ) {
-      b = en.decompress(), g = en.decompress(), r = en.decompress(), a = en.decompress();
+      b = en.decompressByte(), g = en.decompressByte(), r = en.decompressByte(), a = en.decompressByte();
       if( mode == FDECOMPRESS ) {
-        out->putChar((shared->options & OPTION_SKIPRGB) != 0u ? r : b - r);
+        out->putChar(skipRgb ? r : b - r);
         out->putChar(b);
-        out->putChar((shared->options & OPTION_SKIPRGB) != 0u ? g : b - g);
+        out->putChar(skipRgb ? g : b - g);
         out->putChar(a);
         if((j == 0) && ((i & 0xf) == 0)) {
           en.printStatus();
         }
       } else if( mode == FCOMPARE ) {
-        if((((shared->options & OPTION_SKIPRGB) != 0u ? r : b - r) & 255U) != out->getchar() && (diffFound == 0u)) {
+        if(((skipRgb ? r : b - r) & 255U) != out->getchar() && (diffFound == 0u)) {
           diffFound = p + 1;
         }
         if( b != out->getchar() && (diffFound == 0u)) {
           diffFound = p + 2;
         }
-        if((((shared->options & OPTION_SKIPRGB) != 0u ? g : b - g) & 255U) != out->getchar() && (diffFound == 0u)) {
+        if(((skipRgb ? g : b - g) & 255U) != out->getchar() && (diffFound == 0u)) {
           diffFound = p + 3;
         }
         if(((a) & 255) != out->getchar() && (diffFound == 0u)) {
@@ -74,9 +72,9 @@ static auto decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMode m
     }
     for( int j = 0; j < width % 4; j++ ) {
       if( mode == FDECOMPRESS ) {
-        out->putChar(en.decompress());
+        out->putChar(en.decompressByte());
       } else if( mode == FCOMPARE ) {
-        if( en.decompress() != out->getchar() && (diffFound == 0u)) {
+        if( en.decompressByte() != out->getchar() && (diffFound == 0u)) {
           diffFound = p + j + 1;
         }
       }
@@ -84,9 +82,9 @@ static auto decodeIm32(Encoder &en, uint64_t size, int width, File *out, FMode m
   }
   for( int i = size % width; i > 0; i-- ) {
     if( mode == FDECOMPRESS ) {
-      out->putChar(en.decompress());
+      out->putChar(en.decompressByte());
     } else if( mode == FCOMPARE ) {
-      if( en.decompress() != out->getchar() && (diffFound == 0u)) {
+      if( en.decompressByte() != out->getchar() && (diffFound == 0u)) {
         diffFound = size - i;
         break;
       }

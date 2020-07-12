@@ -13,8 +13,11 @@ private:
     const uint32_t ctxMask, inputMask, inputBits;
 
 public:
-    IndirectContext(const int bitsPerContext, const int inputBits) : data(UINT64_C(1) << bitsPerContext), ctx(&data[0]),
-            ctxMask((UINT32_C(1) << bitsPerContext) - 1), inputMask((UINT32_C(1) << inputBits) - 1), inputBits(inputBits) {
+    IndirectContext(const int bitsPerContext, const int inputBits) :
+      data(UINT64_C(1) << bitsPerContext), ctx(&data[0]),
+      ctxMask((UINT32_C(1) << bitsPerContext) - 1), 
+      inputMask((UINT32_C(1) << inputBits) - 1), 
+      inputBits(inputBits) {
 #ifdef VERBOSE
       printf("Created IndirectContext with bitsPerContext = %d, inputBits = %d\n", bitsPerContext, inputBits);
 #endif

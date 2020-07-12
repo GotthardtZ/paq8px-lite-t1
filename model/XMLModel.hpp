@@ -52,7 +52,7 @@ private:
     static constexpr int nCM = 4;
     static_assert((cacheSize & (cacheSize - 1)) == 0);
     static_assert(cacheSize > 8);
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     ContextMap cm;
     XMLTagCache cache {};
     uint32_t stateBh[8] {};
@@ -69,7 +69,7 @@ public:
     static constexpr int MIXERINPUTS = nCM * (ContextMap::MIXERINPUTS); //20
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
-    explicit XMLModel(uint64_t size);
+    explicit XMLModel(const Shared* const sh, uint64_t size);
     void update();
     void mix(Mixer &m);
 };

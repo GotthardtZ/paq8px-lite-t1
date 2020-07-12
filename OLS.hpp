@@ -1,10 +1,10 @@
 #ifndef PAQ8PX_OLS_HPP
 #define PAQ8PX_OLS_HPP
 
-#include "Mixer.hpp"
-#include "Shared.hpp"
 #include <cmath>
 #include <cstdint>
+
+#include "Shared.hpp"
 
 /**
  * Ordinary Least Squares predictor
@@ -16,9 +16,9 @@ template<typename F, typename T, const bool hasZeroMean = true>
 class OLS {
     static constexpr F ftol = 1E-8;
     static constexpr F sub = F(int64_t(!hasZeroMean) << (8 * sizeof(T) - 1));
-    Shared *shared = Shared::getInstance();
 
 private:
+    const Shared* const shared;
     int n, kMax, km, index;
     F lambda, nu;
     F *x, *w, *b;
@@ -74,18 +74,19 @@ private:
     }
 
 public:
-    OLS(int n, int kMax = 1, F lambda = 0.998, F nu = 0.001) : n(n), kMax(kMax), lambda(lambda), nu(nu) {
-      km = index = 0;
-      x = new F[n], w = new F[n], b = new F[n];
-      mCovariance = new F *[n], mCholesky = new F *[n];
-      for( int i = 0; i < n; i++ ) {
-        x[i] = w[i] = b[i] = 0.;
-        mCovariance[i] = new F[n], mCholesky[i] = new F[n];
-        for( int j = 0; j < n; j++ ) {
-          mCovariance[i][j] = mCholesky[i][j] = 0.;
+    OLS(const Shared* const sh, int n, int kMax = 1, F lambda = 0.998, F nu = 0.001) : shared(sh),
+      n(n), kMax(kMax), lambda(lambda), nu(nu) {
+        km = index = 0;
+        x = new F[n], w = new F[n], b = new F[n];
+        mCovariance = new F *[n], mCholesky = new F *[n];
+        for( int i = 0; i < n; i++ ) {
+          x[i] = w[i] = b[i] = 0.;
+          mCovariance[i] = new F[n], mCholesky[i] = new F[n];
+          for( int j = 0; j < n; j++ ) {
+            mCovariance[i][j] = mCholesky[i][j] = 0.;
+          }
         }
       }
-    }
 
     ~OLS() {
       delete x, delete w, delete b;

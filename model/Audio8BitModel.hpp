@@ -16,14 +16,14 @@ private:
     static constexpr int nSSM = nOLS + nLMS + 3;
     static constexpr int nCtx = 3;
     SmallStationaryContextMap sMap1B[nSSM][nCtx];
-    OLS<double, int8_t> ols[nOLS][2] {{{128, 24, 0.9975}, {128, 24, 0.9975}},
-                                      {{90,  30, 0.9965}, {90,  30, 0.9965}},
-                                      {{90,  31, 0.996},  {90,  31, 0.996}},
-                                      {{90,  32, 0.995},  {90,  32, 0.995}},
-                                      {{90,  33, 0.995},  {90,  33, 0.995}},
-                                      {{90,  34, 0.9985}, {90,  34, 0.9985}},
-                                      {{28,  4,  0.98},   {28,  4,  0.98}},
-                                      {{28,  3,  0.992},  {28,  3,  0.992}}};
+    OLS<double, int8_t> ols[nOLS][2] {{{shared,128, 24, 0.9975}, {shared,128, 24, 0.9975}},
+                                      {{shared,90,  30, 0.9965}, {shared,90,  30, 0.9965}},
+                                      {{shared,90,  31, 0.996},  {shared,90,  31, 0.996}},
+                                      {{shared,90,  32, 0.995},  {shared,90,  32, 0.995}},
+                                      {{shared,90,  33, 0.995},  {shared,90,  33, 0.995}},
+                                      {{shared,90,  34, 0.9985}, {shared,90,  34, 0.9985}},
+                                      {{shared,28,  4,  0.98},   {shared,28,  4,  0.98}},
+                                      {{shared,28,  3,  0.992},  {shared,28,  3,  0.992}}};
     LMS<float, int8_t> lms[nLMS][2] {{{1280, 640, 3e-5f,   2e-5f}, {1280, 640, 3e-5f,   2e-5f}},
                                      {{640,  64,  8e-5f,   1e-5f}, {640,  64,  8e-5f,   1e-5f}},
                                      {{2450, 8,   1.6e-5f, 1e-6f}, {2450, 8,   1.6e-5f, 1e-6f}}};
@@ -40,7 +40,7 @@ public:
     static constexpr int MIXERCONTEXTS = 4096 + 2048 + 2048 + 256 + 10; // 8458
     static constexpr int MIXERCONTEXTSETS = 5;
 
-    explicit Audio8BitModel(ModelStats *st);
+    explicit Audio8BitModel(Shared* const sh);
     void setParam(int info);
     void mix(Mixer &m);
 };

@@ -71,15 +71,15 @@ static_assert(sizeof(int) == 4, "sizeof(int)");
 #define DEFAULT_LEARNING_RATE 7
 
 typedef enum {
-    SIMD_NONE, SIMD_SSE2, SIMD_SSSE3, SIMD_AVX2, SIMD_NEON
+  SIMD_NONE, SIMD_SSE2, SIMD_SSSE3, SIMD_AVX2, SIMD_NEON
 } SIMD;
 
 struct ErrorInfo {
-    uint32_t data[2], sum, mask, collected;
+  uint32_t data[2], sum, mask, collected;
 
-    void reset() {
-      memset(this, 0, sizeof(*this));
-    }
+  void reset() {
+    memset(this, 0, sizeof(*this));
+  }
 };
 
 static inline auto square(uint32_t x) -> uint32_t {
@@ -96,6 +96,15 @@ template<typename T>
 constexpr auto isPowerOf2(T x) -> bool {
   return ((x & (x - 1)) == 0);
 }
+
+template <std::uint8_t e>
+struct neg_pow10 {
+  static constexpr double value = neg_pow10<e - 1>::value / 10.f;
+};
+template <>
+struct neg_pow10<0> {
+  static constexpr double value = 1.f;
+};
 
 #ifndef NDEBUG
 #if defined(UNIX)
@@ -133,31 +142,31 @@ class IntentionalException : public std::exception {};
 }
 
 typedef enum {
-    DEFAULT = 0,
-    FILECONTAINER,
-    JPEG,
-    HDR,
-    IMAGE1,
-    IMAGE4,
-    IMAGE8,
-    IMAGE8GRAY,
-    IMAGE24,
-    IMAGE32,
-    AUDIO,
-    AUDIO_LE,
-    EXE,
-    CD,
-    ZLIB,
-    BASE64,
-    GIF,
-    PNG8,
-    PNG8GRAY,
-    PNG24,
-    PNG32,
-    TEXT,
-    TEXT_EOL,
-    RLE,
-    LZW
+  DEFAULT = 0,
+  FILECONTAINER,
+  JPEG,
+  HDR,
+  IMAGE1,
+  IMAGE4,
+  IMAGE8,
+  IMAGE8GRAY,
+  IMAGE24,
+  IMAGE32,
+  AUDIO,
+  AUDIO_LE,
+  EXE,
+  CD,
+  ZLIB,
+  BASE64,
+  GIF,
+  PNG8,
+  PNG8GRAY,
+  PNG24,
+  PNG32,
+  TEXT,
+  TEXT_EOL,
+  RLE,
+  LZW
 } BlockType;
 
 static inline auto hasRecursion(BlockType ft) -> bool {
@@ -182,6 +191,7 @@ static inline auto isPNG(BlockType ft) -> bool { return ft == PNG8 || ft == PNG8
 #define OPTION_TRAINTXT 8U
 #define OPTION_ADAPTIVE 16U
 #define OPTION_SKIPRGB 32U
+#define OPTION_LSTM 64U
 
 //////////////////// Cross-platform definitions /////////////////////////////////////
 

@@ -1,44 +1,19 @@
 #include "Encoder.hpp"
 
-auto Encoder::code(int i) -> int {
-  int p = predictor.p();
-  if( p == 0 ) {
-    p++;
-  }
-  assert(p > 0 && p < 4096);
-  uint32_t xMid = x1 + ((x2 - x1) >> 12U) * p + (((x2 - x1) & 0xfffU) * p >> 12U);
-  assert(xMid >= x1 && xMid < x2);
-  uint8_t y = (mode == DECOMPRESS) ? static_cast<int>(x <= xMid) : i;
-  y != 0u ? (x2 = xMid) : (x1 = xMid + 1);
-  while(((x1 ^ x2) & 0xff000000U) == 0 ) { // pass equal leading bytes of range
-    if( mode == COMPRESS ) {
-      archive->putChar(x2 >> 24U);
-    }
-    x1 <<= 8U;
-    x2 = (x2 << 8U) + 255;
-    if( mode == DECOMPRESS ) {
-      x = (x << 8U) + (archive->getchar() & 255U); // EOF is OK
-    }
-  }
-  predictor.update(y);
-  return y;
-}
 
-Encoder::Encoder(Mode m, File *f) : mode(m), archive(f), x1(0), x2(0xffffffff), x(0), alt(nullptr) {
+Encoder::Encoder(Shared* const sh, Mode m, File *f) : shared(sh), predictor(sh), ari(f), mode(m), archive(f), alt(nullptr) {
   if( mode == DECOMPRESS ) {
     uint64_t start = size();
     archive->setEnd();
     uint64_t end = size();
-    if( end >= (1ULL << 31U)) {
+    if( end >= (1ULL << 31)) {
       quit("Large archives not yet supported.");
     }
     setStatusRange(0.0, static_cast<float>(end));
     archive->setpos(start);
   }
   if( shared->level > 0 && mode == DECOMPRESS ) { // x = first 4 bytes of archive
-    for( int i = 0; i < 4; ++i ) {
-      x = (x << 8U) + (archive->getchar() & 255U);
-    }
+    ari.prefetch();
   }
 }
 
@@ -48,24 +23,27 @@ auto Encoder::size() const -> uint64_t { return archive->curPos(); }
 
 void Encoder::flush() {
   if( mode == COMPRESS && shared->level > 0 ) {
-    archive->putChar(x1 >> 24U); // Flush first unequal byte of range
+    ari.flush();
   }
 }
 
 void Encoder::setFile(File *f) { alt = f; }
 
-void Encoder::compress(int c) {
+void Encoder::compressByte(uint8_t c) {
   assert(mode == COMPRESS);
   if( shared->level == 0 ) {
     archive->putChar(c);
   } else {
     for( int i = 7; i >= 0; --i ) {
-      code((c >> i) & 1U);
+      int p = predictor.p();
+      int y = (c >> i) & 1;
+      ari.encodeBit(p, y);
+      predictor.update(y);
     }
   }
 }
 
-auto Encoder::decompress() -> int {
+auto Encoder::decompressByte() -> uint8_t {
   if( mode == COMPRESS ) {
     assert(alt);
     return alt->getchar();
@@ -73,9 +51,12 @@ auto Encoder::decompress() -> int {
   if( shared->level == 0 ) {
     return archive->getchar();
   } else {
-    int c = 0;
+    uint8_t c = 0;
     for( int i = 0; i < 8; ++i ) {
-      c += c + code();
+      int p = predictor.p();
+      int y = ari.decodeBit(p);
+      c = c << 1 | y;
+      predictor.update(y);
     }
     return c;
   }
@@ -83,10 +64,19 @@ auto Encoder::decompress() -> int {
 
 void Encoder::encodeBlockSize(uint64_t blockSize) {
   while( blockSize > 0x7FU ) {
-    compress(0x80U | (blockSize & 0x7FU));
+    compressByte(0x80 | (blockSize & 0x7FU));
     blockSize >>= 7U;
   }
-  compress(uint8_t(blockSize));
+  compressByte(uint8_t(blockSize));
+}
+
+void Encoder::encodeBlockType(BlockType blocktype) {
+  compressByte(uint8_t(blocktype));
+}
+
+auto Encoder::decodeBlockType() -> BlockType {
+  uint8_t b = decompressByte();
+  return (BlockType)b;
 }
 
 auto Encoder::decodeBlockSize() -> uint64_t {
@@ -94,11 +84,26 @@ auto Encoder::decodeBlockSize() -> uint64_t {
   uint8_t b = 0;
   int i = 0;
   do {
-    b = decompress();
+    b = decompressByte();
     blockSize |= uint64_t((b & 0x7FU) << i);
     i += 7;
   } while((b >> 7U) > 0 );
   return blockSize;
+}
+
+void Encoder::encodeInfo(int info) {
+  compressByte((info >> 24) & 0xFF);
+  compressByte((info >> 16) & 0xFF);
+  compressByte((info >> 8) & 0xFF);
+  compressByte((info) & 0xFF);
+}
+auto Encoder::decodeInfo() -> int {
+  int info = 0;
+  for (int j = 0; j < 4; ++j) {
+    info <<= 8;
+    info += decompressByte();
+  }
+  return info;
 }
 
 void Encoder::setStatusRange(float perc1, float perc2) {

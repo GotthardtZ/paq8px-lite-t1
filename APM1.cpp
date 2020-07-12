@@ -1,6 +1,6 @@
 #include "APM1.hpp"
 
-APM1::APM1(const int n, const int r) : index(0), n(n), t(n * 33), rate(r) {
+APM1::APM1(const Shared* const sh, const int n, const int r) : shared(sh), index(0), n(n), t(n * 33), rate(r) {
 #ifdef VERBOSE
   printf("Created APM1 with n = %d, r = %d\n", n, r);
 #endif
@@ -18,7 +18,7 @@ APM1::APM1(const int n, const int r) : index(0), n(n), t(n * 33), rate(r) {
 }
 
 auto APM1::p(int pr, const int cxt) -> int {
-  shared->updateBroadcaster->subscribe(this);
+  shared->GetUpdateBroadcaster()->subscribe(this);
   assert(pr >= 0 && pr < 4096 && cxt >= 0 && cxt < n);
   pr = stretch(pr);
   const int w = pr & 127U; // interpolation weight (33 points)

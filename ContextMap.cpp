@@ -1,7 +1,9 @@
 #include "ContextMap.hpp"
 
-ContextMap::ContextMap(uint64_t m, const int contexts) : C(contexts), t(m >> 6U), cp(contexts), cp0(contexts), cxt(contexts), chk(contexts), runP(contexts),
-        sm(contexts, 256, 1023, StateMap::BitHistory), cn(0), mask(uint32_t(t.size() - 1)), hashBits(ilog2(mask + 1)), validFlags(0) {
+ContextMap::ContextMap(const Shared* const sh, uint64_t m, const int contexts) : 
+  shared(sh), C(contexts), t(m >> 6U), cp(contexts), cp0(contexts), cxt(contexts), chk(contexts), runP(contexts),
+  sm(sh, contexts, 256, 1023, StateMap::BitHistory), cn(0),
+  mask(uint32_t(t.size() - 1)), hashBits(ilog2(mask + 1)), validFlags(0) {
 #ifdef VERBOSE
   printf("Created ContextMap with m = %" PRIu64 ", contexts = %d\n", m, contexts);
 #endif
@@ -13,17 +15,17 @@ ContextMap::ContextMap(uint64_t m, const int contexts) : C(contexts), t(m >> 6U)
 void ContextMap::set(const uint64_t cx) {
   assert(cn >= 0 && cn < C);
   const uint32_t ctx = cxt[cn] = finalize64(cx, hashBits);
-  const uint16_t checksum = chk[cn] = static_cast<uint16_t>(checksum64(cx, hashBits, 16));
-  uint8_t *base = cp0[cn] = cp[cn] = t[ctx].find(checksum, shared->chosenSimd);
+  const uint16_t checksum = chk[cn] = checksum16(cx, hashBits);
+  uint8_t* base = cp0[cn] = cp[cn] = t[ctx].find(checksum);
   runP[cn] = base + 3;
   // update pending bit histories for bits 2-7
   if( base[3] == 2 ) {
     const int c = base[4] + 256;
-    uint8_t *p = t[(ctx + (c >> 6U)) & mask].find(checksum, shared->chosenSimd);
+    uint8_t *p = t[(ctx + (c >> 6U)) & mask].find(checksum);
     p[0] = 1 + ((c >> 5U) & 1U);
     p[1 + ((c >> 5U) & 1U)] = 1 + ((c >> 4U) & 1U);
     p[3 + ((c >> 4U) & 3U)] = 1 + ((c >> 3U) & 1U);
-    p = t[(ctx + (c >> 3U)) & mask].find(checksum, shared->chosenSimd);
+    p = t[(ctx + (c >> 3U)) & mask].find(checksum);
     p[0] = 1 + ((c >> 2U) & 1U);
     p[1 + ((c >> 2U) & 1U)] = 1 + ((c >> 1U) & 1U);
     p[3 + ((c >> 1U) & 3U)] = 1 + (c & 1U);
@@ -40,6 +42,9 @@ void ContextMap::skip() {
 
 void ContextMap::update() {
   INJECT_SHARED_y
+  INJECT_SHARED_bpos
+  INJECT_SHARED_c1
+  INJECT_SHARED_c0
   for( int i = 0; i < cn; ++i ) {
     if(((validFlags >> (cn - 1 - i)) & 1) != 0 ) {
       // update bit history state byte
@@ -50,32 +55,32 @@ void ContextMap::update() {
       }
 
       // update context pointers
-      if( shared->bitPosition > 1 && runP[i][0] == 0 ) {
+      if( bpos > 1 && runP[i][0] == 0 ) {
         cp[i] = nullptr;
       } else {
-        switch( shared->bitPosition ) {
+        switch( bpos ) {
           case 1:
           case 3:
           case 6:
-            cp[i] = cp0[i] + 1 + (shared->c0 & 1U);
+            cp[i] = cp0[i] + 1 + (c0 & 1U);
             break;
           case 4:
           case 7:
-            cp[i] = cp0[i] + 3 + (shared->c0 & 3U);
+            cp[i] = cp0[i] + 3 + (c0 & 3U);
             break;
           case 2:
           case 5: {
             const uint16_t checksum = chk[i];
             const uint32_t ctx = cxt[i];
-            cp0[i] = cp[i] = t[(ctx + shared->c0) & mask].find(checksum, shared->chosenSimd);
+            cp0[i] = cp[i] = t[(ctx + c0) & mask].find(checksum);
             break;
           }
           case 0: {
             // update run count of previous context
             if( runP[i][0] == 0 ) { // new context
-              runP[i][0] = 2, runP[i][1] = shared->c1;
-            } else if( runP[i][1] != shared->c1 ) { // different byte in context
-              runP[i][0] = 1, runP[i][1] = shared->c1;
+              runP[i][0] = 2, runP[i][1] = c1;
+            } else if( runP[i][1] != c1 ) { // different byte in context
+              runP[i][0] = 1, runP[i][1] = c1;
             } else if( runP[i][0] < 254 ) { // same byte in context
               runP[i][0] += 2;
             } else if( runP[i][0] == 255 ) {
@@ -89,21 +94,23 @@ void ContextMap::update() {
       }
     }
   }
-  if( shared->bitPosition == 0 ) {
+  if( bpos == 0 ) {
     cn = 0;
     validFlags = 0;
   }
 }
 
 void ContextMap::mix(Mixer &m) {
-  shared->updateBroadcaster->subscribe(this);
+  shared->GetUpdateBroadcaster()->subscribe(this);
   sm.subscribe();
+  INJECT_SHARED_bpos
+  INJECT_SHARED_c0
   for( int i = 0; i < cn; ++i ) {
     if(((validFlags >> (cn - 1 - i)) & 1U) != 0 ) {
       // predict from last byte in context
-      if((runP[i][1] + 256) >> (8 - shared->bitPosition) == shared->c0 ) {
+      if((runP[i][1] + 256) >> (8 - bpos) == c0 ) {
         int rc = runP[i][0]; // count*2, +1 if 2 different bytes seen
-        int sign = (runP[i][1] >> (7 - shared->bitPosition) & 1U) * 2 - 1; // predicted bit + for 1, - for 0
+        int sign = (runP[i][1] >> (7 - bpos) & 1U) * 2 - 1; // predicted bit + for 1, - for 0
         int c = ilog->log(rc + 1) << (2 + (~rc & 1U));
         m.add(sign * c);
       } else {

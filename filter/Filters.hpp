@@ -3,7 +3,7 @@
 
 #include "../Array.hpp"
 #include "../Encoder.hpp"
-#include "../Shared.hpp"
+#include "../TransformOptions.hpp"
 #include "../file/File.hpp"
 #include "../file/FileDisk.hpp"
 #include "../file/FileTmp.hpp"
@@ -41,7 +41,7 @@
 //   en.setFile(File *out);
 //   int decode(Encoder& en);
 //
-// Decodes and returns one byte.  Input is from en.decompress(), which
+// Decodes and returns one byte.  Input is from en.decompressByte(), which
 // reads from out if in COMPRESS mode.  During compression, n calls
 // to decode() must exactly match n bytes of in, or else it is compressed
 // as type 0 without encoding.
@@ -114,8 +114,7 @@ static auto isGrayscalePalette(File *in, int n = 256, int isRGBA = 0) -> bool {
 }
 
 // Detect blocks
-static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> BlockType {
-  Shared *shared = Shared::getInstance();
+static auto detect(File *in, uint64_t blockSize, BlockType type, int &info, TransformOptions *transformOptions) -> BlockType {
   TextParserStateInfo *textParser = TextParserStateInfo::getInstance();
   // TODO: Large file support
   int n = static_cast<int>(blockSize);
@@ -288,7 +287,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
 
     int zh = parseZlibHeader(((int) zBuf[(zBufPos - 32) & 0xFF]) * 256 + (int) zBuf[(zBufPos - 32 + 1) & 0xFF]);
     bool valid = (i >= 31 && zh != -1);
-    if( !valid && shared->options & OPTION_BRUTE && i >= 255 ) {
+    if( !valid && transformOptions->useZlibBrute && i >= 255 ) {
       uint8_t bType = (zBuf[zBufPos] & 7) >> 1;
       if((valid = (bType == 1 || bType == 2))) {
         int maximum = 0, used = 0, offset = zBufPos;
@@ -334,7 +333,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
         strm.total_in = strm.total_out = 0;
         if( zlibInflateInit(&strm, zh) == Z_OK ) {
           for( int j = i - (brute ? 255 : 31); j < n; j += 1 << 16 ) {
-            unsigned int blsize = min(n - j, 1 << 16);
+            uint32_t blsize = min(n - j, 1 << 16);
             in->setpos(start + j);
             if( in->blockRead(zin, blsize) != blsize )
               break;
@@ -1232,36 +1231,34 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info) -> B
 
 static void directEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int info = -1) {
   // TODO: Large file support
-  en.compress(type);
+  en.encodeBlockType(type);
   en.encodeBlockSize(len);
   if( info != -1 ) {
-    en.compress((info >> 24) & 0xFF);
-    en.compress((info >> 16) & 0xFF);
-    en.compress((info >> 8) & 0xFF);
-    en.compress((info) & 0xFF);
+    en.encodeInfo(info);
   }
   fprintf(stderr, "Compressing... ");
   for( uint64_t j = 0; j < len; ++j ) {
     if((j & 0xfff) == 0 ) {
       en.printStatus(j, len);
     }
-    en.compress(in->getchar());
+    en.compressByte(in->getchar());
   }
   fprintf(stderr, "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
 }
 
-static void compressRecursive(File *in, uint64_t blockSize, Encoder &en, String &blstr, int recursionLevel, float p1, float p2);
+static void compressRecursive(File *in, uint64_t blockSize, Encoder &en, String &blstr, int recursionLevel, float p1, float p2, TransformOptions *transformOptions);
 
 static auto
-decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File *out, FMode mode, uint64_t &diffFound) -> uint64_t {
+decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File *out, FMode mode, uint64_t &diffFound, TransformOptions *transformOptions) -> uint64_t {
   if( type == IMAGE24 ) {
     auto b = new BmpFilter();
     b->setWidth(info);
+    b->setSkipRgb(transformOptions->skipRgb);
     b->setEncoder(en);
     return b->decode(tmp, out, mode, len, diffFound);
   }
   if( type == IMAGE32 ) {
-    return decodeIm32(en, len, info, out, mode, diffFound);
+    return decodeIm32(en, len, info, out, mode, diffFound, transformOptions->skipRgb);
   }
   if( type == AUDIO_LE ) {
     auto e = new EndiannessFilter();
@@ -1277,7 +1274,7 @@ decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File 
     return d->decode(tmp, out, mode, len, diffFound);
   } else if( type == CD ) {
     auto c = new CdFilter();
-    c->decode(tmp, out, mode, len, diffFound);
+    return c->decode(tmp, out, mode, len, diffFound);
   }
 #ifndef DISABLE_ZLIB
   else if( type == ZLIB )
@@ -1299,12 +1296,13 @@ decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File 
   return 0;
 }
 
-static auto encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int info, int &hdrsize) -> uint64_t {
+static auto encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int info, int &hdrsize, TransformOptions *transformOptions) -> uint64_t {
   if( type == IMAGE24 ) {
     auto b = new BmpFilter();
+    b->setSkipRgb(transformOptions->skipRgb);
     b->encode(in, tmp, len, info, hdrsize);
   } else if( type == IMAGE32 ) {
-    encodeIm32(in, tmp, len, info);
+    encodeIm32(in, tmp, len, info, transformOptions->skipRgb);
   } else if( type == AUDIO_LE ) {
     auto e = new EndiannessFilter();
     e->encode(in, tmp, len, info, hdrsize);
@@ -1339,19 +1337,18 @@ static auto encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int in
 }
 
 static void
-transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int info, String &blstr, int recursionLevel, float p1, float p2,
-                     uint64_t begin) {
+transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int info, String &blstr, int recursionLevel, float p1, float p2, uint64_t begin, TransformOptions *transformOptions) {
   if( hasTransform(type)) {
     FileTmp tmp;
     int headerSize = 0;
-    uint64_t diffFound = encodeFunc(type, in, &tmp, len, info, headerSize);
+    uint64_t diffFound = encodeFunc(type, in, &tmp, len, info, headerSize, transformOptions);
     const uint64_t tmpSize = tmp.curPos();
     tmp.setpos(tmpSize); //switch to read mode
     if( diffFound == 0 ) {
       tmp.setpos(0);
       en.setFile(&tmp);
       in->setpos(begin);
-      decodeFunc(type, en, &tmp, tmpSize, info, in, FCOMPARE, diffFound);
+      decodeFunc(type, en, &tmp, tmpSize, info, in, FCOMPARE, diffFound, transformOptions);
     }
     // Test fails, compress without transform
     if( diffFound > 0 || tmp.getchar() != EOF) {
@@ -1362,7 +1359,7 @@ transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int in
       tmp.setpos(0);
       if( hasRecursion(type)) {
         // TODO(epsteina): Large file support
-        en.compress(type);
+        en.encodeBlockType(type);
         en.encodeBlockSize(tmpSize);
         BlockType type2 = static_cast<BlockType>((info >> 24) & 0xFF);
         if( type2 != DEFAULT ) {
@@ -1380,9 +1377,9 @@ transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int in
           directEncodeBlock(HDR, &tmp, headerSize, en);
           printf(" %-11s | --> data         |%10d bytes [%d - %d]\n", blstrSub2.c_str(), int(tmpSize - headerSize), headerSize,
                  int(tmpSize - 1));
-          transformEncodeBlock(type2, &tmp, tmpSize - headerSize, en, info & 0xffffff, blstr, recursionLevel, p1, p2, headerSize);
+          transformEncodeBlock(type2, &tmp, tmpSize - headerSize, en, info & 0xffffff, blstr, recursionLevel, p1, p2, headerSize, transformOptions);
         } else {
-          compressRecursive(&tmp, tmpSize, en, blstr, recursionLevel + 1, p1, p2);
+          compressRecursive(&tmp, tmpSize, en, blstr, recursionLevel + 1, p1, p2, transformOptions);
         }
       } else {
         directEncodeBlock(type, &tmp, tmpSize, en, hasInfo(type) ? info : -1);
@@ -1394,7 +1391,7 @@ transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int in
   }
 }
 
-static void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, String &blstr, int recursionLevel, float p1, float p2) {
+static void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, String &blstr, int recursionLevel, float p1, float p2, TransformOptions *transformOptions) {
   static const char *typeNames[25] = {"default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
                                       "24b-image", "32b-image", "audio", "audio - le", "exe", "cd", "zlib", "base64", "gif", "png-8b",
                                       "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol", "rle", "lzw"};
@@ -1423,7 +1420,7 @@ static void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, S
       nextBlockType = nextBlockTypeBak;
       nextBlockStart = textEnd + 1;
     } else {
-      nextBlockType = detect(in, bytesToGo, type, info);
+      nextBlockType = detect(in, bytesToGo, type, info, transformOptions);
       nextBlockStart = in->curPos();
       in->setpos(begin);
     }
@@ -1483,7 +1480,7 @@ static void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, S
         printf(" (mode%d/form%d)", info == 1 ? 1 : 2, info != 3 ? 1 : 2);
       }
       printf("\n");
-      transformEncodeBlock(type, in, len, en, info, blstrSub, recursionLevel, p1, p2, begin);
+      transformEncodeBlock(type, in, len, en, info, blstrSub, recursionLevel, p1, p2, begin, transformOptions);
       p1 = p2;
       bytesToGo -= len;
     }
@@ -1496,12 +1493,11 @@ static void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, S
 // For each block, output
 // <type> <size> and call encode_X to convert to type X.
 // Test transform and compress.
-static void compressfile(const char *filename, uint64_t fileSize, Encoder &en, bool verbose) {
-  Shared *shared = Shared::getInstance();
+static void compressfile(const Shared* const shared, const char *filename, uint64_t fileSize, Encoder &en, bool verbose) {
   assert(en.getMode() == COMPRESS);
   assert(filename && filename[0]);
 
-  en.compress(FILECONTAINER);
+  en.encodeBlockType(FILECONTAINER);
   uint64_t start = en.size();
   en.encodeBlockSize(fileSize);
 
@@ -1509,7 +1505,8 @@ static void compressfile(const char *filename, uint64_t fileSize, Encoder &en, b
   in.open(filename, true);
   printf("Block segmentation:\n");
   String blstr;
-  compressRecursive(&in, fileSize, en, blstr, 0, 0.0F, 1.0F);
+  TransformOptions transformOptions(shared);
+  compressRecursive(&in, fileSize, en, blstr, 0, 0.0F, 1.0F, &transformOptions);
   in.close();
 
   if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0u ) { //multiple file mode
@@ -1521,48 +1518,44 @@ static void compressfile(const char *filename, uint64_t fileSize, Encoder &en, b
   }
 }
 
-static auto decompressRecursive(File *out, uint64_t blockSize, Encoder &en, FMode mode, int recursionLevel) -> uint64_t {
+static auto decompressRecursive(File *out, uint64_t blockSize, Encoder &en, FMode mode, int recursionLevel, TransformOptions *transformOptions) -> uint64_t {
   BlockType type;
   uint64_t len = 0;
   uint64_t i = 0;
   uint64_t diffFound = 0;
   int info = 0;
   while( i < blockSize ) {
-    type = static_cast<BlockType>(en.decompress());
+    type = en.decodeBlockType();
     len = en.decodeBlockSize();
     if( hasInfo(type)) {
-      info = 0;
-      for( int j = 0; j < 4; ++j ) {
-        info <<= 8;
-        info += en.decompress();
-      }
+      info = en.decodeInfo();
     }
     if( hasRecursion(type)) {
       FileTmp tmp;
-      decompressRecursive(&tmp, len, en, FDECOMPRESS, recursionLevel + 1);
+      decompressRecursive(&tmp, len, en, FDECOMPRESS, recursionLevel + 1, transformOptions);
       if( mode != FDISCARD ) {
         tmp.setpos(0);
         if( hasTransform(type)) {
-          len = decodeFunc(type, en, &tmp, len, info, out, mode, diffFound);
+          len = decodeFunc(type, en, &tmp, len, info, out, mode, diffFound, transformOptions);
         }
       }
       tmp.close();
     } else if( hasTransform(type)) {
-      len = decodeFunc(type, en, nullptr, len, info, out, mode, diffFound);
+      len = decodeFunc(type, en, nullptr, len, info, out, mode, diffFound, transformOptions);
     } else {
       for( uint64_t j = 0; j < len; ++j ) {
         if((j & 0xfff) == 0u ) {
           en.printStatus();
         }
         if( mode == FDECOMPRESS ) {
-          out->putChar(en.decompress());
+          out->putChar(en.decompressByte());
         } else if( mode == FCOMPARE ) {
-          if( en.decompress() != out->getchar() && (diffFound == 0u)) {
+          if( en.decompressByte() != out->getchar() && (diffFound == 0u)) {
             mode = FDISCARD;
             diffFound = i + j + 1;
           }
         } else {
-          en.decompress();
+          en.decompressByte();
         }
       }
     }
@@ -1572,11 +1565,11 @@ static auto decompressRecursive(File *out, uint64_t blockSize, Encoder &en, FMod
 }
 
 // Decompress or compare a file
-static void decompressFile(const char *filename, FMode fMode, Encoder &en) {
+static void decompressFile(const Shared *const shared, const char *filename, FMode fMode, Encoder &en) {
   assert(en.getMode() == DECOMPRESS);
   assert(filename && filename[0]);
 
-  BlockType blocktype = static_cast<BlockType>(en.decompress());
+  BlockType blocktype = en.decodeBlockType();
   if( blocktype != FILECONTAINER ) {
     quit("Bad archive.");
   }
@@ -1593,7 +1586,8 @@ static void decompressFile(const char *filename, FMode fMode, Encoder &en) {
   printf(" %s %" PRIu64 " bytes -> ", filename, fileSize);
 
   // Decompress/Compare
-  uint64_t r = decompressRecursive(&f, fileSize, en, fMode, 0);
+  TransformOptions transformOptions(shared);
+  uint64_t r = decompressRecursive(&f, fileSize, en, fMode, 0, &transformOptions);
   if( fMode == FCOMPARE && (r == 0u) && f.getchar() != EOF) {
     printf("file is longer\n");
   } else if( fMode == FCOMPARE && (r != 0u)) {

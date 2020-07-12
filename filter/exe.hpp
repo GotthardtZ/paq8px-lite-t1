@@ -73,13 +73,13 @@ public:
       begin = static_cast<int>(encoder->decodeBlockSize());
       size -= VLICost(uint64_t(begin));
       for( int i = 4; i >= 0; i-- ) {
-        c[i] = encoder->decompress(); // Fill queue
+        c[i] = encoder->decompressByte(); // Fill queue
       }
 
       while( offset < static_cast<int>(size) + 6 ) {
         memmove(c + 1, c, 5);
         if( offset <= static_cast<int>(size)) {
-          c[0] = encoder->decompress();
+          c[0] = encoder->decompressByte();
         }
         // E8E9 transform: E8/E9 xx xx xx 00/FF -> subtract location from x
         if((c[0] == 0x00 || c[0] == 0xFF) && (c[4] == 0xE8 || c[4] == 0xE9 || (c[5] == 0x0F && (c[4] & 0xF0U) == 0x80)) &&

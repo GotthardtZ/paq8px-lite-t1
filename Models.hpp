@@ -2,7 +2,6 @@
 #define PAQ8PX_MODELS_HPP
 
 #include "text/TextModel.hpp"
-#include "ModelStats.hpp"
 #include "model/Audio16BitModel.hpp"
 #include "model/Audio8BitModel.hpp"
 #include "model/CharGroupModel.hpp"
@@ -23,6 +22,8 @@
 #include "model/SparseModel.hpp"
 #include "model/WordModel.hpp"
 #include "model/XMLModel.hpp"
+#include "lstm/LstmModel.hpp"
+#include "lstm/LstmFactory.hpp"
 
 /**
  * This is a factory class for lazy object creation for models.
@@ -30,33 +31,33 @@
  */
 class Models {
 private:
-    Shared *shared = Shared::getInstance();
-    ModelStats *stats; //read-write
+  Shared * const shared;
 public:
-    explicit Models(ModelStats *st);
-    auto normalModel() -> NormalModel &;
-    auto dmcForest() -> DmcForest &;
-    auto charGroupModel() -> CharGroupModel &;
-    auto recordModel() -> RecordModel &;
-    auto sparseModel() -> SparseModel &;
-    auto matchModel() -> MatchModel &;
-    auto sparseMatchModel() -> SparseMatchModel &;
-    auto indirectModel() -> IndirectModel &;
-    auto textModel() -> TextModel &;
-    auto wordModel() -> WordModel &;
-    auto nestModel() -> NestModel &;
-    auto xmlModel() -> XMLModel &;
-    auto exeModel() -> ExeModel &;
-    static auto linearPredictionModel() -> LinearPredictionModel &;
-    auto jpegModel() -> JpegModel &;
-    auto image24BitModel() -> Image24BitModel &;
-    auto image8BitModel() -> Image8BitModel &;
-    auto image4BitModel() -> Image4BitModel &;
-    static auto image1BitModel() -> Image1BitModel &;
+  explicit Models(Shared* const sh);
+  auto normalModel() -> NormalModel &;
+  auto dmcForest() -> DmcForest &;
+  auto charGroupModel() -> CharGroupModel &;
+  auto recordModel() -> RecordModel &;
+  auto sparseModel() -> SparseModel &;
+  auto matchModel() -> MatchModel &;
+  auto sparseMatchModel() -> SparseMatchModel &;
+  auto indirectModel() -> IndirectModel &;
+  auto textModel() -> TextModel &;
+  auto wordModel() -> WordModel &;
+  auto nestModel() -> NestModel &;
+  auto xmlModel() -> XMLModel &;
+  auto exeModel() -> ExeModel &;
+  auto linearPredictionModel() -> LinearPredictionModel &;
+  auto jpegModel() -> JpegModel &;
+  auto image24BitModel() -> Image24BitModel &;
+  auto image8BitModel() -> Image8BitModel &;
+  auto image4BitModel() -> Image4BitModel &;
+  auto image1BitModel() -> Image1BitModel &;
 #ifndef DISABLE_AUDIOMODEL
-    auto audio8BitModel() -> Audio8BitModel &;
-    auto audio16BitModel() -> Audio16BitModel &;
+  auto audio8BitModel() -> Audio8BitModel &;
+  auto audio16BitModel() -> Audio16BitModel &;
 #endif //DISABLE_AUDIOMODEL
+  auto lstmModel()->LstmModel<>&;
 };
 
 #endif //PAQ8PX_MODELS_HPP

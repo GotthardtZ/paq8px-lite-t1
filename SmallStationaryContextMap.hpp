@@ -18,7 +18,7 @@ public:
     static constexpr int MIXERINPUTS = 2;
 
 private:
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     Array<uint16_t> data;
     const uint32_t mask;
     const uint32_t stride;
@@ -38,7 +38,7 @@ public:
      * @param rate
      * @param scale
      */
-    SmallStationaryContextMap(int bitsOfContext, int inputBits, int rate, int scale);
+    SmallStationaryContextMap(const Shared* const sh, int bitsOfContext, int inputBits, int rate, int scale);
     void set(uint32_t ctx);
     void reset();
     void update() override;

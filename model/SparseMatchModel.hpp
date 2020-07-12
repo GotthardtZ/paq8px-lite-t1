@@ -12,7 +12,7 @@ class SparseMatchModel {
 private:
     static constexpr int numHashes = 4;
     static constexpr int nSM = 4;
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     enum Parameters : uint32_t {
         MaxLen = 0xFFFF, // longest allowed match
         MinLen = 3, // default minimum required match length
@@ -46,7 +46,7 @@ public:
     static constexpr int MIXERINPUTS = 3 + nSM * StationaryMap::MIXERINPUTS; // 11
     static constexpr int MIXERCONTEXTS = numHashes * (64 + 2048); // 8448
     static constexpr int MIXERCONTEXTSETS = 2;
-    explicit SparseMatchModel(uint64_t size);
+    explicit SparseMatchModel(const Shared* const sh, uint64_t size);
     void update();
     void mix(Mixer &m);
 };

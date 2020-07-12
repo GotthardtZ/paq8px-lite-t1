@@ -83,10 +83,10 @@ public:
     static constexpr int MIXERINPUTS = 5;
 
 private:
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     Random rnd;
     const int C; /**< max number of contexts */
-    Array<Bucket, 64> t; /**< bit histories for bits 0-1, 2-4, 5-7. For 0-1, also contains a run count in bh[][4] and value in bh[][5] and pending update count in bh[7] */
+    Array<Bucket, 64> t; /**< bit and byte histories (statistics) */
     Array<uint8_t *> cp; /**< c pointers to current bit history */
     Array<uint8_t *> cp0; /**< First element of 7 element array containing cp[i] */
     Array<uint32_t> cxt; /**< c whole byte context hashes */
@@ -105,7 +105,7 @@ public:
      * @param m bytes of memory to use
      * @param contexts max number of contexts
      */
-    ContextMap(uint64_t m, int contexts);
+    ContextMap(const Shared* const sh, uint64_t m, int contexts);
 
     /**
      * Set next whole byte context to @ref cx.

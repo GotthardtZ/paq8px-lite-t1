@@ -1,44 +1,42 @@
 #include "RecordModel.hpp"
 
-RecordModel::RecordModel(ModelStats *st, const uint64_t size) : stats(st), cm(32768, 3), cn(32768 / 2, 3), co(32768 * 2, 3), cp(size, 16),
-        maps {{10, 8, 86, 1023},
-              {10, 8, 86, 1023},
-              {8,  8, 86, 1023},
-              {8,  8, 86, 1023},
-              {8,  8, 86, 1023},
-              {11, 1, 86, 1023}
-        },
-        sMap {{11, 1, 6, 86},
-              {3,  1, 6, 86},
-              {19, 1, 5, 128},
-              {8,  8, 5, 64} // shared->buf.getpos()&255
-        },
-        iMap {{8, 8, 86, 255},
-              {8, 8, 86, 255},
-              {8, 8, 86, 255}
-        }, 
-        iCtx {{16, 8},
-             {16, 8},
-             {16, 8},
-             {20, 8},
-             {11, 1}
-        } {}
+RecordModel::RecordModel(Shared* const sh, const uint64_t size) : shared(sh),
+    cm(sh,32768,3), cn(sh,32768/2,3), co(sh,32768*2,3), // cm,cn,co: memory pressure is advantageous
+    cp(sh,size,16),
+    maps{ /* BitsOfContext, InputBits, Scale, Limit  */
+      {sh,10,8,86,1023},{sh,10,8,86,1023},{sh,8,8,86,1023},{sh,8,8,86,1023},{sh,8,8,86,1023},{sh,11,1,86,1023}
+    },
+    sMap{ /* BitsOfContext, InputBits, Rate, Scale */
+      {sh,11,1,6,86}, {sh,3,1,6,86}, {sh,19,1,5,128},
+      {sh,8,8,5,64} // pos&255
+    },
+    iMap{ /* BitsOfContext, InputBits, Scale, Limit */
+      {sh,8,8,86,255}, {sh,8,8,86,255}, {sh,8,8,86,255}
+    },
+    iCtx{ // BitsPerContext, InputBits
+      {16,8}, {16,8}, {16,8}, {20,8}, {11,1}
+    }
+  {} 
 
 void RecordModel::mix(Mixer &m) {
   // find record length
-  if( shared->bitPosition == 0 ) {
+  INJECT_SHARED_bpos
+  if( bpos == 0 ) {
     INJECT_SHARED_buf
-    int w = shared->c4 & 0xffffU;
+    INJECT_SHARED_c4
+    INJECT_SHARED_pos
+    int w = c4 & 0xffffU;
     int c = w & 255U;
     int d = w >> 8U;
-    if((stats->wav) > 2 && (stats->wav) != runLength[0] ) {
-      runLength[0] = stats->wav;
+    if((shared->State.wav) > 2 && (shared->State.wav) != runLength[0] ) {
+      runLength[0] = shared->State.wav;
       rCount[0] = rCount[1] = 0;
     } else {
       // detect dBASE tables
-      if( stats->blPos == 0 || (dbase.version > 0 && stats->blPos >= dbase.end)) {
+      INJECT_SHARED_blockPos
+      if( blockPos == 0 || (dbase.version > 0 && blockPos >= dbase.end)) {
         dbase.version = 0;
-      } else if( dbase.version == 0 && stats->blockType == DEFAULT && stats->blPos >= 31 ) {
+      } else if( dbase.version == 0 && shared->State.blockType == DEFAULT && blockPos >= 31 ) {
         uint8_t b = buf(32);
         if(((b & 7U) == 3 || (b & 7U) == 4 || (b >> 4U) == 3 || b == 0xF5) && ((b = buf(30)) > 0 && b < 13) &&
            ((b = buf(29)) > 0 && b < 32) &&
@@ -48,19 +46,19 @@ void RecordModel::mix(Mixer &m) {
                                                                        (((dbase.headerLength -= 255 + 8) - 32 - 1) % 32) == 0))) &&
            ((dbase.recordLength = buf(22) | (buf(21) << 8U)) > 8) && (buf(20) == 0 && buf(19) == 0 && buf(17) <= 1 && buf(16) <= 1)) {
           dbase.version = (((b = buf(32)) >> 4U) == 3) ? 3 : b & 7U;
-          dbase.start = stats->blPos - 32 + dbase.headerLength;
+          dbase.start = blockPos - 32 + dbase.headerLength;
           dbase.end = dbase.start + dbase.nRecords * dbase.recordLength;
           if( dbase.version == 3 ) {
             runLength[0] = 32;
             rCount[0] = rCount[1] = 0;
           }
         }
-      } else if( dbase.version > 0 && stats->blPos == dbase.start ) {
+      } else if( dbase.version > 0 && blockPos == dbase.start ) {
         runLength[0] = dbase.recordLength;
         rCount[0] = rCount[1] = 0;
       }
-
-      uint32_t r = shared->buf.getpos() - cPos1[c];
+      
+      uint32_t r = pos - cPos1[c];
       if( r > 1 && r == cPos1[c] - cPos2[c] && r == cPos2[c] - cPos3[c] && (r > 32 || r == cPos3[c] - cPos4[c]) &&
           (r > 10 || ((c == buf(r * 5 + 1)) && c == buf(r * 6 + 1)))) {
         if( r == runLength[1] ) {
@@ -119,7 +117,7 @@ void RecordModel::mix(Mixer &m) {
     }
 
     assert(runLength[0] >= 2);
-    col = shared->buf.getpos() % runLength[0];
+    col = pos % runLength[0];
     x = min(0x1F, col / max(1, runLength[0] / 32));
     N = buf(runLength[0]);
     NN = buf(runLength[0] * 2);
@@ -154,10 +152,10 @@ void RecordModel::mix(Mixer &m) {
     if( col == 0u ) {
       nTransition = 0;
     }
-    if((((shared->c4 >> 8U) == SPACE * 0x010101) && (c != SPACE)) ||
-       (((shared->c4 >> 8U) == 0u) && (c != 0) && ((padding != SPACE) || (shared->buf.getpos() - prevTransition > runLength[0])))) {
-      prevTransition = shared->buf.getpos();
-      nTransition += static_cast<unsigned int>(nTransition < 31);
+    if((((c4 >> 8U) == SPACE * 0x010101) && (c != SPACE)) ||
+       (((c4 >> 8U) == 0u) && (c != 0) && ((padding != SPACE) || (pos - prevTransition > runLength[0])))) {
+      prevTransition = pos;
+      nTransition += static_cast<uint32_t>(nTransition < 31);
       padding = static_cast<uint8_t>(d);
     }
 
@@ -165,16 +163,16 @@ void RecordModel::mix(Mixer &m) {
 
     // Set 2-3 dimensional contexts
     // assuming runLength[0]<1024; col<4096
-    cm.set(hash(++i, c << 8U | (min(255, shared->buf.getpos() - cPos1[c]) >> 2U)));
-    cm.set(hash(++i, w << 9U | llog(shared->buf.getpos() - wPos1[w]) >> 2));
+    cm.set(hash(++i, c << 8U | (min(255, pos - cPos1[c]) >> 2U)));
+    cm.set(hash(++i, w << 9U | llog(pos - wPos1[w]) >> 2));
     cm.set(hash(++i, runLength[0] | N << 10U | NN << 18U));
 
     cn.set(hash(++i, w | runLength[0] << 16U));
     cn.set(hash(++i, d | runLength[0] << 8U));
     cn.set(hash(++i, c | runLength[0] << 8U));
 
-    co.set(hash(++i, c << 8U | min(255, shared->buf.getpos() - cPos1[c])));
-    co.set(hash(++i, c << 17U | d << 9U | llog(shared->buf.getpos() - wPos1[w]) >> 2U));
+    co.set(hash(++i, c << 8U | min(255, pos - cPos1[c])));
+    co.set(hash(++i, c << 17U | d << 9U | llog(pos - wPos1[w]) >> 2U));
     co.set(hash(++i, c << 8U | N));
 
     cp.set(hash(++i, runLength[0] | N << 10U | col << 18U));
@@ -182,15 +180,14 @@ void RecordModel::mix(Mixer &m) {
     cp.set(hash(++i, col | runLength[0] << 12));
 
     if( runLength[0] > 8 ) {
-      cp.set(hash(++i, min(min(0xFF, runLength[0]), shared->buf.getpos() - prevTransition), min(0x3FF, col),
-                  (w & 0xF0F0U) | static_cast<unsigned int>(w == ((padding << 8U) | padding)), nTransition));
+      cp.set(hash(++i, min(min(0xFF, runLength[0]), pos - prevTransition), min(0x3FF, col),
+                  (w & 0xF0F0U) | static_cast<uint32_t>(w == ((padding << 8U) | padding)), nTransition));
       cp.set(hash(++i, w, static_cast<uint64_t>(buf(runLength[0] + 1) == padding && N == padding), col / max(1, runLength[0] / 32)));
     } else {
       cp.set(0), cp.set(0);
     }
 
-    cp.set(hash(++i,
-                N | ((NN & 0xF0U) << 4U) | ((NNN & 0xE0U) << 7U) | ((NNNN & 0xE0U) << 10U) | ((col / max(1, runLength[0] / 16)) << 18U)));
+    cp.set(hash(++i, N | ((NN & 0xF0U) << 4U) | ((NNN & 0xE0U) << 7U) | ((NNNN & 0xE0U) << 10U) | ((col / max(1, runLength[0] / 16)) << 18U)));
     cp.set(hash(++i, (N & 0xF8U) | ((NN & 0xF8U) << 8U) | (col << 16U)));
     cp.set(hash(++i, N, NN));
 
@@ -203,12 +200,12 @@ void RecordModel::mix(Mixer &m) {
     cp.set(hash(++i, iCtx[1]() & 0xFFU, iCtx[3]() & 0xFFU));
 
     cp.set(hash(++i, N, (WxNW = c ^ buf(runLength[0] + 1))));
-    cp.set(hash(++i, static_cast<int>(stats->Match.length3 != 0) << 8U | stats->Match.expectedByte, uint8_t(iCtx[1]()), N, WxNW));
+    cp.set(hash(++i, static_cast<int>(shared->State.Match.length3 != 0) << 8U | shared->State.Match.expectedByte, uint8_t(iCtx[1]()), N, WxNW));
 
     int k = 0x300;
     if( mayBeImg24B ) {
       k = (col % 3) << 8U;
-      maps[0].setDirect(clip((static_cast<uint8_t>(shared->c4 >> 16U)) + c - (shared->c4 >> 24U)) | k);
+      maps[0].setDirect(clip((static_cast<uint8_t>(c4 >> 16U)) + c - (c4 >> 24U)) | k);
     } else {
       maps[0].setDirect(clip(c * 2 - d) | k);
     }
@@ -220,19 +217,20 @@ void RecordModel::mix(Mixer &m) {
     iMap[1].setDirect(N * 2 - NN);
     iMap[2].setDirect(N * 3 - NN * 3 + NNN);
 
-    sMap[3].set(shared->buf.getpos() & 255U); // mozilla
+    sMap[3].set(pos & 255U); // mozilla
 
     // update last context positions
     cPos4[c] = cPos3[c];
     cPos3[c] = cPos2[c];
     cPos2[c] = cPos1[c];
-    cPos1[c] = shared->buf.getpos();
-    wPos1[w] = shared->buf.getpos();
+    cPos1[c] = pos;
+    wPos1[w] = pos;
 
     mxCtx = (runLength[0] > 128) ? (min(0x7F, col / max(1, runLength[0] / 128))) : col;
   }
-  uint8_t B = shared->c0 << (8 - shared->bitPosition);
-  uint32_t ctx = (N ^ B) | (shared->bitPosition << 8U);
+  INJECT_SHARED_c0
+  uint8_t B = c0 << (8 - bpos);
+  uint32_t ctx = (N ^ B) | (bpos << 8U);
   INJECT_SHARED_y
   iCtx[nIndContexts - 1] += y;
   iCtx[nIndContexts - 1] = ctx;
@@ -256,9 +254,9 @@ void RecordModel::mix(Mixer &m) {
     sMap[i].mix(m);
   }
 
-  m.set(static_cast<unsigned int>(runLength[0] > 2) * ((shared->bitPosition << 7U) | mxCtx), 1024);
+  m.set(static_cast<uint32_t>(runLength[0] > 2) * ((bpos << 7U) | mxCtx), 1024);
   m.set(((N ^ B) >> 4U) | (x << 4U), 512);
-  m.set(((stats->Text.characterGroup) << 5U) | x, 11 * 32);
+  m.set(((shared->State.Text.characterGroup) << 5U) | x, 11 * 32);
 
-  stats->wav = min(0xFFFF, runLength[0]);
+  shared->State.wav = min(0xFFFF, runLength[0]);
 }

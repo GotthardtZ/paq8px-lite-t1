@@ -1,8 +1,8 @@
 #include "DmcForest.hpp"
 
-DmcForest::DmcForest(const uint64_t size) : dmcModels(MODELS) {
+DmcForest::DmcForest(const Shared* const sh, const uint64_t size) : shared(sh), dmcModels(MODELS) {
   for( int i = MODELS - 1; i >= 0; i-- ) {
-    dmcModels[i] = new DmcModel(size / dmcMem[i], dmcParams[i]);
+    dmcModels[i] = new DmcModel(sh, size / dmcMem[i], dmcParams[i]);
   }
 }
 
@@ -26,7 +26,8 @@ void DmcForest::mix(Mixer &m) {
 
   // reset models when their structure can't adapt anymore
   // the two slow models are never reset
-  if( shared->bitPosition == 0 ) {
+  INJECT_SHARED_bpos
+  if( bpos == 0 ) {
     for( int j = MODELS - 3; j >= 0; j-- ) {
       if( dmcModels[j]->isFull()) {
         dmcModels[j]->resetStateGraph(dmcParams[j]);

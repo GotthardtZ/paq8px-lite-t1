@@ -27,7 +27,7 @@ void dump(const char* msg, int p) {
 
 #define FINISH(success) \
   { \
-    uint32_t length = shared->buf.getpos() - images[idx].offset; \
+    uint32_t length = pos - images[idx].offset; \
     /*if (success && idx && pos-lastPos==1)*/ \
     /*printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bEmbedded JPEG at offset %d, size: %d bytes, level %d\nCompressing... ", images[idx].offset-pos+blPos, length, idx), fflush(stdout);*/ \
     memset(&images[idx], 0, sizeof(JPEGImage)); \
@@ -157,10 +157,10 @@ private:
     APM apm1;
     APM apm2;
     Ilog *ilog = Ilog::getInstance();
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
 
 public:
-    explicit JpegModel(uint64_t size);
+    explicit JpegModel(const Shared* const sh, uint64_t size);
     ~JpegModel();
     auto mix(Mixer &m) -> int;
 };

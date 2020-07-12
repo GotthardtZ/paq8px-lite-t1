@@ -1,32 +1,24 @@
 #include "Audio16BitModel.hpp"
 
-Audio16BitModel::Audio16BitModel(ModelStats *st) : AudioModel(st), sMap1B {
-        /*nOLS: 0-3*/ {{17, 1, 7, 128}, {17, 1, 10, 128}, {17, 1, 6, 86}, {17, 1, 6, 128}},
-                      {{17, 1, 7, 128}, {17, 1, 10, 128}, {17, 1, 6, 86}, {17, 1, 6, 128}},
-                      {{17, 1, 7, 128}, {17, 1, 10, 128}, {17, 1, 6, 86}, {17, 1, 6, 128}},
-                      {{17, 1, 7, 128}, {17, 1, 10, 128}, {17, 1, 6, 86}, {17, 1, 6, 128}},
-        /*nOLS: 4-7*/
-                      {{17, 1, 7, 128}, {17, 1, 10, 128}, {17, 1, 6, 86}, {17, 1, 6, 128}},
-                      {{17, 1, 7, 128}, {17, 1, 10, 128}, {17, 1, 6, 86}, {17, 1, 6, 128}},
-                      {{17, 1, 7, 128}, {17, 1, 10, 128}, {17, 1, 6, 86}, {17, 1, 6, 128}},
-                      {{17, 1, 7, 128}, {17, 1, 10, 128}, {17, 1, 6, 86}, {17, 1, 6, 128}},
-        /*nLMS: 0-2*/
-                      {{17, 1, 7, 86},  {17, 1, 10, 86},  {17, 1, 6, 64}, {17, 1, 6, 86}},
-                      {{17, 1, 7, 86},  {17, 1, 10, 86},  {17, 1, 6, 64}, {17, 1, 6, 86}},
-                      {{17, 1, 7, 86},  {17, 1, 10, 86},  {17, 1, 6, 64}, {17, 1, 6, 86}},
-        /*nSSM: 0-2*/
-                      {{17, 1, 7, 86},  {17, 1, 10, 86},  {17, 1, 6, 64}, {17, 1, 6, 86}},
-                      {{17, 1, 7, 86},  {17, 1, 10, 86},  {17, 1, 6, 64}, {17, 1, 6, 86}},
-                      {{17, 1, 7, 86},  {17, 1, 10, 86},  {17, 1, 6, 64}, {17, 1, 6, 86}}} {}
+Audio16BitModel::Audio16BitModel(Shared* const sh) : AudioModel(sh), 
+  sMap1B{ /* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
+    /*nOLS: 0-3*/ {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}},
+    /*nOLS: 4-7*/ {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}}, {{sh,17,1,7,128},{sh,17,1,10,128},{sh,17,1,6,86},{sh,17,1,6,128}},
+    /*nLMS: 0-2*/ {{sh,17,1,7,86}, {sh,17,1,10,86}, {sh,17,1,6,64},{sh,17,1,6,86}},  {{sh,17,1,7,86},{sh,17,1,10,86},  {sh,17,1,6,64},{sh,17,1,6,86}},  {{sh,17,1,7,86}, {sh,17,1,10,86}, {sh,17,1,6,64},{sh,17,1,6,86}},
+    /*nSSM: 0-2*/ {{sh,17,1,7,86}, {sh,17,1,10,86}, {sh,17,1,6,64},{sh,17,1,6,86}},  {{sh,17,1,7,86},{sh,17,1,10,86},  {sh,17,1,6,64},{sh,17,1,6,86}},  {{sh,17,1,7,86}, {sh,17,1,10,86}, {sh,17,1,6,64},{sh,17,1,6,86}}
+  }
+{}
 
 void Audio16BitModel::setParam(int info) {
-  if( stats->blPos == 0 && shared->bitPosition == 0 ) {
+  INJECT_SHARED_bpos
+  INJECT_SHARED_blockPos
+  if( blockPos == 0 && bpos == 0 ) {
     info |= 4U; // comment this line if skipping the endianness transform
     assert((info & 2) != 0);
     stereo = (info & 1U);
     lsb = static_cast<int>(info < 4);
     mask = 0;
-    stats->wav = (stereo + 1) * 2;
+    shared->State.wav = (stereo + 1) * 2;
     wMode = info;
     for( int i = 0; i < nLMS; i++ ) {
       lms[i][0].reset(), lms[i][1].reset();
@@ -35,10 +27,12 @@ void Audio16BitModel::setParam(int info) {
 }
 
 void Audio16BitModel::mix(Mixer &m) {
-  if( shared->bitPosition == 0 && stats->blPos != 0 ) {
-    ch = (stereo) != 0 ? (stats->blPos & 2U) >> 1U : 0;
-    lsb = (stats->blPos & 1U) ^ static_cast<unsigned int>(wMode < 4);
-    if((stats->blPos & 1U) == 0 ) {
+  INJECT_SHARED_bpos
+    INJECT_SHARED_blockPos
+  if( bpos == 0 && blockPos != 0 ) {
+    ch = (stereo) != 0 ? (blockPos & 2U) >> 1U : 0;
+    lsb = (blockPos & 1U) ^ static_cast<uint32_t>(wMode < 4);
+    if((blockPos & 1U) == 0 ) {
       sample = (wMode < 4) ? s2(2) : t2(2);
       const int pCh = ch ^stereo;
       int i = 0;
@@ -46,7 +40,7 @@ void Audio16BitModel::mix(Mixer &m) {
         ols[i][pCh].update(sample);
         residuals[i][pCh] = sample - prd[i][pCh][0];
         const auto absResidual = static_cast<uint32_t>(abs(residuals[i][pCh]));
-        mask += mask + static_cast<unsigned int>(absResidual > 128);
+        mask += mask + static_cast<uint32_t>(absResidual > 128);
         errLog += square(absResidual >> 6U);
       }
       for( int j = 0; j < nLMS; j++ ) {
@@ -131,35 +125,38 @@ void Audio16BitModel::mix(Mixer &m) {
         prd[i][ch][1] = signedClip16(prd[i][ch][0] + residuals[i][pCh]);
       }
     }
-    stats->Audio = 0x80U | (mxCtx = ilog2(min(0x1F, bitCount(mask))) * 4 + ch * 2 + lsb);
+    shared->State.Audio = 0x80U | (mxCtx = ilog2(min(0x1F, bitCount(mask))) * 4 + ch * 2 + lsb);
   }
 
-  const auto b = short(
-          (wMode < 4) ? (lsb) != 0 ? uint8_t(shared->c0 << (8 - shared->bitPosition)) : (shared->c0 << (16 - shared->bitPosition)) |
-                                                                                        shared->c1 : (lsb) != 0 ? (shared->c1 << 8U) |
-                                                                                                                  uint8_t(shared->c0 << (8 -
-                                                                                                                                         shared->bitPosition))
-                                                                                                                : shared->c0
-                                                                                                             << (16 - shared->bitPosition));
+  INJECT_SHARED_c0
+  INJECT_SHARED_c1
+  const auto b = short((wMode < 4) ?
+                         (lsb) != 0 ? 
+                            uint8_t(c0 << (8 - bpos)) :
+                            (c0 << (16 - bpos)) | c1
+                       :
+                         (lsb) != 0 ?
+                            (c1 << 8U) | uint8_t(c0 << (8 - bpos)) :
+                            c0 << (16 - bpos));
 
   for( int i = 0; i < nSSM; i++ ) {
     const uint32_t ctx0 = uint16_t(prd[i][ch][0] - b);
     const uint32_t ctx1 = uint16_t(prd[i][ch][1] - b);
 
     const int shift = static_cast<const int>(lsb == 0);
-    sMap1B[i][0].set((lsb << 16U) | (shared->bitPosition << 13U) | (ctx0 >> (3U << shift)));
-    sMap1B[i][1].set((lsb << 16U) | (shared->bitPosition << 13U) | (ctx0 >> (static_cast<unsigned int>(lsb == 0) + (3U << shift))));
-    sMap1B[i][2].set((lsb << 16U) | (shared->bitPosition << 13U) | (ctx0 >> (static_cast<int>(lsb == 0) * 2 + (3U << shift))));
-    sMap1B[i][3].set((lsb << 16U) | (shared->bitPosition << 13U) | (ctx1 >> (static_cast<unsigned int>(lsb == 0) + (3U << shift))));
+    sMap1B[i][0].set((lsb << 16U) | (bpos << 13U) | (ctx0 >> (3U << shift)));
+    sMap1B[i][1].set((lsb << 16U) | (bpos << 13U) | (ctx0 >> (static_cast<uint32_t>(lsb == 0) + (3U << shift))));
+    sMap1B[i][2].set((lsb << 16U) | (bpos << 13U) | (ctx0 >> (static_cast<int>(lsb == 0) * 2 + (3U << shift))));
+    sMap1B[i][3].set((lsb << 16U) | (bpos << 13U) | (ctx1 >> (static_cast<uint32_t>(lsb == 0) + (3U << shift))));
     sMap1B[i][0].mix(m);
     sMap1B[i][1].mix(m);
     sMap1B[i][2].mix(m);
     sMap1B[i][3].mix(m);
   }
 
-  m.set((errLog << 9U) | (lsb << 8U) | shared->c0, 8192);
-  m.set((uint8_t(mask) << 4U) | (ch << 3U) | (lsb << 2U) | (shared->bitPosition >> 1U), 4096);
-  m.set((mxCtx << 7U) | (shared->c1 >> 1U), 2560);
-  m.set((errLog << 4U) | (ch << 3U) | (lsb << 2U) | (shared->bitPosition >> 1U), 256);
+  m.set((errLog << 9U) | (lsb << 8U) | c0, 8192);
+  m.set((uint8_t(mask) << 4U) | (ch << 3U) | (lsb << 2U) | (bpos >> 1U), 4096);
+  m.set((mxCtx << 7U) | (c1 >> 1U), 2560);
+  m.set((errLog << 4U) | (ch << 3U) | (lsb << 2U) | (bpos >> 1U), 256);
   m.set(mxCtx, 20);
 }

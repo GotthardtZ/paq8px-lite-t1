@@ -4,7 +4,6 @@
 
 #include "../Shared.hpp"
 #include "../ContextMap2.hpp"
-#include "../ModelStats.hpp"
 #include <cstdint>
 #include <cctype>
 
@@ -19,8 +18,7 @@ private:
     static constexpr int maxLastUpper = 63;
     static constexpr int maxLastLetter = 16;
     static constexpr int nCM1 = 17; /**< pdf / non_pdf contexts */
-    Shared *shared = Shared::getInstance();
-    ModelStats const *stats;
+    Shared * const shared;
     ContextMap2 &cm;
     Array<uint32_t> wordPositions {1U << wPosBits}; /**< last positions of whole words/numbers */
     Array<uint16_t> checksums {1U << wPosBits}; /**< checksums for whole words/numbers */
@@ -49,7 +47,7 @@ private:
     uint32_t mask {}, expr0Chars {}, mask2 {}, f4 {};
 
 public:
-    Info(ModelStats const *st, ContextMap2 &contextmap);
+    Info(Shared* const sh, ContextMap2 &contextmap);
 
     /**
      * Zero the contents.

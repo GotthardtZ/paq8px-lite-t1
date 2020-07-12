@@ -15,7 +15,6 @@ protected:
     const uint32_t numContextsPerSet; /**< Number of contexts in each context set */
     uint32_t numContexts; /**< Number of context indexes present in cxt array (0..s-1) */
     Array<uint32_t> cxt; /**< context index of last prediction per context set */
-    UpdateBroadcaster *updater = UpdateBroadcaster::getInstance();
 public:
     enum MAPTYPE {
         Generic, BitHistory, Run
@@ -28,7 +27,7 @@ public:
      * @param lim
      * @param mapType
      */
-    StateMap(int s, int n, int lim, MAPTYPE mapType);
+    StateMap(const Shared* const sh, int s, int n, int lim, MAPTYPE mapType);
 
     void reset(int rate);
 

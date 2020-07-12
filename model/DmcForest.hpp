@@ -42,14 +42,14 @@ private:
     static constexpr uint32_t MODELS = 10; /**< 8 fast and 2 slow models */
     static constexpr uint32_t dmcParams[MODELS] = {2, 32, 64, 4, 128, 8, 256, 16, 1024, 1536};
     static constexpr uint32_t dmcMem[MODELS] = {6, 10, 11, 7, 12, 8, 13, 9, 2, 2};
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     Array<DmcModel *> dmcModels;
 
 public:
     static constexpr int MIXERINPUTS = 2 + 8 / 2; /**< 6 : fast models (2 individually) + slow models (8 combined pairwise) */
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
-    explicit DmcForest(uint64_t size);
+    explicit DmcForest(const Shared* const sh, uint64_t size);
     ~DmcForest();
 
     /**

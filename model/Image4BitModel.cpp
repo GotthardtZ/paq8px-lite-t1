@@ -2,8 +2,10 @@
 #include "../Stretch.hpp"
 
 
-Image4BitModel::Image4BitModel(const uint64_t size) : t(size), sm {S, 256, 1023, StateMap::BitHistory},
-        map {1, 16, 1023, StateMap::Generic} {}
+Image4BitModel::Image4BitModel(const Shared* const sh, const uint64_t size) : shared(sh), t(size), 
+  sm {sh, S, 256, 1023, StateMap::BitHistory},
+  map {sh, 1, 16, 1023, StateMap::Generic}
+{}
 
 void Image4BitModel::setParam(int info0) {
   w = info0;
@@ -20,7 +22,8 @@ void Image4BitModel::mix(Mixer &m) {
     StateTable::update(cp[i], y, rnd); //update hashtable item priorities using predicted counts
   }
 
-  if( shared->bitPosition == 0 || shared->bitPosition == 4 ) {
+  INJECT_SHARED_bpos
+  if( bpos == 0 || bpos == 4 ) {
     WW = W;
     NWW = NW;
     NW = N;
@@ -31,12 +34,14 @@ void Image4BitModel::mix(Mixer &m) {
     NN = NNE;
     NNE = NNEE;
     INJECT_SHARED_buf
-    if( shared->bitPosition == 0 ) {
-      W = shared->c4 & 0xFU;
+    if( bpos == 0 ) {
+      INJECT_SHARED_c1
+      W = c1 & 0xFU;
       NEE = buf(w - 1) >> 4U;
       NNEE = buf(w * 2 - 1) >> 4U;
     } else {
-      W = shared->c0 & 0xFU;
+      INJECT_SHARED_c0
+      W = c0 & 0xFU;
       NEE = buf(w - 1) & 0xFU;
       NNEE = buf(w * 2 - 1) & 0xFU;
     }
@@ -79,7 +84,7 @@ void Image4BitModel::mix(Mixer &m) {
   } else {
     INJECT_SHARED_y
     px += px + y;
-    int j = (y + 1) << (shared->bitPosition & 3U);
+    int j = (y + 1) << (bpos & 3U);
     for( int i = 0; i < S; i++ ) {
       cp[i] += j;
     }
@@ -101,8 +106,8 @@ void Image4BitModel::mix(Mixer &m) {
 
   m.set((W << 4U) | px, 256);
   m.set(min(31, col / max(1, w / 16)) | (N << 5U), 512);
-  m.set((shared->bitPosition & 3U) | (W << 2U) | (min(7, ilog2(run + 1)) << 6U), 512);
-  m.set(W | (NE << 4U) | ((shared->bitPosition & 3U) << 8U), 1024);
+  m.set((bpos & 3U) | (W << 2U) | (min(7, ilog2(run + 1)) << 6U), 512);
+  m.set(W | (NE << 4U) | ((bpos & 3U) << 8U), 1024);
   m.set(px, 16);
   m.set(0, 1);
 }

@@ -1,9 +1,10 @@
 #include "IndirectMap.hpp"
 #include "Stretch.hpp"
 
-IndirectMap::IndirectMap(const int bitsOfContext, const int inputBits, const int scale, const int limit) : data(
-        (1ULL << bitsOfContext) * ((1ULL << inputBits) - 1)), sm {1, 256, 1023, StateMap::BitHistory}, mask((1U << bitsOfContext) - 1),
-        maskBits(bitsOfContext), stride((1U << inputBits) - 1), bTotal(inputBits), scale(scale) {
+IndirectMap::IndirectMap(const Shared* const sh, const int bitsOfContext, const int inputBits, const int scale, const int limit) : 
+  shared(sh), data((1ULL << bitsOfContext) * ((1ULL << inputBits) - 1)), 
+  sm {sh, 1, 256, 1023, StateMap::BitHistory}, mask((1U << bitsOfContext) - 1),
+  maskBits(bitsOfContext), stride((1U << inputBits) - 1), bTotal(inputBits), scale(scale) {
 #ifdef VERBOSE
   printf("Created IndirectMap with bitsOfContext = %d, inputBits = %d, scale = %d, limit = %d\n", bitsOfContext, inputBits, scale, limit);
 #endif
@@ -27,13 +28,13 @@ void IndirectMap::set(const uint64_t ctx) {
 void IndirectMap::update() {
   INJECT_SHARED_y
   StateTable::update(cp, y, rnd);
-  b += static_cast<unsigned int>((y != 0U) && b > 0);
+  b += static_cast<uint32_t>((y != 0U) && b > 0);
 }
 
 void IndirectMap::setScale(const int Scale) { this->scale = Scale; }
 
 void IndirectMap::mix(Mixer &m) {
-  shared->updateBroadcaster->subscribe(this);
+  shared->GetUpdateBroadcaster()->subscribe(this);
   cp = &data[context + b];
   const uint8_t state = *cp;
   const int p1 = sm.p1(state);

@@ -107,13 +107,18 @@ auto finalize64(const uint64_t hash, const int hashBits) -> uint32_t {
  * Get the next 8 or 16 bits following "hashBits" for checksum
  * @param hash
  * @param hashBits
- * @param checksumBits
  * @return
  */
 static ALWAYS_INLINE
-uint32_t checksum64(const uint64_t hash, const int hashBits, const int checksumBits) {
-  assert(0 < checksumBits && uint32_t(checksumBits) <= 32); //32 is just a reasonable upper limit
-  return static_cast<uint32_t>(hash >> (64 - hashBits - checksumBits)) & ((1U << checksumBits) - 1);
+uint8_t checksum8(const uint64_t hash, const int hashBits) {
+  constexpr int checksumBits = 8;
+  return static_cast<uint8_t>(hash >> (64 - hashBits - checksumBits)) & ((1U << checksumBits) - 1);
+}
+
+static ALWAYS_INLINE
+uint16_t checksum16(const uint64_t hash, const int hashBits) {
+  constexpr int checksumBits = 16;
+  return static_cast<uint16_t>(hash >> (64 - hashBits - checksumBits)) & ((1U << checksumBits) - 1);
 }
 
 //

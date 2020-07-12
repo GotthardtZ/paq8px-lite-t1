@@ -3,26 +3,11 @@
 
 #include "../ContextMap2.hpp"
 #include "../HashTable.hpp"
-#include "../ModelStats.hpp"
 #include "../OLS.hpp"
 #include "../SmallStationaryContextMap.hpp"
 #include "../StationaryMap.hpp"
-#include "RecordModel.hpp"
+#include "ImageModelsCommon.hpp"
 #include <cmath>
-
-static inline auto paeth(uint8_t const W, uint8_t const N, uint8_t const NW) -> uint8_t {
-  int p = W + N - NW;
-  int pW = abs(p - static_cast<int>(W));
-  int pN = abs(p - static_cast<int>(N));
-  int pNW = abs(p - static_cast<int>(NW));
-  if( pW <= pN && pW <= pNW ) {
-    return W;
-  }
-  if( pN <= pNW ) {
-    return N;
-  }
-  return NW;
-}
 
 /**
  * Model for filtered (PNG) or unfiltered 24/32-bit image data
@@ -43,8 +28,7 @@ public:
     static constexpr int MIXERCONTEXTS = 6 + 256 + 512 + 2048 + 8 * 32 + 6 * 64 + 256 * 2 + 1024 + 8192 + 8192 + 8192 + 8192 + 256; //38022
     static constexpr int MIXERCONTEXTSETS = 13;
 
-    Shared *shared = Shared::getInstance();
-    ModelStats *stats;
+    Shared * const shared;
     ContextMap2 cm;
     SmallStationaryContextMap SCMap[nSSM];
     StationaryMap map[nSM];
@@ -72,12 +56,12 @@ public:
     uint8_t mapContexts[nSM1] = {0}, scMapContexts[nSSM] = {0}, pOLS[nOLS] = {0};
     static constexpr double lambda[nOLS] = {0.98, 0.87, 0.9, 0.8, 0.9, 0.7};
     static constexpr int num[nOLS] = {32, 12, 15, 10, 14, 8};
-    OLS<double, uint8_t> ols[nOLS][4] = {{{num[0], 1, lambda[0]}, {num[0], 1, lambda[0]}, {num[0], 1, lambda[0]}, {num[0], 1, lambda[0]}},
-                                         {{num[1], 1, lambda[1]}, {num[1], 1, lambda[1]}, {num[1], 1, lambda[1]}, {num[1], 1, lambda[1]}},
-                                         {{num[2], 1, lambda[2]}, {num[2], 1, lambda[2]}, {num[2], 1, lambda[2]}, {num[2], 1, lambda[2]}},
-                                         {{num[3], 1, lambda[3]}, {num[3], 1, lambda[3]}, {num[3], 1, lambda[3]}, {num[3], 1, lambda[3]}},
-                                         {{num[4], 1, lambda[4]}, {num[4], 1, lambda[4]}, {num[4], 1, lambda[4]}, {num[4], 1, lambda[4]}},
-                                         {{num[5], 1, lambda[5]}, {num[5], 1, lambda[5]}, {num[5], 1, lambda[5]}, {num[5], 1, lambda[5]}}};
+    OLS<double, uint8_t> ols[nOLS][4] = {{{shared,num[0], 1, lambda[0]}, {shared,num[0], 1, lambda[0]}, {shared,num[0], 1, lambda[0]}, {shared,num[0], 1, lambda[0]}},
+                                         {{shared,num[1], 1, lambda[1]}, {shared,num[1], 1, lambda[1]}, {shared,num[1], 1, lambda[1]}, {shared,num[1], 1, lambda[1]}},
+                                         {{shared,num[2], 1, lambda[2]}, {shared,num[2], 1, lambda[2]}, {shared,num[2], 1, lambda[2]}, {shared,num[2], 1, lambda[2]}},
+                                         {{shared,num[3], 1, lambda[3]}, {shared,num[3], 1, lambda[3]}, {shared,num[3], 1, lambda[3]}, {shared,num[3], 1, lambda[3]}},
+                                         {{shared,num[4], 1, lambda[4]}, {shared,num[4], 1, lambda[4]}, {shared,num[4], 1, lambda[4]}, {shared,num[4], 1, lambda[4]}},
+                                         {{shared,num[5], 1, lambda[5]}, {shared,num[5], 1, lambda[5]}, {shared,num[5], 1, lambda[5]}, {shared,num[5], 1, lambda[5]}}};
     const uint8_t *olsCtx1[32] = {&WWWWWW, &WWWWW, &WWWW, &WWW, &WW, &W, &NWWWW, &NWWW, &NWW, &NW, &N, &NE, &NEE, &NEEE, &NEEEE, &NNWWW,
                                   &NNWW, &NNW, &NN, &NNE, &NNEE, &NNEEE, &NNNWW, &NNNW, &NNN, &NNNE, &NNNEE, &NNNNW, &NNNN, &NNNNE, &NNNNN,
                                   &NNNNNN};
@@ -88,7 +72,7 @@ public:
     const uint8_t *olsCtx6[8] = {&WWW, &WW, &W, &NNN, &NN, &N, &p1, &p2};
     const uint8_t **olsCtxs[nOLS] = {&olsCtx1[0], &olsCtx2[0], &olsCtx3[0], &olsCtx4[0], &olsCtx5[0], &olsCtx6[0]};
 
-    Image24BitModel(ModelStats *st, uint64_t size);
+    Image24BitModel(Shared* const sh, uint64_t size);
     void update();
 
     /**

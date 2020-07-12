@@ -13,7 +13,7 @@
 class Image1BitModel {
 private:
     static constexpr int s = 11;
-    Shared *shared = Shared::getInstance();
+    const Shared * const shared;
     Random rnd;
     int w = 0;
     uint32_t r0 = 0, r1 = 0, r2 = 0, r3 = 0; /**< last 4 rows, bit 8 is over current pixel */
@@ -23,7 +23,7 @@ private:
 
 public:
     static constexpr int MIXERINPUTS = s;
-    Image1BitModel();
+    Image1BitModel(const Shared* const sh);
     void setParam(int info0);
     void mix(Mixer &m);
 };

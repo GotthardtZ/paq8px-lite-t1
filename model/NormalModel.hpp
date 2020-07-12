@@ -2,7 +2,6 @@
 #define PAQ8PX_NORMALMODEL_HPP
 
 #include "../ContextMap2.hpp"
-#include "../ModelStats.hpp"
 
 /**
  * Model for order 0-14 contexts
@@ -14,8 +13,7 @@ class NormalModel {
 private:
     static constexpr int nCM = 9;
     static constexpr int nSM = 3;
-    Shared *shared = Shared::getInstance();
-    ModelStats *stats;
+    Shared * const shared;
     ContextMap2 cm;
     StateMap smOrder0Slow;
     StateMap smOrder1Slow;
@@ -26,7 +24,7 @@ public:
             nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS + ContextMap2::MIXERINPUTS_BYTE_HISTORY) + nSM; //66
     static constexpr int MIXERCONTEXTS = 64 + 8 + 1024 + 256 + 256 + 256 + 256 + 1536; //3656
     static constexpr int MIXERCONTEXTSETS = 7;
-    NormalModel(ModelStats *st, uint64_t cmSize);
+    NormalModel(Shared* const sh, uint64_t cmSize);
     void reset();
 
     /**

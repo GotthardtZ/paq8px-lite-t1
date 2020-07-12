@@ -1,15 +1,5 @@
 #include "UpdateBroadcaster.hpp"
 
-UpdateBroadcaster *UpdateBroadcaster::mPInstance = nullptr;
-
-auto UpdateBroadcaster::getInstance() -> UpdateBroadcaster * {
-  if( mPInstance == nullptr ) {
-    mPInstance = new UpdateBroadcaster();
-  }
-
-  return mPInstance;
-}
-
 void UpdateBroadcaster::subscribe(IPredictor *subscriber) {
   subscribers[n] = subscriber;
   n++;

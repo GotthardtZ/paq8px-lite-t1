@@ -1,7 +1,7 @@
 #include "StateMap.hpp"
 
-StateMap::StateMap(const int s, const int n, const int lim, const StateMap::MAPTYPE mapType) : AdaptiveMap(n * s, lim), numContextSets(s),
-        numContextsPerSet(n), numContexts(0), cxt(s) {
+StateMap::StateMap(const Shared* const sh, const int s, const int n, const int lim, const StateMap::MAPTYPE mapType) :
+  AdaptiveMap(sh, n * s, lim), numContextSets(s), numContextsPerSet(n), numContexts(0), cxt(s) {
 #ifdef VERBOSE
   printf("Created StateMap with s = %d, n = %d, lim = %d, maptype = %d\n", s, n, lim, mapType);
 #endif
@@ -59,7 +59,7 @@ void StateMap::update() {
 }
 
 auto StateMap::p1(const uint32_t cx) -> int {
-  updater->subscribe(this);
+  shared->GetUpdateBroadcaster()->subscribe(this);
   assert(cx >= 0 && cx < numContextsPerSet);
   cxt[0] = cx;
   numContexts++;
@@ -77,7 +77,7 @@ auto StateMap::p2(const uint32_t s, const uint32_t cx) -> int {
 }
 
 void StateMap::subscribe() {
-  updater->subscribe(this);
+  shared->GetUpdateBroadcaster()->subscribe(this);
 }
 
 void StateMap::skip(const uint32_t s) {

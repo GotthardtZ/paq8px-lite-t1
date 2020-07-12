@@ -8,7 +8,7 @@
 //////////////////////// Versioning ////////////////////////////////////////
 
 #define PROGNAME     "paq8px"
-#define PROGVERSION  "187fix3"  //update version here before publishing your changes
+#define PROGVERSION  "188"  //update version here before publishing your changes
 #define PROGYEAR     "2020"
 
 
@@ -36,10 +36,10 @@ static void printHelp() {
          "  " PROGNAME " -LEVEL[SWITCHES] INPUTSPEC [OUTPUTSPEC]\n"
          "\n"
          "    -LEVEL:\n"
-         "      -0 = store (uses 322 MB)\n"
-         "      -1 -2 -3 = faster (uses 417, 431, 459 MB)\n"
-         "      -4 -5 -6 -7 -8 -9 = smaller (uses 514, 624, 845, 1288, 2172, 3941 MB)\n"
-         "      -10  -11  -12     = extreme (uses 7478, 14553, 28702 MB)\n"
+         "      -0 = no compression, only transformations when applicable (uses 322 MB)\n"
+         "      -1 -2 -3 = compress using less memory (417, 431, 459 MB)\n"
+         "      -4 -5 -6 -7 -8 -9 = use more memory (514, 624, 845, 1288, 2172, 3941 MB)\n"
+         "      -10  -11  -12     = use even more memory (7478, 14553, 27678 MB)\n"
          "    The listed memory requirements are indicative, actual usage may vary\n"
          "    depending on several factors including need for temporary files,\n"
          "    temporary memory needs of some preprocessing (transformations), etc.\n"
@@ -51,6 +51,7 @@ static void printHelp() {
          "          (english.dic, english.exp)\n"
          "      a = Adaptive learning rate\n"
          "      s = Skip the color transform, just reorder the RGB channels\n"
+         "      l = Use Long Short-Term Memory network\n"
          "    INPUTSPEC:\n"
          "    The input may be a FILE or a PATH/FILE or a [PATH/]@FILELIST.\n"
          "    Only file content and the file size is kept in the archive. Filename,\n"
@@ -67,10 +68,9 @@ static void printHelp() {
          "    utility. The FILELIST file must contain a header but will be ignored.\n"
          "\n"
          "    OUTPUTSPEC:\n"
-         "    When omitted: the archive will be created in the same folder where the\n"
-         "    input file resides. The archive filename will be constructed from the\n"
-         "    input file name by appending ." PROGNAME PROGVERSION " extension\n"
-         "    to it.\n"
+         "    When omitted: the archive will be created in the current folder. The\n"
+         "    archive filename will be constructed from the input file name by \n"
+         "    appending ." PROGNAME PROGVERSION " extension to it.\n"
          "    When OUTPUTSPEC is a filename (with an optional path) it will be\n"
          "    used as the archive filename.\n"
          "    When OUTPUTSPEC is a folder the archive file will be generated from\n"
@@ -119,7 +119,7 @@ static void printHelp() {
          "    Overrides detected SIMD instruction set for neural network operations\n"
          "\n"
          "Remark: the command line arguments may be used in any order except the input\n"
-         "and output: always the input comes first then (the optional) output.\n"
+         "and output: always the input comes first then output (which may be omitted).\n"
          "\n"
          "    Example:\n"
          "      " PROGNAME " -8 enwik8 folder/ -v -log logfile.txt -simd sse2\n"
@@ -131,15 +131,15 @@ static void printModules() {
   printf("\n");
   printf("Build: ");
 #ifndef DISABLE_ZLIB
-  printf("ZLIB: ENABLED ");
+  printf("ZLIB: ENABLED, ");
 #else
-  printf("ZLIB: DISABLED ");
+  printf("ZLIB: DISABLED, ");
 #endif
 
 #ifndef DISABLE_AUDIOMODEL
-  printf("AUDIOMODEL: ENABLED ");
+  printf("AUDIOMODEL: ENABLED, ");
 #else
-  printf("AUDIOMODEL: DISABLED ");
+  printf("AUDIOMODEL: DISABLED, ");
 #endif
 
 #ifndef DISABLE_TEXTMODEL
@@ -194,8 +194,7 @@ static void printCommand(const WHATTODO &whattodo) {
   printf("\n");
 }
 
-static void printOptions() {
-  Shared *shared = Shared::getInstance();
+static void printOptions(Shared *shared) {
   printf(" Level          = %d\n", shared->level);
   printf(" Brute      (b) = %s\n", (shared->options & OPTION_BRUTE) != 0U ? "On  (Brute-force detection of DEFLATE streams)"
                                                                           : "Off"); //this is a compression-only option, but we put/get it for reproducibility
@@ -205,15 +204,16 @@ static void printOptions() {
   printf(" Adaptive   (a) = %s\n", (shared->options & OPTION_ADAPTIVE) != 0U ? "On  (Adaptive learning rate)" : "Off");
   printf(" Skip RGB   (s) = %s\n",
          (shared->options & OPTION_SKIPRGB) != 0U ? "On  (Skip the color transform, just reorder the RGB channels)" : "Off");
+  printf(" Use LSTM   (l) = %s\n", (shared->options & OPTION_LSTM) != 0U ? "On  (Use Long Short-Term Memory network)" : "Off");
   printf(" File mode      = %s\n", (shared->options & OPTION_MULTIPLE_FILE_MODE) != 0U ? "Multiple" : "Single");
 }
 
 auto processCommandLine(int argc, char **argv) -> int {
   ProgramChecker *programChecker = ProgramChecker::getInstance();
-  Shared *shared = Shared::getInstance();
+  Shared shared;
   try {
 
-    if( !shared->toScreen ) { //we need a minimal feedback when redirected
+    if( !shared.toScreen ) { //we need a minimal feedback when redirected
       fprintf(stderr, PROGNAME " archiver v" PROGVERSION " (c) " PROGYEAR ", Matt Mahoney et al.\n");
     }
     printf(PROGNAME " archiver v" PROGVERSION " (c) " PROGYEAR ", Matt Mahoney et al.\n");
@@ -259,25 +259,28 @@ auto processCommandLine(int argc, char **argv) -> int {
           if (level > 12) {
             quit("Compression level must be between 0 and 12.");
           }
-          shared->setLevel(level);
+          shared.init(level);
           whattodo = DoCompress;
           //process optional compression switches
           for( ; j < argLen; j++ ) {
             switch( argv[i][j] & 0xDFU ) {
               case 'B':
-                shared->options |= OPTION_BRUTE;
+                shared.options |= OPTION_BRUTE;
                 break;
               case 'E':
-                shared->options |= OPTION_TRAINEXE;
+                shared.options |= OPTION_TRAINEXE;
                 break;
               case 'T':
-                shared->options |= OPTION_TRAINTXT;
+                shared.options |= OPTION_TRAINTXT;
                 break;
               case 'A':
-                shared->options |= OPTION_ADAPTIVE;
+                shared.options |= OPTION_ADAPTIVE;
                 break;
               case 'S':
-                shared->options |= OPTION_SKIPRGB;
+                shared.options |= OPTION_SKIPRGB;
+                break;
+              case 'L':
+                shared.options |= OPTION_LSTM;
                 break;
               default: {
                 printf("Invalid compression switch: %c", argv[1][j]);
@@ -373,15 +376,15 @@ auto processCommandLine(int argc, char **argv) -> int {
 
     // Set highest or user selected vectorization mode
     if (simdIset == 11) {
-      shared->chosenSimd = SIMD_NEON;
+      shared.chosenSimd = SIMD_NEON;
     } else if (simdIset >= 9) {
-      shared->chosenSimd = SIMD_AVX2;
+      shared.chosenSimd = SIMD_AVX2;
     } else if (simdIset >= 5) {
-      shared->chosenSimd = SIMD_SSSE3;
+      shared.chosenSimd = SIMD_SSSE3;
     } else if( simdIset >= 3 ) {
-      shared->chosenSimd = SIMD_SSE2;
+      shared.chosenSimd = SIMD_SSE2;
     } else {
-      shared->chosenSimd = SIMD_NONE;
+      shared.chosenSimd = SIMD_NONE;
     }
 
     if( verbose ) {
@@ -413,7 +416,7 @@ auto processCommandLine(int argc, char **argv) -> int {
     // File list supplied?
     if( input.beginsWith("@")) {
       if( whattodo == DoCompress ) {
-        shared->options |= OPTION_MULTIPLE_FILE_MODE;
+        shared.options |= OPTION_MULTIPLE_FILE_MODE;
         input.stripStart(1);
       } else {
         quit("A file list (a file name prefixed by '@') may only be specified when compressing.");
@@ -507,7 +510,7 @@ auto processCommandLine(int argc, char **argv) -> int {
     listoffiles.setBasePath(whattodo == DoCompress ? inputPath.c_str() : outputPath.c_str());
 
     // Process file list (in multiple file mode)
-    if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0U ) { //multiple file mode
+    if((shared.options & OPTION_MULTIPLE_FILE_MODE) != 0U ) { //multiple file mode
       assert(whattodo == DoCompress);
       // Read and parse file list file
       FileDisk f;
@@ -544,17 +547,23 @@ auto processCommandLine(int argc, char **argv) -> int {
           quit();
         }
       }
-      shared->setLevel(archive.getchar());
+      
+      c = archive.getchar();
+      uint8_t level = static_cast<uint8_t>(c);
+      if (level > 12) {
+        quit("Unexpected compression level setting in archive");
+      }
+      shared.init(level);
       c = archive.getchar();
       if( c == EOF) {
         printf("Unexpected end of archive file.\n");
       }
-      shared->options = static_cast<uint8_t>(c);
+      shared.options = static_cast<uint8_t>(c);
     }
 
     if( verbose ) {
       printCommand(whattodo);
-      printOptions();
+      printOptions(&shared);
     }
     printf("\n");
 
@@ -562,7 +571,7 @@ auto processCommandLine(int argc, char **argv) -> int {
 
     // Write archive header to archive file
     if( mode == COMPRESS ) {
-      if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0U ) { //multiple file mode
+      if((shared.options & OPTION_MULTIPLE_FILE_MODE) != 0U ) { //multiple file mode
         numberOfFiles = listoffiles.getCount();
         printf("Creating archive %s in multiple file mode with %d file%s...\n", archiveName.c_str(), numberOfFiles,
                numberOfFiles > 1 ? "s" : "");
@@ -571,12 +580,12 @@ auto processCommandLine(int argc, char **argv) -> int {
       }
       archive.create(archiveName.c_str());
       archive.append(PROGNAME);
-      archive.putChar(shared->level);
-      archive.putChar(shared->options);
+      archive.putChar(shared.level);
+      archive.putChar(shared.options);
     }
 
     // In single file mode with no output filename specified we must construct it from the supplied archive filename
-    if((shared->options & OPTION_MULTIPLE_FILE_MODE) == 0 ) { //single file mode
+    if((shared.options & OPTION_MULTIPLE_FILE_MODE) == 0 ) { //single file mode
       if((whattodo == DoExtract || whattodo == DoCompare) && output.strsize() == 0 ) {
         output += input.c_str();
         const char *fileExtension = "." PROGNAME PROGVERSION;
@@ -589,9 +598,7 @@ auto processCommandLine(int argc, char **argv) -> int {
       }
     }
 
-    // Set globals according to requested compression level
-    assert(shared->level <= 12);
-    Encoder en(mode, &archive);
+    Encoder en(&shared, mode, &archive);
     uint64_t contentSize = 0;
     uint64_t totalSize = 0;
 
@@ -602,19 +609,19 @@ auto processCommandLine(int argc, char **argv) -> int {
         printf("Writing header : %" PRIu64 " bytes\n", start);
       }
       totalSize += start;
-      if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
+      if((shared.options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
 
-        en.compress(TEXT);
+        en.encodeBlockType(TEXT);
         uint64_t len1 = input.size(); //ASCIIZ filename of listfile - with ending zero
         const String *const s = listoffiles.getString();
         uint64_t len2 = s->size(); //ASCIIZ filenames of files to compress - with ending zero
         en.encodeBlockSize(len1 + len2);
 
         for( uint64_t i = 0; i < len1; i++ ) {
-          en.compress(input[i]); //ASCIIZ filename of listfile
+          en.compressByte(input[i]); //ASCIIZ filename of listfile
         }
         for( uint64_t i = 0; i < len2; i++ ) {
-          en.compress((*s)[i]); //ASCIIZ filenames of files to compress
+          en.compressByte((*s)[i]); //ASCIIZ filenames of files to compress
         }
 
         printf("1/2 - Filename of listfile : %" PRIu64 " bytes\n", len1);
@@ -625,24 +632,24 @@ auto processCommandLine(int argc, char **argv) -> int {
     }
 
     // Decompress list of files
-    if( mode == DECOMPRESS && (shared->options & OPTION_MULTIPLE_FILE_MODE) != 0 ) {
+    if( mode == DECOMPRESS && (shared.options & OPTION_MULTIPLE_FILE_MODE) != 0 ) {
       const char *errmsgInvalidChar = "Invalid character or unexpected end of archive file.";
       // name of listfile
       FileName listFilename(outputPath.c_str());
       if( output.strsize() != 0 ) {
         quit("Output filename must not be specified when extracting multiple files.");
       }
-      if((c = en.decompress()) != TEXT ) {
+      if((c = en.decodeBlockType()) != TEXT ) {
         quit(errmsgInvalidChar);
       }
       en.decodeBlockSize(); //we don't really need it
-      while((c = en.decompress()) != 0 ) {
+      while((c = en.decompressByte()) != 0 ) {
         if( c == 255 ) {
           quit(errmsgInvalidChar);
         }
         listFilename += static_cast<char>(c);
       }
-      while((c = en.decompress()) != 0 ) {
+      while((c = en.decompressByte()) != 0 ) {
         if( c == 255 ) {
           quit(errmsgInvalidChar);
         }
@@ -679,24 +686,24 @@ auto processCommandLine(int argc, char **argv) -> int {
       }
     }
 
-    if( whattodo == DoList && (shared->options & OPTION_MULTIPLE_FILE_MODE) == 0 ) {
+    if( whattodo == DoList && (shared.options & OPTION_MULTIPLE_FILE_MODE) == 0 ) {
       quit("Can't list. Filenames are not stored in single file mode.\n");
     }
 
     // Compress or decompress files
     if( mode == COMPRESS ) {
-      if( !shared->toScreen ) { //we need a minimal feedback when redirected
+      if( !shared.toScreen ) { //we need a minimal feedback when redirected
         fprintf(stderr, "Output is redirected - only minimal feedback is on screen\n");
       }
-      if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
+      if((shared.options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
         for( int i = 0; i < numberOfFiles; i++ ) {
           const char *fName = listoffiles.getfilename(i);
           uint64_t fSize = getFileSize(fName);
-          if( !shared->toScreen ) { //we need a minimal feedback when redirected
+          if( !shared.toScreen ) { //we need a minimal feedback when redirected
             fprintf(stderr, "\n%d/%d - Filename: %s (%" PRIu64 " bytes)\n", i + 1, numberOfFiles, fName, fSize);
           }
           printf("\n%d/%d - Filename: %s (%" PRIu64 " bytes)\n", i + 1, numberOfFiles, fName, fSize);
-          compressfile(fName, fSize, en, verbose);
+          compressfile(&shared, fName, fSize, en, verbose);
           totalSize += fSize + 4; //4: file size information
           contentSize += fSize;
         }
@@ -706,11 +713,11 @@ auto processCommandLine(int argc, char **argv) -> int {
         fn += input.c_str();
         const char *fName = fn.c_str();
         uint64_t fSize = getFileSize(fName);
-        if( !shared->toScreen ) { //we need a minimal feedback when redirected
+        if( !shared.toScreen ) { //we need a minimal feedback when redirected
           fprintf(stderr, "\nFilename: %s (%" PRIu64 " bytes)\n", fName, fSize);
         }
         printf("\nFilename: %s (%" PRIu64 " bytes)\n", fName, fSize);
-        compressfile(fName, fSize, en, verbose);
+        compressfile(&shared, fName, fSize, en, verbose);
         totalSize += fSize + 4; //4: file size information
         contentSize += fSize;
       }
@@ -743,7 +750,7 @@ auto processCommandLine(int argc, char **argv) -> int {
           results += argv[i];
         }
         results += "\t";
-        results += uint64_t(shared->level);
+        results += uint64_t(shared.level);
         results += "\t";
         results += input.c_str();
         results += "\t";
@@ -761,17 +768,17 @@ auto processCommandLine(int argc, char **argv) -> int {
     } else { //decompress
       if( whattodo == DoExtract || whattodo == DoCompare ) {
         FMode fMode = whattodo == DoExtract ? FDECOMPRESS : FCOMPARE;
-        if((shared->options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
+        if((shared.options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
           for( int i = 0; i < numberOfFiles; i++ ) {
             const char *fName = listoffiles.getfilename(i);
-            decompressFile(fName, fMode, en);
+            decompressFile(&shared, fName, fMode, en);
           }
         } else { //single file mode
           FileName fn;
           fn += outputPath.c_str();
           fn += output.c_str();
           const char *fName = fn.c_str();
-          decompressFile(fName, fMode, en);
+          decompressFile(&shared, fName, fMode, en);
         }
       }
     }

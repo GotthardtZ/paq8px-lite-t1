@@ -66,9 +66,6 @@
     <ClCompile Include="Models.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ModelStats.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="MTFList.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -234,6 +231,12 @@
     <ClCompile Include="text\WordEmbeddingDictionary.cpp">
       <Filter>text</Filter>
     </ClCompile>
+    <ClCompile Include="Clz.hpp">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ArithmeticEncoder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AdaptiveMap.hpp">
@@ -297,9 +300,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Models.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ModelStats.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="MTFList.hpp">
@@ -558,6 +558,15 @@
       <Filter>text</Filter>
     </ClInclude>
     <ClInclude Include="BitCount.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="model\ImageModelsCommon.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="TransformOptions.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ArithmeticEncoder.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="VLI.hpp">

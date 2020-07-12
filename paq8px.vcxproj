@@ -241,6 +241,8 @@
     <ClCompile Include="AdaptiveMap.cpp" />
     <ClCompile Include="APM.cpp" />
     <ClCompile Include="APM1.cpp" />
+    <ClCompile Include="ArithmeticEncoder.cpp" />
+    <ClCompile Include="Clz.hpp" />
     <ClCompile Include="ContextMap.cpp" />
     <ClCompile Include="ContextMap2.cpp" />
     <ClCompile Include="DummyMixer.cpp" />
@@ -258,7 +260,6 @@
     <ClCompile Include="Mixer.cpp" />
     <ClCompile Include="MixerFactory.cpp" />
     <ClCompile Include="Models.cpp" />
-    <ClCompile Include="ModelStats.cpp" />
     <ClCompile Include="model\Audio16BitModel.cpp" />
     <ClCompile Include="model\Audio8BitModel.cpp" />
     <ClCompile Include="model\AudioModel.cpp" />
@@ -312,6 +313,7 @@
     <ClInclude Include="AdaptiveMap.hpp" />
     <ClInclude Include="APM.hpp" />
     <ClInclude Include="APM1.hpp" />
+    <ClInclude Include="ArithmeticEncoder.hpp" />
     <ClInclude Include="Array.hpp" />
     <ClInclude Include="BH.hpp" />
     <ClInclude Include="BitCount.hpp" />
@@ -356,7 +358,6 @@
     <ClInclude Include="Mixer.hpp" />
     <ClInclude Include="MixerFactory.hpp" />
     <ClInclude Include="Models.hpp" />
-    <ClInclude Include="ModelStats.hpp" />
     <ClInclude Include="model\Audio16BitModel.hpp" />
     <ClInclude Include="model\Audio8BitModel.hpp" />
     <ClInclude Include="model\AudioModel.hpp" />
@@ -370,6 +371,7 @@
     <ClInclude Include="model\Image24BitModel.hpp" />
     <ClInclude Include="model\Image4BitModel.hpp" />
     <ClInclude Include="model\Image8BitModel.hpp" />
+    <ClInclude Include="model\ImageModelsCommon.hpp" />
     <ClInclude Include="model\IndirectModel.hpp" />
     <ClInclude Include="model\Info.hpp" />
     <ClInclude Include="model\JpegModel.hpp" />
@@ -415,6 +417,7 @@
     <ClInclude Include="text\TextModel.hpp" />
     <ClInclude Include="text\Word.hpp" />
     <ClInclude Include="text\WordEmbeddingDictionary.hpp" />
+    <ClInclude Include="TransformOptions.hpp" />
     <ClInclude Include="UpdateBroadcaster.hpp" />
     <ClInclude Include="utils.hpp" />
     <ClInclude Include="VLI.hpp" />
