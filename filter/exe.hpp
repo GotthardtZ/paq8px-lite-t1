@@ -71,6 +71,7 @@ public:
       int a = 0;
       uint8_t c[6];
       begin = static_cast<int>(encoder->decodeBlockSize());
+      size -= VLICost(uint64_t(begin));
       for( int i = 4; i >= 0; i-- ) {
         c[i] = encoder->decompressByte(); // Fill queue
       }
