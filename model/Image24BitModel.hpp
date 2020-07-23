@@ -20,7 +20,7 @@ private:
     static constexpr int nSM = nSM0 + nSM1 + nOLS;
     static constexpr int nSSM = 59;
     static constexpr int nCM = 45;
-    Ilog *ilog = Ilog::getInstance();
+    Ilog *ilog = &Ilog::getInstance();
 
 public:
     static constexpr int MIXERINPUTS = nSSM * SmallStationaryContextMap::MIXERINPUTS + nSM * StationaryMap::MIXERINPUTS +

@@ -97,7 +97,7 @@ private:
     const uint32_t mask;
     const int hashBits;
     uint64_t validFlags;
-    Ilog *ilog = Ilog::getInstance();
+    Ilog *ilog = &Ilog::getInstance();
 
 public:
     /**

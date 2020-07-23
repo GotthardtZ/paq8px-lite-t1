@@ -25,6 +25,9 @@
     <Filter Include="text">
       <UniqueIdentifier>{648bde0f-1376-450c-8c89-e9b4863d8783}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\lstm">
+      <UniqueIdentifier>{73abd1bc-6333-4b69-a064-57ad2414ab30}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="paq8px.cpp">
@@ -571,6 +574,45 @@
     </ClInclude>
     <ClInclude Include="VLI.hpp">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lstm\Activations.hpp">
+      <Filter>Header Files\lstm</Filter>
+    </ClInclude>
+    <ClInclude Include="lstm\Adam.hpp">
+      <Filter>Header Files\lstm</Filter>
+    </ClInclude>
+    <ClInclude Include="lstm\CosineDecay.hpp">
+      <Filter>Header Files\lstm</Filter>
+    </ClInclude>
+    <ClInclude Include="lstm\IDecay.hpp">
+      <Filter>Header Files\lstm</Filter>
+    </ClInclude>
+    <ClInclude Include="lstm\IOptimizer.hpp">
+      <Filter>Header Files\lstm</Filter>
+    </ClInclude>
+    <ClInclude Include="lstm\Layer.hpp">
+      <Filter>Header Files\lstm</Filter>
+    </ClInclude>
+    <ClInclude Include="lstm\Lstm.hpp">
+      <Filter>Header Files\lstm</Filter>
+    </ClInclude>
+    <ClInclude Include="lstm\LstmFactory.hpp">
+      <Filter>Header Files\lstm</Filter>
+    </ClInclude>
+    <ClInclude Include="lstm\LstmLayer.hpp">
+      <Filter>Header Files\lstm</Filter>
+    </ClInclude>
+    <ClInclude Include="lstm\LstmModel.hpp">
+      <Filter>Header Files\lstm</Filter>
+    </ClInclude>
+    <ClInclude Include="lstm\PolynomialDecay.hpp">
+      <Filter>Header Files\lstm</Filter>
+    </ClInclude>
+    <ClInclude Include="lstm\SimdFunctions.hpp">
+      <Filter>Header Files\lstm</Filter>
+    </ClInclude>
+    <ClInclude Include="lstm\SimdLstmModel.hpp">
+      <Filter>Header Files\lstm</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

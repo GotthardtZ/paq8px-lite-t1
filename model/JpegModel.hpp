@@ -156,7 +156,7 @@ private:
     Mixer *m1;
     APM apm1;
     APM apm2;
-    Ilog *ilog = Ilog::getInstance();
+    Ilog *ilog = &Ilog::getInstance();
     const Shared * const shared;
 
 public:

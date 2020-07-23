@@ -2,17 +2,12 @@
 
 auto Ilog::log(uint16_t x) const -> int { return static_cast<int>(t[x]); }
 
-Ilog *Ilog::mPInstance = nullptr;
-
-auto Ilog::getInstance() -> Ilog * {
-  if( mPInstance == nullptr ) {   // Only allow one getInstance of class to be generated.
-    mPInstance = new Ilog;
-  }
-
-  return mPInstance;
+auto Ilog::getInstance() -> Ilog& {
+  static Ilog instance;
+  return instance;
 }
 
-Ilog *ilog = Ilog::getInstance();
+Ilog *ilog = &Ilog::getInstance();
 
 auto llog(uint32_t x) -> int {
   if( x >= 0x1000000 ) {

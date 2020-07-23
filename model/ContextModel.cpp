@@ -101,21 +101,21 @@ auto ContextModel::p() -> int {
       Image8BitModel &image8BitModel = models.image8BitModel();
       image8BitModel.setParam(blockInfo, 0, 0);
       image8BitModel.mix(*m);
-      m->setScaleFactor(2048, 128);
+      m->setScaleFactor(1600, 110); // 1500-1800, 100-128
       return m->p();
     }
     case IMAGE8GRAY: {
       Image8BitModel &image8BitModel = models.image8BitModel();
       image8BitModel.setParam(blockInfo, 1, 0);
       image8BitModel.mix(*m);
-      m->setScaleFactor(2048, 128);
+      m->setScaleFactor(1300, 100); // 1100-1400, 90-110
       return m->p();
     }
     case IMAGE24: {
       Image24BitModel &image24BitModel = models.image24BitModel();
       image24BitModel.setParam(blockInfo, 0, 0);
       image24BitModel.mix(*m);
-      m->setScaleFactor(1024, 128);
+      m->setScaleFactor(1024, 100); // 800-1300, 90-110
       return m->p();
     }
     case IMAGE32: {
@@ -129,21 +129,21 @@ auto ContextModel::p() -> int {
       Image8BitModel &image8BitModel = models.image8BitModel();
       image8BitModel.setParam(blockInfo, 0, 1);
       image8BitModel.mix(*m);
-      m->setScaleFactor(2048, 128);
+      m->setScaleFactor(1600, 110);
       return m->p();
     }
     case PNG8GRAY: {
       Image8BitModel &image8BitModel = models.image8BitModel();
       image8BitModel.setParam(blockInfo, 1, 1);
       image8BitModel.mix(*m);
-      m->setScaleFactor(2048, 128);
+      m->setScaleFactor(1300, 110);
       return m->p();
     }
     case PNG24: {
       Image24BitModel &image24BitModel = models.image24BitModel();
       image24BitModel.setParam(blockInfo, 0, 1);
       image24BitModel.mix(*m);
-      m->setScaleFactor(1024, 128);
+      m->setScaleFactor(1024, 100);
       return m->p();
     }
     case PNG32: {
@@ -160,15 +160,16 @@ auto ContextModel::p() -> int {
         Audio8BitModel &audio8BitModel = models.audio8BitModel();
         audio8BitModel.setParam(blockInfo);
         audio8BitModel.mix(*m);
+        m->setScaleFactor(850, 140); //800-900, 140
       }
       else {
         Audio16BitModel& audio16BitModel = models.audio16BitModel();
         audio16BitModel.setParam(blockInfo);
         audio16BitModel.mix(*m);
+        m->setScaleFactor(1024, 128);
       }
       RecordModel& recordModel = models.recordModel();
       recordModel.mix(*m);
-      m->setScaleFactor(1024, 128);
       return m->p();
     }
 #endif //DISABLE_AUDIOMODEL
@@ -227,7 +228,7 @@ auto ContextModel::p() -> int {
     }
   }
 
-  m->setScaleFactor(1024, 128);
+  m->setScaleFactor(940, 80); // 900-1024, 70-110
   return m->p();
 }
 

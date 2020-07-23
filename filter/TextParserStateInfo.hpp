@@ -46,7 +46,7 @@ public:
             12, 36, 12, 12, 12, 12, 12, 36, 12, 36, 12, 12, // state 84-95
             12, 36, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12 // state 96-108
     };
-    static TextParserStateInfo *getInstance();
+    static TextParserStateInfo& getInstance();
     void reset(uint64_t startPos);
     auto start() -> uint64_t;
     auto end() -> uint64_t;
@@ -68,8 +68,7 @@ private:
      * Assignment operator is private so that it cannot be called
      */
     TextParserStateInfo &operator=(TextParserStateInfo const &) { return *this; }
-
-    static TextParserStateInfo *mPInstance;
+  
 };
 
 #endif //PAQ8PX_TEXTPARSERSTATEINFO_HPP

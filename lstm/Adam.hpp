@@ -129,17 +129,17 @@ private:
     float const learning_rate,
     std::uint64_t const time_step) const
   {
-    double const t = static_cast<double>(time_step);
-    float const bias_m = 1.f - static_cast<float>(std::pow(beta1, t));
-    float const bias_v = 1.f - static_cast<float>(std::pow(beta2, t));
-    (*m) *= beta1;
-    (*m) += (1.f - beta1) * (*g);
-    (*v) *= beta2;
-    (*v) += (1.f - beta2) * (*g) * (*g);
-    (*w) -= learning_rate * (
-      ((*m) / bias_m) /
-      (std::sqrt((*v) / bias_v) + eps)
-    );
+    float const t = static_cast<float>(time_step);
+    float const bias_m = 1.f - std::pow(beta1, t);
+    float const bias_v = 1.f - std::pow(beta2, t);
+    for (int i = 0; i < g->size(); i++) {
+      (*m)[i] = (*m)[i] * beta1 + (1.0f - beta1) * (*g)[i];
+      (*v)[i] = (*v)[i] * beta2 + (1.0f - beta2) * (*g)[i] * (*g)[i];
+      (*w)[i] -= learning_rate * (
+        ((*m)[i] / bias_m) /
+        (std::sqrt((*v)[i] / bias_v) + eps)
+      );
+    }
   }
 public:
   void Run(
