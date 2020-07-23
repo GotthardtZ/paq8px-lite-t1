@@ -4,7 +4,7 @@ rem * Remark: SIMD-specific functions are dispatched at runtime to match the run
 rem * If the build fails see compiler errors in _error1_zlib.txt and/or in _error2_paq.txt
 
 rem * Set your mingw-w64 path below
-set path=%path%;C:/Program Files/mingw-w64/x86_64-8.1.0-win32-seh-rt_v6-rev0/mingw64/bin
+set path=%path%;c:/Program Files/mingw-w64/winlibs-x86_64-posix-seh-gcc-9.3.0-llvm-10.0.0-mingw-w64-7.0.0-r4/bin
 
 set zpath=../zlib/
 set zsrc=%zpath%adler32.c %zpath%crc32.c %zpath%deflate.c %zpath%gzlib.c %zpath%inffast.c %zpath%inflate.c %zpath%inftrees.c %zpath%trees.c %zpath%zutil.c

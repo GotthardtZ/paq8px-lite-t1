@@ -44,7 +44,7 @@ private:
     float sum = hsum256_ps_avx(v_sum);
     for (; remainder > 0; remainder--) {
       const std::size_t i = output_size - remainder;
-      output[epoch][i] = std::exp(dot256_ps_fma3(&hidden[0], &output_layer[epoch][i][0], len, 0.f));
+      output[epoch][i] = expa(dot256_ps_fma3(&hidden[0], &output_layer[epoch][i][0], len, 0.f));
       sum += output[epoch][i];
     }
     output[epoch] /= sum;
@@ -52,8 +52,10 @@ private:
   }
   void SoftMaxSimdNone() {
     for (unsigned int i = 0; i < output_size; ++i)
-      output[epoch][i] = std::exp((hidden * output_layer[epoch][i]).sum());
-    output[epoch] /= output[epoch].sum();
+      output[epoch][i] = expa(SumOfProducts(&hidden[0], &output_layer[epoch][i][0], hidden.size()));
+    float s = 0.0f;
+    for (int i = 0; i < output[epoch].size(); i++) s += output[epoch][i];
+    for (int i = 0; i < output[epoch].size(); i++) output[epoch][i] /= s;
   }
 public:
   std::size_t epoch;
@@ -95,17 +97,15 @@ public:
 
   void SetInput(std::valarray<float> const& input) {
     for (std::size_t i = 0; i < layers.size(); i++)
-      std::copy(std::begin(input), std::begin(input) + input_size, std::begin(layer_input[epoch][i]));
+      memcpy(&layer_input[epoch][i][0], &input[0], input_size * sizeof(float));
   }
 
   std::valarray<float>& Predict(T const input) {
     for (std::size_t i = 0; i < layers.size(); i++) {
-      auto start = std::begin(hidden) + i * num_cells;
-      std::copy(start, start + num_cells, std::begin(layer_input[epoch][i]) + input_size);
+      memcpy(&layer_input[epoch][i][input_size], &hidden[i * num_cells], num_cells * sizeof(float));
       layers[i]->ForwardPass(layer_input[epoch][i], input, &hidden, i * num_cells);
       if (i < layers.size() - 1) {
-        auto start2 = std::begin(layer_input[epoch][i + 1]) + num_cells + input_size;
-        std::copy(start, start + num_cells, start2);
+        memcpy(&layer_input[epoch][i + 1][num_cells + input_size], &hidden[i * num_cells], num_cells * sizeof(float));
       }
     }
     if (simd == SIMD_AVX2)
@@ -139,8 +139,9 @@ public:
     }
     for (std::size_t i = 0; i < output_size; i++) {
       float const error = (i == input) ? output[last_epoch][i] - 1.f : output[last_epoch][i];
-      output_layer[epoch][i] = output_layer[last_epoch][i];
-      output_layer[epoch][i] -= learning_rate * error * hidden;
+      for (int j = 0; j < hidden.size(); j++) {
+        output_layer[epoch][i][j] = output_layer[last_epoch][i][j]- learning_rate * error * hidden[j];
+      }
     }
     return Predict(input);
   }

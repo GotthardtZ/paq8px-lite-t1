@@ -21,34 +21,31 @@ private:
     const Shared* const shared;
     int n, kMax, km, index;
     F lambda, nu;
-    F *x, *w, *b;
-    F **mCovariance, **mCholesky;
+    Array<F,32> x, w, b;
+    Array<F,32> mCovariance;
+    Array<F,32> mCholesky;
 
     auto factor() -> int {
       // copy the matrix
-      for( int i = 0; i < n; i++ ) {
-        for( int j = 0; j < n; j++ ) {
-          mCholesky[i][j] = mCovariance[i][j];
-        }
-      }
+      memcpy(&mCholesky[0], &mCovariance[0], n * n * sizeof(F));
 
       for( int i = 0; i < n; i++ ) {
-        mCholesky[i][i] += nu;
+        mCholesky[i*n+i] += nu; //main diagonal
       }
       for( int i = 0; i < n; i++ ) {
         for( int j = 0; j < i; j++ ) {
-          F sum = mCholesky[i][j];
+          F sum = mCholesky[i*n+j];
           for( int k = 0; k < j; k++ ) {
-            sum -= (mCholesky[i][k] * mCholesky[j][k]);
+            sum -= (mCholesky[i*n+k] * mCholesky[j*n+k]);
           }
-          mCholesky[i][j] = sum / mCholesky[j][j];
+          mCholesky[i*n+j] = sum / mCholesky[j*n+j];
         }
-        F sum = mCholesky[i][i];
+        F sum = mCholesky[i*n+i];
         for( int k = 0; k < i; k++ ) {
-          sum -= (mCholesky[i][k] * mCholesky[i][k]);
+          sum -= (mCholesky[i*n+k] * mCholesky[i*n+k]);
         }
         if( sum > ftol ) {
-          mCholesky[i][i] = sqrt(sum);
+          mCholesky[i*n+i] = sqrt(sum); //main diagonal
         } else {
           return 1;
         }
@@ -60,42 +57,32 @@ private:
       for( int i = 0; i < n; i++ ) {
         F sum = b[i];
         for( int j = 0; j < i; j++ ) {
-          sum -= (mCholesky[i][j] * w[j]);
+          sum -= (mCholesky[i*n+j] * w[j]);
         }
-        w[i] = sum / mCholesky[i][i];
+        w[i] = sum / mCholesky[i*n+i];
       }
       for( int i = n - 1; i >= 0; i-- ) {
         F sum = w[i];
         for( int j = i + 1; j < n; j++ ) {
-          sum -= (mCholesky[j][i] * w[j]);
+          sum -= (mCholesky[j*n+i] * w[j]);
         }
-        w[i] = sum / mCholesky[i][i];
+        w[i] = sum / mCholesky[i*n+i];
       }
     }
 
 public:
     OLS(const Shared* const sh, int n, int kMax = 1, F lambda = 0.998, F nu = 0.001) : shared(sh),
-      n(n), kMax(kMax), lambda(lambda), nu(nu) {
+      n(n), kMax(kMax), lambda(lambda), nu(nu), 
+      x(n), w(n), b(n),
+      mCovariance(n*n), mCholesky(n*n) {
         km = index = 0;
-        x = new F[n], w = new F[n], b = new F[n];
-        mCovariance = new F *[n], mCholesky = new F *[n];
         for( int i = 0; i < n; i++ ) {
-          x[i] = w[i] = b[i] = 0.;
-          mCovariance[i] = new F[n], mCholesky[i] = new F[n];
+          x[i] = w[i] = b[i] = 0.0;
           for( int j = 0; j < n; j++ ) {
-            mCovariance[i][j] = mCholesky[i][j] = 0.;
+            mCovariance[i*n+j] = mCholesky[i*n+j] = 0.0;
           }
         }
       }
-
-    ~OLS() {
-      delete x, delete w, delete b;
-      for( int i = 0; i < n; i++ ) {
-        delete mCovariance[i];
-        delete mCholesky[i];
-      }
-      delete[] mCovariance, delete[] mCholesky;
-    }
 
     void add(const T val) {
       assert(index < n);
@@ -145,7 +132,7 @@ public:
       F mul = 1.0 - lambda;
       for( int j = 0; j < n; j++ ) {
         for( int i = 0; i < n; i++ ) {
-          mCovariance[j][i] = lambda * mCovariance[j][i] + mul * (x[j] * x[i]);
+          mCovariance[j*n+i] = lambda * mCovariance[j*n+i] + mul * (x[j] * x[i]);
         }
       }
       mul *= (F(val) - sub);
@@ -167,13 +154,13 @@ public:
       int i = 0;
       for( int j = 0; j < n; j++ ) {
         for( i = 0; i < l; i += 4 ) {
-          mCovariance[j][i] = lambda * mCovariance[j][i] + mul * (x[j] * x[i]);
-          mCovariance[j][i + 1] = lambda * mCovariance[j][i + 1] + mul * (x[j] * x[i + 1]);
-          mCovariance[j][i + 2] = lambda * mCovariance[j][i + 2] + mul * (x[j] * x[i + 2]);
-          mCovariance[j][i + 3] = lambda * mCovariance[j][i + 3] + mul * (x[j] * x[i + 3]);
+          mCovariance[j*n+i] = lambda * mCovariance[j*n+i] + mul * (x[j] * x[i]);
+          mCovariance[j*n+i + 1] = lambda * mCovariance[j+n+i + 1] + mul * (x[j] * x[i + 1]);
+          mCovariance[j*n+i + 2] = lambda * mCovariance[j*n+i + 2] + mul * (x[j] * x[i + 2]);
+          mCovariance[j*n+i + 3] = lambda * mCovariance[j*n+i + 3] + mul * (x[j] * x[i + 3]);
         }
         for( ; i < n; i++ ) {
-          mCovariance[j][i] = lambda * mCovariance[j][i] + mul * (x[j] * x[i]);
+          mCovariance[j*n+i] = lambda * mCovariance[j*n+i] + mul * (x[j] * x[i]);
         }
       }
       mul *= (F(val) - sub);

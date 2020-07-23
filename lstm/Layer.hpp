@@ -62,9 +62,12 @@ public:
         norm[epoch][i] = f;
       }
     }
-    inverse_variance[epoch] = 1.f / std::sqrt(((norm[epoch] * norm[epoch]).sum() / num_cells) + 1e-5f);
-    norm[epoch] *= inverse_variance[epoch];
-    state[epoch] = norm[epoch] * gamma + beta;
+    const float ss = SumOfSquares(&norm[epoch][0], num_cells);
+    inverse_variance[epoch] = 1.f / std::sqrt(ss / num_cells + 1e-5f);
+    for (size_t i = 0; i < num_cells; i++) {
+      norm[epoch][i] *= inverse_variance[epoch];
+      state[epoch][i] = norm[epoch][i] * gamma[i] + beta[i];
+    }
     for (std::size_t i = 0; i < num_cells; i++)
       activation(state[epoch][i]);
   };
@@ -79,18 +82,23 @@ public:
     T const input_symbol)
   {
     if (epoch == horizon - 1) {
-      gamma_u = 0, beta_u = 0;
+       memset(&gamma_u[0], 0, num_cells * sizeof(float));
+       memset(&beta_u[0], 0, num_cells * sizeof(float));
       for (std::size_t i = 0; i < num_cells; i++) {
-        update[i] = 0;
+          memset(&update[i][0], 0, input_size * sizeof(float));
         std::size_t offset = output_size + auxiliary_input_size;
         for (std::size_t j = 0; j < transpose.size(); j++)
           transpose[j][i] = weights[i][j + offset];
       }
     }
-    beta_u += error;
-    gamma_u += error * norm[epoch];
-    error *= gamma * inverse_variance[epoch];
-    error -= ((error * norm[epoch]).sum() / num_cells) * norm[epoch];
+    for (size_t i = 0; i < num_cells; i++) {
+      beta_u[i] += error[i];
+      gamma_u[i] += error[i] * norm[epoch][i];
+      error[i] *= gamma[i] * inverse_variance[epoch];
+    }
+    float sop = SumOfProducts(&error[0], &norm[epoch][0], num_cells) / num_cells;
+    for (size_t i = 0; i < num_cells; i++) error[i] -= sop*norm[epoch][i];
+
     if (layer > 0) {
       for (std::size_t i = 0; i < num_cells; i++) {
         if (simd == SIMD_AVX2)

@@ -1,13 +1,8 @@
 #include "TextParserStateInfo.hpp"
 
-TextParserStateInfo *TextParserStateInfo::mPInstance = nullptr;
-
-TextParserStateInfo *TextParserStateInfo::getInstance() {
-  if( !mPInstance ) {
-    mPInstance = new TextParserStateInfo();
-  }
-
-  return mPInstance;
+auto TextParserStateInfo::getInstance() -> TextParserStateInfo& {
+  static TextParserStateInfo instance;
+  return instance;
 }
 
 void TextParserStateInfo::reset(uint64_t startPos) {

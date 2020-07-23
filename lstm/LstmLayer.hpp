@@ -15,9 +15,9 @@ private:
   float gradient_clip;
   std::size_t num_cells, epoch, horizon, input_size, output_size;
   std::uint64_t update_steps = 0;
-  Layer<simd, Adam<simd, 25, 3, 9999, 4, 1, 6>, Logistic, PolynomialDecay<7, 3, 1, 6, 1, 2>, T> forget_gate;
-  Layer<simd, Adam<simd, 25, 3, 9999, 4, 1, 6>, Tanh, PolynomialDecay<7, 3, 1, 6, 1, 2>, T> input_node;
-  Layer<simd, Adam<simd, 25, 3, 9999, 4, 1, 6>, Logistic, PolynomialDecay<7, 3, 1, 6, 1, 2>, T> output_gate;
+  Layer<simd, Adam<simd, 25, 3, 9999, 4, 1, 6>, Logistic, PolynomialDecay<7, 3, 1, 3, 5, 4, 1, 2>, T> forget_gate; // initial learning rate: 7*10^-3; final learning rate = 1*10^-3; decay multiplier: 5*10^-4; power for decay: 1/2 (i.e. sqrt); Steps: 0
+  Layer<simd, Adam<simd, 25, 3, 9999, 4, 1, 6>, Tanh,     PolynomialDecay<7, 3, 1, 3, 5, 4, 1, 2>, T> input_node;
+  Layer<simd, Adam<simd, 25, 3, 9999, 4, 1, 6>, Logistic, PolynomialDecay<7, 3, 1, 3, 5, 4, 1, 2>, T> output_gate;
   void Clamp(std::valarray<float>* x) {
     for (std::size_t i = 0; i < x->size(); i++)
       (*x)[i] = std::max<float>(std::min<float>(gradient_clip, (*x)[i]), -gradient_clip);
@@ -66,12 +66,12 @@ public:
     forget_gate.ForwardPass(input, input_symbol, epoch);
     input_node.ForwardPass(input, input_symbol, epoch);
     output_gate.ForwardPass(input, input_symbol, epoch);
-    input_gate_state[epoch] = 1.f - forget_gate.state[epoch];
-    state *= forget_gate.state[epoch];
-    state += input_node.state[epoch] * input_gate_state[epoch];
-    tanh_state[epoch] = std::tanh(state);
-    std::slice slice = std::slice(hidden_start, num_cells, 1);
-    (*hidden)[slice] = output_gate.state[epoch] * tanh_state[epoch];
+    for (size_t i = 0; i < num_cells; i++) {
+      input_gate_state[epoch][i] = 1.0f - forget_gate.state[epoch][i];
+      state[i] = state[i] * forget_gate.state[epoch][i] + input_node.state[epoch][i] * input_gate_state[epoch][i];
+      tanh_state[epoch][i] = tanha(state[i]);
+      (*hidden)[hidden_start + i] = output_gate.state[epoch][i] * tanh_state[epoch][i];
+    }
     epoch++;
     if (epoch == horizon) epoch = 0;
   }
@@ -83,22 +83,25 @@ public:
     T const input_symbol,
     std::valarray<float>* hidden_error)
   {
-    if (epoch == horizon - 1) {
-      stored_error = *hidden_error;
-      state_error = 0;
+    for (size_t i = 0; i < num_cells; i++) {
+      if (epoch == horizon - 1) {
+        stored_error[i] = (*hidden_error)[i];
+        state_error[i] = 0.0f;
+      }
+      else 
+          stored_error[i] += (*hidden_error)[i];
+
+      output_gate.error[i] = tanh_state[epoch][i] * stored_error[i] * output_gate.state[epoch][i] * (1.0f - output_gate.state[epoch][i]);
+      state_error[i] += stored_error[i] * output_gate.state[epoch][i] * (1.0f - (tanh_state[epoch][i] * tanh_state[epoch][i]));
+      input_node.error[i] = state_error[i] * input_gate_state[epoch][i] * (1.0f - (input_node.state[epoch][i] * input_node.state[epoch][i]));
+      forget_gate.error[i] = (last_state[epoch][i] - input_node.state[epoch][i]) * state_error[i] * forget_gate.state[epoch][i] * input_gate_state[epoch][i];
+      (*hidden_error)[i] = 0.0f;
+      if (epoch > 0) {
+        state_error[i] *= forget_gate.state[epoch][i];
+        stored_error[i] = 0.0f;
+      }
     }
-    else
-      stored_error += *hidden_error;
-    output_gate.error = tanh_state[epoch] * stored_error * output_gate.state[epoch] * (1.f - output_gate.state[epoch]);
-    state_error += stored_error * output_gate.state[epoch] * (1.f - (tanh_state[epoch] * tanh_state[epoch]));
-    input_node.error = state_error * input_gate_state[epoch] * (1.f - (input_node.state[epoch] * input_node.state[epoch]));
-    forget_gate.error = (last_state[epoch] - input_node.state[epoch]) * state_error * forget_gate.state[epoch] * input_gate_state[epoch];
-    *hidden_error = 0;
-    if (epoch > 0) {
-      state_error *= forget_gate.state[epoch];
-      stored_error = 0;
-    }
-    else
+    if (epoch == 0)
       update_steps++;
     forget_gate.BackwardPass(input, hidden_error, &stored_error, update_steps, epoch, layer, input_symbol);
     input_node.BackwardPass(input, hidden_error, &stored_error, update_steps, epoch, layer, input_symbol);

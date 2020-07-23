@@ -19,7 +19,8 @@ protected:
   std::valarray<float> probs;
   APM apm1, apm2, apm3;
   IndirectContext<std::uint16_t> iCtx;
-  std::size_t top, mid, bot, expected;
+  std::size_t top, mid, bot;
+  std::uint8_t expected;
 public:
   LstmModel(
     const Shared* const sh,

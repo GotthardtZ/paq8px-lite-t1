@@ -99,11 +99,11 @@ constexpr auto isPowerOf2(T x) -> bool {
 
 template <std::uint8_t e>
 struct neg_pow10 {
-  static constexpr double value = neg_pow10<e - 1>::value / 10.f;
+  static constexpr float value = neg_pow10<e - 1>::value / 10.0f;
 };
 template <>
 struct neg_pow10<0> {
-  static constexpr double value = 1.f;
+  static constexpr float value = 1.0f;
 };
 
 #ifndef NDEBUG

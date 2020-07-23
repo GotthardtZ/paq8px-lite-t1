@@ -136,11 +136,12 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <UndefinePreprocessorDefinitions>
       </UndefinePreprocessorDefinitions>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <FloatingPointModel>Strict</FloatingPointModel>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -191,7 +192,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>false</SDLCheck>
-      <PreprocessorDefinitions>DNDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <UndefinePreprocessorDefinitions>
       </UndefinePreprocessorDefinitions>
@@ -204,6 +205,7 @@
       <StructMemberAlignment>16Bytes</StructMemberAlignment>
       <ControlFlowGuard>false</ControlFlowGuard>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Strict</FloatingPointModel>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -355,6 +357,19 @@
     <ClInclude Include="IndirectMap.hpp" />
     <ClInclude Include="IPredictor.hpp" />
     <ClInclude Include="LMS.hpp" />
+    <ClInclude Include="lstm\Activations.hpp" />
+    <ClInclude Include="lstm\Adam.hpp" />
+    <ClInclude Include="lstm\CosineDecay.hpp" />
+    <ClInclude Include="lstm\IDecay.hpp" />
+    <ClInclude Include="lstm\IOptimizer.hpp" />
+    <ClInclude Include="lstm\Layer.hpp" />
+    <ClInclude Include="lstm\Lstm.hpp" />
+    <ClInclude Include="lstm\LstmFactory.hpp" />
+    <ClInclude Include="lstm\LstmLayer.hpp" />
+    <ClInclude Include="lstm\LstmModel.hpp" />
+    <ClInclude Include="lstm\PolynomialDecay.hpp" />
+    <ClInclude Include="lstm\SimdFunctions.hpp" />
+    <ClInclude Include="lstm\SimdLstmModel.hpp" />
     <ClInclude Include="Mixer.hpp" />
     <ClInclude Include="MixerFactory.hpp" />
     <ClInclude Include="Models.hpp" />

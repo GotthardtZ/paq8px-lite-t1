@@ -8,7 +8,7 @@
  */
 class Ilog {
 public:
-    static auto getInstance() -> Ilog *;
+    static Ilog& getInstance();
     [[nodiscard]] auto log(uint16_t x) const -> int;
 private:
     /**
@@ -32,7 +32,6 @@ private:
      */
     auto operator=(Ilog const & /*unused*/) -> Ilog & { return *this; }
 
-    static Ilog *mPInstance;
     Array<uint8_t> t = Array<uint8_t>(65536);
 };
 

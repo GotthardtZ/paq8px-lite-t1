@@ -42,7 +42,7 @@ private:
     bool delta = false; /**< indicates that a match has just failed (delta mode) */
     const uint32_t mask;
     const int hashBits;
-    Ilog *ilog = Ilog::getInstance();
+    Ilog *ilog = &Ilog::getInstance();
 
 public:
     static constexpr int MIXERINPUTS = 2 + nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS) + nST +

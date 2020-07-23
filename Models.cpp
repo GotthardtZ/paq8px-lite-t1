@@ -141,9 +141,9 @@ auto Models::audio16BitModel() -> Audio16BitModel & {
   return instance;
 }
 
+#endif //DISABLE_AUDIOMODEL
+
 auto Models::lstmModel() -> LstmModel<>& {
   static LstmModel<>* instance = LstmFactory<>::CreateLSTM(shared, 200, 2, 100, 0.06f, 16.f);
   return *instance;
 }
-
-#endif //DISABLE_AUDIOMODEL

@@ -2,6 +2,7 @@
 #define PAQ8PX_ACTIVATIONS_HPP
 
 #include "../utils.hpp"
+#include "SimdFunctions.hpp"
 #include <cmath>
 
 template <typename T>
@@ -10,11 +11,13 @@ struct is_valid_activation {
 };
 
 struct Tanh {
-  ALWAYS_INLINE void operator() (float& v) const { v = std::tanh(v); }
+  ALWAYS_INLINE void operator() (float& v) const { v = tanha(v); }
 };
 
 struct Logistic {
-  ALWAYS_INLINE void operator() (float& v) const { v = 1.f / (1.f + std::exp(-v)); }
+  //the following is equivalent to the sigmoid (v = 1.f / (1.f + exp(-v));)
+  //(but faster because tanh is faster): 
+  ALWAYS_INLINE void operator() (float& v) const { v = (tanha(v * 0.5f) + 1.0f) * 0.5f; }
 };
 
 template <std::uint8_t Slope = 2>

@@ -127,6 +127,49 @@ __m256 exp256_ps_fma3(__m256 const x)
 }
 #endif
 
+// non-simd vector functions
+
+float SumOfSquares(float *v1, size_t n) {
+  assert(n > 0);
+  float result = 0.0f;
+  for (size_t i = 0; i < n; i++) {
+    float f = v1[i];
+    result += f * f;
+  }
+  return result;
+}
+
+float SumOfProducts(float* v1, float* v2, size_t n) {
+  assert(n > 0);
+  float result = 0.0f;
+  for (size_t i = 0; i < n; i++)
+    result += v1[i] * v2[i];
+  return result;
+}
+
+
+// fast non-simd approximations
+
+float tanha(float v) {
+  const float c1 = 0.03138777F;
+  const float c2 = 0.276281267F;
+  const float c_log2f = 1.442695022F;
+  v *= c_log2f;
+  int intPart = (int)v;
+  float x = (v - intPart);
+  float xx = x * x;
+  float v1 = c_log2f + c2 * xx;
+  float v2 = x + xx * c1 * x;
+  float v3 = (v2 + v1);
+  *((int*)&v3) += intPart << 24;
+  float v4 = v2 - v1;
+  return (v3 + v4) / (v3 - v4);
+}
+
+float expa(float x) {
+  return 2.0f / (tanha(-x * 0.5f) + 1.0f) - 1.0f;
+}
+
 }
 
 #endif //PAQ8PX_SIMDFUNCTIONS_HPP
