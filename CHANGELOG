@@ -1706,11 +1706,24 @@ paq8px_v187fix6
 - Small cosmetic changes
 - No compression improvements but small fluctuations are to be expected vs. v187fix5
 
+
 paq8px_v187fix7
 2020.07.12
 - Merged ModelStats to Shared
 - Archives are expected to be binary compatible with v187fix6
 
+
 paq8px_v188
 2020.07.12
 - New option switch "l" to use an LSTM model
+
+
+paq8px_v189
+2020.07.23
+- Fixed memory leaks (TextParserStateInfo, Ilog) - cosmetic issue only
+- Unmatched new[] vs delete issue in OLS (cosmetic issue only) is fixed as a side effect of converting all arrays to Array in OLS
+- Small parameter tweak for 8-bit audio, 8-bit image, 24-bit image and generic data (mixer scaling parameters in ContextModel.cpp)
+- LSTM: got rid of most of the valarray-specific operations (GCC seems to implement some valarray operations erroneously, and compression results were different when compiled by GCC and MSCV)
+- LSTM: Activations.hpp: faster sigmoid using tanh instead of exp
+- LSTM: Approximations for tanh and exp (faster than the tanh and exp functions provided by stdlib)
+- LSTM: Probability output of the LSTM model could get negative. Fidex by clipping.
