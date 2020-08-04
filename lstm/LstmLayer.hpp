@@ -14,7 +14,6 @@ private:
   std::valarray<std::valarray<float>> tanh_state, input_gate_state, last_state;
   float gradient_clip;
   std::size_t num_cells, epoch, horizon, input_size, output_size;
-  std::uint64_t update_steps = 0;
   Layer<simd, Adam<simd, 25, 3, 9999, 4, 1, 6>, Logistic, PolynomialDecay<7, 3, 1, 3, 5, 4, 1, 2>, T> forget_gate; // initial learning rate: 7*10^-3; final learning rate = 1*10^-3; decay multiplier: 5*10^-4; power for decay: 1/2 (i.e. sqrt); Steps: 0
   Layer<simd, Adam<simd, 25, 3, 9999, 4, 1, 6>, Tanh,     PolynomialDecay<7, 3, 1, 3, 5, 4, 1, 2>, T> input_node;
   Layer<simd, Adam<simd, 25, 3, 9999, 4, 1, 6>, Logistic, PolynomialDecay<7, 3, 1, 3, 5, 4, 1, 2>, T> output_gate;
@@ -26,6 +25,7 @@ private:
     return ((static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX)) - 0.5f) * range;
   }
 public:
+  std::uint64_t update_steps;
   LstmLayer(
     std::size_t const input_size,
     std::size_t const auxiliary_input_size,
@@ -44,7 +44,8 @@ public:
     input_size(auxiliary_input_size), output_size(output_size),
     forget_gate(input_size, auxiliary_input_size, output_size, num_cells, horizon),
     input_node(input_size, auxiliary_input_size, output_size, num_cells, horizon),
-    output_gate(input_size, auxiliary_input_size, output_size, num_cells, horizon)
+    output_gate(input_size, auxiliary_input_size, output_size, num_cells, horizon),
+    update_steps(0)
   {
     for (std::size_t i = 0; i < num_cells; i++) {
       for (std::size_t j = 0; j < forget_gate.weights[i].size(); j++) {

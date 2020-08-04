@@ -143,7 +143,12 @@ auto Models::audio16BitModel() -> Audio16BitModel & {
 
 #endif //DISABLE_AUDIOMODEL
 
-auto Models::lstmModel() -> LstmModel<>& {
+auto Models::lstmModel() -> LstmModel<> & {
   static LstmModel<>* instance = LstmFactory<>::CreateLSTM(shared, 200, 2, 100, 0.06f, 16.f);
   return *instance;
+}
+
+auto Models::decAlphaModel() -> DECAlphaModel & {
+  static DECAlphaModel instance{ shared };
+  return instance;
 }

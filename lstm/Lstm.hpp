@@ -20,6 +20,7 @@ private:
   std::valarray<std::valarray<float>> output;
   std::valarray<float> hidden, hidden_error;
   std::vector<T> input_history;
+  std::uint64_t saved_timestep;
   float learning_rate;
   std::size_t num_cells, horizon, input_size, output_size;
 
@@ -73,6 +74,7 @@ public:
     hidden(num_cells * num_layers + 1),
     hidden_error(num_cells),
     input_history(horizon),
+    saved_timestep(0),
     learning_rate(learning_rate),
     num_cells(num_cells),
     horizon(horizon),
@@ -144,6 +146,15 @@ public:
       }
     }
     return Predict(input);
+  }
+
+  void SaveTimeStep() {
+    saved_timestep = layers[0]->update_steps;
+  }
+
+  void RestoreTimeStep() {
+    for (std::size_t i = 0; i < layers.size(); i++)
+      layers[i]->update_steps = saved_timestep;
   }
 };
 

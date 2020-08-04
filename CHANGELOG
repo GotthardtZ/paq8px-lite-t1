@@ -1,4 +1,4 @@
-﻿---------------
+---------------
 VERSION HISTORY
 ---------------
 
@@ -1726,4 +1726,9 @@ paq8px_v189
 - LSTM: got rid of most of the valarray-specific operations (GCC seems to implement some valarray operations erroneously, and compression results were different when compiled by GCC and MSCV)
 - LSTM: Activations.hpp: faster sigmoid using tanh instead of exp
 - LSTM: Approximations for tanh and exp (faster than the tanh and exp functions provided by stdlib)
-- LSTM: Probability output of the LSTM model could get negative. Fidex by clipping.
+- LSTM: Probability output of the LSTM model could get negative. Fixed by clipping.
+
+paq8px_v190
+2020.08.04
+- New option switch "r" to perform initial retraining of the LSTM on text blocks
+- Support for DEC Alpha executable compression, with a specific transform and model
