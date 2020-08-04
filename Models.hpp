@@ -22,6 +22,7 @@
 #include "model/SparseModel.hpp"
 #include "model/WordModel.hpp"
 #include "model/XMLModel.hpp"
+#include "model/DecAlphaModel.hpp"
 #include "lstm/LstmModel.hpp"
 #include "lstm/LstmFactory.hpp"
 
@@ -57,7 +58,8 @@ public:
   auto audio8BitModel() -> Audio8BitModel &;
   auto audio16BitModel() -> Audio16BitModel &;
 #endif //DISABLE_AUDIOMODEL
-  auto lstmModel()->LstmModel<>&;
+  auto lstmModel() -> LstmModel<> &;
+  auto decAlphaModel() -> DECAlphaModel &;
 };
 
 #endif //PAQ8PX_MODELS_HPP

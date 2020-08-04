@@ -166,7 +166,8 @@ typedef enum {
   TEXT,
   TEXT_EOL,
   RLE,
-  LZW
+  LZW,
+  DEC_ALPHA
 } BlockType;
 
 static inline auto hasRecursion(BlockType ft) -> bool {
@@ -180,7 +181,7 @@ static inline auto hasInfo(BlockType ft) -> bool {
 
 static inline auto hasTransform(BlockType ft) -> bool {
   return ft == IMAGE24 || ft == IMAGE32 || ft == AUDIO_LE || ft == EXE || ft == CD || ft == ZLIB || ft == BASE64 || ft == GIF ||
-         ft == TEXT_EOL || ft == RLE || ft == LZW;
+         ft == TEXT_EOL || ft == RLE || ft == LZW || ft == DEC_ALPHA;
 }
 
 static inline auto isPNG(BlockType ft) -> bool { return ft == PNG8 || ft == PNG8GRAY || ft == PNG24 || ft == PNG32; }
@@ -192,6 +193,7 @@ static inline auto isPNG(BlockType ft) -> bool { return ft == PNG8 || ft == PNG8
 #define OPTION_ADAPTIVE 16U
 #define OPTION_SKIPRGB 32U
 #define OPTION_LSTM 64U
+#define OPTION_LSTM_RETRAINING 128U
 
 //////////////////// Cross-platform definitions /////////////////////////////////////
 
