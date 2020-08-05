@@ -404,7 +404,7 @@ auto processCommandLine(int argc, char **argv) -> int {
     // Successfully parsed command line arguments
     // Let's check their validity
     if( whattodo == DoNone ) {
-      quit("A command switch is required: -0..-9 to compress, -d to decompress, -t to test, -l to list.");
+      quit("A command switch is required: -0..-12 to compress, -d to decompress, -t to test, -l to list.");
     }
     if( input.strsize() == 0 ) {
       printf("\nAn %s is required %s.\n", whattodo == DoCompress ? "input file or filelist" : "archive filename",
