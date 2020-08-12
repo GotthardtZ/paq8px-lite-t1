@@ -26,7 +26,10 @@ public:
     float const gradient_clip) :
     LstmModel<Bits>(sh, num_cells, num_layers, horizon, learning_rate, gradient_clip),
     lstm(0, this->Size, num_cells, num_layers, horizon, learning_rate, gradient_clip)
-  {}
+  {
+    if ((sh->options & OPTION_TRAINTXT) > 0u)
+      lstm.template LoadFromDisk<4, 1>("english.rnn");
+  }
 
   void mix(Mixer& m) {
     std::uint8_t const bpos = this->shared->State.bitPosition;
@@ -95,6 +98,7 @@ public:
     mask |= 1u << i;
 
     int const p = min(max(std::lround(prediction * 4096.0f), 1), 4095);
+    m.promote(stretch(p)/2);
     m.add(stretch(p));
     m.add((p - 2048) >> 2);
     int const pr1 = this->apm1.p(p, (c0 << 8) | (this->shared->State.misses & 0xFF), 0xFF);

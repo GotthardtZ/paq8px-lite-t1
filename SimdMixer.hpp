@@ -36,7 +36,7 @@ public:
       assert((this->n & (simdWidth() - 1)) == 0);
       assert(this->m > 0);
       assert(this->s > 0);
-      mp = (s > 1) ? new SIMDMixer<simd>(sh, s, 1, 1) : nullptr;
+      mp = (s > 1) ? new SIMDMixer<simd>(sh, s + (((sh->options & OPTION_LSTM) != 0u) ? 1 : 0), 1, 1) : nullptr;
     }
 
     ~SIMDMixer() override {
@@ -48,6 +48,11 @@ public:
       if( mp ) {
         mp->setScaleFactor(sf1, 0);
       }
+    }
+
+    void promote(int x) override {
+      if (mp != nullptr)
+        mp->add(x);
     }
 
     /**

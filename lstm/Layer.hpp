@@ -3,14 +3,14 @@
 
 #include "SimdFunctions.hpp"
 #include "IOptimizer.hpp"
-#include "Activations.hpp"
+#include "IActivation.hpp"
 #include "IDecay.hpp"
 #include "../utils.hpp"
 
-template<SIMD simd, class Optimizer, typename Activation, class Decay, typename T>
+template<SIMD simd, class Optimizer, class Activation, class Decay, typename T>
 class Layer {
   static_assert(std::is_base_of<IOptimizer, Optimizer>::value, "Optimizer must implement IOptimizer interface");
-  static_assert(is_valid_activation<Activation>::value, "Activation must implement void operator(float&)");
+  static_assert(std::is_base_of<IActivation, Activation>::value, "Activation must implement IActivation interface");
   static_assert(std::is_base_of<IDecay, Decay>::value, "Decay must implement IDecay interface");
 private:
   std::valarray<std::valarray<float>> update, m, v, transpose, norm;
@@ -68,8 +68,7 @@ public:
       norm[epoch][i] *= inverse_variance[epoch];
       state[epoch][i] = norm[epoch][i] * gamma[i] + beta[i];
     }
-    for (std::size_t i = 0; i < num_cells; i++)
-      activation(state[epoch][i]);
+    activation.Run(&state[epoch][0], num_cells);
   };
 
   void BackwardPass(
@@ -137,6 +136,5 @@ public:
     }
   }
 };
-
 
 #endif //PAQ8PX_LAYER_HPP

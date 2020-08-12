@@ -14,6 +14,7 @@ public:
     auto p() -> int override;
 
     void setScaleFactor(const int /*sf0*/, const int /*sf1*/) override {}
+    void promote(int) override {}
 };
 
 #endif //PAQ8PX_DUMMYMIXER_HPP

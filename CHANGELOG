@@ -1732,3 +1732,9 @@ paq8px_v190
 2020.08.04
 - New option switch "r" to perform initial retraining of the LSTM on text blocks
 - Support for DEC Alpha executable compression, with a specific transform and model
+
+paq8px_v191
+2020.08.12
+- Pre-training now available for the LSTM, with a heavily-quantized model trained on english texts
+- LSTM prediction is now promoted to the second layer of the paq mixer
+- Activations functions are now available in AVX2
