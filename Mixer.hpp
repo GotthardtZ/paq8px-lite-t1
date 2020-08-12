@@ -208,6 +208,7 @@ public:
      */
     virtual auto p() -> int = 0;
     virtual void setScaleFactor(int sf0, int sf1) = 0;
+    virtual void promote(int x) = 0;
 
     /**
      * Input x (call up to n times)

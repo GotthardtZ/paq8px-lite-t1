@@ -1,8 +1,11 @@
 #ifndef PAQ8PX_LSTM_HPP
 #define PAQ8PX_LSTM_HPP
 
-#include "SimdFunctions.hpp"
 #include "LstmLayer.hpp"
+#include "SimdFunctions.hpp"
+#include "Posit.hpp"
+#include "../file/BitFileDisk.hpp"
+#include "../file/OpenFromMyFolder.hpp"
 #include "../utils.hpp"
 #include <vector>
 #include <memory>
@@ -156,6 +159,128 @@ public:
     for (std::size_t i = 0; i < layers.size(); i++)
       layers[i]->update_steps = saved_timestep;
   }
+
+  template<std::int32_t bits = 0, std::int32_t exp = 0>
+  void LoadFromDisk(const char* const dictionary);
+  
+  template<std::int32_t bits = 0, std::int32_t exp = 0>
+  void SaveToDisk(const char* const dictionary);
 };
+
+template <SIMD simd, typename T>
+template<std::int32_t bits, std::int32_t exp>
+void Lstm<simd, T>::LoadFromDisk(const char* const dictionary) {
+  static_assert((bits >= 0) && (bits <= 16), "LSTM::LoadFromDisk template parameter @bits must be in range [0..16]");
+  std::size_t const last_epoch = ((epoch > 0) ? epoch : horizon) - 1;
+  BitFileDisk file(true);
+  OpenFromMyFolder::anotherFile(&file, dictionary);
+  if ((bits > 0) && (bits <= 16)) {
+    float scale = Posit<9, 1>::Decode(file.getBits(8u));
+    for (std::size_t i = 0u; i < output_size; i++) {
+      for (std::size_t j = 0u; j < output_layer[0][i].size(); j++)
+        output_layer[last_epoch][i][j] = Posit<bits, exp>::Decode(file.getBits(bits)) * scale;
+    }
+    for (std::size_t i = 0u; i < layers.size(); i++) {
+      auto weights = layers[i]->Weights();
+      for (std::size_t j = 0u; j < weights.size(); j++) {
+        for (std::size_t k = 0u; k < weights[j]->size(); k++) {
+          for (std::size_t l = 0u; l < (*weights[j])[k].size(); l++)
+            (*weights[j])[k][l] = Posit<bits, exp>::Decode(file.getBits(bits)) * scale;
+        }
+      }
+    }
+  }
+  else {
+    float v;
+    for (std::size_t i = 0u; i < output_size; i++) {
+      for (std::size_t j = 0u; j < output_layer[0][i].size(); j++) {
+        if (file.blockRead(reinterpret_cast<std::uint8_t*>(&v), sizeof(float)) != sizeof(float)) break;
+        output_layer[last_epoch][i][j] = v;
+      }
+    }
+    for (std::size_t i = 0u; i < layers.size(); i++) {
+      auto weights = layers[i]->Weights();
+      for (std::size_t j = 0u; j < weights.size(); j++) {
+        for (std::size_t k = 0u; k < weights[j]->size(); k++) {
+          for (std::size_t l = 0u; l < (*weights[j])[k].size(); l++) {
+            if (file.blockRead(reinterpret_cast<std::uint8_t*>(&v), sizeof(float)) != sizeof(float)) break;
+            (*weights[j])[k][l] = v;
+          }
+        }
+      }
+    }
+  }
+  file.close();
+}
+
+template <SIMD simd, typename T>
+template<std::int32_t bits, std::int32_t exp>
+void Lstm<simd, T>::SaveToDisk(const char* const dictionary) {
+  static_assert((bits >= 0) && (bits <= 16), "LSTM::SaveToDisk template parameter @bits must be in range [0..16]");  
+  std::size_t const last_epoch = ((epoch > 0) ? epoch : horizon) - 1;
+  BitFileDisk file(false);
+  file.create(dictionary);
+  if ((bits > 0) && (bits <= 16)) {
+    std::uint32_t buf = 0u;
+    std::int32_t constexpr buf_width = static_cast<std::int32_t>(sizeof(buf)) * 8;
+    std::int32_t bits_left = buf_width;
+    float const s = std::pow(2.f, (1 << exp) * (bits - 2));
+    float max_w = 0.f, w, scale;
+    for (std::size_t i = 0u; i < output_size; i++) {
+      for (std::size_t j = 0u; j < output_layer[0][i].size(); j++) {
+        if ((w = std::fabs(output_layer[last_epoch][i][j])) > max_w)
+          max_w = w;
+      }
+    }
+    for (std::size_t i = 0u; i < layers.size(); i++) {
+      auto weights = layers[i]->Weights();
+      for (std::size_t j = 0u; j < weights.size(); j++) {
+        for (std::size_t k = 0u; k < weights[j]->size(); k++) {
+          for (std::size_t l = 0u; l < (*weights[j])[k].size(); l++) {
+            if ((w = std::fabs((*weights[j])[k][l])) > max_w)
+              max_w = w;
+          }
+        }
+      }
+    }
+    scale = Posit<9, 1>::Decode(Posit<9, 1>::Encode(std::max<float>(1.f, max_w / s)));
+    file.putBits(Posit<9, 1>::Encode(scale), 8u);
+    for (std::size_t i = 0u; i < output_size; i++) {
+      for (std::size_t j = 0u; j < output_layer[0][i].size(); j++)
+        file.putBits(Posit<bits, exp>::Encode(output_layer[last_epoch][i][j] / scale), bits);
+    }
+    for (std::size_t i = 0u; i < layers.size(); i++) {
+      auto weights = layers[i]->Weights();
+      for (std::size_t j = 0u; j < weights.size(); j++) {
+        for (std::size_t k = 0u; k < weights[j]->size(); k++) {
+          for (std::size_t l = 0u; l < (*weights[j])[k].size(); l++)
+            file.putBits(Posit<bits, exp>::Encode((*weights[j])[k][l] / scale), bits);
+        }
+      }
+    }
+    file.flush();
+  }
+  else {
+    float v;
+    for (std::size_t i = 0u; i < output_size; i++) {
+      for (std::size_t j = 0u; j < output_layer[0][i].size(); j++) {
+        v = output_layer[last_epoch][i][j];
+        file.blockWrite(reinterpret_cast<std::uint8_t*>(&v), sizeof(float));        
+      }
+    }
+    for (std::size_t i = 0u; i < layers.size(); i++) {
+      auto weights = layers[i]->Weights();
+      for (std::size_t j = 0u; j < weights.size(); j++) {
+        for (std::size_t k = 0u; k < weights[j]->size(); k++) {
+          for (std::size_t l = 0u; l < (*weights[j])[k].size(); l++) {
+            v = (*weights[j])[k][l];
+            file.blockWrite(reinterpret_cast<std::uint8_t*>(&v), sizeof(float));
+          }
+        }
+      }
+    }
+  }
+  file.close();
+}
 
 #endif //PAQ8PX_LSTM_HPP
