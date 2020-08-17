@@ -160,6 +160,32 @@ public:
       layers[i]->update_steps = saved_timestep;
   }
 
+  void Reset() {
+    for (std::size_t i = 0u; i < output_layer.size(); i++) {
+      for (std::size_t j = 0u; j < output_size; j++) {
+        for (std::size_t k = 0u; k < output_layer[0][j].size(); k++)
+          output_layer[i][j][k] = 0.f;
+      }
+    }
+    for (std::size_t i = 0u; i < hidden.size() - 1; i++)
+      hidden[i] = 0.f;
+    hidden[hidden.size() - 1u] = 1.f;
+    for (std::size_t i = 0u; i < horizon; i++) {
+      for (std::size_t j = 0u; j < output_size; j++)
+        output[i][j] = 1.0f / output_size;
+      for (std::size_t j = 0u; j < layers.size(); j++) {
+        for (std::size_t k = 0u; k < layer_input[i][j].size() - 1; k++)
+          layer_input[i][j][k] = 0.f;
+        layer_input[i][j][layer_input[i][j].size() - 1u] = 1.f;
+      }
+    }
+    for (std::size_t i = 0u; i < num_cells; i++)
+      hidden_error[i] = 0.f;
+    for (std::size_t i = 0u; i < layers.size(); i++)
+      layers[i]->Reset();
+    epoch = 0u;
+  }
+
   template<std::int32_t bits = 0, std::int32_t exp = 0>
   void LoadFromDisk(const char* const dictionary);
   
@@ -171,6 +197,7 @@ template <SIMD simd, typename T>
 template<std::int32_t bits, std::int32_t exp>
 void Lstm<simd, T>::LoadFromDisk(const char* const dictionary) {
   static_assert((bits >= 0) && (bits <= 16), "LSTM::LoadFromDisk template parameter @bits must be in range [0..16]");
+  Reset();
   std::size_t const last_epoch = ((epoch > 0) ? epoch : horizon) - 1;
   BitFileDisk file(true);
   OpenFromMyFolder::anotherFile(&file, dictionary);

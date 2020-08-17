@@ -167,7 +167,8 @@ typedef enum {
   TEXT_EOL,
   RLE,
   LZW,
-  DEC_ALPHA
+  DEC_ALPHA,
+  Count
 } BlockType;
 
 static inline auto hasRecursion(BlockType ft) -> bool {

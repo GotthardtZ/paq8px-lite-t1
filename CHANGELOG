@@ -1742,3 +1742,8 @@ paq8px_v191
 paq8px_v191a
 2020.08.14
 - Repurposed option switch "r" to handle loading of pre-trained LSTM models, decoupling it from other switches
+
+paq8px_v192
+2020.08.17
+- New LSTM pre-trained model for x86/64
+- Improved DEC Alpha model

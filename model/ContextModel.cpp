@@ -195,6 +195,7 @@ auto ContextModel::p() -> int {
     case TEXT_EOL:
     case RLE:
     case LZW:
+    case DEC_ALPHA:
       break;
   }
 

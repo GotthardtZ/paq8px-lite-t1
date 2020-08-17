@@ -103,6 +103,12 @@ public:
       //LinearPredictionModel
       //ExeModel
 
+      //DECAlphaModel
+      struct {
+        std::uint8_t state; // used by SSE stage
+        std::uint8_t bcount; // used by SSE stage
+      } DEC;
+
     } State{};
 
     Shared() {

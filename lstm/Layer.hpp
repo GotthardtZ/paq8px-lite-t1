@@ -135,6 +135,30 @@ public:
       optimizer.Run(&beta_u, &beta_m, &beta_v, &beta, learning_rate, time_step);
     }
   }
+
+  void Reset() {
+    for (std::size_t i = 0u; i < horizon; i++) {
+      inverse_variance[i] = 0.f;
+      for (std::size_t j = 0u; j < num_cells; j++) {
+        state[i][j] = 0.f;
+        norm[i][j] = 0.f;
+      }
+    }
+    for (std::size_t i = 0u; i < num_cells; i++) {
+      error[i] = 0.f;
+      gamma[i] = 1.f, gamma_u[i] = 0.f, gamma_m[i] = 0.f, gamma_v[i] = 0.f;
+      beta[i] = 0.f, beta_u[i] = 0.f, beta_m[i] = 0.f, beta_v[i] = 0.f;
+      for (std::size_t j = 0u; j < input_size; j++) {
+        update[i][j] = 0.f;
+        m[i][j] = 0.f;
+        v[i][j] = 0.f;
+      }
+    }
+    for (std::size_t i = 0u; i < transpose.size(); i++) {
+      for (std::size_t j = 0u; j < num_cells; j++)
+        transpose[i][j] = 0.f;
+    }
+  }
 };
 
 #endif //PAQ8PX_LAYER_HPP
