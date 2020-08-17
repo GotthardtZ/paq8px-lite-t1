@@ -16,6 +16,7 @@ class SIMDLstmModel :
   public LstmModel<Bits> {
 private:
   Lstm<simd, std::uint8_t> lstm;
+  std::uint32_t blocks[BlockType::Count];
 public:
   SIMDLstmModel(
     const Shared* const sh,
@@ -25,7 +26,8 @@ public:
     float const learning_rate,
     float const gradient_clip) :
     LstmModel<Bits>(sh, num_cells, num_layers, horizon, learning_rate, gradient_clip),
-    lstm(0, this->Size, num_cells, num_layers, horizon, learning_rate, gradient_clip)
+    lstm(0, this->Size, num_cells, num_layers, horizon, learning_rate, gradient_clip),
+    blocks{ 0 }
   {
     if ((sh->options & OPTION_LSTM_TRAINING) > 0u)
       lstm.template LoadFromDisk<4, 1>("english.rnn");
@@ -45,6 +47,17 @@ public:
       memcpy(&this->probs[0], &output[0], (1 << Bits) * sizeof(float));
       this->top = (1 << Bits) - 1;
       this->bot = 0;
+      if (((this->shared->options & OPTION_LSTM_TRAINING) > 0u) && (this->shared->State.blockPos == 0u)) {
+        std::uint32_t const blockType = this->shared->State.blockType;
+        if (blocks[blockType] == 0u) {
+          switch (blockType) {
+            case EXE: lstm.template LoadFromDisk<4, 1>("x86_64.rnn"); break;
+            default:;
+          }
+        }
+        blocks[blockType]++;
+      }
+
     }
 
     this->mid = (this->bot + this->top)>>1;

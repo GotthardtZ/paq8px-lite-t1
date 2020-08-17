@@ -19,7 +19,7 @@ private:
   Layer<simd, Adam<simd, 25, 3, 9999, 4, 1, 6>, Tanh<simd>,     PolynomialDecay<7, 3, 1, 3, 5, 4, 1, 2>, T> input_node;
   Layer<simd, Adam<simd, 25, 3, 9999, 4, 1, 6>, Logistic<simd>, PolynomialDecay<7, 3, 1, 3, 5, 4, 1, 2>, T> output_gate;
   void Clamp(std::valarray<float>* x) {
-    for (std::size_t i = 0; i < x->size(); i++)
+    for (std::size_t i = 0u; i < x->size(); i++)
       (*x)[i] = std::max<float>(std::min<float>(gradient_clip, (*x)[i]), -gradient_clip);
   }
   static ALWAYS_INLINE float Rand(float const range) {
@@ -46,10 +46,10 @@ public:
     forget_gate(input_size, auxiliary_input_size, output_size, num_cells, horizon),
     input_node(input_size, auxiliary_input_size, output_size, num_cells, horizon),
     output_gate(input_size, auxiliary_input_size, output_size, num_cells, horizon),
-    update_steps(0)
+    update_steps(0u)
   {
-    for (std::size_t i = 0; i < num_cells; i++) {
-      for (std::size_t j = 0; j < forget_gate.weights[i].size(); j++) {
+    for (std::size_t i = 0u; i < num_cells; i++) {
+      for (std::size_t j = 0u; j < forget_gate.weights[i].size(); j++) {
         forget_gate.weights[i][j] = Rand(range);
         input_node.weights[i][j] = Rand(range);
         output_gate.weights[i][j] = Rand(range);
@@ -68,14 +68,14 @@ public:
     forget_gate.ForwardPass(input, input_symbol, epoch);
     input_node.ForwardPass(input, input_symbol, epoch);
     output_gate.ForwardPass(input, input_symbol, epoch);
-    for (size_t i = 0; i < num_cells; i++) {
+    for (std::size_t i = 0u; i < num_cells; i++) {
       input_gate_state[epoch][i] = 1.0f - forget_gate.state[epoch][i];
       state[i] = state[i] * forget_gate.state[epoch][i] + input_node.state[epoch][i] * input_gate_state[epoch][i];
       tanh_state[epoch][i] = tanha(state[i]);
       (*hidden)[hidden_start + i] = output_gate.state[epoch][i] * tanh_state[epoch][i];
     }
     epoch++;
-    if (epoch == horizon) epoch = 0;
+    if (epoch == horizon) epoch = 0u;
   }
 
   void BackwardPass(
@@ -85,8 +85,8 @@ public:
     T const input_symbol,
     std::valarray<float>* hidden_error)
   {
-    for (size_t i = 0; i < num_cells; i++) {
-      if (epoch == horizon - 1) {
+    for (std::size_t i = 0u; i < num_cells; i++) {
+      if (epoch == horizon - 1u) {
         stored_error[i] = (*hidden_error)[i];
         state_error[i] = 0.0f;
       }
@@ -98,12 +98,12 @@ public:
       input_node.error[i] = state_error[i] * input_gate_state[epoch][i] * (1.0f - (input_node.state[epoch][i] * input_node.state[epoch][i]));
       forget_gate.error[i] = (last_state[epoch][i] - input_node.state[epoch][i]) * state_error[i] * forget_gate.state[epoch][i] * input_gate_state[epoch][i];
       (*hidden_error)[i] = 0.0f;
-      if (epoch > 0) {
+      if (epoch > 0u) {
         state_error[i] *= forget_gate.state[epoch][i];
         stored_error[i] = 0.0f;
       }
     }
-    if (epoch == 0)
+    if (epoch == 0u)
       update_steps++;
     forget_gate.BackwardPass(input, hidden_error, &stored_error, update_steps, epoch, layer, input_symbol);
     input_node.BackwardPass(input, hidden_error, &stored_error, update_steps, epoch, layer, input_symbol);
@@ -111,6 +111,26 @@ public:
     Clamp(&state_error);
     Clamp(&stored_error);
     Clamp(hidden_error);
+  }
+
+  void Reset() {
+    forget_gate.Reset();
+    input_node.Reset();
+    output_gate.Reset();
+    for (std::size_t i = 0u; i < horizon; i++) {
+      for (std::size_t j = 0u; j < num_cells; j++) {
+        tanh_state[i][j] = 0.f;
+        input_gate_state[i][j] = 0.f;
+        last_state[i][j] = 0.f;
+      }
+    }
+    for (std::size_t i = 0u; i < num_cells; i++) {
+      state[i] = 0.f;
+      state_error[i] = 0.f;
+      stored_error[i] = 0.f;
+    }
+    epoch = 0u;
+    update_steps = 0u;
   }
 
   std::vector<std::valarray<std::valarray<float>>*> Weights() {

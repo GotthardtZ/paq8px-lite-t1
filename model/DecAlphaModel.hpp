@@ -42,15 +42,17 @@ public:
     std::uint8_t Opcode, Bit, Ra, Rb, Rc, Literal, relOpcode, Format;
   };
 private:
-  static constexpr std::uint32_t nMaps = 9u;
-  static constexpr std::uint32_t maps_mask[nMaps-1] = { 0x6FC3FFu, 0x6F0387u, 0x4E0383u, 0x440183u, 0x181u, 0x181u, 0x81u, 0x1u };
-  const Shared* const shared;
+  static constexpr std::uint32_t nMaps = 11u;
+  static constexpr std::uint32_t maps_mask[nMaps-1] = { 0x6FC3FFu, 0x6F0387u, 0x4E0383u, 0x440183u, 0x181u, 0x181u, 0x81u, 0x1u, 0x1u, 0x1u };
+  Shared* const shared;
   RingBuffer<Instruction> cache;
   State state;
   Instruction op;
   std::uint32_t count;
-  IndirectMap maps0[State::Count], maps1[18], maps2[12], maps3[9], maps4[6], maps5[3], maps6[3], maps7[2], maps8[1];
-  IndirectMap* const maps[nMaps - 1] = { &maps1[0], &maps2[0], &maps3[0], &maps4[0], &maps5[0], &maps6[0], &maps7[0], &maps8[0] };
+  std::uint8_t lastRc;
+  Instruction last[8];
+  IndirectMap maps0[State::Count], maps1[18], maps2[12], maps3[9], maps4[6], maps5[3], maps6[3], maps7[2], maps8[1], maps9[1], maps10[1];
+  IndirectMap* const maps[nMaps - 1] = { &maps1[0], &maps2[0], &maps3[0], &maps4[0], &maps5[0], &maps6[0], &maps7[0], &maps8[0], &maps9[0], &maps10[0] };
   constexpr std::int32_t map_state(std::uint32_t const map, State const state) {
     std::int32_t r = -1;
     if ((map < nMaps) && (((maps_mask[map] >> state) & 1u) != 0u))     
@@ -59,10 +61,10 @@ private:
   }
 public:
   static constexpr int MIXERINPUTS = nMaps * IndirectMap::MIXERINPUTS;
-  static constexpr int MIXERCONTEXTS = State::Count * 26 + State::Count * 64 + 2048 + 4096 + 4096 + 8192 + 8192 + 8192 + 4096 + 4096;
-  static constexpr int MIXERCONTEXTSETS = 10;
-  DECAlphaModel(const Shared* const sh) : 
-    shared(sh), cache(8), op{0}, state(OpCode), count(0u),
+  static constexpr int MIXERCONTEXTS = State::Count * 26 + State::Count * 64 + 2048 + 4096 + 4096 + 8192 + 8192 + 8192 + 4096 + 4096 + 4096;
+  static constexpr int MIXERCONTEXTSETS = 11;
+  DECAlphaModel(Shared* const sh) : 
+    shared(sh), cache(8), op{0}, state(OpCode), count(0u), lastRc(0xFF), last{0},
     maps0 {
       {sh, 1, 6, 256, 255}, // OpCode
       {sh, 1, 5, 256, 255}, // Bra_Ra
@@ -159,6 +161,12 @@ public:
     },
     maps8{
       {sh, 18, 6, 256, 255}  // OpCode
+    },
+    maps9{
+      {sh, 17, 6, 256, 255}  // OpCode
+    },
+    maps10{
+      {sh, 17, 6, 256, 255}  // OpCode
     }
   {}
   void mix(Mixer& m) {
@@ -292,6 +300,7 @@ public:
         case State::F_P_Rc: {
           op.Rc += op.Rc + y;
           if (count == 5u) {
+            lastRc = op.Rc;
             state = State::OpCode;
             count = 0u;
           }
@@ -471,6 +480,7 @@ public:
         case State::Opr_Rc: {
           op.Rc += op.Rc + y;
           if (count == 5u) {
+            lastRc = op.Rc;
             state = State::OpCode;
             count = 0u;
           }
@@ -501,6 +511,9 @@ public:
         maps6[map_state(5u, State::OpCode)].set(ctx = hash(op.Opcode, cache(1).Opcode, cache(2).Opcode, cache(3).Opcode, cache(4).Opcode, cache(5).Opcode));
         maps7[map_state(6u, State::OpCode)].set(ctx = hash(ctx, cache(6).Opcode));
         maps8[map_state(7u, State::OpCode)].set(ctx = hash(ctx, cache(7).Opcode));
+        maps9[map_state(8u, State::OpCode)].set(hash(op.Opcode, op.Ra, cache(1).Opcode, cache(1).Ra, cache(2).Opcode, cache(2).Ra));
+        maps10[map_state(9u, State::OpCode)].set(hash(op.Opcode, op.Rb, lastRc, cache(2).Opcode, cache(2).Rb, cache(3).Opcode, cache(3).Ra));
+        last[op.Format] = op;
         cache.add(op);
         op = { 0 };
       }
@@ -524,6 +537,10 @@ public:
     m.set(finalize64(hash(state, opcode, cache(1).Format, cache(2).Format, cache(3).Format, cache(4).Format), 13), 8192u);
     m.set(finalize64(hash(state, count, op.Opcode, op.Bit, op.Ra), 12), 4096u);
     m.set(finalize64(hash(state, op.Ra, op.Rb, op.Bit), 12), 4096u);
+    m.set(finalize64(hash(state, op.Ra, last[DECAlpha::Mem].Ra, cache(1).Format), 12), 4096u);
+
+    shared->State.DEC.state = state;
+    shared->State.DEC.bcount = count;
   }
 };
 

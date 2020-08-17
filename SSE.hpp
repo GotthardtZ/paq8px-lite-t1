@@ -25,6 +25,9 @@ private:
         } Gray;
     } Image;
     struct {
+      APM APMs[1];
+    } DEC;
+    struct {
         APM1 APM1s[7];
     } Generic;
 

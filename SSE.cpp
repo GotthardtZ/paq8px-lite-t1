@@ -10,6 +10,9 @@ SSE::SSE(Shared* const sh) : shared(sh),
     { /*APM:*/ {{sh,0x1000,24}, {sh,0x10000,24}, {sh,0x10000,24}, {sh,0x10000,24}}, /*APM1:*/ {{sh,0x10000,5}, {sh,0x10000,6}} }, // palette
     { /*APM:*/ {{sh,0x1000,24}, {sh,0x10000,24}, {sh,0x10000,24}} } //gray
   },
+  DEC{
+    { /*APM:*/ {sh,25*26,20} }
+  },
   Generic {
     /*APM1:*/ {{sh,0x2000,7}, {sh,0x10000,7}, {sh,0x10000,7}, {sh,0x10000,7}, {sh,0x10000,7}, {sh,0x10000,7}, {sh,0x10000,7}}
   }
@@ -86,6 +89,12 @@ auto SSE::p(int pr0) -> int {
     }
     case JPEG: {
       pr = pr0;
+      break;
+    }
+    case DEC_ALPHA: {
+      int const limit = 0x3FFu >> (static_cast<int>(blockPos < 0xFFFu) * 4);
+      pr = DEC.APMs[0].p(pr0, (shared->State.DEC.state * 26u) + shared->State.DEC.bcount, limit);
+      pr = (pr * 4 + pr0 * 2 + 3) / 6;
       break;
     }
     default: {
