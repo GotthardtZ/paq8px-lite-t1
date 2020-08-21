@@ -1,6 +1,6 @@
 #include "JpegModel.hpp"
 
-JpegModel::JpegModel(const Shared* const sh, const uint64_t size) : shared(sh), t(size), MJPEGMap(sh, 21, 3, 128, 127), /* BitsOfContext, InputBits, Scale, Limit */
+JpegModel::JpegModel(Shared* const sh, const uint64_t size) : shared(sh), t(size), MJPEGMap(sh, 21, 3, 128, 127), /* BitsOfContext, InputBits, Scale, Limit */
         sm(sh, N, 256, 1023, StateMap::BitHistory), apm1(sh, 0x8000, 24), apm2(sh, 0x20000, 24) {
   auto mf = new MixerFactory();
   m1 = mf->createMixer(sh, N + 1 /*bias*/+ 2 /*MJPEGMap*/, 2050, 3);
@@ -60,7 +60,7 @@ auto JpegModel::mix(Mixer &m) -> int {
     idx = 0;
     lastPos = pos;
   }
-
+  shared->State.JPEG.state = 0u;
 
   // Be sure to quit on a byte boundary
   INJECT_SHARED_buf
@@ -631,6 +631,7 @@ auto JpegModel::mix(Mixer &m) -> int {
   const int comp = color[mcuPos >> 6U];
   const int coef = (mcuPos & 63U) | comp << 6U;
   const int hc = (huffcode * 4 + static_cast<int>((mcuPos & 63U) == 0) * 2 + static_cast<uint32_t>(comp == 0)) | 1U << (huffBits + 2);
+  const int hc2 = (1 << (huffBits - huffSize)) + ((huffcode & ((1 << (huffBits - huffSize)) - 1)) << 1) + static_cast<int>(huffSize > 0);
   const bool firstCol = column == 0 && blockW[mcuPos >> 6U] > mcuPos;
   if( ++hbCount > 2 || huffBits == 0 ) {
     hbCount = 0;
@@ -677,6 +678,7 @@ auto JpegModel::mix(Mixer &m) -> int {
     cxt[i++] = hash(++n, coef, advPred[1] / 17, lcp[static_cast<uint64_t>(zu < zv)] / 24, lcp[2] / 20, lcp[3] / 24);
     cxt[i++] = hash(++n, coef, advPred[3] / 11, lcp[static_cast<uint64_t>(zu < zv)] / 50, lcp[2 + 3 * static_cast<int>(zu * zv > 1)] / 50,
                     lcp[3 + 3 * static_cast<int>(zu * zv > 1)] / 50);
+    cxt[i++] = hash(hc, advPred[3] / 13, prevCoef / 11, static_cast<int>(zu + zv < 4));
     assert(i == N);
   }
 
@@ -745,5 +747,6 @@ auto JpegModel::mix(Mixer &m) -> int {
   m.set(1 + ((hc & 0xFFU) | (min(3, (zu + zv) / 3)) << 8U), 1 + 1024);
   m.set(coef | (min(3, huffBits / 2) << 8), 1024);
 
+  shared->State.JPEG.state = 0x1000u | ((hc2 & 0xFF) << 4) | (static_cast<int>(advPred[1] > 0) << 3) | (static_cast<int>(huffBits > 4) << 2) | (static_cast<int>(comp == 0) << 1) | static_cast<int>(zu + zv < 5);
   return 1;
 }

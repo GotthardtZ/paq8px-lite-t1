@@ -80,6 +80,9 @@ public:
       uint8_t Audio{};
 
       //JpegModel
+      struct {
+        std::uint16_t state; // used by SSE stage
+      } JPEG;
       //SparseMatchModel
       //SparseModel
 
@@ -102,6 +105,9 @@ public:
       //XMLModel
       //LinearPredictionModel
       //ExeModel
+      struct {
+        std::uint8_t state; // used by SSE stage
+      } x86_64;
 
       //DECAlphaModel
       struct {

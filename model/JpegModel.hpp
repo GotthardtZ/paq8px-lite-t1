@@ -76,7 +76,7 @@ struct JPEGImage {
  */
 class JpegModel {
 private:
-    static constexpr int N = 32; // number of contexts
+    static constexpr int N = 33; // number of contexts
 public:
     static constexpr int MIXERINPUTS = 2 * N + 6;
     static constexpr int MIXERCONTEXTS = (1 + 8) + (1 + 1024) + 1024;
@@ -157,10 +157,10 @@ private:
     APM apm1;
     APM apm2;
     Ilog *ilog = &Ilog::getInstance();
-    const Shared * const shared;
+    Shared * const shared;
 
 public:
-    explicit JpegModel(const Shared* const sh, uint64_t size);
+    explicit JpegModel(Shared* const sh, uint64_t size);
     ~JpegModel();
     auto mix(Mixer &m) -> int;
 };

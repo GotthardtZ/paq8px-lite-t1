@@ -276,7 +276,11 @@ void ExeModel::update() {
          static_cast<int>((op.code & 0xFEU) == 0xE8) * 2 +
          static_cast<int>((op.data & multiByteOpcode) != 0 && (op.code & 0xF0U) == 0x80)
     ));
+
+    shared->State.x86_64.state = 0x80u | (static_cast<std::uint8_t>(state) << 3u) | op.bytesRead;
   }
+  else
+    shared->State.x86_64.state = 0u;
 }
 
 void ExeModel::mix(Mixer &m) {
