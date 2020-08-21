@@ -2,8 +2,8 @@
 #define PAQ8PX_SIMDLSTMMODEL_HPP
 
 #include "LstmModel.hpp"
-#include "SimdFunctions.hpp"
 #include "Lstm.hpp"
+#include "SimdFunctions.hpp"
 #include "../Shared.hpp"
 #include "../Mixer.hpp"
 #include "../RingBuffer.hpp"
@@ -14,9 +14,12 @@
 template <SIMD simd, std::size_t Bits = 8>
 class SIMDLstmModel :
   public LstmModel<Bits> {
-private:
+private:  
+  LSTM::Shape shape;
   Lstm<simd, std::uint8_t> lstm;
-  std::uint32_t blocks[BlockType::Count];
+  LSTM::Repository repo;
+  LSTM::Model::Type modelType, pModelType;
+  BlockType pBlockType; // previous blockType
 public:
   SIMDLstmModel(
     const Shared* const sh,
@@ -26,11 +29,19 @@ public:
     float const learning_rate,
     float const gradient_clip) :
     LstmModel<Bits>(sh, num_cells, num_layers, horizon, learning_rate, gradient_clip),
-    lstm(0, this->Size, num_cells, num_layers, horizon, learning_rate, gradient_clip),
-    blocks{ 0 }
+    shape{ 0, this->Size, num_cells, num_layers, horizon },
+    lstm(shape, learning_rate, gradient_clip),
+    modelType(LSTM::Model::Type::Default), pModelType(LSTM::Model::Type::Default),
+    pBlockType(BlockType::Count)
   {
-    if ((sh->options & OPTION_LSTM_TRAINING) > 0u)
-      lstm.template LoadFromDisk<4, 1>("english.rnn");
+    if ((this->shared->options & OPTION_LSTM_TRAINING) > 0u) {
+      repo[LSTM::Model::Type::Default] = std::unique_ptr<LSTM::Model>(new LSTM::Model(shape)); // std::make_unique requires C++14
+      lstm.SaveModel(*repo[LSTM::Model::Type::Default]);
+      repo[LSTM::Model::Type::English] = std::unique_ptr<LSTM::Model>(new LSTM::Model(shape));
+      repo[LSTM::Model::Type::English]->LoadFromDisk<4, 1>("english.rnn");
+      repo[LSTM::Model::Type::x86_64] = std::unique_ptr<LSTM::Model>(new LSTM::Model(shape));
+      repo[LSTM::Model::Type::x86_64]->LoadFromDisk<4, 1>("x86_64.rnn");
+    }
   }
 
   void mix(Mixer& m) {
@@ -48,14 +59,27 @@ public:
       this->top = (1 << Bits) - 1;
       this->bot = 0;
       if (((this->shared->options & OPTION_LSTM_TRAINING) > 0u) && (this->shared->State.blockPos == 0u)) {
-        std::uint32_t const blockType = this->shared->State.blockType;
-        if (blocks[blockType] == 0u) {
+        BlockType const blockType = static_cast<BlockType>(this->shared->State.blockType);
+        if (blockType != pBlockType) {
           switch (blockType) {
-            case EXE: lstm.template LoadFromDisk<4, 1>("x86_64.rnn"); break;
-            default:;
+            case BlockType::TEXT:
+            case BlockType::TEXT_EOL:
+              modelType = LSTM::Model::Type::English; break;
+            case BlockType::EXE:
+              modelType = LSTM::Model::Type::x86_64; break;
+            default:
+              modelType = LSTM::Model::Type::Default;
           }
+          if (modelType != pModelType) {
+            if ((pModelType == LSTM::Model::Type::x86_64) && (blockType == BlockType::DEFAULT)) {}
+            else {
+              lstm.SaveModel(*repo[pModelType]);
+              lstm.LoadModel(*repo[modelType]);
+              pModelType = modelType;
+            }
+          }          
         }
-        blocks[blockType]++;
+        pBlockType = blockType;
       }
 
     }

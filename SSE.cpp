@@ -10,8 +10,14 @@ SSE::SSE(Shared* const sh) : shared(sh),
     { /*APM:*/ {{sh,0x1000,24}, {sh,0x10000,24}, {sh,0x10000,24}, {sh,0x10000,24}}, /*APM1:*/ {{sh,0x10000,5}, {sh,0x10000,6}} }, // palette
     { /*APM:*/ {{sh,0x1000,24}, {sh,0x10000,24}, {sh,0x10000,24}} } //gray
   },
+  Jpeg{
+    { /*APM:*/ {sh,0x2000,24} }
+  },
   DEC{
     { /*APM:*/ {sh,25*26,20} }
+  },
+  x86_64{
+    { /*APM:*/ {sh,0x800,20}, {sh,0x10000,16}, {sh,0x10000,16} }
   },
   Generic {
     /*APM1:*/ {{sh,0x2000,7}, {sh,0x10000,7}, {sh,0x10000,7}, {sh,0x10000,7}, {sh,0x10000,7}, {sh,0x10000,7}, {sh,0x10000,7}}
@@ -88,13 +94,22 @@ auto SSE::p(int pr0) -> int {
       break;
     }
     case JPEG: {
-      pr = pr0;
+      pr = Jpeg.APMs[0].p(pr0, shared->State.JPEG.state, 0x3FF);
+      pr = (pr + pr0 + 1) / 2;
       break;
     }
     case DEC_ALPHA: {
       int const limit = 0x3FFu >> (static_cast<int>(blockPos < 0xFFFu) * 4);
       pr = DEC.APMs[0].p(pr0, (shared->State.DEC.state * 26u) + shared->State.DEC.bcount, limit);
       pr = (pr * 4 + pr0 * 2 + 3) / 6;
+      break;
+    }
+    case EXE: {
+      int const limit = 0x3FFu >> (static_cast<int>(blockPos < 0xFFFu) * 4);
+      pr = x86_64.APMs[0].p(pr0, (shared->State.x86_64.state << 3u) | bpos, limit);
+      pr1 = x86_64.APMs[1].p(pr0, (c0 << 8u) | shared->State.x86_64.state, limit);
+      pr2 = x86_64.APMs[2].p((pr1+pr+1)/2, finalize64(hash(c4 & 0xFFu, bpos, shared->State.misses & 0x1u, shared->State.x86_64.state >> 3), 16), limit);
+      pr = (pr + pr0 + pr1 + pr2 + 2) >> 2;
       break;
     }
     default: {

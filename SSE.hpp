@@ -26,7 +26,13 @@ private:
     } Image;
     struct {
       APM APMs[1];
+    } Jpeg;
+    struct {
+      APM APMs[1];
     } DEC;
+    struct {
+      APM APMs[3];
+    } x86_64;
     struct {
         APM1 APM1s[7];
     } Generic;
