@@ -1,4 +1,4 @@
----------------
+﻿---------------
 VERSION HISTORY
 ---------------
 
@@ -1765,3 +1765,8 @@ paq8px_v193 by Márcio Pais
 - New SSE stage for x86/64 executables
 - New SSE stage for JPEG files and an additional context in the model
 - Faster AVX2 float dot product
+
+
+paq8px_193fix1 by Zoltán Gotthardt
+- Cosmetic changes, fixed compiler warnings
+- Fixed OLS predictor (bug since v189)
