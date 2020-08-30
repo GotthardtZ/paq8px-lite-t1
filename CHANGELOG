@@ -1767,6 +1767,6 @@ paq8px_v193 by Márcio Pais
 - Faster AVX2 float dot product
 
 
-paq8px_193fix1 by Zoltán Gotthardt
+paq8px_v193fix1 by Zoltán Gotthardt
 - Cosmetic changes, fixed compiler warnings
 - Fixed OLS predictor (bug since v189)
