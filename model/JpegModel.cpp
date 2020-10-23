@@ -4,7 +4,10 @@ JpegModel::JpegModel(Shared* const sh, const uint64_t size) : shared(sh), t(size
         sm(sh, N, 256, 1023, StateMap::BitHistory), apm1(sh, 0x20000, 20), 
         apm2(sh, 0x8000, 20), apm3(sh, 0x8000, 21), apm4(sh, 0x8000, 22), 
         apm5(sh, 0x8000, 23), apm6(sh, 0x8000, 24), apm7(sh, 0x8000, 25), 
-        apm8(sh, 0x8000, 26), apm9(sh, 0x8000, 27), apm10(sh, 0x8000, 28) {
+        apm8(sh, 0x8000, 26), apm9(sh, 0x8000, 27), apm10(sh, 0x8000, 28),
+        apm11(sh, 0x8000, 29), apm12(sh, 0x8000, 30), apm13(sh, 0x8000, 31),
+        apm14(sh, 0x8000, 32), apm15(sh, 0x8000, 33)
+{
   auto mf = new MixerFactory();
   m1 = mf->createMixer(sh, N + 1 /*bias*/+ IndirectMap::MIXERINPUTS /*MJPEGMap*/, 1024 + 2 + 1024 + 1024, 4);
   m1->setScaleFactor(1024, 128); // 2048, 256 for small images
@@ -686,6 +689,25 @@ auto JpegModel::mix(Mixer &m) -> int {
     cxt[i++] = hash(++n, coef, advPred[3] / 11, lcp[static_cast<uint64_t>(zu < zv)] / 50, lcp[2 + 3 * static_cast<uint64_t>(zu * zv > 1)] / 50,
                     lcp[3 + 3 * static_cast<uint64_t>(zu * zv > 1)] / 50);
     cxt[i++] = hash(++n, hc, advPred[3] / 13, prevCoef / 11, static_cast<int>(zu + zv < 4));
+    cxt[i++] = hash(++n, hc, advPred[2] / 13, prevCoef / 11, static_cast<int>(zu + zv < 4)); 
+    cxt[i++] = hash(++n, hc, advPred[1] / 13, prevCoef / 11, static_cast<int>(zu + zv < 4)); 
+    cxt[i++] = hash(++n, hc, advPred[3] / 13, prevCoef / 11, prevCoef2 / 11);
+    cxt[i++] = hash(++n, hc, advPred[1] / 13, prevCoef2 / 20, prevCoefRs);
+    cxt[i++] = hash(++n, hc, advPred[2] / 13, prevCoef / 40 + ((prevCoef2 / 40) << 20), prevCoefRs);
+
+    cxt[i++] = hash(++n, hc, advPred[0] / 13, prevCoef / 40 + ((prevCoef2 / 40) << 20), static_cast<int>(zu + zv < 4));
+    cxt[i++] = hash(++n, hc, advPred[4] / 13, prevCoef2 / 20, prevCoefRs);
+    cxt[i++] = hash(++n, hc, runPred[0] / 13, prevCoef / 11, static_cast<int>(zu + zv < 4));
+    cxt[i++] = hash(++n, hc, advPred[2] / 7, runPred[2]);
+    cxt[i++] = hash(++n, hc, advPred[2] / 12 + (runPred[2]), sSum2 >> 6, prevCoef / 12);
+    cxt[i++] = hash(++n, hc, advPred[1] / 11 + (runPred[1]), sSum2 >> 6);
+
+    cxt[i++] = hash(++n, hc, rs1, advPred[2] / 7, prevCoef / 10, prevCoef2 / 10, prevCoef / 40 + ((prevCoef2 / 28) << 20) );
+    cxt[i++] = hash(++n, hc, rs1, advPred[0] / 7, prevCoef2 / 10);
+    cxt[i++] = hash(++n, hc, lcp[0] / 12, lcp[1] / 12, mcuPos & 63U, lcp[4] / 10);
+	  cxt[i++] = hash(++n, hc, zu / 2, prevCoef / 40 + ((prevCoef2 / 28) << 20));
+    cxt[i++] = hash(++n, hc, zv / 2, prevCoef / 40 + ((prevCoef2 / 28) << 20));
+    cxt[i++] = hash(++n, hc, column >> 3, min(5 + 2 * static_cast<int>(comp == 0), zu + zv), prevCoef / 40 + ((prevCoef2 / 28) << 20) );
 
     assert(i == N);
   }
@@ -752,38 +774,55 @@ auto JpegModel::mix(Mixer &m) -> int {
   m.add(stretch(pr1) >> 1);
   m.add((pr1 - 2048) >> 3);
   
-  int pr2 = apm2.p(pr1, (hc & 511U) | (((advPred[1] / 16) & 63U) << 9), 1023);
+  int pr2 = apm2.p(pr1, (hc & 511U) | (((advPred[1] / 12) & 63U) << 9), 1023);
   m.add(stretch(pr2) >> 1);
   m.add((pr2 - 2048) >> 3);
 
-  int pr3 = apm3.p(pr2, (hc & 511U) | (((advPred[0] / 16) & 63U) << 9), 1023);
+  int pr3 = apm3.p(pr2, (hc & 511U) | (((advPred[0] / 12) & 63U) << 9), 1023);
   m.add(stretch(pr3) >> 1);
 
-  int pr4 = apm4.p(pr3, (hc & 511U) | (((advPred[2] / 16) & 63U) << 9), 1023);
+  int pr4 = apm4.p(pr3, (hc & 511U) | (((advPred[2] / 12) & 63U) << 9), 1023);
   m.add(stretch(pr4) >> 1);
 
-  int pr5 = apm5.p(pr4, (hc & 511U) | (((advPred[3] / 16) & 63U) << 9), 1023);
+  int pr5 = apm5.p(pr4, (hc & 511U) | (((advPred[3] / 12) & 63U) << 9), 1023);
   m.add(stretch(pr5) >> 1);
 
-  int pr6 = apm6.p(pr5, (hc & 511U) | (((lcp[0] / 16) & 63U) << 9), 1023);
+  int pr6 = apm6.p(pr5, (hc & 511U) | (((lcp[0] / 12) & 63U) << 9), 1023);
   m.add(stretch(pr6) >> 1);
 
-  int pr7 = apm7.p(pr6, (hc & 511U) | (((lcp[1] / 16) & 63U) << 9), 1023);
+  int pr7 = apm7.p(pr6, (hc & 511U) | (((lcp[1] / 12) & 63U) << 9), 1023);
   m.add(stretch(pr7) >> 1);
 
-  int pr8 = apm8.p(pr7, (hc & 511U) | (((lcp[2] / 16) & 63U) << 9), 1023);
+  int pr8 = apm8.p(pr7, (hc & 511U) | (((lcp[2] / 12) & 63U) << 9), 1023);
   m.add(stretch(pr8) >> 1);
 
-  int pr9 = apm9.p(pr8, (hc & 511U) | (((lcp[3] / 16) & 63U) << 9), 1023);
+  int pr9 = apm9.p(pr8, (hc & 511U) | (((lcp[3] / 12) & 63U) << 9), 1023);
   m.add(stretch(pr9) >> 1);
 
-  int pr10 = apm10.p(pr9, (hc & 511U) | (((lcp[4] / 16) & 63U) << 9), 1023);
+  int pr10 = apm10.p(pr9, (hc & 511U) | (((lcp[4] / 12) & 63U) << 9), 1023);
   m.add(stretch(pr10) >> 1);
-  
+    
+  int pr11 = apm11.p(pr10, (hc & 511U) |  (((lcp[0] / 12 + lcp[1] / 12) & 63U) << 9), 1023);
+  m.add(stretch(pr11) >> 1);
+
+  int pr12 = apm12.p(pr11, (hc & 511U) |  (((advPred[0] / 12 + advPred[1] / 12) & 63U) << 9), 1023);
+  m.add(stretch(pr12) >> 1);
+
+  int pr13 = apm13.p(pr12, (hc & 511U) |  (((advPred[1] / 12 + advPred[2] / 12) & 63U) << 9), 1023);
+  m.add(stretch(pr13) >> 1);
+
+  int pr14 = apm14.p(pr13, (hc & 511U) |  (((advPred[2] / 12 + advPred[3] / 12) & 63U) << 9), 1023);
+  m.add(stretch(pr14) >> 1);
+
+  int pr15 = apm15.p(pr14, (hc & 511U) |  ((abs(advPred[0] / 12 + advPred[1] / 12 - advPred[2]) & 63U) << 9), 1023);
+  m.add(stretch(pr15) >> 1);
+
+   
   m.set(1 + (static_cast<int>(zu + zv < 5) | (static_cast<int>(huffBits > 8) << 1U) | (static_cast<int>(firstCol) << 2U)), 1 + 8);
   m.set(1 + ((hc & 0xFFU) | (min(3, (zu + zv) / 3)) << 8), 1 + 1024);
   m.set(coef | (min(3, huffBits / 2) << 8), 1024);
   m.set(colCtx, 1024);
+
 
   shared->State.JPEG.state = 0x1000u | ((hc2 & 0xFF) << 4) | (static_cast<int>(advPred[1] > 0) << 3) | (static_cast<int>(huffBits > 4) << 2) | (static_cast<int>(comp == 0) << 1) | static_cast<int>(zu + zv < 5);
   return 1;
