@@ -1,4 +1,4 @@
----------------
+﻿---------------
 VERSION HISTORY
 ---------------
 
@@ -1799,3 +1799,8 @@ paq8px_v193fix5 by Surya Kandau
 paq8px_v194 by Zoltán Gotthardt
 2020.10.20
 - Fixed and further enhanced jpeg model
+
+
+paq8px_v195 by Surya Kandau
+2020.10.23
+- Improve jpeg recompression
