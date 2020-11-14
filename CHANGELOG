@@ -1817,7 +1817,7 @@ Fixes and improvements in jpeg model
 - tweaks
 
 
-paq8px_v196 by Zoltán Gotthardt
+paq8px_v197 by Zoltán Gotthardt
 2020.11.15
 - Fix for thumbnails in JpegModel (thank you, Kaitz!)
 - Included more blocktypes as a context in NormalModel (text and dec alpha)
