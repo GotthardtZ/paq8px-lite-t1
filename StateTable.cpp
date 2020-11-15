@@ -10,7 +10,7 @@ auto StateTable::next(uint8_t const oldState, const int y, Random &rnd) -> uint8
     if( oldState < 249 ) { // still climbing
       const int shift = (460 - newState) >> 3U;
       //for each group the probability to advance to a higher state is less and less as we climb higher and higher
-      if((rnd() << shift) != 0 ) {
+      if( rnd(32-shift) != 0 ) {
         newState -= 4;
       }
     }
