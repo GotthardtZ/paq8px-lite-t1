@@ -238,9 +238,6 @@ auto processCommandLine(int argc, char **argv) -> int {
     FileName outputPath;
     FileName archiveName;
     FileName logfile;
-#ifdef HASHCONFIGCMD
-    String hashConfig;
-#endif
 
     for( int i = 1; i < argc; i++ ) {
       int argLen = static_cast<int>(strlen(argv[i]));
@@ -319,14 +316,6 @@ auto processCommandLine(int argc, char **argv) -> int {
           }
           logfile += argv[i];
         }
-#ifdef HASHCONFIGCMD
-          else if (strcasecmp(argv[i],"-hash")==0) {
-            if(hashConfig.strsize()!=0)quit("Only one hash configuration may be specified.");
-            if(++i==argc)quit("The -hash switch requires more parameters: 14 magic hash constants delimited by non-spaces.");
-            hashConfig+=argv[i];
-            loadHashesFromCmd(hashConfig.c_str());
-          }
-#endif //HASHCONFIGCMD
         else if( strcasecmp(argv[i], "-simd") == 0 ) {
           if( ++i == argc ) {
             quit("The -simd switch requires an instruction set name (NONE,SSE2,SSSE3, AVX2, NEON).");
