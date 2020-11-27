@@ -6,7 +6,7 @@ MatchModel::MatchModel(Shared* const sh, const uint64_t buffermemorysize, const 
   stateMaps {{sh, 1, 56 * 256,          1023, StateMap::Generic},
              {sh, 1, 8 * 256 * 256 + 1, 1023, StateMap::Generic},
              {sh, 1, 256 * 256,         1023, StateMap::Generic}},
-  cm(sh, mapmemorysize, nCM, 74, CM_USE_RUN_STATS),
+  cm(sh, mapmemorysize, nCM, 74),
   SCM {sh, 6, 1, 6, 64},
   maps {{sh, 23, 1, 64, 1023},
         {sh, 15, 1, 64, 1023}}, 
@@ -162,13 +162,14 @@ void MatchModel::mix(Mixer &m) {
   //bytewise contexts
   INJECT_SHARED_c4
   if( bpos == 0 ) {
+    const uint8_t R_ = CM_USE_RUN_STATS;
     if( length != 0 ) {
-      cm.set(hash(0, expectedByte, length3Rm));
-      cm.set(hash(1, expectedByte, length3Rm, c1));
+      cm.set(R_, hash(0, expectedByte, length3Rm));
+      cm.set(R_, hash(1, expectedByte, length3Rm, c1));
     } else {
       // when there is no match it is still slightly beneficial not to skip(), but set some low-order contexts
-      cm.set(hash(2, c4 & 0xffu)); // order 1
-      cm.set(hash(3, c4 & 0xffffu)); // order 2
+      cm.set(R_, hash(2, c4 & 0xffu)); // order 1
+      cm.set(R_, hash(3, c4 & 0xffffu)); // order 2
     }
   }
   cm.mix(m);
