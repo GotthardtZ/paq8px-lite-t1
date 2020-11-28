@@ -13,20 +13,21 @@ void SparseBitModel::mix(Mixer &m) {
     const uint8_t __ = CM_USE_NONE;
     uint64_t i = 0;
     if (isText) {
-      cm.skipn(__, 4);
-      i += 4;
+      cm.skipn(__, 3);
+      i += 3;
     }
     else {
+      cm.set(__, hash(++i, c4 & 0x0000f8f8));
       cm.set(__, hash(++i, c4 & 0x00f8f8f8));
       cm.set(__, hash(++i, c4 & 0xf8f8f8f8));
-      cm.set(__, hash(++i, c4 & 0xc0ccc0cc));
-      cm.set(__, hash(++i, c4 & 0x00c0ccc0));
     }
-    //for (some) text files they are useful (but week) contexts
     cm.set(__, hash(++i, c4 & 0x00f0f0ff));
+    cm.set(__, hash(++i, c4 & 0xdfdfdfe0));
+    cm.set(__, hash(++i, c4 & 0xffc0ffc0));
+    cm.set(__, hash(++i, c4 & 0xe0ffffe0));
     cm.set(__, hash(++i, c4 & 0x00e0e0e0));
     cm.set(__, hash(++i, c4 & 0xe0e0e0e0));
-    cm.set(__, hash(++i, c4 & 0xe00000e0));
+    assert(i == nCM);
   }
 
   cm.mix(m);
