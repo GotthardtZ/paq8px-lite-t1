@@ -17,13 +17,17 @@
 
 // Multipliers
 // - They don't need to be prime, just large odd numbers
-// - The golden ratio is usually preferred as a multiplier (PHI64)
+// - It's advantageous to have a multiplier such as m-1 is divicible by 4
+//   See also: https://en.wikipedia.org/wiki/Linear_congruential_generator
+// - It's advantageoud where the multiplier is based on an irrational number to guarantee good (long) periodic behaviour
+// - The golden ratio is usually preferred as a multiplier (PHI64) as it is the most irrational number
 
 static constexpr uint64_t hashes[14] = {UINT64_C(0x9E3779B97F4A7C15), UINT64_C(0x993DDEFFB1462949), UINT64_C(0xE9C91DC159AB0D2D),
-                                       UINT64_C(0x83D6A14F1B0CED73), UINT64_C(0xA14F1B0CED5A841F), UINT64_C(0xC0E51314A614F4EF),
-                                       UINT64_C(0xDA9CC2600AE45A27), UINT64_C(0x826797AA04A65737), UINT64_C(0x2375BE54C41A08ED),
-                                       UINT64_C(0xD39104E950564B37), UINT64_C(0x3091697D5E685623), UINT64_C(0x20EB84EE04A3C7E1),
-                                       UINT64_C(0xF501F1D0944B2383), UINT64_C(0xE3E4E8AA829AB9B5)};
+                                       UINT64_C(0x83D6A14F1B0CED75), UINT64_C(0xA14F1B0CED5A841D), UINT64_C(0xC0E51314A614F4E1),
+                                       UINT64_C(0xDA9CC2600AE45A25), UINT64_C(0x826797AA04A65735), UINT64_C(0x2375BE54C41A08ED),
+                                       UINT64_C(0xD39104E950564B39), UINT64_C(0x3091697D5E685621), UINT64_C(0x20EB84EE04A3C7E1),
+                                       UINT64_C(0xF501F1D0944B2385), UINT64_C(0xE3E4E8AA829AB9B5)};
+                                       
 
 // Golden ratio of 2^64 (not a prime)
 #define PHI64 hashes[0] // 11400714819323198485
