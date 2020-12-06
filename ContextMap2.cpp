@@ -6,13 +6,12 @@ ContextMap2::ContextMap2(const Shared* const sh, const uint64_t size, const uint
         stateMap(sh, contexts, (1U << 8U), 511, StateMap::BitHistory), /* StateMap : s, n, lim, init */ // 511-1023
         bhMap8B(sh, contexts, (1U << 8U), 511, StateMap::Generic),     /* StateMap : s, n, lim, init */ // 511-1023
         bhMap12B(sh, contexts, (1U << 12U), 511, StateMap::Generic),   /* StateMap : s, n, lim, init */ // 255-1023
-        index(0), mask(uint32_t(table.size() - 1)), hashBits(ilog2(mask + 1)), scale(scale) {
+        index(0), mask(uint32_t(table.size() - 1)), hashBits(ilog2(mask + 1)), scale(scale), contextflagsAll(0) {
 #ifdef VERBOSE
   printf("Created ContextMap2 with size = %" PRIu64 ", contexts = %d, scale = %d, uw = %d\n", size, contexts, scale, uw);
 #endif
   assert(size >= 64 && isPowerOf2(size));
   static_assert(sizeof(Bucket) == 64, "Size of Bucket should be 64!");
-  assert(C <= (int) sizeof(validFlags) * 8); // validFlags is 64 bits - it can't support more than 64 contexts
   for( uint32_t i = 0; i < C; i++ ) {
     bitState[i] = bitState0[i] = &table[i].bitState[0][0];
     byteHistory[i] = bitState[i] + 3;
