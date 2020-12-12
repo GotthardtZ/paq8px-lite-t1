@@ -3,30 +3,33 @@
 Image24BitModel::Image24BitModel(Shared* const sh, const uint64_t size) : 
   shared(sh), cm(sh, size, nCM, 64),
   SCMap { /* SmallStationaryContextMap : BitsOfContext, InputBits, Rate, Scale */
-    {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
-    {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
-    {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
-    {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
-    {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
-    {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
-    {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86}, {sh,11,1,9,86},
-    {sh,11,1,9,86}, {sh,11,1,9,86}, {sh, 0,8,9,86}
+    {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74},
+    {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74},
+    {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74},
+    {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74},
+    {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74},
+    {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74},
+    {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74}, {sh,11,1,9,74},
+    {sh,11,1,9,74}, {sh,11,1,9,74}, {sh, 0,8,9,74}
   },
-  map{ /* StationaryMap: BitsOfContext, InputBits, Scale, Limit  */
-    /*nSM0: 0- 8*/  {sh,8,8,86,1023},  {sh,8,8,86,1023},  {sh,8,8,86,1023},  {sh,2,8,86,1023},  {sh,0,8,86,1023}, {sh,15,1,86,1023}, {sh,15,1,86,1023}, {sh,15,1,86,1023}, {sh,15,1,86,1023},
-    /*nSM0: 9-17*/ {sh,15,1,86,1023}, {sh,17,1,86,1023}, {sh,17,1,86,1023}, {sh,17,1,86,1023}, {sh,17,1,86,1023}, {sh,13,1,86,1023}, {sh,13,1,86,1023}, {sh,13,1,86,1023}, {sh,13,1,86,1023},
-    /*nSM1: 0- 8*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
-    /*nSM1: 9-17*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
-    /*nSM1:18-26*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
-    /*nSM1:27-35*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
-    /*nSM1:36-44*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
-    /*nSM1:45-53*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
-    /*nSM1:54-62*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
-    /*nSM1:63-71*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
-    /*nSM1:72-75*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023},
-    /*nOLS: 0- 5*/ {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}, {sh,11,1,86,1023}
+  mapL{ /* LargeStationaryMap : HashMaskBits, Scale, AdaptivityRate  */
+    {sh,17,74,16}, {sh,17,74,16}, {sh,17,74,16}, {sh,17,74,16},
+  },
+  map{ /* StationaryMap : BitsOfContext, InputBits, Scale, AdaptivityRate  */
+    /*nSM0: 0- 8*/ {sh,8,8,74,16},  {sh,8,8,74,16},  {sh,8,8,74,16},  {sh,2,8,74,16}, {sh,0,8,74,16}, {sh,15,1,74,16}, {sh,15,1,74,16}, {sh,15,1,74,16}, {sh,15,1,74,16},
+    /*nSM0: 9-13*/ {sh,15,1,74,16}, {sh,13,1,74,16}, {sh,13,1,74,16}, {sh,13,1,74,16}, {sh,13,1,74,16},
+    /*nSM1: 0- 8*/ {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16},
+    /*nSM1: 9-17*/ {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16},
+    /*nSM1:18-26*/ {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16},
+    /*nSM1:27-35*/ {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16},
+    /*nSM1:36-44*/ {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16},
+    /*nSM1:45-53*/ {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16},
+    /*nSM1:54-62*/ {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16},
+    /*nSM1:63-71*/ {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16},
+    /*nSM1:72-75*/ {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16},
+    /*nOLS: 0- 5*/ {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}, {sh,11,1,74,16}
   }
-{}
+  {}
 
 void Image24BitModel::update() {
   INJECT_SHARED_bpos
@@ -383,11 +386,11 @@ void Image24BitModel::update() {
       }
 
       int i = -1;
-      map[++i].setDirect((W & 0xC0U) | ((N & 0xC0U) >> 2U) | ((WW & 0xC0U) >> 4U) | (NN >> 6U));
-      map[++i].setDirect((N & 0xC0U) | ((NN & 0xC0U) >> 2U) | ((NE & 0xC0U) >> 4U) | (NEE >> 6U));
-      map[++i].setDirect(buf(1 + static_cast<int>((isPNG != 0u) && x < 2)));
-      map[++i].setDirect(min(color, stride - 1));
-      map[++i].setDirect(0);
+      map[++i].set((W & 0xC0U) | ((N & 0xC0U) >> 2U) | ((WW & 0xC0U) >> 4U) | (NN >> 6U));
+      map[++i].set((N & 0xC0U) | ((NN & 0xC0U) >> 2U) | ((NE & 0xC0U) >> 4U) | (NEE >> 6U));
+      map[++i].set(buf(1 + static_cast<int>((isPNG != 0u) && x < 2)));
+      map[++i].set(min(color, stride - 1));
+      map[++i].set(0);
       shared->State.Image.plane = min(color, stride - 1);
       shared->State.Image.pixels.W = W;
       shared->State.Image.pixels.N = N;
@@ -403,33 +406,33 @@ void Image24BitModel::update() {
     uint8_t b = (c0 << (8 - bpos));
     int i = 4;
 
-    map[++i].setDirect(((static_cast<uint8_t>(clip(W + N - NW) - px - b)) * 8 + bpos) |
+    map[++i].set(((static_cast<uint8_t>(clip(W + N - NW) - px - b)) * 8 + bpos) |
                        (logMeanDiffQt(clip(N + NE - NNE), clip(N + NW - NNW)) << 11));
-    map[++i].setDirect(((static_cast<uint8_t>(clip(N * 2 - NN) - px - b)) * 8 + bpos) | 
+    map[++i].set(((static_cast<uint8_t>(clip(N * 2 - NN) - px - b)) * 8 + bpos) | 
                        (logMeanDiffQt(W, clip(NW * 2 - NNW)) << 11));
-    map[++i].setDirect(((static_cast<uint8_t>(clip(W * 2 - WW) - px - b)) * 8 + bpos) |
+    map[++i].set(((static_cast<uint8_t>(clip(W * 2 - WW) - px - b)) * 8 + bpos) |
                        (logMeanDiffQt(N, clip(NW * 2 - NWW)) << 11));
-    map[++i].setDirect(((static_cast<uint8_t>(clip(W + N - NW) - px - b)) * 8 + bpos) |
+    map[++i].set(((static_cast<uint8_t>(clip(W + N - NW) - px - b)) * 8 + bpos) |
                        (logMeanDiffQt(p1, clip(Wp1 + Np1 - NWp1)) << 11));
-    map[++i].setDirect(((static_cast<uint8_t>(clip(W + N - NW) - px - b)) * 8 + bpos) |
+    map[++i].set(((static_cast<uint8_t>(clip(W + N - NW) - px - b)) * 8 + bpos) |
                        (logMeanDiffQt(p2, clip(Wp2 + Np2 - NWp2)) << 11));
-    map[++i].set(hash(W - px - b, N - px - b) * 8 + bpos);
-    map[++i].set(hash(W - px - b, WW - px - b) * 8 + bpos);
-    map[++i].set(hash(N - px - b, NN - px - b) * 8 + bpos);
-    map[++i].set(hash(clip(N + NE - NNE) - px - b, clip(N + NW - NNW) - px - b) * 8 + bpos);
-    map[++i].setDirect((min(color, stride - 1) << 11U) | ((static_cast<uint8_t>(clip(N + p1 - Np1) - px - b)) * 8 + bpos));
-    map[++i].setDirect((min(color, stride - 1) << 11U) | ((static_cast<uint8_t>(clip(N + p2 - Np2) - px - b)) * 8 + bpos));
-    map[++i].setDirect((min(color, stride - 1) << 11U) | ((static_cast<uint8_t>(clip(W + p1 - Wp1) - px - b)) * 8 + bpos));
-    map[++i].setDirect((min(color, stride - 1) << 11U) | ((static_cast<uint8_t>(clip(W + p2 - Wp2) - px - b)) * 8 + bpos));
+    map[++i].set((min(color, stride - 1) << 11U) | ((static_cast<uint8_t>(clip(N + p1 - Np1) - px - b)) * 8 + bpos));
+    map[++i].set((min(color, stride - 1) << 11U) | ((static_cast<uint8_t>(clip(N + p2 - Np2) - px - b)) * 8 + bpos));
+    map[++i].set((min(color, stride - 1) << 11U) | ((static_cast<uint8_t>(clip(W + p1 - Wp1) - px - b)) * 8 + bpos));
+    map[++i].set((min(color, stride - 1) << 11U) | ((static_cast<uint8_t>(clip(W + p2 - Wp2) - px - b)) * 8 + bpos));
+    mapL[0].set(hash(W - px - b, N - px - b, bpos));
+    mapL[1].set(hash(W - px - b, WW - px - b, bpos));
+    mapL[2].set(hash(N - px - b, NN - px - b, bpos));
+    mapL[3].set(hash(clip(N + NE - NNE) - px - b, clip(N + NW - NNW) - px - b, bpos));
     ++i;
     assert(i == nSM0);
 
     for( int j = 0; j < nSM1; i++, j++ ) {
-      map[i].setDirect((mapContexts[j] - px - b) * 8 + bpos);
+      map[i].set((mapContexts[j] - px - b) * 8 + bpos);
     }
 
     for( int j = 0; i < nSM; i++, j++ ) {
-      map[i].setDirect((pOLS[j] - px - b) * 8 + bpos);
+      map[i].set((pOLS[j] - px - b) * 8 + bpos);
     }
 
     for( int i = 0; i < nSSM; i++ ) {
@@ -447,8 +450,11 @@ void Image24BitModel::init() {
   columns[0] = max(1, w / max(1, ilog2(w) * 3));
   columns[1] = max(1, columns[0] / max(1, ilog2(columns[0])));
   if( lastPos > 0 && lastWasPNG != isPNG ) {
+    for (int i = 0; i < nLSM; i++) {
+      mapL[i].reset();
+    }
     for( int i = 0; i < nSM; i++ ) {
-      map[i].reset(0);
+      map[i].reset();
     }
   }
   lastWasPNG = isPNG;
@@ -482,6 +488,10 @@ void Image24BitModel::mix(Mixer &m) {
   // predict next bit
   if( x > 0 || (isPNG == 0u)) {
     cm.mix(m);
+
+    for (int i = 0; i < nLSM; i++) {
+      mapL[i].mix(m);
+    }
 
     for( int i = 0; i < nSM; i++ ) {
       map[i].mix(m);
