@@ -1,16 +1,16 @@
 #include "LargeStationaryMap.hpp"
 
-LargeStationaryMap::LargeStationaryMap(const Shared* const sh, const int hashMaskBits, const int scale, const int rate) :
+LargeStationaryMap::LargeStationaryMap(const Shared* const sh, const int hashBits, const int scale, const int rate) :
   shared(sh),
-  data((1ULL << hashMaskBits)),
-  maskBits(hashMaskBits),
+  data((1ULL << hashBits)),
+  hashBits(hashBits),
   scale(scale),
   rate(rate) {
 #ifdef VERBOSE
-  printf("Created LargeStationaryMap with hashMaskBits = %d, %d, scale = %d, rate = %d\n", hashMaskBits, scale, rate);
+  printf("Created LargeStationaryMap with hashBits = %d, %d, scale = %d, rate = %d\n", hashBits, scale, rate);
 #endif
-  assert(hashMaskBits > 0);
-  assert(hashMaskBits <= 24); // 24 is just a reasonable limit for memory use 
+  assert(hashBits > 0);
+  assert(hashBits <= 24); // 24 is just a reasonable limit for memory use 
   assert(9 <= rate && rate <= 16); // 9 is just a reasonable lower bound, 16 is a hard bound
   reset();
   set(0);
@@ -33,7 +33,7 @@ void LargeStationaryMap::reset() {
 void LargeStationaryMap::update() {
   INJECT_SHARED_y
 
-  uint32_t counts, n0, n1;
+  uint32_t n0, n1;
   n0 = cp[0];
   n1 = cp[1];
 
@@ -52,10 +52,10 @@ void LargeStationaryMap::update() {
 void LargeStationaryMap::mix(Mixer &m) {
   shared->GetUpdateBroadcaster()->subscribe(this);
   uint32_t n0, n1, sum;
-  int p1, st, bitIsUncertain, p0;
+  int p1, st, bitIsUncertain;
   
-  uint32_t hashkey = finalize64(context, maskBits);
-  uint16_t checksum = checksum16(context, maskBits);
+  uint32_t hashkey = finalize64(context, hashBits);
+  uint16_t checksum = checksum16(context, hashBits);
   cp = data[hashkey].find(checksum);
   n0 = cp[0];
   n1 = cp[1];
