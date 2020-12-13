@@ -2,7 +2,7 @@
 
 LargeStationaryMap::LargeStationaryMap(const Shared* const sh, const int hashBits, const int scale, const int rate) :
   shared(sh),
-  data((1ULL << hashBits)),
+  data((UINT64_C(1) << hashBits)),
   hashBits(hashBits),
   scale(scale),
   rate(rate) {
