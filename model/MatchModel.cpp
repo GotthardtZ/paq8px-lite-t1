@@ -6,7 +6,7 @@ MatchModel::MatchModel(Shared* const sh, const uint64_t buffermemorysize, const 
   stateMaps {{sh, 1, 56 * 256,          1023, StateMap::Generic},
              {sh, 1, 8 * 256 * 256 + 1, 1023, StateMap::Generic},
              {sh, 1, 256 * 256,         1023, StateMap::Generic}},
-  cm(sh, mapmemorysize, nCM, 74),
+  cm(sh, mapmemorysize, nCM, 64),
   mapL{ /* LargeStationaryMap : HashBits, Scale=64, Rate=16  */
         {sh,20},
   },
