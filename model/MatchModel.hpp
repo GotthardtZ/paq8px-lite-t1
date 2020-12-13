@@ -19,7 +19,6 @@ private:
     static constexpr int numHashes = 3;
     static constexpr int nCM = 2;
     static constexpr int nST = 3;
-    static constexpr int nSSM = 2;
     static constexpr int nLSM = 1;
     static constexpr int nSM = 1;
     Shared * const shared;
@@ -31,7 +30,6 @@ private:
     Array<uint32_t> table;
     StateMap stateMaps[nST];
     ContextMap2 cm;
-    SmallStationaryContextMap SCM;
     LargeStationaryMap mapL[nLSM];
     StationaryMap map[nSM];
     IndirectContext<uint8_t> iCtx;
@@ -51,10 +49,9 @@ public:
     static constexpr int MIXERINPUTS = 
       2 + // inputs based on expected bit
       nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS) + 
-      nST +
-      nSSM * SmallStationaryContextMap::MIXERINPUTS + 
+      nST * 2 +
       nLSM * LargeStationaryMap::MIXERINPUTS +
-      nSM * StationaryMap::MIXERINPUTS; // 25
+      nSM * StationaryMap::MIXERINPUTS; // 24
     static constexpr int MIXERCONTEXTS = 8;
     static constexpr int MIXERCONTEXTSETS = 1;
     MatchModel(Shared* const sh, const uint64_t buffermemorysize, const uint64_t mapmemorysize);
