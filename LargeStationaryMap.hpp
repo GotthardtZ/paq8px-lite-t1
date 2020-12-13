@@ -44,9 +44,9 @@ public:
       *      ...              ...                         ...
       * 
      * @param scale
-     * @param rate
+     * @param rate use 16 near-stationary modelling (default), smaller values may be used for tuning adaptivity
      */
-    LargeStationaryMap(const Shared* const sh, const int hashBits, const int scale, const int rate);
+    LargeStationaryMap(const Shared* const sh, const int hashBits, const int scale = 64, const int rate = 16);
 
     /**
      * ctx must be a hash

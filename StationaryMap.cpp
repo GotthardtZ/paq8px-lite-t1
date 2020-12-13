@@ -44,7 +44,7 @@ void StationaryMap::update() {
 
   n0 += 1 - y;
   n1 += y;
-  int shift = (n0 | n1) >> rate; //near-stationary: rate=16; adaptive: smaller rate
+  int shift = (n0 | n1) >> rate; // shift: 0 or 1
   n0 >>= shift;
   n1 >>= shift;
 
