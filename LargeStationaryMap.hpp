@@ -23,7 +23,7 @@ private:
     const uint32_t hashBits;
     int scale, rate;
     uint64_t context;
-    uint16_t *cp;
+    uint32_t *cp;
 
 public:
     /**

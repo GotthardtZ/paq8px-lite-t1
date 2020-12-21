@@ -33,9 +33,10 @@ void LargeStationaryMap::reset() {
 void LargeStationaryMap::update() {
   INJECT_SHARED_y
 
-  uint32_t n0, n1;
-  n0 = cp[0];
-  n1 = cp[1];
+  uint32_t n0, n1, value;
+  value = *cp;
+  n0 = value >> 16;
+  n1 = value & 0xffff;
 
   n0 += 1 - y;
   n1 += y;
@@ -43,22 +44,22 @@ void LargeStationaryMap::update() {
   n0 >>= shift;
   n1 >>= shift;
 
-  cp[0] = n0;
-  cp[1] = n1;
+  *cp = n0 << 16 | n1;
 
   context = hash(context, y);
 }
 
 void LargeStationaryMap::mix(Mixer &m) {
   shared->GetUpdateBroadcaster()->subscribe(this);
-  uint32_t n0, n1, sum;
+  uint32_t n0, n1, value, sum;
   int p1, st, bitIsUncertain;
   
   uint32_t hashkey = finalize64(context, hashBits);
   uint16_t checksum = checksum16(context, hashBits);
   cp = data[hashkey].find(checksum);
-  n0 = cp[0];
-  n1 = cp[1];
+  value = *cp;
+  n0 = value >> 16;
+  n1 = value & 0xffff;
 
   sum = n0 + n1;
   p1 = ((n1 * 2 + 1) << 12) / (sum * 2 + 2);
