@@ -14,8 +14,8 @@ MatchModel::MatchModel(Shared* const sh, const uint64_t buffermemorysize, const 
         {sh,15,1},
   }, 
   iCtx {15, 1}, 
-  mask(uint32_t(buffermemorysize / sizeof(uint32_t) - 1)), 
-  hashBits(ilog2(mask + 1)) {
+  hashBits(ilog2(uint32_t(buffermemorysize / sizeof(uint32_t))))
+{
 #ifdef VERBOSE
   printf("Created MatchModel with size = %" PRIu64 "\n", size);
 #endif
@@ -55,7 +55,7 @@ void MatchModel::update() {
     // recover match after a 1-byte mismatch
     if( length == 0 && !delta && lengthBak != 0 ) { //match failed (2 bytes ago), no new match found, and we have a backup
       indexBak++;
-      if( lengthBak < mask ) {
+      if( lengthBak < 65535 ) {
         lengthBak++;
       }
       INJECT_SHARED_c1
@@ -69,7 +69,7 @@ void MatchModel::update() {
     // extend current match
     if( length != 0 ) {
       index++;
-      if( length < mask ) {
+      if( length < 65535) {
         length++;
       }
     }

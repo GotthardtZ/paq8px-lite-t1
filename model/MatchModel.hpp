@@ -41,7 +41,6 @@ private:
     uint32_t indexBak = 0;
     uint8_t expectedByte = 0; /**< prediction is based on this byte (buf[index]), valid only when length>0 */
     bool delta = false; /**< indicates that a match has just failed (delta mode) */
-    const uint32_t mask;
     const int hashBits;
     Ilog *ilog = &Ilog::getInstance();
 
