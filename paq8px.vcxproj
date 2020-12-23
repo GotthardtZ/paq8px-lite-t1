@@ -362,6 +362,7 @@
     <ClInclude Include="IndirectContext.hpp" />
     <ClInclude Include="IndirectMap.hpp" />
     <ClInclude Include="IPredictor.hpp" />
+    <ClInclude Include="LargeIndirectContext.hpp" />
     <ClInclude Include="LargeStationaryMap.hpp" />
     <ClInclude Include="LMS.hpp" />
     <ClInclude Include="lstm\Activations.hpp" />

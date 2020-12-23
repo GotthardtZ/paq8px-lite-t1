@@ -5,20 +5,24 @@
 #include <cstring>
 
 /**
- * Hash bucket for 16-bit counts
+ * Hash bucket for arbitrary-sized values:
+ * For LargeStationaryMap: two 16-bit counts (4 bytes)
+ * For LargeIndirectContext: 4 bytes
  *
  */
 
 constexpr int ElementsInBucket = 7;
 
-struct HashElement16 { // 6 bytes
+template<typename T>
+struct HashElement { // 6 bytes (when T=uint32_t)
   uint16_t checksum;
-  uint32_t value;
+  T value;
 };
 
-class Bucket16 { // sizeof(Bucket16) = 7*6 = 42 bytes
+template<typename T>
+class Bucket16 { // sizeof(Bucket16) = 7*6 = 42 bytes (when T=uint32_t)
 private:
-  HashElement16 elements[ElementsInBucket];
+  HashElement<T> elements[ElementsInBucket];
 public:
 
   void reset() {
@@ -32,7 +36,7 @@ public:
         if (i != 0) {
           uint32_t value = elements[i].value;
           //shift elements
-          memmove(&elements[1], &elements[0], i * sizeof(HashElement16));
+          memmove(&elements[1], &elements[0], i * sizeof(HashElement<T>));
           //move element to front
           elements[0].checksum = checksum;
           elements[0].value = value;
@@ -42,16 +46,15 @@ public:
       if (elements[i].checksum == 0) { // found empty slot
         if (i != 0) {
           //shift elements down (make room for the new element)
-          memmove(&elements[1], &elements[0], i * sizeof(HashElement16));
+          memmove(&elements[1], &elements[0], i * sizeof(HashElement<T>));
         }
-        //create new element
-        elements[0].checksum = checksum;
-        elements[0].value = 0;
-        return &elements[0].value;
+        goto not_found;
       }
     }
     //no match and no empty slot -> overwrite the last accessed element with an empty one
-    memmove(&elements[1], &elements[0], (ElementsInBucket - 1) * sizeof(HashElement16));
+    memmove(&elements[1], &elements[0], (ElementsInBucket - 1) * sizeof(HashElement<T>));
+
+  not_found:
     //create new element
     elements[0].checksum = checksum;
     elements[0].value = 0;

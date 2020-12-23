@@ -19,7 +19,7 @@ public:
 
 private:
     const Shared * const shared;
-    Array<Bucket16> data;
+    Array<Bucket16<uint32_t>> data;
     const uint32_t hashBits;
     int scale, rate;
     uint64_t context;
