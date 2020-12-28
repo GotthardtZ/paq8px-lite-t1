@@ -25,7 +25,7 @@ private:
     uint32_t chars4 {0};
 
 public:
-    static constexpr int MIXERINPUTS = nCM * (ContextMap::MIXERINPUTS); // 130
+    static constexpr int MIXERINPUTS = nCM * (ContextMap::MIXERINPUTS); // 135
     static constexpr int MIXERCONTEXTS = 0;
     static constexpr int MIXERCONTEXTSETS = 0;
     explicit IndirectModel(const Shared* const sh, uint64_t size);

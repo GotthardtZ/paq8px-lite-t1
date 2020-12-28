@@ -18,13 +18,13 @@ void IndirectModel::mix(Mixer &m) {
     uint32_t d3 = (buf(1) >> 3) | (buf(2) >> 3) << 5 | (buf(3) >> 3) << 10; //15 bits
     uint32_t d4 = (buf(1) >> 4) | (buf(2) >> 4) << 4 | (buf(3) >> 4) << 8 | (buf(4) >> 4) << 12; //16 bits
 
-    //byte histories
+    //... and their byte histories
     const uint32_t h1 = c1 | t1[c1] << 8;
     const uint32_t h2 = d2 | t2[d2] << 16;
     const uint32_t h3 = d3 | t3[d3] << 16;
     const uint32_t h4 = d4 | t4[d4] << 16;
 
-    //update "small" context history tables
+    //update their context history tables
     uint32_t& r1 = t1[d2 >> 8];
     r1 = r1 << 8 | c1;
     uint16_t& r2 = t2[(c4 >> 8) & 0xffff];
