@@ -357,6 +357,8 @@
     <ClInclude Include="filter\TextParserStateInfo.hpp" />
     <ClInclude Include="filter\zlib.hpp" />
     <ClInclude Include="Hash.hpp" />
+    <ClInclude Include="HashElementForContextMap.hpp" />
+    <ClInclude Include="HashElementForStationaryMap.hpp" />
     <ClInclude Include="HashTable.hpp" />
     <ClInclude Include="Ilog.hpp" />
     <ClInclude Include="IndirectContext.hpp" />

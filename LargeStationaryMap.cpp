@@ -2,6 +2,7 @@
 
 LargeStationaryMap::LargeStationaryMap(const Shared* const sh, const int hashBits, const int scale, const int rate) :
   shared(sh),
+  rnd(),
   data((UINT64_C(1) << hashBits)),
   hashBits(hashBits),
   scale(scale),
@@ -56,7 +57,7 @@ void LargeStationaryMap::mix(Mixer &m) {
   
   uint32_t hashkey = finalize64(context, hashBits);
   uint16_t checksum = checksum16(context, hashBits);
-  cp = data[hashkey].find(checksum);
+  cp = &data[hashkey].find(checksum, &rnd)->value;
   value = *cp;
   n0 = value >> 16;
   n1 = value & 0xffff;

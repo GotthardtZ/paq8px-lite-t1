@@ -10,7 +10,7 @@
 template<typename T>
 class LargeIndirectContext {
 private:
-    Array<Bucket16<T>> data;
+    Array<Bucket16<T, 7>> data;
     const uint32_t hashBits, inputBits;
 
 public:
@@ -31,12 +31,12 @@ public:
 
     void set(const uint64_t contextHash, const uint8_t c) {
       assert(c < (1 << inputBits));
-      uint32_t* ptr = data[finalize64(contextHash, hashBits)].find(checksum16(contextHash, hashBits));
+      uint32_t* ptr = data[finalize64(contextHash, hashBits)].find(checksum16(contextHash, hashBits), nullptr);
       *ptr = (*ptr) << inputBits | c;
     };
 
     uint32_t get(const uint64_t contextHash) {
-      return *data[finalize64(contextHash, hashBits)].find(checksum16(contextHash, hashBits));
+      return *data[finalize64(contextHash, hashBits)].find(checksum16(contextHash, hashBits), nullptr);
     };
 
 };

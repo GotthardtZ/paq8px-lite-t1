@@ -13,13 +13,15 @@
  * The context is a hash. For each bit modelled, the exact counts of 0s and 1s are stored.
  *
  */
+
 class LargeStationaryMap : IPredictor {
 public:
     static constexpr int MIXERINPUTS = 3;
 
 private:
     const Shared * const shared;
-    Array<Bucket16<uint32_t>> data;
+    Random rnd;
+    Array<Bucket16<HashElementForStationaryMap, 7>> data;
     const uint32_t hashBits;
     int scale, rate;
     uint64_t context;
