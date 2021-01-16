@@ -33,10 +33,11 @@ void NormalModel::mix(Mixer &m) {
     updateHashes();
     uint64_t* cxt = shared->State.cxt;
     const uint8_t RH = CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY;
-    for(uint64_t i = 1; i <= 7; ++i ) {
+    for(uint64_t i = 1; i <= 6; ++i ) {
       cm.set(RH, cxt[i]);
     }
-    cm.set(RH, cxt[9]);
+    cm.set(RH, cxt[8]); 
+    cm.set(RH, cxt[11]);
     cm.set(RH, cxt[14]);
   }
   cm.mix(m);
