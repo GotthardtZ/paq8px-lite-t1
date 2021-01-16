@@ -65,6 +65,8 @@ public:
 
       //NormalModel
       int order{};
+      uint64_t cxt[15]{}; // context hashes
+
 
       //image models
       struct {
