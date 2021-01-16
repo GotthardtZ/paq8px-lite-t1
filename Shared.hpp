@@ -59,8 +59,8 @@ public:
 
       //MatchModel
       struct {
-        uint32_t length3; //used by SSE stage and RecordModel
-        uint8_t expectedByte; //used by SSE stage
+        uint32_t length3;     //used by SSE stage and RecordModel
+        uint8_t expectedByte; //used by SSE stage and RecordModel
       } Match{};
 
       //NormalModel
