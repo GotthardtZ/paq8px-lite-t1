@@ -118,7 +118,7 @@ public:
     } State{};
 
     Shared() {
-      toScreen = !isOutputDirected();
+      toScreen = !isOutputRedirected();
     }
     void init(uint8_t level);
     void update(int y);
@@ -140,7 +140,7 @@ private:
      * Determine if output is redirected
      * @return
      */
-    static auto isOutputDirected() -> bool;
+    static auto isOutputRedirected() -> bool;
 
     static Shared *mPInstance;
 };
