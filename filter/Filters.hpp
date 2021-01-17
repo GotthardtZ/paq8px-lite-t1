@@ -1612,7 +1612,7 @@ static void compressRecursive(File *in, const uint64_t blockSize, Encoder &en, S
     if( textEnd > nextBlockStart - 1 ) {
       textEnd = nextBlockStart - 1;
     }
-    if( type == DEFAULT && textStart < textEnd ) { // only DEFAULT blocks may be overridden
+    if( type == DEFAULT && textStart < textEnd && textEnd != UINT64_MAX) { // only DEFAULT blocks may be overridden
       if( textStart == begin && textEnd == nextBlockStart - 1 ) { // whole first block is text
         type = (textParser->_EOLType[0] == 1) ? TEXT_EOL : TEXT; // DEFAULT -> TEXT
       } else if( textEnd - textStart + 1 >= TEXT_MIN_SIZE ) { // we have one (or more) large enough text portion that splits DEFAULT

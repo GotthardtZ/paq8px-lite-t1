@@ -9,7 +9,7 @@
 
 #define PROGNAME     "paq8px"
 #define PROGVERSION  "201"  //update version here before publishing your changes
-#define PROGYEAR     "2020"
+#define PROGYEAR     "2021"
 
 
 #include "utils.hpp"

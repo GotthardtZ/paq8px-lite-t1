@@ -18,7 +18,6 @@ MatchModel::MatchModel(Shared* const sh, const uint64_t hashtablesize, const uin
 {
   assert(isPowerOf2(hashtablesize));
   assert(isPowerOf2(mapmemorysize));
-  iCtx.reset();
 }
 
 void MatchModel::update() {
@@ -76,7 +75,7 @@ void MatchModel::mix(Mixer &m) {
   }
   
   size_t bestCandidateIdx = 0; //default item is the first candidate, let's see if any other candidate is better
-  for (int i = 1; i < numberOfActiveCandidates; i++) {
+  for (size_t i = 1; i < numberOfActiveCandidates; i++) {
     if (matchCandidates[i].isBetterThan(&matchCandidates[bestCandidateIdx]))
       bestCandidateIdx = i;
   }

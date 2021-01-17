@@ -69,7 +69,7 @@ private:
         return
           static_cast<uint64_t>(length != 0) << 49 | //normal mode (match)
           static_cast<uint64_t>(delta) << 48 | //delta mode
-          static_cast<uint64_t>(delta ? lengthBak : length) << 32 | //the lnger wins
+          static_cast<uint64_t>(delta ? lengthBak : length) << 32 | //the longer wins
           static_cast<uint64_t>(index); //the more recent wins
       }
       bool isBetterThan(MatchInfo* other) {
@@ -126,7 +126,7 @@ private:
             if (length < 65535) {
               length++;
             }
-            if (isInRecoveryMode() && recoveryModePos() >= MINLEN_RM) { // strong recovery -> exit tecovery mode (finalize)
+            if (isInRecoveryMode() && recoveryModePos() >= MINLEN_RM) { // recovery seems to be successful and stable -> exit recovery mode
               lengthBak = indexBak = 0; // purge backup
             }
           }
