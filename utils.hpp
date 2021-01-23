@@ -340,39 +340,4 @@ static inline auto logQt(const uint8_t px, const uint8_t bits) -> uint32_t {
   return (uint32_t(0x100 | px)) >> max(0, static_cast<int>(ilog2(px) - bits));
 }
 
-#ifdef _MSC_VER
-#include <intrin.h>
-inline uint32_t clz(uint32_t x) {
-  DWORD leading_zero;
-  if (x != 0u) {
-    _BitScanReverse(&leading_zero, x);
-    return 31u - leading_zero;
-  }
-  return 32u;
-}
-#elif __GNUC__
-inline uint32_t clz(uint32_t x) {
-  if (x != 0u)
-    return __builtin_clz(x);
-  return 32u;
-}
-#else
-inline uint32_t popcnt(uint32_t x) {
-  x -= ((x >> 1) & 0x55555555);
-  x = (((x >> 2) & 0x33333333) + (x & 0x33333333));
-  x = (((x >> 4) + x) & 0x0f0f0f0f);
-  x += (x >> 8);
-  x += (x >> 16);
-  return x & 0x0000003f;
-}
-inline uint32_t clz(uint32_t x) {
-  x |= (x >> 1);
-  x |= (x >> 2);
-  x |= (x >> 4);
-  x |= (x >> 8);
-  x |= (x >> 16);
-  return 32u - popcnt(x);
-}
-#endif
-
 #endif //PAQ8PX_UTILS_HPP
