@@ -7,9 +7,8 @@ MatchModel::MatchModel(Shared* const sh, const uint64_t hashtablesize, const uin
              {sh, 1, 8 * 256 * 256 + 1, 1023, StateMap::Generic},
              {sh, 1, 256 * 256,         1023, StateMap::Generic}},
   cm(sh, mapmemorysize, nCM, 64),
-  mapL{ /* LargeStationaryMap : HashBits, Scale=64, Rate=16  */
-        {sh, 20}, // effective bits: ~22
-  },
+  mapL /* LargeStationaryMap : Contexts, HashBits, Scale=64, Rate=16  */
+        {sh, nLSM, 20}, // effective bits: ~22
   map { /* StationaryMap : BitsOfContext, InputBits, Scale=64, Rate=16  */
         {sh, 1 /*< leading bit */ + iCtxBits + 3 /*< length3Rm */, 1}
   }, 
@@ -150,8 +149,8 @@ void MatchModel::mix(Mixer &m) {
   cm.mix(m);
 
   //bitwise contexts
-  mapL[0].set(hash(expectedByte, c0, c4 & 0x00ffffff, mode3)); // max context bits: 8+8+24+3 = 43 bits -> hashed into ~22 bits
-  mapL[0].mix(m);
+  mapL.set(hash(expectedByte, c0, c4 & 0x00ffffff, mode3)); // max context bits: 8+8+24+3 = 43 bits -> hashed into ~22 bits
+  mapL.mix(m);
 
   const uint32_t mCtx =
     isInNoMatchMode ? 0 :

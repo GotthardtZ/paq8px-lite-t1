@@ -266,9 +266,6 @@
     <ClInclude Include="BH.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Bucket.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="ContextMap.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -285,9 +282,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Hash.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="HashTable.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Ilog.hpp">
@@ -651,6 +645,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="HashElementForMatchPositions.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HashElementForBitHistoryState.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

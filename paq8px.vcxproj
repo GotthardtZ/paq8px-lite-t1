@@ -322,7 +322,6 @@
     <ClInclude Include="Array.hpp" />
     <ClInclude Include="BH.hpp" />
     <ClInclude Include="BitCount.hpp" />
-    <ClInclude Include="Bucket.hpp" />
     <ClInclude Include="Bucket16.hpp" />
     <ClInclude Include="ContextMap.hpp" />
     <ClInclude Include="ContextMap2.hpp" />
@@ -357,10 +356,10 @@
     <ClInclude Include="filter\TextParserStateInfo.hpp" />
     <ClInclude Include="filter\zlib.hpp" />
     <ClInclude Include="Hash.hpp" />
+    <ClInclude Include="HashElementForBitHistoryState.hpp" />
     <ClInclude Include="HashElementForMatchPositions.hpp" />
     <ClInclude Include="HashElementForContextMap.hpp" />
     <ClInclude Include="HashElementForStationaryMap.hpp" />
-    <ClInclude Include="HashTable.hpp" />
     <ClInclude Include="Ilog.hpp" />
     <ClInclude Include="IndirectContext.hpp" />
     <ClInclude Include="IndirectMap.hpp" />

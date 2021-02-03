@@ -25,7 +25,7 @@ private:
     Array<HashElementForMatchPositions> hashtable;
     StateMap stateMaps[nST];
     ContextMap2 cm;
-    LargeStationaryMap mapL[nLSM];
+    LargeStationaryMap mapL;
     StationaryMap map[nSM];
     static constexpr uint32_t iCtxBits = 7;
     IndirectContext<uint8_t> iCtx;
