@@ -37,4 +37,4 @@ static inline uint32_t clz(uint32_t x) {
 }
 #endif
 
-#endif PAQ8PX_CLZ_HPP
+#endif //PAQ8PX_CLZ_HPP
