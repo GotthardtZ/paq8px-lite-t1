@@ -23,7 +23,7 @@ auto Predictor::p() -> int {
 void Predictor::update(uint8_t y) {
   // update global context: y, pos, bitPosition, c0, c4, c8, buf
   shared->update(y);
-  shared->State.misses = shared->State.misses<<1 | static_cast<uint64_t>((pr >> 11U) != y);
+  shared->State.misses = shared->State.misses << 1 | ((pr >> 11U) != y);
 }
 
 void Predictor::trainText(const char *const dictionary, int iterations) {
