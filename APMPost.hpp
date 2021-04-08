@@ -7,7 +7,7 @@
 #include "UpdateBroadcaster.hpp"
 
 /**
- * APMPost maps a 12-bit probability (0-4095) to a 16-bit probability (0-65535)
+ * APMPost maps a 12-bit probability (0-4095) to an n-bit probability (as defined by the Arithmetic Encoder)
  * After each guess it updates its state to improve future guesses.
  */
 class APMPost : IPredictor {
