@@ -1305,7 +1305,7 @@ static auto detect(File *in, uint64_t blockSize, BlockType type, int &info, Tran
     if ((type == DEFAULT) && (DEC.branches[DEC.idx] >= 16u))
       return in->setpos(start + DEC.offset - (start + DEC.offset) % 4), DEC_ALPHA;    
    
-    if ((static_cast<std::uint64_t>(i) > DEC.last + (type==DEC_ALPHA ? UINT64_C(0x8000) : UINT64_C(0x4000))) && (DEC.count[DEC.offset & 3] == 0u)) {
+    if ((i + 1 == n) || (static_cast<std::uint64_t>(i) > DEC.last + (type == DEC_ALPHA ? UINT64_C(0x8000) : UINT64_C(0x4000))) && (DEC.count[DEC.offset & 3] == 0u)) {
       if (type == DEC_ALPHA)
         return in->setpos(start + DEC.last - (start + DEC.last) % 4), DEFAULT;
       DEC.last = 0u, DEC.offset = 0u;
