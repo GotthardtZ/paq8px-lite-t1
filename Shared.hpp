@@ -59,14 +59,17 @@ public:
 
       //MatchModel
       struct {
-        uint8_t length3;     //used by SSE stage and RecordModel
+        uint8_t length2;      //used by SSE stage and RecordModel
+        uint8_t mode3;        //used by SSE stage 
+        uint8_t mode5;        //used by SSE stage 
         uint8_t expectedByte; //used by SSE stage and RecordModel
       } Match{};
 
       //NormalModel
-      int order{};
-      uint64_t cxt[15]{}; // context hashes
-
+      struct {
+        uint8_t order;
+        uint64_t cxt[15]; // context hashes used by NormalModel and MatchModel
+      } NormalModel{};
 
       //image models
       struct {
@@ -98,9 +101,14 @@ public:
         uint8_t characterGroup; //used by RecordModel, TextModel - Quantized partial byte as ASCII group
         uint8_t firstLetter; //used by SSE stage
         uint8_t mask; //used by SSE stage
+        uint8_t order; //used by SSE stage
       } Text{};
 
       //WordModel
+      struct {
+        uint8_t order; //used by SSE stage
+      } WordModel{};
+
       //IndirectModel
       //Dmcforest
       //NestModel

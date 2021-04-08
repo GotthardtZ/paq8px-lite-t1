@@ -42,19 +42,19 @@ void MatchModel::update() {
     uint64_t hash;
     HashElementForMatchPositions* matches;
 
-    hash = shared->State.cxt[LEN3];
+    hash = shared->State.NormalModel.cxt[LEN3];
     matches = &hashtable[finalize64(hash, hashBits)];
     if (numberOfActiveCandidates < N)
       AddCandidates(matches, LEN3); //longest
     matches->Add(pos);
 
-    hash = shared->State.cxt[LEN2];
+    hash = shared->State.NormalModel.cxt[LEN2];
     matches = &hashtable[finalize64(hash, hashBits)];
     if (numberOfActiveCandidates < N)
       AddCandidates(matches, LEN2); //middle
     matches->Add(pos);
 
-    hash = shared->State.cxt[LEN1];
+    hash = shared->State.NormalModel.cxt[LEN1];
     matches = &hashtable[finalize64(hash, hashBits)];
     if (numberOfActiveCandidates < N)
       AddCandidates(matches, LEN1); //shortest
@@ -175,10 +175,12 @@ void MatchModel::mix(Mixer &m) {
 
   m.set(mode5, 20);
 
-  shared->State.Match.length3 =
+  shared->State.Match.length2 =
     isInDeltaMode ? 1 :
     length == 0 ? 0 :
     length <= 7 ? 2 : 3;
+  shared->State.Match.mode3 = mode3; 
+  shared->State.Match.mode5 = mode5;
   shared->State.Match.expectedByte = length != 0 ? expectedByte : 0;
 
 }
