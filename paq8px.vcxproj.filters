@@ -249,6 +249,39 @@
     <ClCompile Include="model\Info.cpp">
       <Filter>model</Filter>
     </ClCompile>
+    <ClCompile Include="APMPost.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="model\ContextModelGeneric.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\ContextModelAudio8.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\ContextModelAudio16.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\ContextModelJpeg.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\ContextModelImage1.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\ContextModelImage4.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\ContextModelImage8.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\ContextModelImage24.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\ContextModelText.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\ContextModelDec.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AdaptiveMap.hpp">
@@ -648,6 +681,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="HashElementForBitHistoryState.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="APMPost.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

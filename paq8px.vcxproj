@@ -243,6 +243,7 @@
     <ClCompile Include="AdaptiveMap.cpp" />
     <ClCompile Include="APM.cpp" />
     <ClCompile Include="APM1.cpp" />
+    <ClCompile Include="APMPost.cpp" />
     <ClCompile Include="ArithmeticEncoder.cpp" />
     <ClCompile Include="Clz.hpp" />
     <ClCompile Include="ContextMap.cpp" />
@@ -269,6 +270,16 @@
     <ClCompile Include="model\AudioModel.cpp" />
     <ClCompile Include="model\CharGroupModel.cpp" />
     <ClCompile Include="model\ContextModel.cpp" />
+    <ClCompile Include="model\ContextModelAudio16.cpp" />
+    <ClCompile Include="model\ContextModelAudio8.cpp" />
+    <ClCompile Include="model\ContextModelDec.cpp" />
+    <ClCompile Include="model\ContextModelGeneric.cpp" />
+    <ClCompile Include="model\ContextModelImage1.cpp" />
+    <ClCompile Include="model\ContextModelImage24.cpp" />
+    <ClCompile Include="model\ContextModelImage4.cpp" />
+    <ClCompile Include="model\ContextModelImage8.cpp" />
+    <ClCompile Include="model\ContextModelJpeg.cpp" />
+    <ClCompile Include="model\ContextModelText.cpp" />
     <ClCompile Include="model\DmcForest.cpp" />
     <ClCompile Include="model\DmcModel.cpp" />
     <ClCompile Include="model\DmcNode.cpp" />
@@ -318,6 +329,7 @@
     <ClInclude Include="AdaptiveMap.hpp" />
     <ClInclude Include="APM.hpp" />
     <ClInclude Include="APM1.hpp" />
+    <ClInclude Include="APMPost.hpp" />
     <ClInclude Include="ArithmeticEncoder.hpp" />
     <ClInclude Include="Array.hpp" />
     <ClInclude Include="BH.hpp" />
