@@ -80,8 +80,6 @@ static_assert(sizeof(int) == 4, "sizeof(int)");
 //uRetVal, DWORD, UINT, TRUE, MAX_PATH, CP_UTF8, etc.
 #endif
 
-#define DEFAULT_LEARNING_RATE 7
-
 typedef enum {
   SIMD_NONE, SIMD_SSE2, SIMD_SSSE3, SIMD_AVX2, SIMD_NEON
 } SIMD;
