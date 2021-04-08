@@ -6,7 +6,8 @@
 class ArithmeticEncoder {
 public:
   ArithmeticEncoder(File* archive);
-  constexpr static int PRECISION = 12; //12 bit precision
+  constexpr static int PRECISION = 31; //31 bit precision
+  static_assert(PRECISION < 32, "Arithmetic encoder supports max 31 bits of probability precision");
   uint32_t x1, x2; /**< Range, initially [0, 1), scaled by 2^32 */
   uint32_t x; /**< Decompress mode: last 4 input bytes of archive */
   uint32_t pending_bits;
