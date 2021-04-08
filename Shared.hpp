@@ -81,7 +81,6 @@ public:
       } Image{};
 
       //AudioModel
-      uint32_t wav{}; //used by recordModel
       uint8_t Audio{};
 
       //JpegModel

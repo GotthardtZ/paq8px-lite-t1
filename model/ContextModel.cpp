@@ -160,12 +160,14 @@ auto ContextModel::p() -> int {
     case AUDIO:
     case AUDIO_LE: {
       if((blockInfo & 2U) == 0 ) {
+        shared->State.rLength = (blockInfo & 1) + 1;
         Audio8BitModel &audio8BitModel = models.audio8BitModel();
         audio8BitModel.setParam(blockInfo);
         audio8BitModel.mix(*m);
         m->setScaleFactor(850, 140); //800-900, 140
       }
       else {
+        shared->State.rLength = ((blockInfo & 1) + 1) * 2;
         Audio16BitModel& audio16BitModel = models.audio16BitModel();
         audio16BitModel.setParam(blockInfo);
         audio16BitModel.mix(*m);
