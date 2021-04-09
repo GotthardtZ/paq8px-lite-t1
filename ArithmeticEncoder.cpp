@@ -45,7 +45,7 @@ void ArithmeticEncoder::prefetch() {
 
 void ArithmeticEncoder::encodeBit(uint32_t p, const int bit) {
   if (p == 0) p++;
-  assert(p > 0 && p < (1 << PRECISION));
+  assert(p > 0 && p < (1u << PRECISION));
   uint32_t xmid = x1 + uint32_t((uint64_t(x2 - x1) * p) >> PRECISION);
   assert(xmid >= x1 && xmid < x2);
   bit !=0 ? (x2 = xmid) : (x1 = xmid + 1);
@@ -63,7 +63,7 @@ void ArithmeticEncoder::encodeBit(uint32_t p, const int bit) {
 
 int ArithmeticEncoder::decodeBit(uint32_t p) {
   if (p == 0) p++;
-  assert(p > 0 && p < (1<< PRECISION));
+  assert(p > 0 && p < (1u<< PRECISION));
   uint32_t xmid = x1 + uint32_t((uint64_t(x2 - x1) * p) >> PRECISION);
   assert(xmid >= x1 && xmid < x2);
   int bit = x <= xmid;
