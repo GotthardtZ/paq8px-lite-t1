@@ -28,11 +28,12 @@ void RecordModel::mix(Mixer &m) {
     int w = c4 & 0xffffU;
     int c = w & 255U;
     int d = w >> 8U;
-    if((shared->State.rLength) >= 2) {
+    if((shared->State.rLength) != 0) {
       rLength[0] = shared->State.rLength;
-      shared->State.rLength = 0;
       rCount[0] = rCount[1] = rLength[1] = rLength[2] = 0;
+      shared->State.rLength = 0;
     } else {
+
       // detect dBASE tables
       INJECT_SHARED_blockPos
       if( blockPos == 0 || (dbase.version > 0 && blockPos >= dbase.end)) {
@@ -117,7 +118,7 @@ void RecordModel::mix(Mixer &m) {
       }
     }
 
-    assert(rLength[0] >= 2);
+    assert(rLength[0] != 0);
     col = pos % rLength[0];
     x = min(0x1F, col / max(1, rLength[0] / 32));
     N = buf(rLength[0]);
