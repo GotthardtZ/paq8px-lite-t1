@@ -53,6 +53,7 @@ SSE::SSE(Shared* const sh) : shared(sh),
     { /*ApmPostB: */ sh,8}
   }
   {}
+
 auto SSE::p(const int pr_orig) -> int {
 
   INJECT_SHARED_c0
@@ -70,11 +71,11 @@ auto SSE::p(const int pr_orig) -> int {
   assert(shared->State.JPEG.state <= 4095u + 1u);
 
   uint32_t misses4 = shared->State.misses & 15u;
+  constexpr int limit = 1023;
 
   switch(blockType) {
     case TEXT:
     case TEXT_EOL: {
-      int limit = 0x03FF >> (static_cast<int>(blockPos < 0x0FFF) * 2);
       uint32_t pr0 = Text.APMs[0].p(pr_orig, static_cast<uint32_t>(c0) << 8 | (shared->State.Text.mask & 0x0F) | misses4 << 4, limit);
       uint32_t pr1 = Text.APMs[1].p(pr_orig, finalize64(hash(bpos, misses4 & 3, c4 & 0xFFFF, shared->State.Text.mask >> 4), 16), limit);
       uint32_t pr2 = Text.APMs[2].p(pr_orig, finalize64(hash(c0, shared->State.Match.expectedByte << 2 | shared->State.Match.length2), 16), limit);
@@ -94,7 +95,6 @@ auto SSE::p(const int pr_orig) -> int {
     }
     case IMAGE24:
     case IMAGE32: {
-      int limit = 0x03FF >> (static_cast<int>(blockPos < 0x0FFF) * 4);
       uint32_t pr0 = Image.Color.APMs[0].p(pr_orig, static_cast<uint32_t>(c0) << 4 | misses4, limit);
       uint32_t pr1 = Image.Color.APMs[1].p(pr_orig, finalize64(hash(c0, shared->State.Image.pixels.W, shared->State.Image.pixels.WW), 16), limit);
       uint32_t pr2 = Image.Color.APMs[2].p(pr_orig, finalize64(hash(c0, shared->State.Image.pixels.N, shared->State.Image.pixels.NN), 16), limit);
@@ -112,7 +112,6 @@ auto SSE::p(const int pr_orig) -> int {
       break;
     }
     case IMAGE8GRAY: {
-      int limit = 0x03FF >> (static_cast<int>(blockPos < 0x0FFF) * 4);
       uint32_t pr0 = Image.Gray.APMs[0].p(pr_orig, static_cast<uint32_t>(c0) << 4 | misses4, limit);
       uint32_t pr1 = Image.Gray.APMs[1].p(pr0, (c0 << 8) | shared->State.Image.ctx, limit);
       uint32_t pr2 = Image.Gray.APMs[2].p(pr_orig, bpos | (shared->State.Image.ctx & 0xF8) | (shared->State.Match.expectedByte << 8), limit);
@@ -124,7 +123,6 @@ auto SSE::p(const int pr_orig) -> int {
       break;
     }
     case IMAGE8: {
-      int limit = 0x03FF >> (static_cast<int>(blockPos < 0x0FFF) * 4);
       uint32_t pr0 = Image.Palette.APMs[0].p(pr_orig, c0 | misses4 << 8, limit);
       uint32_t pr1 = Image.Palette.APMs[1].p(pr_orig, finalize64(hash(c0 | shared->State.Image.pixels.W << 8 | shared->State.Image.pixels.N << 16), 16), limit);
       uint32_t pr2 = Image.Palette.APMs[2].p(pr_orig, finalize64(hash(c0 | shared->State.Image.pixels.N << 8 | shared->State.Image.pixels.NN << 16), 16), limit);
@@ -143,27 +141,24 @@ auto SSE::p(const int pr_orig) -> int {
     }
     case AUDIO:
     case AUDIO_LE: {
-      int const limit = 0x03FF >> (static_cast<int>(blockPos < 0x0FFF) * 4);
       uint32_t pr0 = Audio.APMs[0].p(pr_orig, shared->State.Audio << 8 | static_cast<uint32_t>(bpos) << 5 | (shared->State.misses & 31), limit);
       uint32_t pr = (Audio.APMPostA.p(pr_orig, bpos) + Audio.APMPostB.p(pr0, bpos) + 1) >> 1;
       return pr;
       break;
     }
     case JPEG: {
-      uint32_t pr0 = Jpeg.APMs[0].p(pr_orig, shared->State.JPEG.state, 0x03FF);
+      uint32_t pr0 = Jpeg.APMs[0].p(pr_orig, shared->State.JPEG.state, limit);
       uint32_t pr = (Jpeg.APMPostA.p(pr_orig, 0) + Jpeg.APMPostB.p(pr0, 0) + 1) >> 1;
       return pr;
       break;
     }
     case DEC_ALPHA: {
-      int const limit = 0x03FF >> (static_cast<int>(blockPos < 0x0FFF) * 4);
       uint32_t pr0 = DEC.APMs[0].p(pr_orig, (shared->State.DEC.state * 26u) + shared->State.DEC.bcount, limit);
       uint32_t pr = (DEC.APMPostA.p(pr_orig, 0) + DEC.APMPostB.p(pr0, 0)+1) >> 1;
       return pr;
       break;
     }
     case EXE: {
-      int const limit = 0x03FF >> (static_cast<int>(blockPos < 0x0FFF) * 4);
       uint32_t pr0 = x86_64.APMs[0].p(pr_orig, shared->State.x86_64.state << 7 | misses4 << 3 | bpos, limit);//15
       uint32_t pr1 = x86_64.APMs[1].p(pr_orig, shared->State.x86_64.state<<8 | c0, limit); // 16
       uint32_t pr2 = x86_64.APMs[2].p((pr0 + pr1 + 1) >> 1, finalize64(hash(c4 & 0xFF, bpos, shared->State.misses & 1, shared->State.x86_64.state >> 3), 16), limit);
@@ -181,7 +176,6 @@ auto SSE::p(const int pr_orig) -> int {
       break;
     }
     default: {
-      int limit = 0x03FF >> (static_cast<int>(blockPos < 0x0FFF) * 2);
       uint32_t pr0 = Generic.APMs[0].p(pr_orig, shared->State.Match.length2 << 8 | static_cast<uint32_t>(bpos) << 5 | (shared->State.misses & 31), limit); //10
       uint32_t pr1 = Generic.APMs[1].p(pr_orig, shared->State.NormalModel.order << 5 | shared->State.Match.length2 << 3 | bpos, limit); //8
       uint32_t pr2 = Generic.APMs[2].p(pr_orig, c0 | (c4 & 0xFF) << 8, limit); //16
