@@ -25,8 +25,8 @@ public:
       MatchModel::MIXERCONTEXTSETS + NormalModel::MIXERCONTEXTSETS_PRE + NormalModel::MIXERCONTEXTSETS_POST +
       Image1BitModel::MIXERCONTEXTSETS +
       (((shared->options & OPTION_LSTM) != 0u) ? LstmModel<>::MIXERCONTEXTSETS : 0)
-      
     );
+    m->setScaleFactor(1200, 130);
   }
 
 
@@ -51,7 +51,6 @@ public:
     image1BitModel.setParam(blockInfo);
     image1BitModel.mix(*m);
 
-    m->setScaleFactor(940, 80); // ??
     return m->p();
   }
 

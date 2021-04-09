@@ -29,6 +29,7 @@ public:
       RecordModel::MIXERCONTEXTSETS +
       (((shared->options & OPTION_LSTM) != 0u) ? LstmModel<>::MIXERCONTEXTSETS : 0)
     );
+    m->setScaleFactor(1024, 128);
   }
 
 
@@ -52,11 +53,11 @@ public:
     audio16BitModel.setParam(blockInfo);
     audio16BitModel.mix(*m);
 
-    shared->State.rLength = ((blockInfo & 1) + 1) * 2;
+    int isStereo = (blockInfo & 1);
+    shared->State.rLength = (isStereo + 1) * 2;
     RecordModel& recordModel = models->recordModel();
     recordModel.mix(*m);
 
-    m->setScaleFactor(1024, 128);
     return m->p();
 
   }

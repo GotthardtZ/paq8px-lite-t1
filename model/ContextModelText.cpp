@@ -32,6 +32,7 @@ public:
       DmcForest::MIXERCONTEXTSETS + NestModel::MIXERCONTEXTSETS + XMLModel::MIXERCONTEXTSETS +
       (((shared->options & OPTION_LSTM) != 0u) ? LstmModel<>::MIXERCONTEXTSETS : 0)
     );
+    m->setScaleFactor(940, 60);
   }
 
 
@@ -74,7 +75,6 @@ public:
     XMLModel& xmlModel = models->xmlModel();
     xmlModel.mix(*m);
 
-    m->setScaleFactor(940, 80); // ??
     return m->p();
   }
 

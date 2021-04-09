@@ -25,8 +25,8 @@ public:
       MatchModel::MIXERCONTEXTSETS + NormalModel::MIXERCONTEXTSETS_PRE + 
       Image4BitModel::MIXERCONTEXTSETS +
       (((shared->options & OPTION_LSTM) != 0u) ? LstmModel<>::MIXERCONTEXTSETS : 0)
-      
     );
+    m->setScaleFactor(2048, 256);
   }
 
 
@@ -50,7 +50,6 @@ public:
     image4BitModel.setParam(blockInfo);
     image4BitModel.mix(*m);
 
-    m->setScaleFactor(2048, 256);
     return m->p();
   }
 

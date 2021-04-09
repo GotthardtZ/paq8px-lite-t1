@@ -35,6 +35,7 @@ public:
       LinearPredictionModel::MIXERCONTEXTSETS + ExeModel::MIXERCONTEXTSETS + 
       LstmModel<>::MIXERCONTEXTSETS
     );
+    m->setScaleFactor(980, 90);
   }
 
 
@@ -82,7 +83,6 @@ public:
     ExeModel& exeModel = models->exeModel();
     exeModel.mix(*m);
 
-    m->setScaleFactor(940, 80); // ??
     return m->p();
   }
 

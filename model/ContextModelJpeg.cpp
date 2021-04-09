@@ -91,7 +91,7 @@ public:
       LinearPredictionModel& linearPredictionModel = models->linearPredictionModel();
       linearPredictionModel.mix(*m);
 
-      m->setScaleFactor(940, 80); // ??
+      m->setScaleFactor(940, 80);
       return m->p();
     }
 

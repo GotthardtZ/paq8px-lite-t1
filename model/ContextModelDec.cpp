@@ -35,6 +35,7 @@ public:
       ExeModel::MIXERCONTEXTSETS +
       (((shared->options & OPTION_LSTM) != 0u) ? LstmModel<>::MIXERCONTEXTSETS : 0)
     );
+    m->setScaleFactor(1800, 60);
   }
 
 
@@ -74,7 +75,6 @@ public:
     ExeModel& exeModel = models->exeModel();
     exeModel.mix(*m);
 
-    m->setScaleFactor(1800, 60);
     return m->p();
   }
 
