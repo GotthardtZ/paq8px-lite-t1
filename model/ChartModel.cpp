@@ -1,5 +1,5 @@
 #include "ChartModel.hpp"
-
+#include "../BlockType.hpp"
 
 ///////////////////////////// chartModel ////////////////////////////
 
@@ -52,13 +52,12 @@ void ChartModel::mix(Mixer& m) {
             c4 & 3 };
 
 
-    INJECT_SHARED_blockType
-    const bool isText = blockType == TEXT || blockType == TEXT_EOL;
-
     const uint8_t __ = CM_USE_NONE;
     uint64_t q1 = 0;
     uint64_t q2 = 0;
 
+    INJECT_SHARED_blockType
+    const bool isText = isTEXT(blockType);
     uint32_t cnt = isText ? 1 : 3; // for text files only the top bits are good predictors - no need to go for the others
 
     for (int i = 0; i < cnt; i++) {
@@ -66,7 +65,7 @@ void ChartModel::mix(Mixer& m) {
       uint32_t f = j | b[i];
       uint32_t e = a[i];
       indirect1[f] = w1; // <--Update indirect
-      const uint32_t g =indirect1[j|d[i]];
+      const uint32_t g = indirect1[j|d[i]];
       chart[i << 3 | ((e >> 16) & 7)] = w0; // <--Fix chart
       chart[i << 3 | ((e >> 8) & 7)] = w << 8; // <--Update chart
       cn.set(__, hash(++q2, e)); // <--Model previous/current/next slot
@@ -81,10 +80,10 @@ void ChartModel::mix(Mixer& m) {
     
     indirect2[buf2] = buf1;
     uint32_t g = indirect2[buf1];
-          cn.set(__, hash(++q2, g)); // <--Guesses next "c4&0xFF"
-          cn.set(__, hash(++q2, w2|g)); // <--Guesses next "c4&0xFFFF"
-          cn.set(__, hash(++q2, w3|g)); // <--Guesses next "c4&0xFF00FF"
-          cn.set(__, hash(++q2, w4|g)); // <--Guesses next "c4&0xFF0000FF"
+    cn.set(__, hash(++q2, g)); // <--Guesses next "c4&0xFF"
+    cn.set(__, hash(++q2, w2|g)); // <--Guesses next "c4&0xFFFF"
+    cn.set(__, hash(++q2, w3|g)); // <--Guesses next "c4&0xFF00FF"
+    cn.set(__, hash(++q2, w4|g)); // <--Guesses next "c4&0xFF0000FF"
 
     indirect3[buf3 << 8 | buf2] = buf1;
     g = indirect3[buf2 << 8 | buf1];

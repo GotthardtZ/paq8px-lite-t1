@@ -1,4 +1,5 @@
 #include "Info.hpp"
+#include "../CharacterNames.hpp"
 
 Info::Info(Shared* const sh, ContextMap2 &contextmap) : shared(sh), cm(contextmap) {
   reset();
@@ -297,7 +298,7 @@ void Info::predict(const uint8_t pdfTextParserState) {
   const uint8_t mayBeCaps = static_cast<const uint8_t>(uint8_t(c4 >> 8U) >= 'A' && uint8_t(c4 >> 8U) <= 'Z' && uint8_t(c4) >= 'A' &&
                                                        uint8_t(c4) <= 'Z');
   INJECT_SHARED_blockType
-  const bool isTextBlock = blockType == TEXT || blockType == TEXT_EOL;
+  const bool isTextBlock = isTEXT(blockType);
 
   const uint8_t RH = CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY;
   uint64_t i = 2048 * static_cast<uint64_t>(isTextBlock);

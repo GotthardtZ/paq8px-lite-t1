@@ -2,6 +2,8 @@
 #define PAQ8PX_FILTERS_HPP
 
 #include "../Array.hpp"
+#include "../BlockType.hpp"
+#include "../CharacterNames.hpp"
 #include "../Encoder.hpp"
 #include "../TransformOptions.hpp"
 #include "../file/File.hpp"
@@ -72,7 +74,7 @@
 
 #endif //DISABLE_ZLIB
 
-static auto isGrayscalePalette(File *in, int n = 256, int isRGBA = 0) -> bool {
+static bool isGrayscalePalette(File *in, int n = 256, int isRGBA = 0) {
   uint64_t offset = in->curPos();
   int stride = 3 + isRGBA;
   int res = (n > 0) << 8U;
@@ -193,7 +195,7 @@ static TextDetectionInfo detectText(File* in, uint64_t blockStart, uint64_t bloc
         //end of text block
         //if we have a large enough valid textblock, get it
         if (textParser.Start == 0 && textParser.isLargeText()) {
-          detectionInfo.Type = textParser.EOLType == 1 ? TEXT_EOL : TEXT;
+          detectionInfo.Type = textParser.EOLType == 1 ? BlockType::TEXT_EOL : BlockType::TEXT;
           detectionInfo.DataStart = blockStart;
           detectionInfo.DataLength = textParser.End;
           return detectionInfo;
@@ -206,7 +208,7 @@ static TextDetectionInfo detectText(File* in, uint64_t blockStart, uint64_t bloc
     //early stop
     //we have a large enough text block, but it's not the first block
     if (textParser.Start != 0 && textParser.isLargeText()) {
-      detectionInfo.Type = DEFAULT;
+      detectionInfo.Type = BlockType::DEFAULT;
       detectionInfo.DataStart = blockStart;
       detectionInfo.DataLength = textParser.Start;
       return detectionInfo;
@@ -218,7 +220,7 @@ static TextDetectionInfo detectText(File* in, uint64_t blockStart, uint64_t bloc
     textParser.End + 1 == n || /*< the whole block is text, no matter how small */
     textParser.isSmallText())) /*< the whole block is a large enough text block with some garbage */
   {
-    detectionInfo.Type = textParser.EOLType == 1 ? TEXT_EOL : TEXT;
+    detectionInfo.Type = textParser.EOLType == 1 ? BlockType::TEXT_EOL : BlockType::TEXT;
     detectionInfo.DataStart = blockStart;
     detectionInfo.DataLength = n;
     return detectionInfo;
@@ -226,7 +228,7 @@ static TextDetectionInfo detectText(File* in, uint64_t blockStart, uint64_t bloc
 
   //DEFAULT (->TEXT)
   if (textParser.Start != 0 && textParser.isLargeText()) {
-    detectionInfo.Type = DEFAULT;
+    detectionInfo.Type = BlockType::DEFAULT;
     detectionInfo.DataStart = blockStart;
     detectionInfo.DataLength = textParser.Start; //could overshoot depending on how the inalidcount decays
     return detectionInfo;
@@ -234,7 +236,7 @@ static TextDetectionInfo detectText(File* in, uint64_t blockStart, uint64_t bloc
 
   //no text found at all, or it is too small
   //DEFAULT
-  detectionInfo.Type = DEFAULT;
+  detectionInfo.Type = BlockType::DEFAULT;
   detectionInfo.DataStart = blockStart;
   detectionInfo.DataLength = n;
   return detectionInfo;
@@ -527,24 +529,24 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
         int info = 0;
         if (pdfImW > 0 && pdfImW < 0x1000000 && pdfImH > 0) {
           if (pdfImB == 8 && (int)strm.total_out == pdfImW * pdfImH)
-            info = ((pdfGray ? IMAGE8GRAY : IMAGE8) << 24) | pdfImW;
+            info = ((pdfGray ? BlockType::IMAGE8GRAY : BlockType::IMAGE8) << 24) | pdfImW;
           if (pdfImB == 8 && (int)strm.total_out == pdfImW * pdfImH * 3)
-            info = (IMAGE24 << 24) | pdfImW * 3;
+            info = (BlockType::IMAGE24 << 24) | pdfImW * 3;
           if (pdfImB == 4 && (int)strm.total_out == ((pdfImW + 1) / 2) * pdfImH)
-            info = (IMAGE4 << 24) | ((pdfImW + 1) / 2);
+            info = (BlockType::IMAGE4 << 24) | ((pdfImW + 1) / 2);
           if (pdfImB == 1 && (int)strm.total_out == ((pdfImW + 7) / 8) * pdfImH)
-            info = (IMAGE1 << 24) | ((pdfImW + 7) / 8);
+            info = (BlockType::IMAGE1 << 24) | ((pdfImW + 7) / 8);
           pdfGray = 0;
         }
         else if (png && pngw < 0x1000000 && lastChunk == 0x49444154 /*IDAT*/) {
           if (pngbps == 8 && pngType == 2 && (int)strm.total_out == (pngw * 3 + 1) * pngh)
-            info = (PNG24 << 24) | (pngw * 3), png = 0;
+            info = (BlockType::PNG24 << 24) | (pngw * 3), png = 0;
           else if (pngbps == 8 && pngType == 6 && (int)strm.total_out == (pngw * 4 + 1) * pngh)
-            info = (PNG32 << 24) | (pngw * 4), png = 0;
+            info = (BlockType::PNG32 << 24) | (pngw * 4), png = 0;
           else if (pngbps == 8 && (!pngType || pngType == 3) && (int)strm.total_out == (pngw + 1) * pngh)
-            info = (((!pngType || pnggray) ? PNG8GRAY : PNG8) << 24) | (pngw), png = 0;
+            info = (((!pngType || pnggray) ? BlockType::PNG8GRAY : BlockType::PNG8) << 24) | (pngw), png = 0;
         }
-        detectionInfo.Type = ZLIB;
+        detectionInfo.Type = BlockType::ZLIB;
         detectionInfo.DataInfo = info;
         detectionInfo.DataLength = streamLength;
         detectionInfo.DataStart = start + i - (brute ? 255 : 31);
@@ -613,8 +615,8 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
           cdm = t * static_cast<int>(i - cdi < 2352);
         }
         if ((cdm != 0) && cda != 10 && (cdm == 1 || buf0 == buf1)) {
-          if (detectionInfo.Type != CD) {
-            detectionInfo.Type = CD;
+          if (detectionInfo.Type != BlockType::CD) {
+            detectionInfo.Type = BlockType::CD;
             detectionInfo.DataStart = start + cdi - 7;
             detectionInfo.DataInfo = cdm;
           }
@@ -630,12 +632,12 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
           cdi = 0;
         }
       }
-      if ((i + 1 == n || cdi == 0) && detectionInfo.Type == CD) {
+      if ((i + 1 == n || cdi == 0) && detectionInfo.Type == BlockType::CD) {
         detectionInfo.DataLength = (start + i - p - 7) - detectionInfo.DataStart;
         return detectionInfo;
       }
     }
-    if (detectionInfo.Type == CD) {
+    if (detectionInfo.Type == BlockType::CD) {
       continue;
     }
 
@@ -657,8 +659,8 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
       }
       if ((sof != 0) && sof > soi && i - sof < 0x1000 && (buf0 & 0xffff) == 0xffda) {
         sos = i;
-        if (detectionInfo.Type != JPEG) {
-          detectionInfo.Type = JPEG;
+        if (detectionInfo.Type != BlockType::JPEG) {
+          detectionInfo.Type = BlockType::JPEG;
           detectionInfo.DataStart = start + soi - 3;
         }
       }
@@ -666,7 +668,7 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
         soi = 0;
       }
     }
-    if (detectionInfo.Type == JPEG && (sos != 0) && i > sos && (buf0 & 0xff00) == 0xff00 && (buf0 & 0xff) != 0 && (buf0 & 0xf8) != 0xd0) {
+    if (detectionInfo.Type == BlockType::JPEG && (sos != 0) && i > sos && (buf0 & 0xff00) == 0xff00 && (buf0 & 0xff) != 0 && (buf0 & 0xf8) != 0xd0) {
       detectionInfo.DataLength = start + i +1 - detectionInfo.DataStart;
       return detectionInfo;
     }
@@ -706,7 +708,7 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
             wavLen = 0;
             if ((wavch == 1 || wavch == 2) && (wavbps == 8 || wavbps == 16) && wavD > 0 && wavSize >= wavD + 36 &&
                 wavD % ((wavbps / 8) * wavch) == 0) {
-              detectionInfo.AUD_DET(start, (wavbps == 8) ? AUDIO : AUDIO_LE, wavi - 3, 44 + wavm, wavD, wavch + wavbps / 4 - 3);
+              detectionInfo.AUD_DET(start, (wavbps == 8) ? BlockType::AUDIO : BlockType::AUDIO_LE, wavi - 3, 44 + wavm, wavD, wavch + wavbps / 4 - 3);
               return detectionInfo;
             }
             wavi = 0;
@@ -733,7 +735,7 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
             else if (p == 12) {
               int wavD = bswap(buf0); // size of data section
               if ((wavD != 0) && (wavD + 12) == wavLen) {
-                detectionInfo.AUD_DET(start, AUDIO_LE, wavi - 3, (12 + wavlist - (wavi - 3) + 1) & ~1, wavD, 1 + 16 / 4 - 3 /*mono, 16-bit*/);
+                detectionInfo.AUD_DET(start, BlockType::AUDIO_LE, wavi - 3, (12 + wavlist - (wavi - 3) + 1) & ~1, wavD, 1 + 16 / 4 - 3 /*mono, 16-bit*/);
                 return detectionInfo;
               }
               wavi = 0; // fail; bad format
@@ -769,7 +771,7 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
         }
       }
       else if (p == 42 + aiffs) { // Sound Data Chunk
-        detectionInfo.AUD_DET(start, AUDIO, aiff - 3, 54 + aiffs, buf0 - 8, aiffm);
+        detectionInfo.AUD_DET(start, BlockType::AUDIO, aiff - 3, 54 + aiffs, buf0 - 8, aiffm);
         return detectionInfo;
       }
     }
@@ -795,7 +797,7 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
         }
       }
       if (numPat < 65) {
-        detectionInfo.AUD_DET(start, AUDIO, i - 1083, 1084 + numPat * 256 * chn, len, 4 /*mono, 8-bit*/);
+        detectionInfo.AUD_DET(start, BlockType::AUDIO, i - 1083, 1084 + numPat * 256 * chn, len, 4 /*mono, 8-bit*/);
         return detectionInfo;
       }
       in->setpos(savedPos);
@@ -844,7 +846,7 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
           }
         }
         if ((ok != 0) && samStart < (1 << 16)) {
-          detectionInfo.AUD_DET(start, AUDIO, s3mi - 31, samStart, samEnd - samStart, 0 /*mono, 8-bit*/);
+          detectionInfo.AUD_DET(start, BlockType::AUDIO, s3mi - 31, samStart, samEnd - samStart, 0 /*mono, 8-bit*/);
           return detectionInfo;
         }
         s3mi = 0;
@@ -915,26 +917,26 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
             bmpy = bmpx;
           }
 
-          BlockType blockType = DEFAULT;
+          BlockType blockType = BlockType::DEFAULT;
           int widthInBytes = 0;
           if (imgbpp == 1) {
-            blockType = IMAGE1;
+            blockType = BlockType::IMAGE1;
             widthInBytes = (((bmpx - 1) >> 5) + 1) * 4;
           }
           else if (imgbpp == 4) {
-            blockType = IMAGE4;
+            blockType = BlockType::IMAGE4;
             widthInBytes = ((bmpx * 4 + 31) >> 5) * 4;
           }
           else if (imgbpp == 8) {
-            blockType = IMAGE8;
+            blockType = BlockType::IMAGE8;
             widthInBytes = (bmpx + 3) & -4;
           }
           else if (imgbpp == 24) {
-            blockType = IMAGE24;
+            blockType = BlockType::IMAGE24;
             widthInBytes = ((bmpx * 3) + 3) & -4;
           }
           else if (imgbpp == 32) {
-            blockType = IMAGE32;
+            blockType = BlockType::IMAGE32;
             widthInBytes = bmpx * 4;
           }
 
@@ -943,7 +945,7 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
             const uint64_t savedPos = in->curPos();
             in->setpos(colorPalettePos);
             if (isGrayscalePalette(in, nColors, 1)) {
-              blockType = IMAGE8GRAY;
+              blockType = BlockType::IMAGE8GRAY;
             }
             in->setpos(savedPos);
           }
@@ -1091,19 +1093,19 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
           (pgm - 2 == 0 && n - pgmDataSize == i)) // or the image is the whole file/block -> FINISH (success)
         {
           if ((pgmw != 0) && (pgmh != 0) && (pgmc == 0) && pgmn == 4) {
-            detectionInfo.IMG_DET(start, IMAGE1, pgm - 2, pgmdata - pgm + 3, (pgmw + 7) / 8, pgmh);
+            detectionInfo.IMG_DET(start, BlockType::IMAGE1, pgm - 2, pgmdata - pgm + 3, (pgmw + 7) / 8, pgmh);
             return detectionInfo;
           }
           if ((pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 5 || (pgmn == 7 && pamd == 1 && pamatr == 6))) {
-            detectionInfo.IMG_DET(start, IMAGE8GRAY, pgm - 2, pgmdata - pgm + 3, pgmw, pgmh);
+            detectionInfo.IMG_DET(start, BlockType::IMAGE8GRAY, pgm - 2, pgmdata - pgm + 3, pgmw, pgmh);
             return detectionInfo;
           }
           if ((pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 6 || (pgmn == 7 && pamd == 3 && pamatr == 6))) {
-            detectionInfo.IMG_DET(start, IMAGE24, pgm - 2, pgmdata - pgm + 3, pgmw * 3, pgmh);
+            detectionInfo.IMG_DET(start, BlockType::IMAGE24, pgm - 2, pgmdata - pgm + 3, pgmw * 3, pgmh);
             return detectionInfo;
           }
           if ((pgmw != 0) && (pgmh != 0) && (pgmc != 0) && (pgmn == 7 && pamd == 4 && pamatr == 6)) {
-            detectionInfo.IMG_DET(start, IMAGE32, pgm - 2, pgmdata - pgm + 3, pgmw * 4, pgmh);
+            detectionInfo.IMG_DET(start, BlockType::IMAGE32, pgm - 2, pgmdata - pgm + 3, pgmw * 4, pgmh);
             return detectionInfo;
           }
         }
@@ -1137,7 +1139,7 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
       else if (p == 10) {
         int z = buf0 & 0xffff;
         if ((rgbx != 0) && (rgby != 0) && (z == 1 || z == 3 || z == 4)) {
-          detectionInfo.IMG_DET(start, IMAGE8, rgbi - 1, 512, rgbx, rgby * z);
+          detectionInfo.IMG_DET(start, BlockType::IMAGE8, rgbi - 1, 512, rgbx, rgby * z);
           return detectionInfo;
         }
         rgbi = 0;
@@ -1209,24 +1211,24 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
         if ((tifofs != 0) && tifofs < (1 << 18) && tifofs + i < n) {
           if (tifC == 1) {
             if (tifZ == 1 && tifZb == 1) {
-              detectionInfo.IMG_DET(start, IMAGE1, i - 7, tifofs, ((tifX - 1) >> 3) + 1, tifY);
+              detectionInfo.IMG_DET(start, BlockType::IMAGE1, i - 7, tifofs, ((tifX - 1) >> 3) + 1, tifY);
               return detectionInfo;
             }
             if (tifZ == 1 && tifZb == 8) {
-              detectionInfo.IMG_DET(start, IMAGE8, i - 7, tifofs, tifX, tifY);
+              detectionInfo.IMG_DET(start, BlockType::IMAGE8, i - 7, tifofs, tifX, tifY);
               return detectionInfo;
             }
             if (tifZ == 3 && tifZb == 8) {
-              detectionInfo.IMG_DET(start, IMAGE24, i - 7, tifofs, tifX * 3, tifY);
+              detectionInfo.IMG_DET(start, BlockType::IMAGE24, i - 7, tifofs, tifX * 3, tifY);
               return detectionInfo;
             }
           }
           else if (tifC == 5 && tifSize > 0) {
             tifX = ((tifX + 8 - tifZb) / (9 - tifZb)) * tifZ;
             int info = tifZ * tifZb;
-            info = (((info == 1) ? IMAGE1 : ((info == 8) ? IMAGE8 : IMAGE24)) << 24) | tifX;
+            info = (((info == 1) ? BlockType::IMAGE1 : ((info == 8) ? BlockType::IMAGE8 : BlockType::IMAGE24)) << 24) | tifX;
             detectionInfo.DataInfo = info;
-            detectionInfo.Type = LZW;
+            detectionInfo.Type = BlockType::LZW;
             detectionInfo.DataStart = start + i - 7 + tifofs;
             detectionInfo.DataLength = tifSize;
             return detectionInfo;
@@ -1258,15 +1260,15 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
           if (tgat == 1) {
             in->setpos(start + tga + 11 + tgaid);
             bool isGray = isGrayscalePalette(in);
-            detectionInfo.IMG_DET(start, isGray ? IMAGE8GRAY : IMAGE8, tga - 7, 18 + tgaid + 256 * tgamap, tgax, tgay);
+            detectionInfo.IMG_DET(start, isGray ? BlockType::IMAGE8GRAY : BlockType::IMAGE8, tga - 7, 18 + tgaid + 256 * tgamap, tgax, tgay);
             return detectionInfo;
           }
           if (tgat == 2) {
-            detectionInfo.IMG_DET(start, (tgaz == 24) ? IMAGE24 : IMAGE32, tga - 7, 18 + tgaid, tgax * (tgaz >> 3), tgay);
+            detectionInfo.IMG_DET(start, (tgaz == 24) ? BlockType::IMAGE24 : BlockType::IMAGE32, tga - 7, 18 + tgaid, tgax * (tgaz >> 3), tgay);
             return detectionInfo;
           }
           if (tgat == 3) {
-            detectionInfo.IMG_DET(start, IMAGE8GRAY, tga - 7, 18 + tgaid, tgax, tgay);
+            detectionInfo.IMG_DET(start, BlockType::IMAGE8GRAY, tga - 7, 18 + tgaid, tgax, tgay);
             return detectionInfo;
           }
           if (tgat == 9 || tgat == 11) {
@@ -1275,11 +1277,11 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
             in->setpos(start + tga + 11 + tgaid);
             if (tgat == 9) {
               bool isGray = isGrayscalePalette(in);
-              info = (isGray ? IMAGE8GRAY : IMAGE8) << 24;
+              info = (isGray ? BlockType::IMAGE8GRAY : BlockType::IMAGE8) << 24;
               in->setpos(start + tga + 11 + tgaid + 256 * tgamap);
             }
             else {
-              info = IMAGE8GRAY << 24;
+              info = BlockType::IMAGE8GRAY << 24;
             }
             info |= tgax;
             // now detect compressed image data size
@@ -1314,7 +1316,7 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
               }
             }
             if (total == 0) {
-              detectionInfo.Type = RLE;
+              detectionInfo.Type = BlockType::RLE;
               detectionInfo.DataInfo = info;
               detectionInfo.DataStart = start + tga + 11 + tgaid + 256 * tgamap;
               detectionInfo.DataLength = detd;
@@ -1327,11 +1329,11 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
       }
     }
 
-    static int dett = 0;
+    static BlockType dett = BlockType::DEFAULT;
 
     // Detect .gif
-    if (detectionInfo.Type == 0 && dett == GIF && i == 0) {
-      dett = 0;
+    if (detectionInfo.Type == BlockType::DEFAULT && dett == BlockType::GIF && i == 0) {
+      dett = BlockType::DEFAULT;
       if (c == 0x2c || c == 0x21) { //image section or extension block
         gif = 2; // flag: image section or extension block
         gifi = 2; //jump 2 bytes
@@ -1394,11 +1396,11 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
           gifi = i + 3;
         }
         else {
-          dett = GIF;
-          detectionInfo.Type = GIF;
+          dett = BlockType::GIF;
+          detectionInfo.Type = BlockType::GIF;
           detectionInfo.DataStart = start + gifa - 1;
           detectionInfo.DataLength = i - gifa + 2;
-          detectionInfo.DataInfo = ((gifGray ? IMAGE8GRAY : IMAGE8) << 24) | gifw;
+          detectionInfo.DataInfo = ((gifGray ? BlockType::IMAGE8GRAY : BlockType::IMAGE8) << 24) | gifw;
           return detectionInfo;
         }
       }
@@ -1434,8 +1436,8 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
       else {
         e8e9count = 0;
       }
-      if (detectionInfo.Type == 0 && e8e9count >= 4 && e8e9pos > 5) {
-        detectionInfo.Type = EXE;
+      if (detectionInfo.Type == BlockType::DEFAULT && e8e9count >= 4 && e8e9pos > 5) {
+        detectionInfo.Type = BlockType::EXE;
         detectionInfo.DataStart = start + e8e9pos - 5;
       }
       absPos[a] = i;
@@ -1443,7 +1445,7 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
     }
     if (i + 1 == n || i - e8e9last > 0x4000) {
       // TODO: Large file support
-      if (detectionInfo.Type == EXE) {
+      if (detectionInfo.Type == BlockType::EXE) {
         detectionInfo.DataInfo = static_cast<int>(detectionInfo.DataStart);
         detectionInfo.DataLength = start + e8e9last - detectionInfo.DataStart;
         return detectionInfo;
@@ -1481,13 +1483,13 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
       DEC.absPos[absAddrLSB] = DEC.relPos[relAddrLSB] = curPos;
     }
      
-    if ((detectionInfo.Type == 0) && (DEC.branches[DEC.idx] >= 16u)) {
-      detectionInfo.Type = DEC_ALPHA;
+    if ((detectionInfo.Type == BlockType::DEFAULT) && (DEC.branches[DEC.idx] >= 16u)) {
+      detectionInfo.Type = BlockType::DEC_ALPHA;
       detectionInfo.DataStart = start + DEC.offset - (start + DEC.offset) % 4;
     }
    
-    if ((i + 1 == n) || (static_cast<std::uint64_t>(i) > DEC.last + (detectionInfo.Type == DEC_ALPHA ? UINT64_C(0x8000) : UINT64_C(0x4000))) && (DEC.count[DEC.offset & 3] == 0u)) {
-      if (detectionInfo.Type == DEC_ALPHA) {
+    if ((i + 1 == n) || (static_cast<std::uint64_t>(i) > DEC.last + (detectionInfo.Type == BlockType::DEC_ALPHA ? UINT64_C(0x8000) : UINT64_C(0x4000))) && (DEC.count[DEC.offset & 3] == 0u)) {
+      if (detectionInfo.Type == BlockType::DEC_ALPHA) {
         detectionInfo.DataLength = (start + DEC.last - (start + DEC.last) % 4) - detectionInfo.DataStart;
         return detectionInfo;
       }
@@ -1530,7 +1532,7 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
         b64S = 4;
       }
       if((b64S == 4 && b64End - b64I > 32) || (b64S == 5 && b64End - b64I > 32 && b64End - b64I < (1 << 27))) {
-        detectionInfo.Type = BASE64;
+        detectionInfo.Type = BlockType::BASE64;
         detectionInfo.DataStart = start + b64I;
         detectionInfo.DataLength = b64End - b64I;
         return detectionInfo;
@@ -1545,11 +1547,11 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
 
   }
   
-  if (detectionInfo.Type != 0)
+  if (detectionInfo.Type != BlockType::DEFAULT)
     quit("detect(): detection didn't finish properly.");
 
   //nothing detected
-  detectionInfo.Type = DEFAULT;
+  detectionInfo.Type = BlockType::DEFAULT;
   detectionInfo.DataStart = start + n;
   detectionInfo.DataLength = 0;
 
@@ -1586,47 +1588,47 @@ static void compressRecursive(File *in, uint64_t blockSize, Encoder &en, String 
 
 static auto
 decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File *out, FMode mode, uint64_t &diffFound, const TransformOptions* const transformOptions) -> uint64_t {
-  if( type == IMAGE24 ) {
+  if( type == BlockType::IMAGE24 ) {
     auto b = new BmpFilter();
     b->setWidth(info);
     b->setSkipRgb(transformOptions->skipRgb);
     b->setEncoder(en);
     return b->decode(tmp, out, mode, len, diffFound);
   }
-  if( type == IMAGE32 ) {
+  if( type == BlockType::IMAGE32 ) {
     return decodeIm32(en, len, info, out, mode, diffFound, transformOptions->skipRgb);
   }
-  if( type == AUDIO_LE ) {
+  if( type == BlockType::AUDIO_LE ) {
     auto e = new EndiannessFilter();
     e->setEncoder(en);
     return e->decode(tmp, out, mode, len, diffFound);
-  } else if( type == EXE ) {
+  } else if( type == BlockType::EXE ) {
     auto e = new ExeFilter();
     e->setEncoder(en);
     return e->decode(tmp, out, mode, len, diffFound);
-  } else if( type == TEXT_EOL ) {
+  } else if( type == BlockType::TEXT_EOL ) {
     auto d = new EolFilter();
     d->setEncoder(en);
     return d->decode(tmp, out, mode, len, diffFound);
-  } else if( type == CD ) {
+  } else if( type == BlockType::CD ) {
     auto c = new CdFilter();
     return c->decode(tmp, out, mode, len, diffFound);
   }
 #ifndef DISABLE_ZLIB
-  else if( type == ZLIB )
+  else if( type == BlockType::ZLIB )
     return decodeZlib(tmp, len, out, mode, diffFound);
 #endif //DISABLE_ZLIB
-  else if( type == BASE64 ) {
+  else if( type == BlockType::BASE64 ) {
     auto b = new Base64Filter();
     return b->decode(tmp, out, mode, len, diffFound);
-  } else if( type == GIF ) {
+  } else if( type == BlockType::GIF ) {
     return decodeGif(tmp, len, out, mode, diffFound);
-  } else if( type == RLE ) {
+  } else if( type == BlockType::RLE ) {
     auto r = new RleFilter();
     return r->decode(tmp, out, mode, len, diffFound);
-  } else if( type == LZW ) {
+  } else if( type == BlockType::LZW ) {
     return decodeLzw(tmp, out, mode, diffFound);
-  } else if (type == DEC_ALPHA) {
+  } else if (type == BlockType::DEC_ALPHA) {
     auto e = new DECAlphaFilter();
     e->setEncoder(en);
     return e->decode(tmp, out, mode, len, diffFound);
@@ -1638,40 +1640,40 @@ decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File 
 }
 
 static auto encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int info, int &hdrsize, const TransformOptions* const transformOptions) -> uint64_t {
-  if( type == IMAGE24 ) {
+  if( type == BlockType::IMAGE24 ) {
     auto b = new BmpFilter();
     b->setSkipRgb(transformOptions->skipRgb);
     b->encode(in, tmp, len, info, hdrsize);
-  } else if( type == IMAGE32 ) {
+  } else if( type == BlockType::IMAGE32 ) {
     encodeIm32(in, tmp, len, info, transformOptions->skipRgb);
-  } else if( type == AUDIO_LE ) {
+  } else if( type == BlockType::AUDIO_LE ) {
     auto e = new EndiannessFilter();
     e->encode(in, tmp, len, info, hdrsize);
-  } else if( type == EXE ) {
+  } else if( type == BlockType::EXE ) {
     auto e = new ExeFilter();
     e->encode(in, tmp, len, info, hdrsize);
-  } else if( type == TEXT_EOL ) {
+  } else if( type == BlockType::TEXT_EOL ) {
     auto e = new EolFilter();
     e->encode(in, tmp, len, info, hdrsize);
-  } else if( type == CD ) {
+  } else if( type == BlockType::CD ) {
     auto c = new CdFilter();
     c->encode(in, tmp, len, info, hdrsize);
   }
 #ifndef DISABLE_ZLIB
-  else if( type == ZLIB )
+  else if( type == BlockType::ZLIB )
     return encodeZlib(in, tmp, len, hdrsize) ? 0 : 1;
 #endif //DISABLE_ZLIB
-  else if( type == BASE64 ) {
+  else if( type == BlockType::BASE64 ) {
     auto b = new Base64Filter();
     b->encode(in, tmp, len, info, hdrsize);
-  } else if( type == GIF ) {
+  } else if( type == BlockType::GIF ) {
     return encodeGif(in, tmp, len, hdrsize) != 0 ? 0 : 1;
-  } else if( type == RLE ) {
+  } else if( type == BlockType::RLE ) {
     auto r = new RleFilter();
     r->encode(in, tmp, len, info, hdrsize);
-  } else if( type == LZW ) {
+  } else if( type == BlockType::LZW ) {
     return encodeLzw(in, tmp, len, hdrsize) != 0 ? 0 : 1;
-  } else if (type == DEC_ALPHA) {
+  } else if (type == BlockType::DEC_ALPHA) {
     auto e = new DECAlphaFilter();
     e->encode(in, tmp, len, info, hdrsize);
   }
@@ -1699,7 +1701,7 @@ transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int in
     if( diffFound > 0 || tmp.getchar() != EOF) {
       printf("Transform fails at %" PRIu64 ", skipping...\n", diffFound - 1);
       in->setpos(begin);
-      directEncodeBlock(DEFAULT, in, len, en);
+      directEncodeBlock(BlockType::DEFAULT, in, len, en);
     } else {
       tmp.setpos(0);
       if( hasRecursion(type)) {
@@ -1707,7 +1709,7 @@ transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int in
         en.encodeBlockType(type);
         en.encodeBlockSize(tmpSize);
         BlockType type2 = static_cast<BlockType>((info >> 24) & 0xFF);
-        if( type2 != DEFAULT ) {
+        if( type2 != BlockType::DEFAULT ) {
           String blstrSub0;
           blstrSub0 += blstr.c_str();
           blstrSub0 += "->";
@@ -1719,7 +1721,7 @@ transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int in
           blstrSub2 += "-->";
           printf(" %-11s | ->  exploded     |%10d bytes [%d - %d]\n", blstrSub0.c_str(), int(tmpSize), 0, int(tmpSize - 1));
           printf(" %-11s | --> added header |%10d bytes [%d - %d]\n", blstrSub1.c_str(), headerSize, 0, headerSize - 1);
-          directEncodeBlock(HDR, &tmp, headerSize, en);
+          directEncodeBlock(BlockType::HDR, &tmp, headerSize, en);
           printf(" %-11s | --> data         |%10d bytes [%d - %d]\n", blstrSub2.c_str(), int(tmpSize - headerSize), headerSize,
                  int(tmpSize - 1));
           transformEncodeBlock(type2, &tmp, tmpSize - headerSize, en, info & 0xffffff, blstr, recursionLevel, p1, p2, headerSize, transformOptions);
@@ -1753,18 +1755,18 @@ static void printBlock(const uint64_t begin, const uint64_t len, const BlockType
 
 
   printf(" %-11s | %-16s |%10" PRIu64 " bytes [%" PRIu64 " - %" PRIu64 "]", blstrSub.c_str(),
-    typeNames[(type == ZLIB && isPNG(BlockType(blockInfo >> 24U))) ? blockInfo >> 24U : type], len, begin, (begin + len) - 1);
-  if (type == AUDIO || type == AUDIO_LE) {
+    typeNames[(type == BlockType::ZLIB && isPNG(BlockType(blockInfo >> 24U))) ? blockInfo >> 24 : (int)type], len, begin, (begin + len) - 1);
+  if (type == BlockType::AUDIO || type == BlockType::AUDIO_LE) {
     printf(" (%s)", audioTypes[blockInfo % 4]);
   }
-  else if (type == IMAGE1 || type == IMAGE4 || type == IMAGE8 || type == IMAGE8GRAY || type == IMAGE24 || type == IMAGE32 ||
-    (type == ZLIB && isPNG(BlockType(blockInfo >> 24U)))) {
-    printf(" (width: %d)", (type == ZLIB) ? (blockInfo & 0xFFFFFFU) : blockInfo);
+  else if (type == BlockType::IMAGE1 || type == BlockType::IMAGE4 || type == BlockType::IMAGE8 || type == BlockType::IMAGE8GRAY || type == BlockType::IMAGE24 || type == BlockType::IMAGE32 ||
+    (type == BlockType::ZLIB && isPNG(BlockType(blockInfo >> 24U)))) {
+    printf(" (width: %d)", (type == BlockType::ZLIB) ? (blockInfo & 0xFFFFFFU) : blockInfo);
   }
-  else if (hasRecursion(type) && (blockInfo >> 24U) != DEFAULT) {
+  else if (hasRecursion(type) && (blockInfo >> 24U) != (int)BlockType::DEFAULT) {
     printf(" (%s)", typeNames[blockInfo >> 24U]);
   }
-  else if (type == CD) {
+  else if (type == BlockType::CD) {
     printf(" (mode%d/form%d)", blockInfo == 1 ? 1 : 2, blockInfo != 3 ? 1 : 2);
   }
   printf("\n");
@@ -1806,7 +1808,7 @@ static void compressRecursive(File *in, uint64_t bytesToProcess, Encoder &en, St
     }
 
     if (detectionInfo.HeaderLength != 0) {
-      compressBlock(in, detectionInfo.HeaderStart, detectionInfo.HeaderLength, /*ref: */ blNum, HDR, 0, en, /*in: */ blstr, recursionLevel, /*ref: */ p1, /*ref: */ p2, pscale, transformOptions);
+      compressBlock(in, detectionInfo.HeaderStart, detectionInfo.HeaderLength, /*ref: */ blNum, BlockType::HDR, 0, en, /*in: */ blstr, recursionLevel, /*ref: */ p1, /*ref: */ p2, pscale, transformOptions);
       begin += detectionInfo.HeaderLength;
       bytesToProcess -= detectionInfo.HeaderLength;
     }
@@ -1830,7 +1832,7 @@ static void compressfile(const Shared* const shared, const char *filename, uint6
   assert(en.getMode() == COMPRESS);
   assert(filename && filename[0]);
 
-  en.encodeBlockType(FILECONTAINER);
+  en.encodeBlockType(BlockType::FILECONTAINER);
   uint64_t start = en.size();
   en.encodeBlockSize(fileSize);
 
@@ -1903,7 +1905,7 @@ static void decompressFile(const Shared *const shared, const char *filename, FMo
   assert(filename && filename[0]);
 
   BlockType blocktype = en.decodeBlockType();
-  if( blocktype != FILECONTAINER ) {
+  if( blocktype != BlockType::FILECONTAINER ) {
     quit("Bad archive.");
   }
   uint64_t fileSize = en.decodeBlockSize();

@@ -370,15 +370,15 @@ auto processCommandLine(int argc, char **argv) -> int {
 
     // Set highest or user selected vectorization mode
     if (simdIset == 11) {
-      shared.chosenSimd = SIMD_NEON;
+      shared.chosenSimd = SIMDType::SIMD_NEON;
     } else if (simdIset >= 9) {
-      shared.chosenSimd = SIMD_AVX2;
+      shared.chosenSimd = SIMDType::SIMD_AVX2;
     } else if (simdIset >= 5) {
-      shared.chosenSimd = SIMD_SSSE3;
+      shared.chosenSimd = SIMDType::SIMD_SSSE3;
     } else if( simdIset >= 3 ) {
-      shared.chosenSimd = SIMD_SSE2;
+      shared.chosenSimd = SIMDType::SIMD_SSE2;
     } else {
-      shared.chosenSimd = SIMD_NONE;
+      shared.chosenSimd = SIMDType::SIMD_NONE;
     }
 
     if( verbose ) {
@@ -605,7 +605,7 @@ auto processCommandLine(int argc, char **argv) -> int {
       totalSize += start;
       if((shared.options & OPTION_MULTIPLE_FILE_MODE) != 0 ) { //multiple file mode
 
-        en.encodeBlockType(TEXT);
+        en.encodeBlockType(BlockType::TEXT);
         uint64_t len1 = input.size(); //ASCIIZ filename of listfile - with ending zero
         const String *const s = listoffiles.getString();
         uint64_t len2 = s->size(); //ASCIIZ filenames of files to compress - with ending zero
@@ -633,7 +633,7 @@ auto processCommandLine(int argc, char **argv) -> int {
       if( output.strsize() != 0 ) {
         quit("Output filename must not be specified when extracting multiple files.");
       }
-      if((c = en.decodeBlockType()) != TEXT ) {
+      if((en.decodeBlockType()) != BlockType::TEXT ) {
         quit(errmsgInvalidChar);
       }
       en.decodeBlockSize(); //we don't really need it

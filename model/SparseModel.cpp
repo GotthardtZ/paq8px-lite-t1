@@ -4,7 +4,7 @@ SparseModel::SparseModel(const Shared* const sh, const uint64_t size) : shared(s
 
 void SparseModel::mix(Mixer &m) {
   INJECT_SHARED_blockType
-  const bool isText = blockType == TEXT || blockType == TEXT_EOL;
+  const bool isText = isTEXT(blockType);
 
   INJECT_SHARED_bpos
   if( bpos == 0 ) {

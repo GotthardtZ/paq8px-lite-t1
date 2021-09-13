@@ -55,7 +55,7 @@ void WordModel::mix(Mixer &m) {
       infoPdf.lineModelSkip();
     } else {
       INJECT_SHARED_blockType
-      const bool isTextBlock = blockType == TEXT || blockType == TEXT_EOL;
+      const bool isTextBlock = isTEXT(blockType);
       const bool isExtendedChar = isTextBlock && c1 >= 128;
       infoNormal.processChar(isExtendedChar);
       infoNormal.predict(pdfTextParserState);

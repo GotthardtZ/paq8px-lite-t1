@@ -1,4 +1,5 @@
 #include "RecordModel.hpp"
+#include "../CharacterNames.hpp"
 
 RecordModel::RecordModel(Shared* const sh, const uint64_t size) : shared(sh),
     cm(sh,32768,3), cn(sh,32768/2,3), co(sh,32768*2,3), // cm,cn,co: memory pressure is advantageous
@@ -38,7 +39,7 @@ void RecordModel::mix(Mixer &m) {
       INJECT_SHARED_blockPos
       if( blockPos == 0 || (dbase.version > 0 && blockPos >= dbase.end)) {
         dbase.version = 0;
-      } else if( dbase.version == 0 && shared->State.blockType == DEFAULT && blockPos >= 31 ) {
+      } else if( dbase.version == 0 && shared->State.blockType == BlockType::DEFAULT && blockPos >= 31 ) {
         uint8_t b = buf(32);
         if(((b & 7U) == 3 || (b & 7U) == 4 || (b >> 4U) == 3 || b == 0xF5) && ((b = buf(30)) > 0 && b < 13) &&
            ((b = buf(29)) > 0 && b < 32) &&

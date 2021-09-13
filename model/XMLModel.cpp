@@ -1,4 +1,5 @@
 #include "XMLModel.hpp"
+#include "../CharacterNames.hpp"
 
 void XMLModel::detectContent(XMLContent *content) {
   INJECT_SHARED_buf

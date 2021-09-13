@@ -1,5 +1,6 @@
 #include "Predictor.hpp"
 #include "ArithmeticEncoder.hpp"
+#include "CharacterNames.hpp"
 
 Predictor::Predictor(Shared* const sh) : shared(sh), sse(sh), pr(1<<(ArithmeticEncoder::PRECISION-1)) {
   shared->reset();
@@ -41,7 +42,7 @@ void Predictor::trainText(const char *const dictionary, int iterations) {
     NormalModel::MIXERINPUTS + WordModel::MIXERINPUTS, 
     NormalModel::MIXERCONTEXTS_PRE + WordModel::MIXERCONTEXTS,
     NormalModel::MIXERCONTEXTSETS_PRE + WordModel::MIXERCONTEXTSETS);
-  shared->State.blockType = TEXT;
+  shared->State.blockType = BlockType::TEXT;
   INJECT_SHARED_pos
   INJECT_SHARED_blockPos
   assert(pos == 0 && blockPos == 0);

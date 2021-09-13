@@ -1,6 +1,7 @@
 #ifndef PAQ8PX_CONTEXTMODEL_HPP
 #define PAQ8PX_CONTEXTMODEL_HPP
 
+#include "../BlockType.hpp"
 #include "../Mixer.hpp"
 #include "../MixerFactory.hpp"
 #include "../Models.hpp"
@@ -11,8 +12,8 @@
 class ContextModel {
     Shared * const shared;
     Models * const models;
-    BlockType nextBlockType = DEFAULT;
-    BlockType blockType = DEFAULT;
+    BlockType nextBlockType = BlockType::DEFAULT;
+    BlockType blockType = BlockType::DEFAULT;
     int blockSize = 1;
     int blockInfo = 0;
     int bytesRead = 0;
@@ -20,7 +21,7 @@ class ContextModel {
 
 public:
     ContextModel(Shared* const sh, Models* const models);
-    auto p() -> int;
+    int p();
 };
 
 #endif //PAQ8PX_CONTEXTMODEL_HPP
