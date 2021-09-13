@@ -74,6 +74,8 @@ public:
     indirectModel.mix(*m);
     DECAlphaModel& decAlphaModel = models->decAlphaModel();
     decAlphaModel.mix(*m);
+
+    //exemodel must be the last one
     ExeModel& exeModel = models->exeModel();
     exeModel.mix(*m);
 

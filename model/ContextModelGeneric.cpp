@@ -85,6 +85,8 @@ public:
 
     LinearPredictionModel& linearPredictionModel = models->linearPredictionModel();
     linearPredictionModel.mix(*m);
+
+    //exemodel must be the last
     ExeModel& exeModel = models->exeModel();
     exeModel.mix(*m);
 

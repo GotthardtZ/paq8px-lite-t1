@@ -300,10 +300,13 @@ void ExeModel::mix(Mixer &m) {
     iMap.set(hash(brkCtx, bpos));
     iMap.mix(m);
     } else {
-    for( int i = 0; i < MIXERINPUTS; ++i ) {
-      m.add(0);
+      if constexpr (false) { //no need to add inputs as exemodel is always the last model
+        for (int i = 0; i < MIXERINPUTS; ++i) {
+          m.add(0);
+        }
+      }
     }
-  }
+
     INJECT_SHARED_c0
     uint8_t s = (
       (stateBh[context] >> (28 - bpos)) & 0x08U) |
