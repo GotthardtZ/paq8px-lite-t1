@@ -92,7 +92,7 @@ void ChartModel::mix(Mixer& m) {
     cn.set(__, hash(++q2, w3|g)); // <--Guesses next "c4&0xFF00FF"
     cn.set(__, hash(++q2, w4|g)); // <--Guesses next "c4&0xFF0000FF"
 
-    assert(q2 <= nCM2);
+    assert(q2 == isText ? nCM2_TEXT : nCM2);
 
     cnt = isText ? 8 : 2*8+4;
 
@@ -100,13 +100,13 @@ void ChartModel::mix(Mixer& m) {
       uint32_t s = i >> 3;   // selector: which bits are selected
       uint32_t e = a[s];     // content: 2-3 selected bits from 3 consecutive bytes
       uint32_t k = chart[i]; 
-                                                              //   k   e
-      cm.set(__, hash(++q1, k, s));                           //  111 000
-      cm.set(__, hash(++q1, e, k, s));                        //  111 111
-      cm.set(__, hash(++q1, e & 255, k >> 16, k & 255, s));   //  101 001
+                                                             //   k   e
+      cm.set(__, hash(++q1, k));                             //  111 000
+      cm.set(__, hash(++q1, e, k));                          //  111 111
+      cm.set(__, hash(++q1, (e & 255)<<8 | (k&0xff00ff)));   //  101 001
     }
 
-    assert(q1 <= nCM1);
+    assert(q1 == isText ? nCM1_TEXT : nCM1);
   }
   cn.mix(m);
   cm.mix(m);
