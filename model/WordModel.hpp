@@ -16,8 +16,8 @@
  */
 class WordModel {
 private:
-    static constexpr int nCM1 = 17; // pdf / non_pdf contexts
-    static constexpr int nCM2 = 41; // common contexts
+    static constexpr int nCM1 = Info::nCM1; // pdf / non_pdf contexts
+    static constexpr int nCM2 = Info::nCM2; // common contexts
     static constexpr int nCM = nCM1 + nCM2; // 58
 public:
     static constexpr int MIXERINPUTS = nCM * (ContextMap2::MIXERINPUTS + ContextMap2::MIXERINPUTS_RUN_STATS + ContextMap2::MIXERINPUTS_BYTE_HISTORY); // 406

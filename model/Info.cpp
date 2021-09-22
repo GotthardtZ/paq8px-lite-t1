@@ -437,6 +437,6 @@ void Info::predict(const uint8_t pdfTextParserState) {
     cm.skip(RH);
     i++;
   }
-  // TODO(epsteina): Figure out how to do this
-//  assert(int(i) == 2048 * isTextBlock + nCM2);
+
+  assert(int(i) == 2048 * isTextBlock + nCM2);
 }
