@@ -371,6 +371,7 @@
     <ClInclude Include="filter\lzw.hpp" />
     <ClInclude Include="filter\LZWDictionary.hpp" />
     <ClInclude Include="filter\LZWEntry.hpp" />
+    <ClInclude Include="filter\mrb.hpp" />
     <ClInclude Include="filter\rle.hpp" />
     <ClInclude Include="filter\TextParserStateInfo.hpp" />
     <ClInclude Include="filter\zlib.hpp" />

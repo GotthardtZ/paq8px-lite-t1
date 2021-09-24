@@ -47,7 +47,9 @@ public:
     }
 
     Image8BitModel& image8BitModel = models->image8BitModel();
-    image8BitModel.setParam(blockInfo, isGray, isPNG);
+    INJECT_SHARED_blockType
+    int width = blockType == BlockType::MRB8 ? (blockInfo >> 16) & 0xFFF : blockInfo;
+    image8BitModel.setParam(width, isGray, isPNG);
     image8BitModel.mix(*m);
 
     if(isGray)

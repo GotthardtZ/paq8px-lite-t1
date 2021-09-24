@@ -17,6 +17,7 @@
 #include "ecc.hpp"
 #include "gif.hpp"
 #include "lzw.hpp"
+#include "mrb.hpp"
 #include "DecAlphaFilter.hpp"
 #include <cctype>
 #include <cstdint>
@@ -109,6 +110,24 @@ static bool isGrayscalePalette(File *in, int n = 256, int isRGBA = 0) {
   return (res >> 8) > 0;
 }
 
+//for MRBR detection:
+//read compressed word,dword
+uint16_t GetCWord(File* f) {
+  uint8_t b = f->getchar();
+  if (b & 1) return ((f->getchar() << 8) | b) >> 1;
+  return b >> 1;
+}
+uint32_t GetCDWord(File* f) {
+  uint16_t w = f->getchar();
+  w = w | (f->getchar() << 8);
+  if (w & 1) {
+    uint16_t w1 = f->getchar();
+    w1 = w1 | (f->getchar() << 8);
+    return ((w1 << 16) | w) >> 1;
+  }
+  return w >> 1;
+}
+
 struct DetectionInfo {
   uint64_t HeaderStart{};
   uint64_t HeaderLength{};
@@ -133,6 +152,15 @@ struct DetectionInfo {
     DataStart = HeaderStart + HeaderLength;
     DataLength = data_len;
     DataInfo = wmode;
+  }
+
+  void MRBRLE_DET(uint64_t blockStart, BlockType type, uint64_t start_pos, uint32_t header_len, uint64_t data_len, int width, int height) {
+    Type = type;
+    HeaderStart = blockStart + start_pos;
+    HeaderLength = header_len;
+    DataStart = HeaderStart + HeaderLength;
+    DataLength = data_len;
+    DataInfo = (((width + 3) / 4) * 4) << 16 | height;
   }
 };
 
@@ -309,6 +337,12 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
   int s3Mni = 0; 
 #endif //  DISABLE_AUDIOMODEL
    
+  // For MRB detection
+  uint64_t mrb = 0; 
+  uint8_t mrbPictureType = 0;
+  uint8_t mrbPackingMethod = 0;
+  uint16_t mrbmulti = 0; // number of pictures in multi-resolution-bitmap minus 1
+
   // For BMP detection
   uint64_t bmpi = 0;
   uint64_t dibi = 0;
@@ -854,6 +888,67 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
       }
     }
 #endif //  DISABLE_AUDIOMODEL
+
+    //detect rle encoded mrb files inside windows hlp files 506C
+    //we support only RLE encoded single images
+    if (!mrb && ((buf0 & 0xFFFF) == 0x6c70 || (buf0 & 0xFFFF) == 0x6C50) && !b64S && !cdi) { //Magic: 0x506C (SHG,lP) or 0x706C (MRB,lp)
+      mrb = i; 
+      mrbmulti = 0;
+    }
+    if (mrb) {
+      const int p = int(i - mrb) - mrbmulti * 4; // p: offset of first picture descriptor
+      if (p == 1 && c > 1 && c < 4 && mrbmulti == 0) mrbmulti = c - 1; //c: NumberOfPictures
+      else if (p == 1 && c == 0) mrb = 0; // fail
+      else if (p == 7) {
+        if ((c == 5 || c == 6)) mrbPictureType = c; // 5=DDB   6=DIB   8=metafile
+        else mrb = 0; // fail
+      }
+      else if (p == 8) {
+        if (c == 1 || c == 2 || c == 3 || c == 0) mrbPackingMethod = c; // 0=uncompressed 1=RunLen 2=LZ77 3=both
+        else mrb = 0; // fail
+      }
+      else if (p == 10) {
+        if (mrbPictureType == 6 && mrbPackingMethod <=3) { //The only type we support is RunLen encoded DIB
+          uint64_t mrbTell = in->curPos() - 2; //save curPos so we can restore it
+          in->setpos(mrbTell);
+          uint32_t Xdpi = GetCDWord(in);
+          uint32_t Ydpi = GetCDWord(in);
+          uint16_t Planes = GetCWord(in);
+          uint16_t BitCount = GetCWord(in);  //4: 16 colors, 8: 256 colors
+          uint32_t mrbw = GetCDWord(in);
+          uint32_t mrbh = GetCDWord(in);
+          uint32_t ColorsUsed = GetCDWord(in);
+          uint32_t ColorsImportant = GetCDWord(in);
+          uint32_t mrbcsize = GetCDWord(in); // compressedSize
+          uint32_t HotspotSize = GetCDWord(in);
+          uint32_t CompressedOffset = bswap(in->get32());
+          uint32_t HotspotOffset = bswap(in->get32());
+          uint64_t mrbsize = mrbcsize + in->curPos() - mrbTell + 10 + (1 << BitCount) * 4; // ignore HotspotSize
+          mrbTell = mrbTell + 2;
+          in->setpos(mrbTell);
+          //debug:
+          printf("MRB: %d, %d, %d, %d, %d, %d, %d\n", (int)mrbPictureType, (int)mrbPackingMethod, BitCount, ColorsUsed, (int)mrbw, (int)mrbh, mrbmulti);
+          if (!(BitCount == 4 || BitCount == 8) || mrbw < 4 || mrbh < 4 || mrbw > 1024 || mrbh >= 4096 || mrbsize == 0 || mrbPackingMethod != 1) {
+            mrb = 0; 
+          }
+          else {
+            // success
+            if (BitCount == 4) {
+              detectionInfo.MRBRLE_DET(start, BlockType::MRB4, mrb - 1, mrbsize - mrbcsize, mrbcsize, mrbw, mrbh);
+              return detectionInfo;
+            }
+            if (BitCount == 8) {
+              detectionInfo.MRBRLE_DET(start, BlockType::MRB8, mrb - 1, mrbsize - mrbcsize, mrbcsize, mrbw, mrbh);
+              return detectionInfo;
+            }
+          }
+        }
+        else {
+          //unsupported format
+          mrb = 0; // fail
+        }
+      }
+    }
 
     // Detect .bmp image
     if ((bmpi == 0u) && (dibi == 0u)) {
@@ -1626,6 +1721,9 @@ decodeFunc(BlockType type, Encoder &en, File *tmp, uint64_t len, int info, File 
   } else if( type == BlockType::RLE ) {
     auto r = new RleFilter();
     return r->decode(tmp, out, mode, len, diffFound);
+  } else if( type == BlockType::MRB4 || type == BlockType::MRB8) {
+    auto m = new MrbFilter();
+    return m->decode(tmp, out, mode, len, diffFound);
   } else if( type == BlockType::LZW ) {
     return decodeLzw(tmp, out, mode, diffFound);
   } else if (type == BlockType::DEC_ALPHA) {
@@ -1671,6 +1769,13 @@ static auto encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int in
   } else if( type == BlockType::RLE ) {
     auto r = new RleFilter();
     r->encode(in, tmp, len, info, hdrsize);
+  } else if (type == BlockType::MRB4 || type == BlockType::MRB8) {
+    auto m = new MrbFilter();
+    const int width = (info >> 16) & 0xfff;
+    const int height = info & 0xfff;
+    int widthInBytes = (type == BlockType::MRB8) ? width : (((width) * 4 + 15) / 16) * 2;
+    m->setInfo(widthInBytes, height);
+    m->encode(in, tmp, len, info, hdrsize);
   } else if( type == BlockType::LZW ) {
     return encodeLzw(in, tmp, len, hdrsize) != 0 ? 0 : 1;
   } else if (type == BlockType::DEC_ALPHA) {
@@ -1704,6 +1809,12 @@ transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int in
       directEncodeBlock(BlockType::DEFAULT, in, len, en);
     } else {
       tmp.setpos(0);
+      if (type == BlockType::MRB4 || type == BlockType::MRB8) {
+        String blstrSub0;
+        blstrSub0 += blstr.c_str();
+        blstrSub0 += "->";
+        printf(" %-11s | ->  uncompressed |%10d bytes [%d - %d]\n", blstrSub0.c_str(), int(tmpSize), 0, int(tmpSize - 1));
+      }
       if( hasRecursion(type)) {
         // TODO(epsteina): Large file support
         en.encodeBlockType(type);
@@ -1720,10 +1831,12 @@ transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int in
           blstrSub2 += blstr.c_str();
           blstrSub2 += "-->";
           printf(" %-11s | ->  exploded     |%10d bytes [%d - %d]\n", blstrSub0.c_str(), int(tmpSize), 0, int(tmpSize - 1));
-          printf(" %-11s | --> added header |%10d bytes [%d - %d]\n", blstrSub1.c_str(), headerSize, 0, headerSize - 1);
-          directEncodeBlock(BlockType::HDR, &tmp, headerSize, en);
-          printf(" %-11s | --> data         |%10d bytes [%d - %d]\n", blstrSub2.c_str(), int(tmpSize - headerSize), headerSize,
-                 int(tmpSize - 1));
+          if (headerSize != 0) {
+            printf(" %-11s | --> added header |%10d bytes [%d - %d]\n", blstrSub1.c_str(), headerSize, 0, headerSize - 1);
+            directEncodeBlock(BlockType::HDR, &tmp, headerSize, en);
+            printf(" %-11s | --> data         |%10d bytes [%d - %d]\n", blstrSub2.c_str(), int(tmpSize - headerSize), headerSize,
+              int(tmpSize - 1));
+          }
           transformEncodeBlock(type2, &tmp, tmpSize - headerSize, en, info & 0xffffff, blstr, recursionLevel, p1, p2, headerSize, transformOptions);
         } else {
           compressRecursive(&tmp, tmpSize, en, blstr, recursionLevel + 1, p1, p2, transformOptions);
@@ -1748,9 +1861,9 @@ static void composeSubBlockStringToPrint(String& blstr, String& blstrSub, int bl
 }
 
 static void printBlock(const uint64_t begin, const uint64_t len, const BlockType type, const int blockInfo, String& blstrSub, const int recursionLevel) {
-  static const char* typeNames[26] = { "default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
+  static const char* typeNames[28] = { "default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
                                       "24b-image", "32b-image", "audio", "audio - le", "x86/64", "cd", "zlib", "base64", "gif", "png-8b",
-                                      "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol", "rle", "lzw", "dec-alpha"};
+                                      "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol", "rle", "lzw", "dec-alpha", "mrb4", "mrb8" };
   static const char* audioTypes[4] = { "8b-mono", "8b-stereo", "16b-mono", "16b-stereo" };
 
 
@@ -1763,8 +1876,11 @@ static void printBlock(const uint64_t begin, const uint64_t len, const BlockType
     (type == BlockType::ZLIB && isPNG(BlockType(blockInfo >> 24U)))) {
     printf(" (width: %d)", (type == BlockType::ZLIB) ? (blockInfo & 0xFFFFFFU) : blockInfo);
   }
+  else if (type == BlockType::MRB4 || type == BlockType::MRB8) {
+    printf(" (%s: %dx%d)", type == BlockType::MRB8 ? "8-bit image" : "4-bit image", (blockInfo >> 16) & 0xFFF, blockInfo & 0xFFF);
+  }
   else if (hasRecursion(type) && (blockInfo >> 24U) != (int)BlockType::DEFAULT) {
-    printf(" (%s)", typeNames[blockInfo >> 24U]);
+      printf(" (%s)", typeNames[blockInfo >> 24U]);
   }
   else if (type == BlockType::CD) {
     printf(" (mode%d/form%d)", blockInfo == 1 ? 1 : 2, blockInfo != 3 ? 1 : 2);
@@ -1865,6 +1981,17 @@ static auto decompressRecursive(File *out, uint64_t blockSize, Encoder &en, FMod
     if( hasInfo(type)) {
       info = en.decodeInfo();
     }
+    if (type == BlockType::MRB4 || type == BlockType::MRB8) {
+      FileTmp tmp;
+      for (uint64_t j = 0; j < len; ++j) 
+          tmp.putChar(en.decompressByte());
+      if (mode != FDISCARD) {
+        tmp.setpos(0);
+        len = decodeFunc(type, en, &tmp, len, info, out, mode, diffFound, transformOptions);
+      }
+      tmp.close();
+    } 
+    else
     if( hasRecursion(type)) {
       FileTmp tmp;
       decompressRecursive(&tmp, len, en, FDECOMPRESS, recursionLevel + 1, transformOptions);

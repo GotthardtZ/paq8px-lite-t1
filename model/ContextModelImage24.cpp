@@ -47,7 +47,8 @@ public:
     }
 
     Image24BitModel& image24BitModel = models->image24BitModel();
-    image24BitModel.setParam(blockInfo, isAlpha, isPNG);
+    int width = blockInfo & 0xffffff;
+    image24BitModel.setParam(width, isAlpha, isPNG);
     image24BitModel.mix(*m);
 
     if(isAlpha)

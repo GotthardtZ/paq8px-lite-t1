@@ -716,6 +716,9 @@
     <ClInclude Include="SIMDType.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="filter\mrb.hpp">
+      <Filter>filter</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

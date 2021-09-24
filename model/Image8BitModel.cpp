@@ -29,8 +29,8 @@ Image8BitModel::Image8BitModel(Shared* const sh, const uint64_t size) :
   }
   {}
 
-void Image8BitModel::setParam(int info0, uint32_t gray0, uint32_t isPNG0) {
-  w = info0;
+void Image8BitModel::setParam(int width, uint32_t gray0, uint32_t isPNG0) {
+  w = width;
   gray = gray0;
   isPNG = isPNG0;
 }

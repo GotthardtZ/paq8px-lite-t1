@@ -65,7 +65,8 @@ int ContextModel::p() {
       return contextModelImage1.p(blockInfo);
     }
 
-    case BlockType::IMAGE4: {
+    case BlockType::IMAGE4:
+    case BlockType::MRB4: {
       static ContextModelImage4 contextModelImage4{ shared, models };
       return contextModelImage4.p(blockInfo);
     }
@@ -73,7 +74,8 @@ int ContextModel::p() {
     case BlockType::IMAGE8:
     case BlockType::PNG8:
     case BlockType::IMAGE8GRAY:
-    case BlockType::PNG8GRAY: {
+    case BlockType::PNG8GRAY:
+    case BlockType::MRB8: {
       static ContextModelImage8 contextModelImage8{ shared, models };
       int isGray = blockType == BlockType::IMAGE8GRAY || blockType == BlockType::PNG8GRAY;
       int isPNG = blockType == BlockType::PNG8 || blockType == BlockType::PNG8GRAY;
