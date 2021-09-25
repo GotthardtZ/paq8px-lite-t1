@@ -414,6 +414,7 @@
     <ClInclude Include="model\DmcModel.hpp" />
     <ClInclude Include="model\DmcNode.hpp" />
     <ClInclude Include="model\ExeModel.hpp" />
+    <ClInclude Include="model\IContextModel.hpp" />
     <ClInclude Include="model\Image1BitModel.hpp" />
     <ClInclude Include="model\Image24BitModel.hpp" />
     <ClInclude Include="model\Image4BitModel.hpp" />

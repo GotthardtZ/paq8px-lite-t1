@@ -719,6 +719,9 @@
     <ClInclude Include="filter\mrb.hpp">
       <Filter>filter</Filter>
     </ClInclude>
+    <ClInclude Include="model\IContextModel.hpp">
+      <Filter>model</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

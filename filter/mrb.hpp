@@ -3,7 +3,7 @@
 
 #include "Filter.hpp"
 
-class MrbFilter : Filter {
+class MrbRleFilter : Filter {
 private:
   int width;
   int height;

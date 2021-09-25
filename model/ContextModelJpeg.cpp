@@ -1,7 +1,7 @@
 #include "../MixerFactory.hpp"
 #include "../Models.hpp"
 
-class ContextModelJpeg {
+class ContextModelJpeg : public IContextModel {
 
 private:
   Shared* const shared;
@@ -43,8 +43,7 @@ public:
     );
   }
 
-
-  int p(int blockInfo) {
+  int p() {
 
     m->add(256); //network bias
 

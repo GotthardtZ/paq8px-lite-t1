@@ -1,5 +1,4 @@
 #include "ContextModel.hpp"
-#include "ContextModelGeneric.cpp"
 #include "ContextModelText.cpp"
 #include "ContextModelImage1.cpp"
 #include "ContextModelImage4.cpp"
@@ -21,10 +20,12 @@ int ContextModel::p() {
     blpos++;
     INJECT_SHARED_c1
     if( blockSize == -1 ) {
+      selectedContextModel = &contextModelGeneric;
       nextBlockType = static_cast<BlockType>(c1); //got blockType but don't switch (we don't have all the info yet)
       bytesRead = 0;
       readSize = true;
     } else if( blockSize < 0 ) {
+      selectedContextModel = &contextModelGeneric;
       if( readSize ) {
         bytesRead |= int(c1 & 0x7FU) << ((-blockSize - 2) * 7);
         if((c1 >> 7U) == 0 ) {
@@ -47,85 +48,119 @@ int ContextModel::p() {
       }
     }
 
-    if(blpos == 0 ) {
+    if (blpos == 0) {
       blockType = nextBlockType; //got all the info - switch to next blockType
       shared->State.blockType = blockType;
+
+      if (blockType == BlockType::MRB) {
+        const uint16_t colorBits = (blockInfo >> 26); //1,4,8
+
+        if (colorBits == 4) {
+          blockType = BlockType::IMAGE4;
+          blockInfo = ((((blockInfo >> 12) & 0xfff) * 4 + 15) / 16) * 2;
+        }
+        else if (colorBits == 8) {
+          blockType = BlockType::IMAGE8;
+          blockInfo = (blockInfo >> 12) & 0xFFF;
+        }
+        else
+          quit("Unexpected colorBits for MRB");
+      }
+
+      switch (blockType) {
+
+        case BlockType::IMAGE1: {
+          static ContextModelImage1 contextModelImage1{ shared, models };
+          int width = blockInfo;
+          contextModelImage1.setParam(width);
+          selectedContextModel = &contextModelImage1;
+          break;
+        }
+
+        case BlockType::IMAGE4: {
+          static ContextModelImage4 contextModelImage4{ shared, models };
+          int width = blockInfo;
+          contextModelImage4.setParam(width);
+          selectedContextModel = &contextModelImage4;
+          break;
+        }
+
+        case BlockType::IMAGE8:
+        case BlockType::PNG8:
+        case BlockType::IMAGE8GRAY:
+        case BlockType::PNG8GRAY: {
+          static ContextModelImage8 contextModelImage8{ shared, models };
+          int isGray = blockType == BlockType::IMAGE8GRAY || blockType == BlockType::PNG8GRAY;
+          int isPNG = blockType == BlockType::PNG8 || blockType == BlockType::PNG8GRAY;
+          int width = blockInfo & 0xffffff;
+          contextModelImage8.setParam(width, isGray, isPNG);
+          selectedContextModel = &contextModelImage8;
+          break;
+        }
+
+        case BlockType::IMAGE24:
+        case BlockType::PNG24:
+        case BlockType::IMAGE32:
+        case BlockType::PNG32: {
+          static ContextModelImage24 contextModelImage24{ shared, models };
+          int isAlpha = blockType == BlockType::IMAGE32 || blockType == BlockType::PNG32;
+          int isPNG = blockType == BlockType::PNG24 || blockType == BlockType::PNG32;
+          int width = blockInfo & 0xffffff;
+          contextModelImage24.setParam(width, isAlpha, isPNG);
+          selectedContextModel = &contextModelImage24;
+          break;
+        }
+
+  #ifndef DISABLE_AUDIOMODEL
+        case BlockType::AUDIO:
+        case BlockType::AUDIO_LE: {
+          if ((blockInfo & 2) == 0) {
+            static ContextModelAudio8 contextModelAudio8{ shared, models };
+            contextModelAudio8.setParam(blockInfo);
+            selectedContextModel = &contextModelAudio8;
+            break;
+          }
+          else {
+            static ContextModelAudio16 contextModelAudio16{ shared, models };
+            contextModelAudio16.setParam(blockInfo);
+            selectedContextModel = &contextModelAudio16;
+            break;
+          }
+        }
+  #endif //DISABLE_AUDIOMODEL
+
+        case BlockType::JPEG: {
+          static ContextModelJpeg contextModelJpeg{ shared, models };
+          selectedContextModel = &contextModelJpeg;
+          break;
+        }
+
+        case BlockType::DEC_ALPHA: {
+          static ContextModelDec contextModelDec{ shared, models };
+          selectedContextModel = &contextModelDec;
+          break;
+        }
+
+        case BlockType::TEXT:
+        case BlockType::TEXT_EOL: {
+          static ContextModelText contextModelText{ shared, models };
+          selectedContextModel = &contextModelText;
+          break;
+        }
+
+        default: {
+          selectedContextModel = &contextModelGeneric;
+          break;
+        }
+      }
     }
     if( blockSize == 0 ) {
       blockType = BlockType::DEFAULT;
       shared->State.blockType = blockType;
+      selectedContextModel = &contextModelGeneric;
     }
   }
 
-
-  switch( blockType ) {
-
-    case BlockType::IMAGE1: {
-      static ContextModelImage1 contextModelImage1{ shared, models };
-      return contextModelImage1.p(blockInfo);
-    }
-
-    case BlockType::IMAGE4:
-    case BlockType::MRB4: {
-      static ContextModelImage4 contextModelImage4{ shared, models };
-      return contextModelImage4.p(blockInfo);
-    }
-
-    case BlockType::IMAGE8:
-    case BlockType::PNG8:
-    case BlockType::IMAGE8GRAY:
-    case BlockType::PNG8GRAY:
-    case BlockType::MRB8: {
-      static ContextModelImage8 contextModelImage8{ shared, models };
-      int isGray = blockType == BlockType::IMAGE8GRAY || blockType == BlockType::PNG8GRAY;
-      int isPNG = blockType == BlockType::PNG8 || blockType == BlockType::PNG8GRAY;
-      return contextModelImage8.p(blockInfo, isGray, isPNG);
-    }
-
-    case BlockType::IMAGE24:
-    case BlockType::PNG24:
-    case BlockType::IMAGE32:
-    case BlockType::PNG32: {
-      static ContextModelImage24 contextModelImage24{ shared, models };
-      int isAlpha = blockType == BlockType::IMAGE32 || blockType == BlockType::PNG32;
-      int isPNG = blockType == BlockType::PNG24 || blockType == BlockType::PNG32;
-      return contextModelImage24.p(blockInfo, isAlpha, isPNG);
-    }
-
-#ifndef DISABLE_AUDIOMODEL
-    case BlockType::AUDIO:
-    case BlockType::AUDIO_LE: {
-      if ((blockInfo & 2) == 0) {
-
-        static ContextModelAudio8 contextModelAudio8{ shared, models };
-        return contextModelAudio8.p(blockInfo);
-      }
-      else {
-        static ContextModelAudio16 contextModelAudio16{ shared, models };
-        return contextModelAudio16.p(blockInfo);
-      }
-      }
-#endif //DISABLE_AUDIOMODEL
-
-    case BlockType::JPEG: {
-      static ContextModelJpeg contextModelJpeg{ shared, models };
-      return contextModelJpeg.p(blockInfo);
-    }
-
-    case BlockType::DEC_ALPHA: {
-      static ContextModelDec contextModelDec{ shared, models };
-      return contextModelDec.p();
-    }
-
-    case BlockType::TEXT:
-    case BlockType::TEXT_EOL: {
-      static ContextModelText contextModelText{ shared, models };
-      return contextModelText.p();
-    }
-
-    default:
-      static ContextModelGeneric contextModelGeneric{ shared, models };
-      return contextModelGeneric.p();
-  }
+  return selectedContextModel->p();
 
 }

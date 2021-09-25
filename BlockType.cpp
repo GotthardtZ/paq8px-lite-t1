@@ -6,12 +6,12 @@ bool hasRecursion(BlockType ft) {
 
 bool hasInfo(BlockType ft) {
   return ft == BlockType::IMAGE1 || ft == BlockType::IMAGE4 || ft == BlockType::IMAGE8 || ft == BlockType::IMAGE8GRAY || ft == BlockType::IMAGE24 || ft == BlockType::IMAGE32 || ft == BlockType::AUDIO ||
-    ft == BlockType::AUDIO_LE || ft == BlockType::PNG8 || ft == BlockType::PNG8GRAY || ft == BlockType::PNG24 || ft == BlockType::PNG32 || ft == BlockType::MRB4 || ft == BlockType::MRB8;
+    ft == BlockType::AUDIO_LE || ft == BlockType::PNG8 || ft == BlockType::PNG8GRAY || ft == BlockType::PNG24 || ft == BlockType::PNG32 || ft == BlockType::MRB;
 }
 
 bool hasTransform(BlockType ft) {
   return ft == BlockType::IMAGE24 || ft == BlockType::IMAGE32 || ft == BlockType::AUDIO_LE || ft == BlockType::EXE || ft == BlockType::CD || ft == BlockType::ZLIB || ft == BlockType::BASE64 || ft == BlockType::GIF ||
-    ft == BlockType::TEXT_EOL || ft == BlockType::RLE || ft == BlockType::MRB4 || ft == BlockType::MRB8 || ft == BlockType::LZW || ft == BlockType::DEC_ALPHA;
+    ft == BlockType::TEXT_EOL || ft == BlockType::RLE || ft == BlockType::MRB || ft == BlockType::LZW || ft == BlockType::DEC_ALPHA;
 }
 
 bool isPNG(BlockType ft) { return ft == BlockType::PNG8 || ft == BlockType::PNG8GRAY || ft == BlockType::PNG24 || ft == BlockType::PNG32; }

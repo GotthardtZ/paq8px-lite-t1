@@ -1,7 +1,7 @@
 #include "../MixerFactory.hpp"
 #include "../Models.hpp"
 
-class ContextModelAudio8 {
+class ContextModelAudio8 : public IContextModel {
 
 private:
   Shared* const shared;
@@ -32,8 +32,12 @@ public:
     m->setScaleFactor(850, 140); //800-900, 140
   }
 
+  void setParam(int blockInfo) {
+    Audio8BitModel& audio8BitModel = models->audio8BitModel();
+    audio8BitModel.setParam(blockInfo);
+  }
 
-  int p(int blockInfo) {
+  int p() {
 
     m->add(256); //network bias
 
@@ -50,11 +54,9 @@ public:
     }
 
     Audio8BitModel& audio8BitModel = models->audio8BitModel();
-    audio8BitModel.setParam(blockInfo);
     audio8BitModel.mix(*m);
 
-    int isStereo = (blockInfo & 1);
-    shared->State.rLength = isStereo + 1;
+    shared->State.rLength = audio8BitModel.stereo + 1;
     RecordModel& recordModel = models->recordModel();
     recordModel.mix(*m);
 

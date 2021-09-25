@@ -1,7 +1,7 @@
 #include "../MixerFactory.hpp"
 #include "../Models.hpp"
 
-class ContextModelText {
+class ContextModelText : public IContextModel {
 
 private:
   Shared* const shared;

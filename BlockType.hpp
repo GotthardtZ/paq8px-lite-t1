@@ -30,8 +30,7 @@ enum class BlockType {
   RLE,
   LZW,
   DEC_ALPHA,
-  MRB4,
-  MRB8,
+  MRB,
   Count
 };
 
