@@ -31,6 +31,7 @@ enum class BlockType {
   LZW,
   DEC_ALPHA,
   MRB,
+  DBF,
   Count
 };
 

@@ -73,6 +73,20 @@ int ContextModel::p() {
           quit("Unexpected colorBits for MRB");
         blockInfo = widthInBytes;
       }
+      else if (blockType == BlockType::DBF) {
+        RecordModel& recordModel = models->recordModel();
+        uint32_t fixedRecordLenght = blockInfo;
+        recordModel.setParam(fixedRecordLenght);
+      }
+      else if (blockType == BlockType::DEC_ALPHA) {
+        RecordModel& recordModel = models->recordModel();
+        uint32_t fixedRecordLenght = 16;
+        recordModel.setParam(fixedRecordLenght);
+      }
+      else {
+        RecordModel& recordModel = models->recordModel();
+        recordModel.setParam(0); //enable automatic record length detection
+      }
 
       bool isText = isTEXT(blockType);
       TextModel& textModel = models->textModel();
@@ -155,7 +169,8 @@ int ContextModel::p() {
         }
 
         case BlockType::TEXT:
-        case BlockType::TEXT_EOL: {
+        case BlockType::TEXT_EOL:
+        case BlockType::DBF: {
           static ContextModelText contextModelText{ shared, models };
           selectedContextModel = &contextModelText;
           break;

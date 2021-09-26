@@ -35,6 +35,9 @@ public:
   void setParam(int blockInfo) {
     Audio8BitModel& audio8BitModel = models->audio8BitModel();
     audio8BitModel.setParam(blockInfo);
+    uint32_t fixedRecordLenght = audio8BitModel.stereo + 1;
+    RecordModel& recordModel = models->recordModel();
+    recordModel.setParam(fixedRecordLenght);  // 1 or 2
   }
 
   int p() {
@@ -56,7 +59,6 @@ public:
     Audio8BitModel& audio8BitModel = models->audio8BitModel();
     audio8BitModel.mix(*m);
 
-    shared->State.rLength = audio8BitModel.stereo + 1;
     RecordModel& recordModel = models->recordModel();
     recordModel.mix(*m);
 

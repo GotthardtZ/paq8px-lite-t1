@@ -63,7 +63,6 @@ public:
     sparseModel.mix(*m);
     ChartModel& chartModel = models->chartModel();
     chartModel.mix(*m);
-    shared->State.rLength = 16;
     RecordModel& recordModel = models->recordModel();
     recordModel.mix(*m);
     TextModel& textModel = models->textModel();

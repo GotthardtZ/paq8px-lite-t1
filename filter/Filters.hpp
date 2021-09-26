@@ -162,6 +162,15 @@ struct DetectionInfo {
     DataLength = data_len;
     DataInfo = (colorBits << 2 | packingMethod) << 24 | width << 12 | height;
   }
+
+  void DBF_DET(uint64_t blockStart, BlockType type, uint64_t start_pos, uint32_t header_len, uint64_t data_len, int recordLength) {
+    Type = type;
+    HeaderStart = blockStart + start_pos;
+    HeaderLength = header_len;
+    DataStart = HeaderStart + HeaderLength;
+    DataLength = data_len;
+    DataInfo = recordLength;
+  }
 };
 
 struct TextDetectionInfo {
@@ -270,6 +279,12 @@ static TextDetectionInfo detectText(File* in, uint64_t blockStart, uint64_t bloc
   return detectionInfo;
 }
 
+struct dBASE {
+  uint8_t Version{};
+  uint32_t nRecords{};
+  uint16_t RecordLength{};
+  uint16_t HeaderLength{};
+};
 
 // Detect blocks
 static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions* const transformOptions) {
@@ -392,6 +407,10 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
   uint8_t zin[1U << 16] = {0};
   uint8_t zout[1U << 16] = {0};
 
+  // For DBF detection
+  dBASE dbase{};
+  uint64_t dbasei = 0;
+
   int zBufPos = 0;
   uint64_t zZipPos = UINT64_MAX;
   int histogram[256] = {0};
@@ -434,7 +453,7 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
     if (c == EOF) {
       quit("detect(): Unexpected end of file");
     }
-    
+
     blockHash = hash(blockHash, c);
 
     buf3 = buf3 << 8 | buf2 >> 24;
@@ -459,7 +478,7 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
         pngType = static_cast<uint8_t>(buf0 >> 16);
         pnggray = 0;
         png *= static_cast<int>((buf0 & 0xFFFF) == 0 && (pngw != 0) && (pngh != 0) && pngbps == 8 &&
-                               ((pngType == 0) || pngType == 2 || pngType == 3 || pngType == 4 || pngType == 6));
+          ((pngType == 0) || pngType == 2 || pngType == 3 || pngType == 4 || pngType == 6));
       }
       else if (p > 12 && pngType < 0) {
         png = 0;
@@ -588,14 +607,86 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
       }
     }
     if (zh == -1 && zBuf[(zBufPos - 32) & 0xFF] == 'P' && zBuf[(zBufPos - 32 + 1) & 0xFF] == 'K' &&
-        zBuf[(zBufPos - 32 + 2) & 0xFF] == '\x3' && zBuf[(zBufPos - 32 + 3) & 0xFF] == '\x4' && zBuf[(zBufPos - 32 + 8) & 0xFF] == '\x8' &&
-        zBuf[(zBufPos - 32 + 9) & 0xFF] == '\0') {
+      zBuf[(zBufPos - 32 + 2) & 0xFF] == '\x3' && zBuf[(zBufPos - 32 + 3) & 0xFF] == '\x4' && zBuf[(zBufPos - 32 + 8) & 0xFF] == '\x8' &&
+      zBuf[(zBufPos - 32 + 9) & 0xFF] == '\0') {
       int nlen = (int)zBuf[(zBufPos - 32 + 26) & 0xFF] + ((int)zBuf[(zBufPos - 32 + 27) & 0xFF]) * 256 +
-                 (int)zBuf[(zBufPos - 32 + 28) & 0xFF] + ((int)zBuf[(zBufPos - 32 + 29) & 0xFF]) * 256;
+        (int)zBuf[(zBufPos - 32 + 28) & 0xFF] + ((int)zBuf[(zBufPos - 32 + 29) & 0xFF]) * 256;
       if (nlen < 256 && i + 30 + nlen < n)
         zZipPos = i + 30 + nlen;
     }
 #endif //DISABLE_ZLIB
+
+    // dBASE VERSIONS
+    //  '02' > FoxBase
+    //  '03' > dBase III without memo file
+    //  '04' > dBase IV without memo file
+    //  '05' > dBase V without memo file
+    //  '07' > Visual Objects 1.x
+    //  '30' > Visual FoxPro
+    //  '31' > Visual FoxPro with AutoIncrement field
+    //  '43' > dBASE IV SQL table files, no memo
+    //  '63' > dBASE IV SQL system files, no memo
+    //  '7b' > dBase IV with memo file
+    //  '83' > dBase III with memo file
+    //  '87' > Visual Objects 1.x with memo file
+    //  '8b' > dBase IV with memo file
+    //  '8e' > dBase IV with SQL table
+    //  'cb' > dBASE IV SQL table files, with memo
+    //  'f5' > FoxPro with memo file - tested
+    //  'fb' > FoxPro without memo file
+    //
+    if (dbasei == 0 && ((c & 7) == 3 /*dBase level 3-5*/ || (c & 7) == 4 /*dBase level 7*/ || (c >> 4) == 3 || c == 0xf5 || c == 0x30)) {
+      dbasei = i + 1;
+      dbase.Version = ((c >> 4) == 3) ? 3 : c & 7;
+    }
+    if (dbasei) {
+      const int p = int(i - dbasei + 1);
+      //1-2-3: Date of last update; in YYMMDD format
+      if (p == 1) { if (c < 83) dbasei = 0; } //year (the DBF file type was introduced with dBASE II in 1983.)
+      else if (p == 2) { if (!(c > 0 && c < 13)) dbasei = 0; } //month
+      else if (p == 3) { if (!(c > 0 && c < 32)) dbasei = 0; }//day
+      //4-7: Number of records in the table. (Least significant byte first.)
+      else if (p == 7) { if (!((dbase.nRecords = bswap(buf0)) > 0 && dbase.nRecords < 0x40000000)) dbasei = 0; }
+      //8-9: Number of bytes in the header. (Least significant byte first.)
+      else if (p == 9) { if (!((dbase.HeaderLength = ((buf0 >> 8) & 0xff) | (c << 8)) > 32 && (((dbase.HeaderLength - 32 - 1) % 32) == 0 || (dbase.HeaderLength > 255 + 8 && (((dbase.HeaderLength -= 255 + 8) - 32 - 1) % 32) == 0)))) dbasei = 0; }
+      //10-11: Number of bytes in the record. (Least significant byte first.)
+      else if (p == 11) { if (!(((dbase.RecordLength = ((buf0 >> 8) & 0xff) | (c << 8))) > 8 && dbase.HeaderLength + dbase.nRecords * dbase.RecordLength < blockSize)) dbasei = 0; }
+      //12-13: Reserved; filled with zeros.
+      //14: Flag indicating incomplete dBASE IV transaction. 0 or 1.
+      //15: dBASE IV encryption flag. 0 or 1.
+      else if (p == 15) { if ((buf0 & 0xfffffefe) != 0) dbasei = 0; }
+      //16-27: Reserved for multi - user processing.
+      //28: Production .mdx file flag; 1 if there is a production .mdx file, 0 if not
+      else if (p == 28) { if ((c & 0xfe) != 0) dbasei = 0; }
+      //30-31: Reserved; filled with zeros.
+      else if (p == 31) { if ((buf0 & 0xffff) != 0) dbasei = 0; }
+      //32: for dBase III, IV and 5 the 'Field descriptor array' starts now and is n*32 bytes, for level 7 it starts at 68 and is n*48 bytes
+      else if (p == 32) {
+        uint64_t savedpos = in->curPos();
+        in->setpos(savedpos - 34 + dbase.HeaderLength);
+        uint8_t marker = in->getchar(); // field descriptor array terminator, it must be 0x0d
+        if (marker != 0x0d) { 
+          dbasei = 0; 
+          in->setpos(savedpos); 
+        }
+        else {
+          uint32_t endPos = dbase.nRecords * dbase.RecordLength;
+          uint32_t seekpos = endPos + in->curPos();
+          in->setpos(seekpos);
+          marker = in->getchar(); // file end marker, it must be 0x1a
+          if (marker != 0x1a) {
+            dbasei = 0;
+            in->setpos(savedpos);
+          }
+          else {
+            //success
+            in->setpos(savedpos);
+            detectionInfo.DBF_DET(start, BlockType::DBF, dbasei - 1, dbase.HeaderLength, dbase.nRecords* dbase.RecordLength + 1, dbase.RecordLength);
+            return detectionInfo;
+          }
+        }
+      }
+    }
 
     if (i - pdfimp > 1024) {
       pdfIm = pdfImW = pdfImH = pdfImB = pdfGray = 0; // fail
@@ -1874,9 +1965,9 @@ static void composeSubBlockStringToPrint(String& blstr, String& blstrSub, int bl
 }
 
 static void printBlock(const uint64_t begin, const uint64_t len, const BlockType type, const int blockInfo, String& blstrSub, const int recursionLevel) {
-  static const char* typeNames[27] = { "default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
+  static const char* typeNames[28] = { "default", "filecontainer", "jpeg", "hdr", "1b-image", "4b-image", "8b-image", "8b-img-grayscale",
                                       "24b-image", "32b-image", "audio", "audio - le", "x86/64", "cd", "zlib", "base64", "gif", "png-8b",
-                                      "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol", "rle", "lzw", "dec-alpha", "mrb" };
+                                      "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol", "rle", "lzw", "dec-alpha", "mrb", "dBase"};
   static const char* audioTypes[4] = { "8b-mono", "8b-stereo", "16b-mono", "16b-stereo" };
   static const char* mrbTypes[4] = { "mrb-uncompressed", "mrb-rle", "mrb-lz77", "mrb-rle-lz77" };
 
@@ -1904,6 +1995,9 @@ static void printBlock(const uint64_t begin, const uint64_t len, const BlockType
   }
   else if (type == BlockType::CD) {
     printf(" (mode%d/form%d)", blockInfo == 1 ? 1 : 2, blockInfo != 3 ? 1 : 2);
+  }
+  else if (type == BlockType::DBF) {
+    printf(" (record length: %d)", blockInfo);
   }
   printf("\n");
 }

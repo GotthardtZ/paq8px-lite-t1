@@ -55,12 +55,20 @@ public:
       lstmModel.mix(*m);
     }
 
+    INJECT_SHARED_blockType
+
     SparseMatchModel& sparseMatchModel = models->sparseMatchModel();
     sparseMatchModel.mix(*m);
     SparseBitModel& sparseBitModel = models->sparseBitModel();
     sparseBitModel.mix(*m);
-    SparseModel& sparseModel = models->sparseModel();
-    sparseModel.mix(*m);
+    if (blockType != BlockType::DBF) {
+      SparseModel& sparseModel = models->sparseModel();
+      sparseModel.mix(*m);
+      XMLModel& xmlModel = models->xmlModel();
+      xmlModel.mix(*m);
+      NestModel& nestModel = models->nestModel();
+      nestModel.mix(*m);
+    }
     ChartModel& chartModel = models->chartModel();
     chartModel.mix(*m);
     RecordModel& recordModel = models->recordModel();
@@ -75,10 +83,6 @@ public:
     indirectModel.mix(*m);
     DmcForest& dmcForest = models->dmcForest();
     dmcForest.mix(*m);
-    NestModel& nestModel = models->nestModel();
-    nestModel.mix(*m);
-    XMLModel& xmlModel = models->xmlModel();
-    xmlModel.mix(*m);
 
     return m->p();
   }
