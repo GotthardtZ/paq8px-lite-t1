@@ -160,7 +160,7 @@ struct DetectionInfo {
     HeaderLength = header_len;
     DataStart = HeaderStart + HeaderLength;
     DataLength = data_len;
-    DataInfo = (colorBits << 2 | packingMethod) << 24 | (((width + 3) / 4) * 4) << 12 | height;
+    DataInfo = (colorBits << 2 | packingMethod) << 24 | width << 12 | height;
   }
 };
 
@@ -889,8 +889,8 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
     }
 #endif //  DISABLE_AUDIOMODEL
 
-    //detect rle encoded mrb files inside windows hlp files 506C
-    //we support only RLE encoded single images
+    //detect uncompressed and rle encoded mrb files inside windows hlp files 506C
+    //we support only single images
     if (!mrb && ((buf0 & 0xFFFF) == 0x6c70 || (buf0 & 0xFFFF) == 0x6C50) && !b64S && !cdi) { //Magic: 0x506C (SHG,lP) or 0x706C (MRB,lp)
       mrb = i; 
       mrbmulti = 0;
@@ -908,7 +908,7 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
         else mrb = 0; // fail
       }
       else if (p == 10) {
-        if (mrbPictureType == 6) { //Note: the only type we support is (RunLen encoded) DIB
+        if (mrbPictureType == 6) { // DIB
           uint64_t mrbTell = in->curPos() - 2; //save curPos so we can restore it
           in->setpos(mrbTell);
           uint32_t Xdpi = GetCDWord(in);
@@ -926,10 +926,16 @@ static DetectionInfo detect(File *in, uint64_t blockSize, const TransformOptions
           uint64_t mrbsize = mrbcsize + in->curPos() - mrbTell + 10 + (1 << BitCount) * 4; // ignore HotspotSize
           mrbTell = mrbTell + 2;
           in->setpos(mrbTell);
+          int pixelBytes = (mrbw * mrbh * BitCount) >> 3;
           //debug:
           //printf("MRB: %d, %d, %d, %d, %d, %d, %d, %d\n", mrbPictureType, mrbPackingMethod, BitCount, ColorsUsed, mrbw, mrbh, mrbcsize, mrbmulti);
-          if (!(BitCount == 4 || BitCount == 8) || mrbw < 4 || mrbh < 4 || mrbw > 1024 || mrbh >= 4096 || mrbsize == 0 || mrbPackingMethod != 1) {
-            mrb = 0; 
+          if (!(BitCount == 1 || BitCount == 4 || BitCount == 8) || mrbw < 4 || mrbh < 4 || mrbw > 1024 || mrbh >= 4096 || mrbsize == 0 || mrbPackingMethod > 1) {
+            mrb = 0; // fail
+          }
+          else if (mrbPackingMethod <= 1 && pixelBytes < 360) {
+            //debug:
+            //printf("MRB: skipping\n");
+            mrb = 0; // block is too small to be worth processing as a new block
           }
           else {
             // success
@@ -1772,7 +1778,11 @@ static auto encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int in
     const uint16_t colorBits = (info >> 26); //1,4,8
     const int width = (info >> 12) & 0xfff;
     const int height = info & 0xfff;
-    const int widthInBytes = (colorBits == 8) ? width : (((width) * 4 + 15) / 16) * 2;
+    int widthInBytes;
+    if (colorBits == 8) widthInBytes = ((width + 3) / 4) * 4;
+    else if (colorBits == 4) widthInBytes = ((width + 3) / 4) * 2;
+    else if (colorBits == 1) widthInBytes = ((width + 31) / 32) * 4;
+    else quit("Unexpected colorBits for MRB");
     if (packingMethod == 1 /*RLE*/) {
       auto m = new MrbRleFilter();
       m->setInfo(widthInBytes, height);
@@ -1793,7 +1803,7 @@ static auto encodeFunc(BlockType type, File *in, File *tmp, uint64_t len, int in
 
 static void
 transformEncodeBlock(BlockType type, File *in, uint64_t len, Encoder &en, int info, String &blstr, int recursionLevel, float p1, float p2, uint64_t begin, const TransformOptions* const transformOptions) {
-  if( hasTransform(type)) {
+  if( hasTransform(type, info)) {
     FileTmp tmp;
     int headerSize = 0;
     uint64_t diffFound = encodeFunc(type, in, &tmp, len, info, headerSize, transformOptions);
@@ -1868,10 +1878,13 @@ static void printBlock(const uint64_t begin, const uint64_t len, const BlockType
                                       "24b-image", "32b-image", "audio", "audio - le", "x86/64", "cd", "zlib", "base64", "gif", "png-8b",
                                       "png-8b-grayscale", "png-24b", "png-32b", "text", "text - eol", "rle", "lzw", "dec-alpha", "mrb" };
   static const char* audioTypes[4] = { "8b-mono", "8b-stereo", "16b-mono", "16b-stereo" };
+  static const char* mrbTypes[4] = { "mrb-uncompressed", "mrb-rle", "mrb-lz77", "mrb-rle-lz77" };
 
-
-  printf(" %-11s | %-16s |%10" PRIu64 " bytes [%" PRIu64 " - %" PRIu64 "]", blstrSub.c_str(),
-    typeNames[(type == BlockType::ZLIB && isPNG(BlockType(blockInfo >> 24U))) ? blockInfo >> 24 : (int)type], len, begin, (begin + len) - 1);
+  auto typeName =
+    type == BlockType::MRB ? mrbTypes[(blockInfo >> 24) & 3] :
+    type == BlockType::ZLIB && isPNG(BlockType(blockInfo >> 24U)) ? typeNames[blockInfo >> 24] :
+    typeNames[(int)type];
+  printf(" %-11s | %-16s |%10" PRIu64 " bytes [%" PRIu64 " - %" PRIu64 "]", blstrSub.c_str(), typeName, len, begin, (begin + len) - 1);
   if (type == BlockType::AUDIO || type == BlockType::AUDIO_LE) {
     printf(" (%s)", audioTypes[blockInfo % 4]);
   }
@@ -1882,7 +1895,9 @@ static void printBlock(const uint64_t begin, const uint64_t len, const BlockType
   else if (type == BlockType::MRB) {
     const uint8_t packingMethod = (blockInfo >> 24) & 3; //0..3
     const uint16_t colorBits = (blockInfo >> 26); //1,4,8
-    printf(" (%d-bit %s image: %dx%d)", colorBits, packingMethod ==0 ? "uncompressed" : packingMethod == 1 ? "RLE" : "LZ77", (blockInfo >> 12) & 0xFFF, blockInfo & 0xFFF);
+    const int width = ((blockInfo >> 12) & 0xFFF);
+    const int height = blockInfo & 0xFFF;
+    printf(" (%d-bit image: %dx%d)", colorBits, width, height);
   }
   else if (hasRecursion(type) && (blockInfo >> 24U) != (int)BlockType::DEFAULT) {
       printf(" (%s)", typeNames[blockInfo >> 24U]);
@@ -2002,12 +2017,12 @@ static auto decompressRecursive(File *out, uint64_t blockSize, Encoder &en, FMod
       decompressRecursive(&tmp, len, en, FDECOMPRESS, recursionLevel + 1, transformOptions);
       if( mode != FDISCARD ) {
         tmp.setpos(0);
-        if( hasTransform(type)) {
+        if( hasTransform(type, info)) {
           len = decodeFunc(type, en, &tmp, len, info, out, mode, diffFound, transformOptions);
         }
       }
       tmp.close();
-    } else if( hasTransform(type)) {
+    } else if( hasTransform(type, info)) {
       len = decodeFunc(type, en, nullptr, len, info, out, mode, diffFound, transformOptions);
     } else {
       for( uint64_t j = 0; j < len; ++j ) {

@@ -44,7 +44,7 @@ bool hasRecursion(BlockType ft);
 
 bool hasInfo(BlockType ft);
 
-bool hasTransform(BlockType ft);
+bool hasTransform(BlockType ft, int info);
 
 bool isPNG(BlockType ft);
 

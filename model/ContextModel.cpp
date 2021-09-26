@@ -53,18 +53,25 @@ int ContextModel::p() {
       shared->State.blockType = blockType;
 
       if (blockType == BlockType::MRB) {
+        const uint8_t packingMethod = (blockInfo >> 24) & 3; //0..3
         const uint16_t colorBits = (blockInfo >> 26); //1,4,8
-
-        if (colorBits == 4) {
-          blockType = BlockType::IMAGE4;
-          blockInfo = ((((blockInfo >> 12) & 0xfff) * 4 + 15) / 16) * 2;
-        }
-        else if (colorBits == 8) {
+        const int width = (blockInfo >> 12) & 0xfff;
+        int widthInBytes;
+        if (colorBits == 8) { 
+          widthInBytes = ((width + 3) / 4) * 4; 
           blockType = BlockType::IMAGE8;
-          blockInfo = (blockInfo >> 12) & 0xFFF;
+        }
+        else if (colorBits == 4) {
+          widthInBytes = ((width + 3) / 4) * 2;
+          blockType = BlockType::IMAGE4;
+        }
+        else if (colorBits == 1) {
+          widthInBytes = ((width + 31) / 32) * 4; 
+          blockType = BlockType::IMAGE1;
         }
         else
           quit("Unexpected colorBits for MRB");
+        blockInfo = widthInBytes;
       }
 
       switch (blockType) {
