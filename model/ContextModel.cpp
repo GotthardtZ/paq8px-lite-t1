@@ -74,6 +74,12 @@ int ContextModel::p() {
         blockInfo = widthInBytes;
       }
 
+      bool isText = isTEXT(blockType);
+      TextModel& textModel = models->textModel();
+      textModel.setParam(isText ? 74 : 64);
+      WordModel& wordModel = models->wordModel();
+      wordModel.setParam(isText ? 74 : 64);
+
       switch (blockType) {
 
         case BlockType::IMAGE1: {

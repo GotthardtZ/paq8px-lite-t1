@@ -4,13 +4,17 @@
 
 WordModel::WordModel(Shared* const sh, const uint64_t size) : 
   shared(sh),
-  cm(sh, size, nCM1 + nCM2_TEXT, 74),
+  cm(sh, size, nCM1 + nCM2_TEXT, 64),
   infoNormal(sh, cm), infoPdf(sh, cm), pdfTextParserState(0)
 {}
 
 void WordModel::reset() {
   infoNormal.reset();
   infoPdf.reset();
+}
+
+void WordModel::setParam(int cmScale) {
+  cm.setScale(cmScale);
 }
 
 void WordModel::mix(Mixer &m) {

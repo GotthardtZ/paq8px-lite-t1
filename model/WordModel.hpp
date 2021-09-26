@@ -34,6 +34,7 @@ private:
 public:
     WordModel(Shared* const sh, uint64_t size);
     void reset();
+    void setParam(int cmScale);
     void mix(Mixer &m);
 };
 
