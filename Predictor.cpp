@@ -39,7 +39,7 @@ void Predictor::trainText(const char *const dictionary, int iterations) {
   NormalModel &normalModel = models->normalModel();
   WordModel &wordModel = models->wordModel();
   DummyMixer mDummy(shared, 
-    NormalModel::MIXERINPUTS + WordModel::MIXERINPUTS, 
+    NormalModel::MIXERINPUTS + WordModel::MIXERINPUTS_TEXT, 
     NormalModel::MIXERCONTEXTS_PRE + WordModel::MIXERCONTEXTS,
     NormalModel::MIXERCONTEXTSETS_PRE + WordModel::MIXERCONTEXTSETS);
   shared->State.blockType = BlockType::TEXT;

@@ -4,7 +4,7 @@
 
 WordModel::WordModel(Shared* const sh, const uint64_t size) : 
   shared(sh),
-  cm(sh, size, nCM, 74),
+  cm(sh, size, nCM1 + nCM2_TEXT, 74),
   infoNormal(sh, cm), infoPdf(sh, cm), pdfTextParserState(0)
 {}
 
@@ -64,7 +64,7 @@ void WordModel::mix(Mixer &m) {
   }
   cm.mix(m);
 
-  const int order = max(0, cm.order - (nCM - 31)); //0-31
+  const int order = max(0, cm.order - (nCM1 + nCM2_TEXT - 31)); //0-31
   assert(0 <= order && order <= 31);
   m.set((order >> 1) << 3 | bpos, 16 * 8);
   shared->State.WordModel.order = order;

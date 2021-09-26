@@ -47,7 +47,8 @@ private:
 
 public:
     static constexpr int nCM1 = 17; // pdf / non_pdf contexts
-    static constexpr int nCM2 = 41; // common contexts
+    static constexpr int nCM2_TEXT = 41; // common contexts (text content)
+    static constexpr int nCM2_BIN = 41 - 9; // common contexts (bibnary content)
     Info(Shared* const sh, ContextMap2 &contextmap);
 
     /**
