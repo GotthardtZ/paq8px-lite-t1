@@ -15,16 +15,19 @@ typedef enum {
  */
 class Encoder {
 private:
-    Predictor predictor;
     ArithmeticEncoder ari;
     const Mode mode; /**< Compress or decompress? */
     File* archive; /**< Compressed data file */
     File *alt; /**< decompressByte() source in COMPRESS mode */
     float p1 {}, p2 {}; /**< percentages for progress indicator: 0.0 .. 1.0 */
-    const Shared * const shared;
+    Shared * const shared;
 
+    void updateModels(Predictor* predictor, uint32_t p, int y);
 
 public:
+
+    Predictor predictorMain;
+    //Predictor predictor;
 
     /**
      * Encoder(COMPRESS, f) creates encoder for compression to archive @ref f, which
@@ -54,26 +57,18 @@ public:
      * @param f
      */
     void setFile(File *f);
-    
+
     /**
      * compressByte(c) in COMPRESS mode compresses one byte.
      * @param c the byte to be compressed
      */
-    void compressByte(uint8_t c);
+    void compressByte(Predictor *predictor, uint8_t c);
 
     /**
      * decompressByte() in DECOMPRESS mode decompresses and returns one byte.
      * @return the decompressed byte
      */
-    auto decompressByte() ->uint8_t;
-
-    void encodeBlockType(BlockType blocktype);
-    void encodeBlockSize(uint64_t blockSize);
-    auto decodeBlockType() -> BlockType;
-    auto decodeBlockSize() -> uint64_t;
-
-    void encodeInfo(int width);
-    auto decodeInfo() -> int;
+    uint8_t decompressByte(Predictor *predictor);
 
     void setStatusRange(float perc1, float perc2);
     void printStatus(uint64_t n, uint64_t size) const;

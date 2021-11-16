@@ -1,9 +1,8 @@
 #ifndef PAQ8PX_MIXER_HPP
 #define PAQ8PX_MIXER_HPP
 
-#include "IPredictor.hpp"
 #include "Shared.hpp"
-#include "utils.hpp"
+#include "Utils.hpp"
 
 #if defined(__i386__) || defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>
@@ -172,19 +171,12 @@ static void trainSimdNone(const short *const t, short *const w, int n, const int
   }
 }
 
-struct ErrorInfo {
-  uint32_t data[2], sum, mask, collected;
 
-  void reset() {
-    memset(this, 0, sizeof(*this));
-  }
-};
-
-class Mixer : protected IPredictor {
+class Mixer {
 protected:
-    static constexpr int MAX_LEARNING_RATE = 8 * 65536 - 1;
-    static constexpr int MIN_LEARNING_RATE_S1 = 2 * 65536 - 1; 
-    static constexpr int MIN_LEARNING_RATE_SN = 6 * 65536 - 1;
+    static constexpr int MAX_LEARNING_RATE = int(8 * 65536 - 1);
+    static constexpr int MIN_LEARNING_RATE_S1 = int(3 * 65536 - 1);
+    static constexpr int MIN_LEARNING_RATE_SN = int(4.5 * 65536 - 1);
     
 
     const Shared * const shared;
@@ -195,7 +187,6 @@ protected:
     Array<short, 32> tx; /**< n inputs from add() */
     Array<short, 32> wx; /**< n*m weights */
     Array<uint32_t> cxt; /**< s contexts */
-    Array<ErrorInfo> info; /**< stats for the adaptive learning rates  */
     Array<int> rates; /**< learning rates */
     uint32_t numContexts {}; /**< number of contexts (0 to s)  */
     uint32_t base {}; /**< offset of next context */
@@ -214,14 +205,14 @@ public:
      */
     Mixer(const Shared* sh, int n, int m, int s);
 
-    ~Mixer() override = default;
+    virtual ~Mixer() = default;
     /**
      * Returns the output prediction that the next bit is 1 as a 12 bit number (0 to 4095).
      * @return the prediction
      */
     virtual int p() = 0;
     virtual void setScaleFactor(int sf0, int sf1) = 0;
-    virtual void promote(int x) = 0;
+    virtual void update() = 0;
 
     /**
      * Input x (call up to n times)
@@ -242,7 +233,6 @@ public:
      * @param rate
      */
     void set(uint32_t cx, uint32_t range);
-    void skip(uint32_t range);
     void reset();
 };
 

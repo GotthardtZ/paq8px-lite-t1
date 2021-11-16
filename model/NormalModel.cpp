@@ -1,87 +1,158 @@
 #include "NormalModel.hpp"
 
-NormalModel::NormalModel(Shared* const sh, const uint64_t cmSize) : 
-  shared(sh), cm(sh, cmSize, nCM, 64),
-  smOrder0Slow(sh, 1, 255, 1023, StateMap::Generic), 
-  smOrder1Slow(sh, 1, 255 * 256, 1023, StateMap::Generic),
-  smOrder1Fast(sh, 1, 255 * 256, 64, StateMap::Generic) // 64->16 is also ok
+NormalModel::NormalModel(Shared* const sh, const uint64_t cmSize) :
+  shared(sh), 
+  cm(sh, cmSize),
+  smOrder0(sh, 255, 4, StateMap::Generic),
+  smOrder1(sh, 255 * 256, 32, StateMap::Generic),
+  smOrder2(sh, 1<<24, 1023, StateMap::Generic)
 {
   assert(isPowerOf2(cmSize));
 }
 
-void NormalModel::reset() {
-  memset(&shared->State.NormalModel.cxt[0], 0, sizeof(shared->State.NormalModel.cxt));
-}
-
-void NormalModel::updateHashes() {
-  INJECT_SHARED_c1
-  INJECT_SHARED_blockType
-  BlockType normalizedBlockType = blockType;
-  /* todo: let blocktype represent simply the blocktype without any transformation used:
-      blockType == BlockType::AUDIO_LE = BlockType::AUDIO
-      blockType == BlockType::TEXT_EOL = BlockType::TEXT
-  */
-  if (isTEXT(blockType))
-    normalizedBlockType = BlockType::DEFAULT;
-  else if (blockType == BlockType::AUDIO_LE)
-    normalizedBlockType = BlockType::AUDIO;
-  const uint64_t blocktype_c1 = normalizedBlockType << 8 | c1;
-  uint64_t* cxt = shared->State.NormalModel.cxt;
-  for( uint64_t i = 14; i > 0; --i ) {
-    cxt[i] = (cxt[i - 1] + blocktype_c1 + i) * PHI64;
-  }
+bool isPunctuation(uint32_t c3) {
+  static constexpr uint32_t PUNCTUATION[]{ 
+    0xEFBC8C,0xE79A84,0xE38082,0xE38081,0xEFBC88,0xEFBC89,0xE59CA8,0xE698AF,
+    0xE69C89,0xE5928C,0xEFBC9A,0xE782BA,0xE4BBA5,0xE3808A,0xE4BA86,0xE696BC,
+    0xE4B8BA,0xE794A8,0xE3808C,0xE58F8A,0xE8808C,0xE588B0,0xE4BA8E,0xE794B1,
+    0xE8A2AB,0xE88887,0xE4BBBB,0xE59091,0xE5808B,0xE2809C,0xE887B3,0xE88085,
+    0xE6ADA4,0xE585A5,0xE4BD86,0xEFBC9B,0xE4B88E,0xE68896,0xE5A682,0xE5B087,
+    0xE68BAC,0xE4BA9B,0xE4B894,
+  };
+  constexpr size_t PUNCTUATION_COUNT = sizeof(PUNCTUATION)/sizeof(uint32_t);
+  for (size_t i = 0; i < PUNCTUATION_COUNT; i++)
+    if (PUNCTUATION[i] == c3)
+      return true;
+  return false;
 }
 
 void NormalModel::mix(Mixer &m) {
   INJECT_SHARED_bpos
+  INJECT_SHARED_c1
   if( bpos == 0 ) {
-    updateHashes();
-    uint64_t* cxt = shared->State.NormalModel.cxt;
-    const uint8_t RH = CM_USE_RUN_STATS | CM_USE_BYTE_HISTORY;
-    for(uint64_t i = 1; i <= 6; ++i ) {
-      cm.set(RH, cxt[i]);
+
+    uint64_t lastchar = static_cast<uint64_t>(c1);
+    lastchar++;
+    if (utf8left == 0) {
+
+      utf8c7 = (utf8c6 + lastchar) * PHI64;
+      utf8c6 = (utf8c5 + lastchar) * PHI64;
+      utf8c5 = (utf8c4 + lastchar) * PHI64;
+      utf8c4 = (utf8c3 + lastchar) * PHI64;
+      utf8c3 = (utf8c2 + lastchar) * PHI64;
+      utf8c2 = (utf8c1 + lastchar) * PHI64;
+      utf8c1 = (lastchar)*PHI64; // ascii or E*
+
+      if ((c1 >> 5) == 0b110)utf8left = 1;
+      else if ((c1 >> 4) == 0b1110)utf8left = 2;
+      else if ((c1 >> 3) == 0b11110)utf8left = 3;
+      else utf8left = 0; //ascii or utf8 error
+
     }
-    cm.set(RH, cxt[8]); 
-    cm.set(RH, cxt[11]);
-    cm.set(RH, cxt[14]);
+    else {
+
+      // https://stackoverflow.com/questions/37296289/fastest-way-to-multiply-an-array-of-int64-t
+      utf8c7 = (utf8c7 + lastchar) * PHI64;
+      utf8c6 = (utf8c6 + lastchar) * PHI64;
+      utf8c5 = (utf8c5 + lastchar) * PHI64;
+      utf8c4 = (utf8c4 + lastchar) * PHI64;
+      utf8c3 = (utf8c3 + lastchar) * PHI64;
+      utf8c2 = (utf8c2 + lastchar) * PHI64;
+      utf8c1 = (utf8c1 + lastchar) * PHI64;
+
+      utf8left--;
+      if ((c1 >> 6) != 0b10)
+        utf8left = 0; //utf8 error
+    }
+
+    type =
+      c1 >= '0' && c1 <= '9' ? 0 :
+      (c1 >= 'a' && c1 <= 'z') || (c1 >= 'A' && c1 <= 'Z') ? 1 :
+      (c1 < 128) ? 2 :
+      3 + utf8left; //0..6
+
+    cm.set(0, utf8c1);
+    cm.set(1, utf8c2);
+    cm.set(2, utf8c3);
+    cm.set(3, utf8c4);
+    cm.set(4, utf8c5);
+    cm.set(5, utf8c6);
+    cm.set(6, utf8c7);
+
+    uint8_t tokentype = type <= 1 ? 0 : type == 2 ? 1 : 2;
+    INJECT_SHARED_c4
+    uint32_t c3 = c4 & 0xffffff;
+    bool isP = (utf8left == 0 && (c3&0xE0C0C0)==0xE08080 && isPunctuation(c3));
+    if (isP) {
+      wordhash = MUL64_1;
+      tokentype = 3;
+    }
+    else {
+      if ((tokentype != lasttokentype))
+        wordhash = MUL64_1;
+      wordhash = (wordhash + lastchar) * PHI64;
+    }
+    cm.set(7, wordhash);
+    lasttokentype = tokentype;
   }
   cm.mix(m);
+  
   INJECT_SHARED_c0
-  INJECT_SHARED_c1
-  m.add((stretch(smOrder0Slow.p1(c0 - 1))) >> 2U); //order 0
-  m.add((stretch(smOrder1Fast.p1((c0 - 1) << 8U | c1))) >> 2U); //order 1
-  m.add((stretch(smOrder1Slow.p1((c0 - 1) << 8U | c1))) >> 2U); //order 1
+  int p1, st;
+  p1 = smOrder0.p1(c0 - 1);
+  m.add((p1 - 2048) >> 2);
+  st = stretch(p1);
+  m.add(st >> 1);
 
-  const int order = max(0, cm.order - (nCM - 7)); //0-7
-  assert(0 <= order && order <= 7);
-  m.set(order << 3U | bpos, 64);
-  shared->State.NormalModel.order = order;
-}
+  uint32_t c = ((c1 & 0xc0) == 0x80 ? 0x80 + utf8left : c1);
+  p1 = smOrder1.p1((c0 - 1) << 8 | c); 
+  m.add((p1 - 2048) >> 2);
+  st = stretch(p1);
+  m.add(st >> 1);
 
-void NormalModel::mixPost(Mixer &m) {
-  INJECT_SHARED_c4
-  uint32_t c2 = (c4 >> 8U) & 0xffU;
-  uint32_t c3 = (c4 >> 16U) & 0xffU;
-  uint32_t c;
+  p1 = smOrder2.p1(finalize64(utf8c1, 24) ^ c0);
+  m.add((p1 - 2048) >> 2);
+  st = stretch(p1);
+  m.add(st >> 1);
 
-  INJECT_SHARED_c0
-  INJECT_SHARED_c1
-  INJECT_SHARED_bpos
-  INJECT_SHARED_blockType
-  m.set((c1 | static_cast<int>(bpos > 5) << 8U | static_cast<int>(((c0 & ((1U << bpos) - 1)) == 0) || (c0 == ((2 << bpos) - 1))) << 9U), 1024);
-  m.set(c0, 256);
-  uint32_t bt = blockType == BlockType::DEFAULT ? 0 : isTEXT(blockType) ? 1 : blockType == BlockType::EXE || blockType == BlockType::DEC_ALPHA ? 2 : 3;
-  m.set(shared->State.NormalModel.order | ((c1 >> 6U) & 3U) << 3U | static_cast<int>(bpos == 0) << 5U | static_cast<int>(c1 == c2) << 6U | bt << 7U, 512);
-  m.set(c2, 256);
-  m.set(c3, 256);
-  if( bpos != 0 ) {
-    c = c0 << (8 - bpos);
-    if( bpos == 1 ) {
-      c |= c3 >> 1U;
-    }
-    c = min(bpos, 5) << 8U | c1 >> 5U | (c2 >> 5U) << 3U | (c & 192U);
-  } else {
-    c = c3 >> 7U | (c4 >> 31U) << 1U | (c2 >> 6U) << 2U | (c1 & 240U);
+  //modeling significant bits (utf8)
+  st = 0;
+  if (bpos == 0) {
+    if (utf8left != 0)
+      st = 2047;
   }
-  m.set(c, 1536);
+  else if (bpos == 1) {
+    if (utf8left != 0)
+      st = -2047;
+    else if ((c0 & 1) == 1)
+      st = 2047;
+  }
+  m.add(st);
+
+  //modeling switching between ascii and non-ascii fragments
+  st = 0;
+  if (bpos == 0) {
+    if (c1 >= 128)
+      st = +512;
+    else
+      st = -512;
+  }
+  m.add(st);
+
+
+  uint32_t misses = shared->State.misses << ((8 - bpos) & 7); //byte-aligned
+  misses = (misses & 0xffffff00) | (misses & 0xff) >> ((8 - bpos) & 7);
+
+  uint32_t misses3 =
+    ((misses & 0x1) != 0) |
+    ((misses & 0xfe) != 0) << 1 |
+    ((misses & 0xff00) != 0) << 2;
+   
+  const int order = cm.order; //0..6 (C)
+  m.set((order * 7 + type) << 3 | bpos, (ContextMap2::C + 1) * 8 * 7);
+  m.set(((misses3) * 7 + type) * 255 + (c0 - 1), 255 * 8 * 7);
+  m.set(order << 10 | (misses != 0) << 9 | (utf8left == 0) << 8 | c1, (ContextMap2::C + 1) * 2 * 2 * 256);
+  m.set(cm.confidence, 6561); // 3^8
+
 }
+

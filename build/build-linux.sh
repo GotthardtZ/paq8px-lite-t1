@@ -1,2 +1,1 @@
-cmake -G "Unix Makefiles" -DNDEBUG ..
-make
+g++ -fno-rtti -std=gnu++1z -DNDEBUG -O3 -m64 -march=native -mtune=native -flto -fwhole-program  ../file/*.cpp ../model/*.cpp ../*.cpp -opaq8px-lite-t1.exe

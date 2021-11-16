@@ -100,23 +100,3 @@ static_assert(sizeof(int) == 4, "sizeof(int)");
 #ifdef WINDOWS
 #define strcasecmp _stricmp
 #endif
-
-#if defined(__GNUC__) || defined(__clang__)
-#define bswap(x) __builtin_bswap32(x)
-#define bswap64(x) __builtin_bswap64(x)
-#elif defined(_MSC_VER)
-#define bswap(x) _byteswap_ulong(x)
-#define bswap64(x) _byteswap_uint64(x)
-#else
-#define bswap(x) \
-  +(((( x ) &0xff000000) >> 24) | +((( x ) &0x00ff0000) >> 8) | +((( x ) &0x0000ff00) << 8) | +((( x ) &0x000000ff) << 24))
-#define bswap64(x) \
-  +((x) >> 56) |
-+(((x) << 40) & 0x00FF000000000000) | \
-+ (((x) << 24) & 0x0000FF0000000000) | \
-+ (((x) << 8) & 0x000000FF00000000) | \
-+ (((x) >> 8) & 0x00000000FF000000) | \
-+ (((x) >> 24) & 0x0000000000FF0000) | \
-+ (((x) >> 40) & 0x000000000000FF00) | \
-+ ((x) << 56))
-#endif

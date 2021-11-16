@@ -1,7 +1,6 @@
 #ifndef PAQ8PX_CONTEXTMAP2_HPP
 #define PAQ8PX_CONTEXTMAP2_HPP
 
-// TODO(epsteina): update this documentation
 /**
 context map for large contexts.
 maps to a bit history state, a 3 mostRecentlyUsed byte history, and 1 byte RunStats.
@@ -19,31 +18,24 @@ with the bit history states to provide additional states that are then
 mapped to predictions.
 */
 
-#include "IPredictor.hpp"
 #include "Bucket16.hpp"
 #include "HashElementForContextMap.hpp"
 #include "Hash.hpp"
-#include "Ilog.hpp"
 #include "Mixer.hpp"
-#include "Random.hpp"
 #include "StateMap.hpp"
+#include "StateMap1.hpp"
+#include "RunMap1.hpp"
 #include "StateTable.hpp"
 #include "Stretch.hpp"
-#include "UpdateBroadcaster.hpp"
 
-#define CM_USE_NONE 0
-#define CM_USE_RUN_STATS 1
-#define CM_USE_BYTE_HISTORY 2
-#define CM_DEFERRED 64
-#define CM_SKIPPED_CONTEXT 128
-
-class ContextMap2 : IPredictor {
+class ContextMap2 {
 public:
-    static constexpr int MIXERINPUTS = 4;
-    static constexpr int MIXERINPUTS_RUN_STATS = 1;
-    static constexpr int MIXERINPUTS_BYTE_HISTORY = 2;
+    static constexpr int MIXERINPUTS = 3;
+    static constexpr uint32_t C = 8;
 
 private:
+
+  static constexpr uint8_t FLAG_DEFERRED_UPDATE = 1;
 
   struct ContextInfo {
     HashElementForContextMap* slot0; /**< pointer to current byte history in slot0 */
@@ -55,26 +47,19 @@ private:
   };
 
     const Shared * const shared;
-    Random rnd;
-    const uint32_t C; /**< max number of contexts */
-    Array<Bucket16<HashElementForContextMap, 7>> hashTable; /**< bit and byte histories (statistics) */
-    Array<ContextInfo> contextInfoList;
-    StateMap runMap;
-    StateMap stateMap;
-    StateMap bhMap8B;
-    StateMap bhMap12B;
-    uint32_t index; /**< next context to set by @ref ContextMap2::set(), resets to zero after every round */
+    Array<Bucket16> hashTable; /**< bit and byte histories (statistics) */
+    ContextInfo contextInfoList[C]{};
     const uint32_t mask;
     const int hashBits;
-    int scale;
-    uint8_t contextflagsAll;
 
     void updatePendingContextsInSlot(HashElementForContextMap* const p, uint32_t c);
     void updatePendingContexts(uint32_t ctx, uint16_t checksum, uint32_t c);
     size_t getStateByteLocation(const uint32_t bpos, const uint32_t c0);
 
 public:
-    int order = 0; // is set after mix()
+  int order = 0; // is set after mix()
+  uint32_t confidence = 0; // is set after mix()
+
     /**
      * Construct using @ref size bytes of memory for @ref contexts contexts.
      * @param size bytes of memory to use
@@ -82,18 +67,19 @@ public:
      * @param scale
      * @param uw
      */
-    ContextMap2(const Shared* const sh, uint64_t size, uint32_t contexts, int scale);
+    ContextMap2(const Shared* const sh, uint64_t size);
 
     /**
      * Set next whole byte context to @ref ctx.
      * @param ctx
      */
-    void set(uint8_t ctxflags, const uint64_t ctx);
-    void skip(const uint8_t ctxflags);
-    void skipn(const uint8_t ctxflags, const int n);
-    void update() override;
-    void setScale(const int Scale);
+    void set(int index, const uint64_t ctx);
+    void update();
     void mix(Mixer &m);
+    void print();
+
+    RunMap1 runMap1;
+    StateMap1 stateMap1;
 };
 
 #endif //PAQ8PX_CONTEXTMAP2_HPP
