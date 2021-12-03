@@ -33,3 +33,9 @@ paq8px-lite-t1 by Zoltán Gotthardt
 - Added another utf8 context
 - Using the same fixed probabilities in StateMap1 and RunMap1 for each of the contexts
 - Updated memory use per compression level on help screen
+
+
+paq8px-lite-t1-fix1 by Zoltán Gotthardt
+2021.12.03
+- Fixed reading filesize from archive greater then 4gb. 
+- Renamed utils.hpp to Utils.hpp to fix build on some linux systems.
