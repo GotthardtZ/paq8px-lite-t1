@@ -10,8 +10,8 @@ NormalModel::NormalModel(Shared* const sh, const uint64_t cmSize) :
   assert(isPowerOf2(cmSize));
 }
 
-bool isPunctuation(uint32_t c3) {
-  static constexpr uint32_t PUNCTUATION[]{ 
+bool isSegmentBorder(uint32_t c3) {
+  static constexpr uint32_t SEGMENT_BORDER_MARKERS[]{ 
     0xEFBC8C,0xE79A84,0xE38082,0xE38081,0xEFBC88,0xEFBC89,0xE59CA8,0xE698AF,
     0xE69C89,0xE5928C,0xEFBC9A,0xE782BA,0xE4BBA5,0xE3808A,0xE4BA86,0xE696BC,
     0xE4B8BA,0xE794A8,0xE3808C,0xE58F8A,0xE8808C,0xE588B0,0xE4BA8E,0xE794B1,
@@ -19,9 +19,9 @@ bool isPunctuation(uint32_t c3) {
     0xE6ADA4,0xE585A5,0xE4BD86,0xEFBC9B,0xE4B88E,0xE68896,0xE5A682,0xE5B087,
     0xE68BAC,0xE4BA9B,0xE4B894,
   };
-  constexpr size_t PUNCTUATION_COUNT = sizeof(PUNCTUATION)/sizeof(uint32_t);
-  for (size_t i = 0; i < PUNCTUATION_COUNT; i++)
-    if (PUNCTUATION[i] == c3)
+  constexpr size_t SEGMENT_BORDER_MARKER_COUNT = sizeof(SEGMENT_BORDER_MARKERS)/sizeof(uint32_t);
+  for (size_t i = 0; i < SEGMENT_BORDER_MARKER_COUNT; i++)
+    if (SEGMENT_BORDER_MARKERS[i] == c3)
       return true;
   return false;
 }
@@ -41,17 +41,16 @@ void NormalModel::mix(Mixer &m) {
       utf8c4 = (utf8c3 + lastchar) * PHI64;
       utf8c3 = (utf8c2 + lastchar) * PHI64;
       utf8c2 = (utf8c1 + lastchar) * PHI64;
-      utf8c1 = (lastchar)*PHI64; // ascii or E*
+      utf8c1 = (lastchar) * PHI64; // first byte of a UTF8 character, might be ascii
 
-      if ((c1 >> 5) == 0b110)utf8left = 1;
-      else if ((c1 >> 4) == 0b1110)utf8left = 2;
-      else if ((c1 >> 3) == 0b11110)utf8left = 3;
+      if ((c1 >> 5) == 0b110) utf8left = 1;
+      else if ((c1 >> 4) == 0b1110) utf8left = 2;
+      else if ((c1 >> 3) == 0b11110) utf8left = 3;
       else utf8left = 0; //ascii or utf8 error
 
     }
     else {
 
-      // https://stackoverflow.com/questions/37296289/fastest-way-to-multiply-an-array-of-int64-t
       utf8c7 = (utf8c7 + lastchar) * PHI64;
       utf8c6 = (utf8c6 + lastchar) * PHI64;
       utf8c5 = (utf8c5 + lastchar) * PHI64;
@@ -65,7 +64,7 @@ void NormalModel::mix(Mixer &m) {
         utf8left = 0; //utf8 error
     }
 
-    type =
+    lastByteType =
       c1 >= '0' && c1 <= '9' ? 0 :
       (c1 >= 'a' && c1 <= 'z') || (c1 >= 'A' && c1 <= 'Z') ? 1 :
       (c1 < 128) ? 2 :
@@ -79,20 +78,20 @@ void NormalModel::mix(Mixer &m) {
     cm.set(5, utf8c6);
     cm.set(6, utf8c7);
 
-    uint8_t tokentype = type <= 1 ? 0 : type == 2 ? 1 : 2;
+    uint8_t tokentype = lastByteType <= 1 ? 0 : lastByteType == 2 ? 1 : 2;
     INJECT_SHARED_c4
-    uint32_t c3 = c4 & 0xffffff;
-    bool isP = (utf8left == 0 && (c3&0xE0C0C0)==0xE08080 && isPunctuation(c3));
-    if (isP) {
-      wordhash = MUL64_1;
+    const uint32_t c3 = c4 & 0xffffff;
+    const bool isSegmentStart = (utf8left == 0 && (c3 & 0xE0C0C0) == 0xE08080 && isSegmentBorder(c3));
+    if (isSegmentStart) {
+      tokenHash = MUL64_1;
       tokentype = 3;
     }
     else {
       if ((tokentype != lasttokentype))
-        wordhash = MUL64_1;
-      wordhash = (wordhash + lastchar) * PHI64;
+        tokenHash = MUL64_1;
+      tokenHash = (tokenHash + lastchar) * PHI64;
     }
-    cm.set(7, wordhash);
+    cm.set(7, tokenHash);
     lasttokentype = tokentype;
   }
   cm.mix(m);
@@ -149,8 +148,8 @@ void NormalModel::mix(Mixer &m) {
     ((misses & 0xff00) != 0) << 2;
    
   const int order = cm.order; //0..6 (C)
-  m.set((order * 7 + type) << 3 | bpos, (ContextMap2::C + 1) * 8 * 7);
-  m.set(((misses3) * 7 + type) * 255 + (c0 - 1), 255 * 8 * 7);
+  m.set((order * 7 + lastByteType) << 3 | bpos, (ContextMap2::C + 1) * 8 * 7);
+  m.set(((misses3) * 7 + lastByteType) * 255 + (c0 - 1), 255 * 8 * 7);
   m.set(order << 10 | (misses != 0) << 9 | (utf8left == 0) << 8 | c1, (ContextMap2::C + 1) * 2 * 2 * 256);
   m.set(cm.confidence, 6561); // 3^8
 

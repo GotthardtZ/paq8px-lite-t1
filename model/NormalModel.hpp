@@ -14,18 +14,16 @@ private:
     static constexpr int nCM = ContextMap2::C; // 8
     static constexpr int nSM = 8;
     Shared * const shared;
-    uint64_t utf8c1{};
+    uint64_t utf8c1{}; //last character (UTF8)
     uint64_t utf8c2{};
     uint64_t utf8c3{};
     uint64_t utf8c4{};
     uint64_t utf8c5{};
     uint64_t utf8c6{};
     uint64_t utf8c7{};
-    uint64_t wordhash{};
-    uint64_t gaphash{};
-    uint64_t utf8hash{};
-    uint8_t utf8left{};
-    uint8_t type{};
+    uint64_t tokenHash{};
+    uint8_t utf8left{}; //how many bytes are left from the current UTF8 character
+    uint8_t lastByteType{};
     uint8_t lasttokentype{};
 public:
     static constexpr int MIXERINPUTS = nCM * (ContextMap2::MIXERINPUTS) + nSM; // 32

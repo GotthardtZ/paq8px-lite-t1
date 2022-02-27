@@ -8,7 +8,7 @@ set path=%path%;c:/Program Files/mingw-w64/winlibs-x86_64-posix-seh-gcc-9.3.0-ll
 
 rem * The following settings are for a release build.
 rem * For a debug build remove -DNDEBUG to enable asserts and array bound checks and add -Wall to show compiler warnings.
-set options=-DNDEBUG -O3 -m64 -march=nocona -mtune=generic -flto -fwhole-program 
+set options=-DNDEBUG -O3 -m64 -march=skylake -mtune=skylake -flto -fwhole-program
 
 del _error2_paq.txt  >nul 2>&1
 del paq8px-lite-t1.exe       >nul 2>&1
